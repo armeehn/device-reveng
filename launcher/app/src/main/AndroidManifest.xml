@@ -60,6 +60,22 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!--
+          NotificationListenerService: required so MediaSessionManager.getActiveSessions()
+          can read other apps' now-playing (Spotify, mpv, vendor player). Must be declared
+          with BIND_NOTIFICATION_LISTENER_SERVICE + the notification-listener intent-filter,
+          then ENABLED (Settings, or on this rooted unit via `cmd notification allow_listener`).
+        -->
+        <service
+            android:name=".media.MediaListenerService"
+            android:exported="false"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
     </application>
 
 </manifest>

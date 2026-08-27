@@ -8,10 +8,13 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import com.reveng.carlauncher.carlib.CarEvents
 import com.reveng.carlauncher.carlib.CarService
+import com.reveng.carlauncher.media.NowPlayingRepository
 import com.reveng.carlauncher.ui.HomeScreen
 import com.reveng.carlauncher.ui.theme.CarLauncherTheme
 
@@ -27,6 +30,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var carEvents: CarEvents
     private lateinit var carService: CarService
     private lateinit var appRepository: AppRepository
+    private lateinit var nowPlaying: NowPlayingRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -37,9 +41,12 @@ class MainActivity : ComponentActivity() {
         carEvents = CarEvents(applicationContext).also { it.register() }
         carService = CarService(applicationContext).also { it.bind() }
         appRepository = AppRepository(this)
+        nowPlaying = NowPlayingRepository(applicationContext).also { it.start(lifecycleScope) }
 
         setContent {
-            CarLauncherTheme {
+            // Day/night from the vendor illumination broadcast (CAR_API §1.3).
+            val dayNight by carEvents.dayNight.collectAsStateWithLifecycle()
+            CarLauncherTheme(night = dayNight == CarEvents.DayNight.NIGHT) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background,
@@ -47,6 +54,7 @@ class MainActivity : ComponentActivity() {
                     HomeScreen(
                         carEvents = carEvents,
                         appRepository = appRepository,
+                        nowPlaying = nowPlaying,
                     )
                 }
             }
@@ -57,5 +65,6 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
         carEvents.unregister()
         carService.unbind()
+        nowPlaying.stop()
     }
 }
