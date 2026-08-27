@@ -31,6 +31,18 @@ The "slow to appear" delay is the **XS9922B signal auto-detection**:
 
 ---
 
+
+### ✅ RESOLVED (2026-08-27, confirmed on-device)
+Root cause CONFIRMED live: `BackcarEvent` msg-513 health loop calls `isSignalOK()`; with the
+rear signal on AUTO the PR2000 decoder oscillated (camera_status 7↔5↔3) and never passed the
+check, so it ran `stopDetection→closeCamera→reset("r")→reconfigure→startDetection` every 1-3 s
+= perpetual black-flash. **Fix that worked:** pin the rear format via
+**Factory Settings → rear camera signal type → AHD 720p/30Hz** (setting `Sys_backcar_Video_Type`
+in `content://com.szchoiceway.eventcenter.SysVarProvider/SysVar`). After pinning: one `start_stream`,
+`camera_status` stable at 7, **zero resets** across a ~9 s reverse hold. Owner confirmed "seems better."
+Note: ~0.6 s initial black at startup is normal signal-lock. If any residual issues, the Feb-2026
+firmware ("improves rear camera performance") is the deeper demod-level fix.
+
 ## MCU ↔ Android serial protocol [confirmed]
 - Port: **`/dev/ttyHS1` @ 115200 8N1** (`EventService.openSerialPort`).
 - Internal MCU↔ARM framing: `0x0D 0x0A | len | payload | checksum(~(len+Σpayload)) | 0x00`.
