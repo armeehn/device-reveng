@@ -35,3 +35,6 @@ recon/
 *.log
 camera-diag-out/
 camera-config-backup/
+
+# Launcher/device UI screenshots — may show on-screen device identifiers (GSF, account)
+screenshots/
