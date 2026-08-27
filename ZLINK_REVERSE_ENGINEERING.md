@@ -146,18 +146,43 @@ Our own receiver wins by *removing* ZLink's liabilities, not by out-engineering 
    protobuf + `com.zjinnova.zlink*` broadcast contract so the cluster/dashboard keep working.
 6. **Lower latency** — H.264 → MediaCodec surface; tune AEC via `persist.blinkbt.carplay.aecdelay`.
 
-## Recommended build path (staged)
-- **Phase 1 — Android Auto receiver (buildable, legal, highest ROI).** The AA protocol (AAP,
-  protobuf over USB/Wi-Fi; wireless via BT-RFCOMM bootstrap) is fully documented in OSS
-  (openauto / crankshaft / headunit / AAGateway / WirelessAndroidAutoDongle). Ship as a
-  privileged system app; wired first (USB AOAv2), then wireless (BT handshake → unit AP → TCP).
-  Emit the `:1555` metadata + `com.zjinnova.zlink*` broadcasts.
-- **Phase 2 — Wireless bootstrap + reconnect hardening**, shared by AA and CarPlay
-  (`com.zjinnova.netshare`-style tethering/DHCP + fixed 5 GHz channel).
-- **Phase 3 — CarPlay via the on-board MFi chip** (personal use): I2C auth handshake +
-  AirPlay streaming, reusing OSS AirPlay stacks (UxPlay/openairplay/pyatv) as reference against
-  the observed `libCoreUtils` behavior. Highest effort, legally gray to distribute.
-- **Drop HiCar/CarLife** unless there's a Huawei/Chinese-phone need (niche for a US RAV4).
+## Recommended path — **iPhone owner** (CarPlay is the only mode that matters)
+
+Android Auto / HiCar / CarLife are irrelevant. CarPlay is also the *hardest* mode to build,
+because ZLink already does it **genuinely** through Apple's CoreUtils + the on-board MFi chip.
+So "better" is not "reimplement the receiver" — from-scratch would be strictly worse for a long
+time. Three honest tiers:
+
+### Tier 1 — "ZLink-minus" (recommended; days, achievable with root)
+Keep ZLink's proven licensed CarPlay engine; strip its liabilities and fix the real pain.
+- **Kill the phone-home / activation friction.** CarPlay is the activation-gated mode
+  (`verifyMirrorFreeEnv`/`verifyHiCarFreeEnv` exist but there is **no CarPlay "free" path** —
+  Mirror/HiCar run unlicensed, CarPlay requires activation tied to the MFi chip serial). On the
+  already-activated OEM unit: block `www.zjinnova.com` / `com.zjinnova.net` / `bugly.qq.com`
+  (hosts/iptables) so it can't de-activate, nag, or re-gate after an OTA; if a re-activation is
+  ever forced, Frida-hook `ZlinkCore.getChipActivationInfo` / `setActivationResult` to
+  short-circuit. Legitimate on your own OEM-installed app.
+- **Strip telemetry** (Tencent Bugly / MTA) and stop the `DaemonService` respawn.
+- **Fix the flakiness** (the actual complaint, per CARPLAY.md — RF/pairing, not protocol): pin
+  the AP to a clean 5 GHz channel, set `persist.zj.need.reconnect`, and tune call/Siri mic via
+  `persist.zj.aecdelay` / `aecheaddelay` / `aectype` / `cp.use.gocaec`.
+- **Replace the UI**: swap ZLink's clunky connection/step activities for a clean Compose
+  front-end that keeps the native CarPlay service, wired into our launcher (`./launcher`) via
+  the `:1555` protobuf + `com.zjinnova.zlink*` broadcast contract.
+→ Net result: a "better ZLink" for iPhone without touching Apple's protocol.
+
+### Tier 2 — Carlinkit 5.0 / U2W dongle (most reliable, least effort, not "ours")
+Bypasses the built-in receiver entirely. If the goal is rock-solid wireless CarPlay with zero
+dev, this beats everything.
+
+### Tier 3 — full DIY CarPlay receiver (months; legally gray; personal-use only)
+We now have the **complete map** to attempt it: drive the on-board MFi chip with the exact I2C
+functions in `libzlink*`/`libzjL10001` (`mfi_detect_i2c`, `MFi_Read_Certificate_i2c`,
+`MFi_Write_ChallengeDataLen_i2c`, `MFi_Write_ChallengeData_i2c`, `MFiGetSignatureLen_i2c`,
+`MUCMFi_CreateSignature`, `MUCMFi_CopyCertificate`; chip location via `persist.zj.mfi.channel` /
+`persist.sys.mfi.index`), then AirPlay screen/audio streaming referencing OSS stacks
+(UxPlay / openairplay / pyatv) against observed `libCoreUtils` behavior. A genuine research
+project; recommended only as a hobby, not the primary path.
 
 ## Extracted artifacts (local, not in git — `*.apk` is gitignored)
 - `mcu-analysis/apks/com.zjinnova.zlink.apk` — the 40 MB APK.
