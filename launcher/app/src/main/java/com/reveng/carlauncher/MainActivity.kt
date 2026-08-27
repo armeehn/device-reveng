@@ -23,6 +23,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import com.reveng.carlauncher.carlib.CarEvents
 import com.reveng.carlauncher.carlib.CarService
+import com.reveng.carlauncher.data.CarSettingsController // v1.1 settings suite
 import com.reveng.carlauncher.data.DayNightMode // v0.6
 import com.reveng.carlauncher.data.RadioPresetsStore // v0.9
 import com.reveng.carlauncher.data.SettingsStore // v0.6
@@ -35,7 +36,7 @@ import com.reveng.carlauncher.media.NowPlayingRepository
 import com.reveng.carlauncher.ui.HomeScreen
 import kotlinx.coroutines.launch
 import com.reveng.carlauncher.ui.OnboardingScreen // v1.0
-import com.reveng.carlauncher.ui.SettingsScreen // v0.6
+import com.reveng.carlauncher.ui.settings.SettingsHost // v1.1 settings suite
 import com.reveng.carlauncher.ui.ThemeEditorScreen
 import com.reveng.carlauncher.ui.ThemesScreen
 import com.reveng.carlauncher.ui.theme.CarLauncherTheme
@@ -61,6 +62,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var themeStore: ThemeStore
     private lateinit var settingsStore: SettingsStore // v0.6
     private lateinit var radioPresetsStore: RadioPresetsStore // v0.9
+    private lateinit var carSettingsController: CarSettingsController // v1.1 settings suite
 
     // v0.8: roving focus ring for steering-wheel / DPAD navigation. Held as a field so the
     // key dispatcher below and the Compose tree (via LocalLauncherFocus) share one instance.
@@ -83,6 +85,7 @@ class MainActivity : ComponentActivity() {
         themeStore = ThemeStore(applicationContext)
         settingsStore = SettingsStore(applicationContext) // v0.6
         radioPresetsStore = RadioPresetsStore(applicationContext, lifecycleScope) // v0.9
+        carSettingsController = CarSettingsController(applicationContext, lifecycleScope) // v1.1
 
         // v0.8: input source (a) — vendor STEER_WHEEL_INFOR broadcasts as CAR_KEY_* codes.
         lifecycleScope.launch {
@@ -158,10 +161,14 @@ class MainActivity : ComponentActivity() {
                                 radioPresetsStore = radioPresetsStore, // v0.9 Radio 2.0
                             )
 
-                            // v0.6: launcher Settings screen.
-                            Screen.Settings -> SettingsScreen(
+                            // v1.1: full settings suite — categorized, reskinned vendor mirror.
+                            Screen.Settings -> SettingsHost(
                                 settingsStore = settingsStore,
-                                onBack = { screen = Screen.Home },
+                                controller = carSettingsController,
+                                carService = carService,
+                                carEvents = carEvents,
+                                radioPresetsStore = radioPresetsStore,
+                                onExit = { screen = Screen.Home },
                             )
 
                             Screen.Themes -> ThemesScreen(
@@ -270,6 +277,7 @@ class MainActivity : ComponentActivity() {
         carEvents.unregister()
         carService.unbind()
         nowPlaying.stop()
+        carSettingsController.release() // v1.1
     }
 
     /** Top-level screens — a simple switch, no nav library (LAUNCHER_DESIGN v0.5). */
