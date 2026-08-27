@@ -18,6 +18,7 @@ import androidx.lifecycle.lifecycleScope
 import com.reveng.carlauncher.carlib.CarEvents
 import com.reveng.carlauncher.carlib.CarService
 import com.reveng.carlauncher.data.DayNightMode // v0.6
+import com.reveng.carlauncher.data.RadioPresetsStore // v0.9
 import com.reveng.carlauncher.data.SettingsStore // v0.6
 import com.reveng.carlauncher.data.ThemeStore
 import com.reveng.carlauncher.media.NowPlayingRepository
@@ -47,6 +48,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var nowPlaying: NowPlayingRepository
     private lateinit var themeStore: ThemeStore
     private lateinit var settingsStore: SettingsStore // v0.6
+    private lateinit var radioPresetsStore: RadioPresetsStore // v0.9
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -60,6 +62,7 @@ class MainActivity : ComponentActivity() {
         nowPlaying = NowPlayingRepository(applicationContext).also { it.start(lifecycleScope) }
         themeStore = ThemeStore(applicationContext)
         settingsStore = SettingsStore(applicationContext) // v0.6
+        radioPresetsStore = RadioPresetsStore(applicationContext, lifecycleScope) // v0.9
 
         setContent {
             // Day/night from the vendor illumination broadcast (CAR_API §1.3).
@@ -92,6 +95,7 @@ class MainActivity : ComponentActivity() {
                             // v0.6: wire settings + a Settings-screen entry point.
                             settingsStore = settingsStore,
                             onOpenSettings = { screen = Screen.Settings },
+                            radioPresetsStore = radioPresetsStore, // v0.9 Radio 2.0
                         )
 
                         // v0.6: launcher Settings screen.

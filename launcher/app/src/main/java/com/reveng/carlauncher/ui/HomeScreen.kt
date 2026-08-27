@@ -67,6 +67,7 @@ fun HomeScreen(
     // v0.6: launcher settings (grid density + widget visibility) + Settings nav.
     settingsStore: SettingsStore? = null,
     onOpenSettings: () -> Unit = {},
+    radioPresetsStore: com.reveng.carlauncher.data.RadioPresetsStore? = null, // v0.9 Radio 2.0
 ) {
     val reverse by carEvents.reverse.collectAsStateSafe(initial = false)
     val media by nowPlaying.state.collectAsStateSafe(initial = null)
@@ -113,6 +114,8 @@ fun HomeScreen(
                             onPlayPause = nowPlaying::playPause,
                             onNext = nowPlaying::next,
                             onPrev = nowPlaying::prev,
+                            onSeek = nowPlaying::seekTo,          // v0.9 Media 2.0
+                            onCycleSource = nowPlaying::cycleSession, // v0.9 Media 2.0
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .weight(1f),
@@ -180,6 +183,7 @@ fun HomeScreen(
                         Spacer(Modifier.height(16.dp))
                         RadioCard(
                             carService = carService,
+                            presetsStore = radioPresetsStore, // v0.9 Radio 2.0
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(180.dp),
@@ -189,21 +193,9 @@ fun HomeScreen(
             }
         }
 
-        // Full-screen reverse camera overlay, above the home content (unchanged).
-        ReverseOverlay(visible = reverse, modifier = Modifier.fillMaxSize())
-
-        // v0.7: parking-sensor zones overlaid on the reverse camera (radar frames arrive
-        // while reversing). Only renders when a real frame is present.
-        if (reverse) {
-            RadarView(
-                state = radar,
-                showPlaceholder = false,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .padding(horizontal = 48.dp, vertical = 32.dp),
-            )
-        }
+        // v0.9: minimal, transparent reverse overlay that COEXISTS with the vendor reverse
+        // window (radar bars + optional static guide lines are now owned by ReverseOverlay).
+        ReverseOverlay(visible = reverse, radar = radar, modifier = Modifier.fillMaxSize())
     }
 }
 
