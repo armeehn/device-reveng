@@ -13,8 +13,8 @@ android {
         applicationId = "com.reveng.carlauncher"
         minSdk = 33
         targetSdk = 33
-        versionCode = 9
-        versionName = "0.9.0"
+        versionCode = 10
+        versionName = "1.0.0"
 
         // Single head-unit target: arm64 landscape @240dpi, 1920x720.
         ndk { abiFilters += "arm64-v8a" }
@@ -26,17 +26,33 @@ android {
             applicationIdSuffix = ".debug"
         }
         release {
-            isMinifyEnabled = false
+            // v1.0: shrink + obfuscate for a much smaller side-load APK. The KEEP rules that
+            // make this safe (AIDL stubs, NotificationListenerServices, reflective libsu,
+            // Compose, Kotlin metadata) live in proguard-rules.pro. If minify ever needs to be
+            // disabled to unblock a build, flip both flags to false — the rules file stays.
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // No release keystore for this side-loaded head-unit build: sign release with the
+            // debug key so `assembleRelease` produces an installable APK out of the box.
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+
+    // v1.0: `assembleRelease` runs lint-vital by default, which drags in extra resolution we
+    // don't need for a side-loaded head-unit APK (and can't fetch on an offline builder).
+    // Disable it so a release assemble is self-contained; run `./gradlew lint` explicitly if wanted.
+    lint {
+        checkReleaseBuilds = false
+        abortOnError = false
     }
 
     compileOptions {

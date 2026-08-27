@@ -1,15 +1,19 @@
 package com.reveng.carlauncher
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -30,6 +34,7 @@ import com.reveng.carlauncher.input.SwcNavigator // v0.8
 import com.reveng.carlauncher.media.NowPlayingRepository
 import com.reveng.carlauncher.ui.HomeScreen
 import kotlinx.coroutines.launch
+import com.reveng.carlauncher.ui.OnboardingScreen // v1.0
 import com.reveng.carlauncher.ui.SettingsScreen // v0.6
 import com.reveng.carlauncher.ui.ThemeEditorScreen
 import com.reveng.carlauncher.ui.ThemesScreen
@@ -102,61 +107,94 @@ class MainActivity : ComponentActivity() {
 
             var screen by screenState // v0.8: hoisted to a field (Back/Home keys)
 
+            // v1.0: route to onboarding exactly once on genuine first run. firstRun is null
+            // until DataStore resolves; we hold a plain themed frame (below) until then so a
+            // returning user never flashes the onboarding screen.
+            val firstRun by settingsStore.firstRun.collectAsStateWithLifecycle()
+            var routed by remember { mutableStateOf(false) }
+            LaunchedEffect(firstRun) {
+                if (!routed && firstRun != null) {
+                    if (firstRun == true) screen = Screen.Onboarding
+                    routed = true
+                }
+            }
+
             CarLauncherTheme(theme = activeTheme, night = night) {
               CompositionLocalProvider(LocalLauncherFocus provides launcherFocus) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background,
                 ) {
-                    when (val s = screen) {
-                        Screen.Home -> HomeScreen(
-                            carEvents = carEvents,
-                            carService = carService,
-                            appRepository = appRepository,
-                            nowPlaying = nowPlaying,
-                            onOpenThemes = { screen = Screen.Themes },
-                            // v0.6: wire settings + a Settings-screen entry point.
-                            settingsStore = settingsStore,
-                            onOpenSettings = { screen = Screen.Settings },
-                            radioPresetsStore = radioPresetsStore, // v0.9 Radio 2.0
-                        )
+                    // v1.0: crossfade top-level screen transitions (Home ↔ Themes ↔ Settings ↔
+                    // Editor ↔ Onboarding) instead of a hard swap. While firstRun is unresolved
+                    // we render nothing but the themed Surface — a fast, jank-free first frame.
+                    if (firstRun == null) {
+                        // holding frame: just the background Surface
+                    } else Crossfade(
+                        targetState = screen,
+                        animationSpec = tween(durationMillis = 300),
+                        label = "screen",
+                    ) { s ->
+                        when (s) {
+                            Screen.Onboarding -> OnboardingScreen(
+                                themeStore = themeStore,
+                                appRepository = appRepository,
+                                night = night,
+                                onFinish = {
+                                    settingsStore.setFirstRunComplete()
+                                    screen = Screen.Home
+                                },
+                            )
 
-                        // v0.6: launcher Settings screen.
-                        Screen.Settings -> SettingsScreen(
-                            settingsStore = settingsStore,
-                            onBack = { screen = Screen.Home },
-                        )
+                            Screen.Home -> HomeScreen(
+                                carEvents = carEvents,
+                                carService = carService,
+                                appRepository = appRepository,
+                                nowPlaying = nowPlaying,
+                                onOpenThemes = { screen = Screen.Themes },
+                                // v0.6: wire settings + a Settings-screen entry point.
+                                settingsStore = settingsStore,
+                                onOpenSettings = { screen = Screen.Settings },
+                                radioPresetsStore = radioPresetsStore, // v0.9 Radio 2.0
+                            )
 
-                        Screen.Themes -> ThemesScreen(
-                            themes = allThemes,
-                            activeId = activeTheme.id,
-                            night = night,
-                            onSetActive = { themeStore.setActive(it.id) },
-                            onDuplicate = { themeStore.duplicate(it) },
-                            onEdit = { screen = Screen.Editor(it) },
-                            onDelete = { themeStore.delete(it.id) },
-                            onNew = {
-                                // An unsaved draft off the active theme; persisted only on Save.
-                                val draft = activeTheme.copy(
-                                    id = "user.${System.currentTimeMillis()}",
-                                    name = "New theme",
-                                    isBuiltIn = false,
-                                )
-                                screen = Screen.Editor(draft)
-                            },
-                            onBack = { screen = Screen.Home },
-                        )
+                            // v0.6: launcher Settings screen.
+                            Screen.Settings -> SettingsScreen(
+                                settingsStore = settingsStore,
+                                onBack = { screen = Screen.Home },
+                            )
 
-                        is Screen.Editor -> ThemeEditorScreen(
-                            source = s.theme,
-                            night = night,
-                            onSave = {
-                                themeStore.upsert(it)
-                                themeStore.setActive(it.id)
-                                screen = Screen.Themes
-                            },
-                            onCancel = { screen = Screen.Themes },
-                        )
+                            Screen.Themes -> ThemesScreen(
+                                themes = allThemes,
+                                activeId = activeTheme.id,
+                                night = night,
+                                onSetActive = { themeStore.setActive(it.id) },
+                                onDuplicate = { themeStore.duplicate(it) },
+                                onEdit = { screen = Screen.Editor(it) },
+                                onDelete = { themeStore.delete(it.id) },
+                                onNew = {
+                                    // An unsaved draft off the active theme; persisted only on Save.
+                                    val draft = activeTheme.copy(
+                                        id = "user.${System.currentTimeMillis()}",
+                                        name = "New theme",
+                                        isBuiltIn = false,
+                                    )
+                                    screen = Screen.Editor(draft)
+                                },
+                                onBack = { screen = Screen.Home },
+                            )
+
+                            is Screen.Editor -> ThemeEditorScreen(
+                                source = s.theme,
+                                night = night,
+                                onSave = {
+                                    themeStore.upsert(it)
+                                    themeStore.setActive(it.id)
+                                    screen = Screen.Themes
+                                },
+                                onCancel = { screen = Screen.Themes },
+                            )
+                        }
                     }
                 }
               }
@@ -200,6 +238,33 @@ class MainActivity : ComponentActivity() {
             if (screenState.value == Screen.Home) launcherFocus.onKey(nav) else false
     }
 
+    /**
+     * v1.0: HOME intent handling. Because MainActivity is singleTask, pressing HOME (or the
+     * system relaunching us as the HOME app after the vendor idle/screensaver dismisses)
+     * delivers here instead of recreating the activity. Behave like a launcher should: pop back
+     * to the top-level Home surface and reset the focus ring. We never fight the vendor
+     * com.android.atslcarconsole overlay — we simply re-assert Home cleanly when we regain focus.
+     */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.hasCategory(Intent.CATEGORY_HOME) && screenState.value != Screen.Onboarding) {
+            screenState.value = Screen.Home
+            launcherFocus.reset()
+        }
+    }
+
+    /**
+     * v1.0: re-assert our display flags on resume. The vendor idle/screensaver can clear
+     * FLAG_KEEP_SCREEN_ON while it owns the screen; re-adding it here (idempotent) keeps the
+     * head unit awake once we're foreground again, without polling or contending with the
+     * vendor overlay.
+     */
+    override fun onResume() {
+        super.onResume()
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         carEvents.unregister()
@@ -209,6 +274,7 @@ class MainActivity : ComponentActivity() {
 
     /** Top-level screens — a simple switch, no nav library (LAUNCHER_DESIGN v0.5). */
     private sealed interface Screen {
+        data object Onboarding : Screen // v1.0 first-run flow
         data object Home : Screen
         data object Themes : Screen
         data object Settings : Screen // v0.6
