@@ -3,6 +3,7 @@ package com.reveng.carlauncher.ui
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
@@ -32,6 +33,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -58,6 +60,7 @@ import androidx.core.graphics.drawable.toBitmap
 import com.reveng.carlauncher.AppInfo
 import com.reveng.carlauncher.data.AppOrderStore
 import com.reveng.carlauncher.data.FavoritesStore
+import com.reveng.carlauncher.input.GridFocus // v0.8 SWC navigation
 import kotlinx.coroutines.launch
 import kotlin.math.hypot
 
@@ -84,6 +87,7 @@ fun AppDrawer(
     onLaunch: (AppInfo) -> Unit,
     modifier: Modifier = Modifier,
     columns: Int = 0, // v0.6: 0 = adaptive sizing; >0 = fixed column count (SettingsStore)
+    gridFocus: GridFocus? = null, // v0.8: roving focus over grid tiles (null = touch-only)
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -135,6 +139,7 @@ fun AppDrawer(
             onReorder = { newOrder -> scope.launch { orderStore.setOrder(newOrder.map { it.packageName }) } },
             onOpenSystem = { showSystem = true },
             columns = columns, // v0.6 density
+            gridFocus = gridFocus, // v0.8
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f),
@@ -169,6 +174,7 @@ private fun ReorderableAppGrid(
     onReorder: (List<AppInfo>) -> Unit,
     onOpenSystem: () -> Unit,
     columns: Int = 0, // v0.6: 0=adaptive, >0=fixed
+    gridFocus: GridFocus? = null, // v0.8
     modifier: Modifier = Modifier,
 ) {
     val gridState = rememberLazyGridState()
@@ -178,6 +184,25 @@ private fun ReorderableAppGrid(
     var draggingIndex by remember { mutableStateOf(-1) }
     var dragOffset by remember { mutableStateOf(Offset.Zero) }
     var totalDrag by remember { mutableStateOf(Offset.Zero) }
+
+    // v0.8: publish the displayed grid (count, resolved columns, launch-by-index) to the focus
+    // ring so the SWC key dispatcher navigates the exact tiles the drawer shows. The System
+    // folder tile (when present) is the last focusable index.
+    val hasSystem = systemApps.isNotEmpty()
+    val effectiveColumns = if (columns > 0) columns else 3
+    if (gridFocus != null) {
+        SideEffect {
+            gridFocus.count = items.size + if (hasSystem) 1 else 0
+            gridFocus.columns = effectiveColumns
+            gridFocus.launch = { i ->
+                when {
+                    i < items.size -> onLaunch(items[i])
+                    hasSystem -> onOpenSystem()
+                }
+            }
+        }
+    }
+    val focusedIndex = gridFocus?.focusedIndex
 
     val dragModifier = if (reorderEnabled) {
         Modifier.pointerInput(items.size) {
@@ -258,6 +283,7 @@ private fun ReorderableAppGrid(
                 app = app,
                 onClick = { onLaunch(app) },
                 favorite = app.packageName in favorites,
+                focused = index == focusedIndex, // v0.8 focus ring
                 modifier = Modifier
                     .zIndex(if (dragging) 1f else 0f)
                     .graphicsLayer {
@@ -270,9 +296,13 @@ private fun ReorderableAppGrid(
                     },
             )
         }
-        if (systemApps.isNotEmpty()) {
+        if (hasSystem) {
             item(key = "__system_folder__") {
-                SystemFolderTile(count = systemApps.size, onClick = onOpenSystem)
+                SystemFolderTile(
+                    count = systemApps.size,
+                    onClick = onOpenSystem,
+                    focused = focusedIndex == items.size, // v0.8: folder is the last index
+                )
             }
         }
     }
@@ -320,11 +350,17 @@ private fun AppTile(
     modifier: Modifier = Modifier,
     favorite: Boolean = false,
     onLongClick: (() -> Unit)? = null,
+    focused: Boolean = false, // v0.8: SWC/DPAD focus ring
 ) {
+    val shape = RoundedCornerShape(16.dp)
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
+            .clip(shape)
+            .then(
+                if (focused) Modifier.border(3.dp, MaterialTheme.colorScheme.primary, shape)
+                else Modifier,
+            )
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -359,11 +395,16 @@ private fun AppTile(
 
 /** The "System" folder entry — a folder-styled tile showing an apps icon + count. */
 @Composable
-private fun SystemFolderTile(count: Int, onClick: () -> Unit) {
+private fun SystemFolderTile(count: Int, onClick: () -> Unit, focused: Boolean = false) {
+    val shape = RoundedCornerShape(16.dp)
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
+            .clip(shape)
+            .then(
+                if (focused) Modifier.border(3.dp, MaterialTheme.colorScheme.primary, shape)
+                else Modifier,
+            )
             .clickable(onClick = onClick)
             .padding(vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
