@@ -45,6 +45,9 @@ class CarService(private val appContext: Context) {
         const val RADIO_KEY_SEEK_DOWN = 1
         const val RADIO_KEY_SEEK_UP = 2
 
+        /** v0.6 — assumed main-volume range for QuickControls. ⚠ GUESSED (verify on-device). */
+        const val MAX_VOLUME = 30
+
         /** Radio band ordinal → true when it's an AM band (getRadioBand()). GUESSED split. */
         fun isAmBand(band: Int): Boolean = band >= 3
     }
@@ -123,6 +126,19 @@ class CarService(private val appContext: Context) {
     fun sendMode(mode: Int, flag: Boolean) { call { sendMode(mode, flag) } }
     fun sendWheelKey(key: Int) { call { sendWheelKey(key) } }
     fun setMute(mute: Boolean) { call { sendMuteState(mute) } }
+
+    // ---- v0.6: volume set (QuickControls) ----------------------------------
+    /**
+     * v0.6 — set the absolute main volume. ⚠ GUESSED mapping: there is no explicit
+     * `setVolume` in the decompiled AIDL; `sendVolState(boolean z, int i)` (ordinal 77) is
+     * the closest match, read as (isMuted, volumeLevel). Verify on-device; guarded like the
+     * rest, so a wrong ordinal is a no-op rather than a crash. [MAX_VOLUME] is also a guess.
+     */
+    fun setVolume(level: Int) {
+        val clamped = level.coerceIn(0, MAX_VOLUME)
+        val muted = isMuteOn()
+        call { sendVolState(muted, clamped) }
+    }
 
     // ---- Radio control (CAR_API §3.2). All guarded; ⚠ key codes GUESSED. -----
     fun sendRadioKey(key: Int) { call { sendRadioKey(key) } }
