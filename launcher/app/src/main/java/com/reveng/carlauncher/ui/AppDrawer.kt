@@ -53,11 +53,13 @@ fun AppDrawer(
     systemApps: List<AppInfo>,
     onLaunch: (AppInfo) -> Unit,
     modifier: Modifier = Modifier,
+    columns: Int = 0, // v0.6: 0 = adaptive sizing; >0 = fixed column count (SettingsStore)
 ) {
     var showSystem by remember { mutableStateOf(false) }
 
     LazyVerticalGrid(
-        columns = GridCells.Adaptive(minSize = 140.dp),
+        // v0.6: honour the app-grid density from Settings, else fall back to adaptive.
+        columns = if (columns > 0) GridCells.Fixed(columns) else GridCells.Adaptive(minSize = 140.dp),
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),

@@ -38,6 +38,8 @@ import com.reveng.carlauncher.AppRepository
 import com.reveng.carlauncher.R
 import com.reveng.carlauncher.carlib.CarEvents
 import com.reveng.carlauncher.carlib.CarService
+import com.reveng.carlauncher.data.LauncherSettings // v0.6
+import com.reveng.carlauncher.data.SettingsStore // v0.6
 import com.reveng.carlauncher.media.NowPlayingRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -62,9 +64,15 @@ fun HomeScreen(
     appRepository: AppRepository,
     nowPlaying: NowPlayingRepository,
     onOpenThemes: () -> Unit = {},
+    // v0.6: launcher settings (grid density + widget visibility) + Settings nav.
+    settingsStore: SettingsStore? = null,
+    onOpenSettings: () -> Unit = {},
 ) {
     val reverse by carEvents.reverse.collectAsStateSafe(initial = false)
     val media by nowPlaying.state.collectAsStateSafe(initial = null)
+    // v0.6: observe launcher settings (null store -> defaults, keeps previews working).
+    val settings by (settingsStore?.settings?.collectAsStateSafe(initial = LauncherSettings())
+        ?: remember { mutableStateOf(LauncherSettings()) })
 
     var apps by remember { mutableStateOf<List<AppInfo>>(emptyList()) }
     LaunchedEffect(Unit) {
@@ -75,7 +83,15 @@ fun HomeScreen(
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
-            StatusBar(carEvents = carEvents, onOpenThemes = onOpenThemes)
+            StatusBar(
+                carEvents = carEvents,
+                onOpenThemes = onOpenThemes,
+                // v0.6: pass Settings nav + services so the status bar can host the gear
+                // and the Quick Controls pull-down.
+                onOpenSettings = onOpenSettings,
+                carService = carService,
+                settingsStore = settingsStore,
+            )
 
             Row(
                 modifier = Modifier
@@ -89,23 +105,28 @@ fun HomeScreen(
                         .weight(0.30f)
                         .fillMaxHeight(),
                 ) {
-                    MediaCard(
-                        now = media,
-                        onPlayPause = nowPlaying::playPause,
-                        onNext = nowPlaying::next,
-                        onPrev = nowPlaying::prev,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f),
-                    )
-                    Spacer(Modifier.height(16.dp))
-                    ClimateReadout(
-                        carService = carService,
-                        carEvents = carEvents,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(130.dp),
-                    )
+                    // v0.6: media/climate cards are individually toggleable in Settings.
+                    if (settings.showMedia) {
+                        MediaCard(
+                            now = media,
+                            onPlayPause = nowPlaying::playPause,
+                            onNext = nowPlaying::next,
+                            onPrev = nowPlaying::prev,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
+                        )
+                    }
+                    if (settings.showClimate) {
+                        if (settings.showMedia) Spacer(Modifier.height(16.dp))
+                        ClimateReadout(
+                            carService = carService,
+                            carEvents = carEvents,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(130.dp),
+                        )
+                    }
                 }
 
                 // ---- CENTER: the app-drawer grid (widest) ----------------------
@@ -125,6 +146,7 @@ fun HomeScreen(
                         systemApps = systemApps,
                         onLaunch = appRepository::launch,
                         modifier = Modifier.fillMaxSize(),
+                        columns = settings.gridColumns, // v0.6: grid density from Settings
                     )
                 }
 
@@ -141,13 +163,16 @@ fun HomeScreen(
                             .fillMaxWidth()
                             .weight(1f),
                     )
-                    Spacer(Modifier.height(16.dp))
-                    RadioCard(
-                        carService = carService,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(180.dp),
-                    )
+                    // v0.6: radio card is toggleable in Settings.
+                    if (settings.showRadio) {
+                        Spacer(Modifier.height(16.dp))
+                        RadioCard(
+                            carService = carService,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(180.dp),
+                        )
+                    }
                 }
             }
         }
