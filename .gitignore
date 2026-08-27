@@ -1,0 +1,37 @@
+# NOTE: comments MUST be on their own line (git ignores inline trailing comments).
+# This repo intentionally tracks ONLY our own docs + scripts. Everything below
+# is excluded: device secrets, proprietary firmware/apps, tool binaries, blobs.
+
+# --- device backup: secrets / DRM / EFS / full system ---
+backup-*/
+
+# --- proprietary firmware + extracted images (copyright, huge) ---
+gt6-fw/
+payload/
+run/
+loaders/
+
+# --- EDL tooling (venv + cloned upstream) ---
+edl/venv/
+edl/src/
+
+# --- decompiled proprietary app sources (copyright) — matches -src, -src2, etc ---
+mcu-analysis/
+
+# --- recon raw dumps: contain IMEIs, MACs, serial, secrets ---
+recon/
+
+# --- generic binary/archive types (defense in depth) ---
+*.bin
+*.img
+*.elf
+*.apk
+*.zip
+*.pac
+*.dex
+*.gz
+
+# --- local scratch / logs ---
+*.log
+camera-diag-out/
+camera-config-backup/
