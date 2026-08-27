@@ -3,262 +3,409 @@
 Reference for building our own Kotlin/Compose replacement launcher (`/home/sasha/projects/device-reveng/launcher`).
 Cross-reference: `/home/sasha/projects/device-reveng/CAR_API.md` (the car-integration API).
 
-> **STATUS — device UNREACHABLE, APK NOT PULLED.**
-> `adb connect <ip>:<port>` timed out (Connection timed out, exit 124; `adb devices`
-> empty on two attempts, 2026-08-27). The head unit is offline, so **customerui.apk could not
-> be pulled or decompiled**. No prior copy of the APK or its decompiled source exists anywhere
-> under `/home/sasha/projects/device-reveng` (searched).
+> **STATUS — APK PULLED & DECOMPILED (2026-08-27).**
+> `com.szchoiceway.customerui.apk` (260 MB, versionName `1.0_202412261721`, minSdk 28 / target 33 /
+> compile 33 = Android 13) was decompiled **with resources** via
+> `mcu-analysis/jadx/bin/jadx -d mcu-analysis/customerui-src`. Source at
+> `mcu-analysis/customerui-src/sources/`, resources at `mcu-analysis/customerui-src/resources/`
+> (946 layouts, a dedicated `res/layout-hdpi-1920x720/` + `res/values-hdpi-1920x720/`,
+> `res/drawable-*-1920x720/`).
 >
-> **Everything below is therefore [inferred]** — reconstructed from the *gateway* app
-> `com.szchoiceway.eventcenter` (decompiled at `mcu-analysis/eventcenter-src/sources/`), which
-> names, launches, and reflectively reaches into customerui, plus `CAR_API.md`. Citations of the
-> form `file:line` are **into the eventcenter source**, NOT into customerui (which we do not have).
-> When the device is back, re-run the pull/jadx steps to confirm the [inferred] items marked below.
+> Items are now marked **[confirmed]** (verified in customerui itself), **[corrected]** (the offline
+> inference was wrong), or **[inferred]** (still only from the gateway). `file:line` citations are now
+> **into customerui** unless the row says "(eventcenter)".
 >
-> To finish the job later:
-> ```
-> adb connect <ip>:<port>
-> adb -s <ip>:<port> shell pm path com.szchoiceway.customerui
-> adb -s <ip>:<port> pull <path> mcu-analysis/apks/customerui.apk
-> mcu-analysis/jadx/bin/jadx -d mcu-analysis/customerui-src --no-res -q mcu-analysis/apks/customerui.apk
-> # + a resource pass (unzip the apk, or jadx without --no-res) for the layouts named in §3/§4
-> ```
+> **Biggest surprises (read these first):**
+> 1. **customerui is NOT an Android HOME app.** No activity declares `category.HOME`. `MainActivity`
+>    is a 25-line stub that only fixes orientation and calls `finish()` — see §2.
+> 2. **The home UI is a *window*, not an activity.** The root home view `layout_launcher_zxw`
+>    (→ `com.szchoiceway.customerui.views.LauncherView`) is referenced **only in R.java**, i.e. it is
+>    inflated *by name* from another process — the same by-name inflation the gateway uses for the
+>    status bar and side window (§2, §3).
+> 3. **It's a giant multi-OEM launcher.** ~55 launcher skins (Benz/BMW/Audi/Porsche/Lexus/Toyota/BYD/
+>    Wrangler/…) selected at runtime by an integer SysVar **`uiNumberKey`**. Our unit uses the
+>    **default** skin (§2). The `zxw` resources the gateway inflates by name are that default.
+> 4. customerui declares **no custom permissions at all** — not even
+>    `com.szchoiceway.permission.broadcast`. It receives protected broadcasts purely via
+>    `android:sharedUserId="android.uid.system"` + platform signature (§7).
 
 ---
 
-## 1. Identity & components
+## 1. Identity & components  [confirmed]
 
-| Thing | Value | Evidence (eventcenter) |
+Manifest: `mcu-analysis/customerui-src/resources/AndroidManifest.xml`.
+
+| Thing | Value | Evidence |
 |---|---|---|
-| Package | `com.szchoiceway.customerui` | `EventUtils.java:144` (`APPLIST_MODE_PACKAGE_NAME`) |
-| **Home/main activity** | `com.szchoiceway.customerui.MainActivity` | `DualScreenDisplayManage.java:402,419`; `HDMIManage.java:439,456`; `HDMIOutUtils.java:40` |
-| App-drawer activity | `com.szchoiceway.activity.AppLauncherListActivity` | `EventUtils.java:143` (`APPLIST_MODE_CLASS_NAME`) |
-| Music screen | `com.szchoiceway.fragment.MusicModeActivity` | `EventService.java:3197` |
-| Empty/placeholder | `com.szchoiceway.customerui.EmptyActivity` | grep of decompiled apps |
-| App-list adapter pkg | `com.szchoiceway.customerui.applist` | grep of decompiled apps |
-| Reverse/radar views (in-launcher) | `com.szchoiceway.view.{ReverseAssistLineView, ReverseAssistLineControlView, ReverseCarTrackView, ReverseCarTrackParameterControl, RadarViewUp, RadarViewDown}` | grep |
-| Wheel-learn activities | `com.szchoiceway.activity.{CarWheelActivity, McuWheelActivity}` | grep |
-| Custom widgets | `com.szchoiceway.view.{CoverFlowView, CoverFlowAdapter, DayNightImageButton, DayNightImageBtnDrawable, SelectStateTextView, VerticalSeekBar, SideBarView, SideBigBarView, ColorAdjustmentView, CalibrationView}` | grep |
+| Package | `com.szchoiceway.customerui` | manifest `package=` |
+| sharedUserId | **`android.uid.system`** | manifest line 3 **[confirmed]** |
+| Application class | `com.szchoiceway.customerui.CustomerUIApp`, theme `@android:style/Theme.Wallpaper.NoTitleBar`, `configChanges="orientation"` | `<application>` |
+| **"Home"/main activity** | `com.szchoiceway.customerui.MainActivity` — theme `@style/AppNewZxw`, exported, filter `MAIN`+`LAUNCHER` (**no HOME**). Stub, see §2 | `MainActivity.java:1-25` **[corrected]** |
+| Duplicate launcher entry | `com.szchoiceway.customerui.EmptyActivity` — also `MAIN`+`LAUNCHER`, theme `AppNewZxw` | manifest |
+| App-drawer activity | `com.szchoiceway.activity.AppLauncherListActivity` — `launchMode="singleInstance"`, `configChanges="smallestScreenSize|screenSize|uiMode|screenLayout|orientation"`, `resizeableActivity="false"`, theme `AppThemeAppLauncherListActivity` | manifest **[confirmed]** |
+| Screensaver | `com.szchoiceway.activity.ScreensaverActivity` (`singleInstance`) | manifest |
+| Background/home host | `com.szchoiceway.activity.BackgroundActivity` (`singleInstance`, theme `AppThemeSinkingInvasion`) | manifest |
+| Icon-picker | `com.szchoiceway.icon.AppSelectActivity` (`singleTask`) | manifest |
+| Dialogs | `dialog.SearchDialog`, `cheku.dialog.ChooseMyAppDialog` (both `singleInstance`) | manifest |
+| Cheku (Lincoln/Bentian) | `cheku.activity.ChekulinkenChooseCarTypeActivity`, `…ChooseThemeActivity` (`singleTask`) | manifest |
+| UI service | **`com.szchoiceway.service.UiService`** (action `com.szchoiceway.service.action.UI_SERVICE`) — only manages the up/down center popup (`WmUpDownCenterView`), NOT the launcher window | `UiService.java` |
+| Content provider | `com.szchoiceway.customerui.CoreContentProvider` (authority `com.szchoiceway.customerui.CoreContentProvider`) — exposes `getGlobalContext()` | manifest |
+| Media notification bridge | `com.zxw.lib.ui.service.MediaNotificationService` | manifest |
+| **AppWidget providers** (customerui is also a widget host) | Music/Clock/Radio/Weather/Gyro/Compass/Meter/Calendar widgets in many sizes (`MusicWidget*`, `AnalogClockWidget*`, `RadioWidget*`, `WeatherWidget*`, `GyroWidget*`, `CompassWidget*`, `MeterWidget*`, `PlayerWidget_2x2`, `WeatherReportWidget_2x2`, …) backed by services `MusicService/ClockService/RadioService/WeathService/CalendarService/GyroService/CompassService/MeterService/AppCustomService` | manifest **[new]** |
 
-Note the class names live in **three** package roots that all ship inside the customerui APK:
-`com.szchoiceway.customerui.*`, `com.szchoiceway.activity.*`, `com.szchoiceway.fragment.*`,
-`com.szchoiceway.view.*`, `com.szchoiceway.base.*`. Our replacement only needs to re-implement
-`MainActivity` (HOME) + a drawer; the `view.*` reverse/radar widgets are optional (the gateway's
-own `BackCarActivity` covers reverse — see §5).
+Package roots that ship in the APK (all confirmed present): `com.szchoiceway.customerui.*`,
+`com.szchoiceway.activity.*`, `com.szchoiceway.view.*` (+ `view.item.*`, `view.secondary.*`),
+`com.szchoiceway.launcher.*` (per-OEM skins), `com.szchoiceway.cheku.*`, `com.szchoiceway.widget.*`,
+`com.zxw.lib.ui.*` (shared UI lib), `com.core.ex.*` (shared "ex" widget lib: `SmpDn*` day/night
+views, `CoreAdapterImp`, `LinearLayoutManagerX.PageGrid2`, `IndicatorView`, `RoundedImageView`).
 
-Runs as **`android.uid.system`** like the gateway (CAR_API §0, §6.4). Our normal-app launcher can
-**not** share that uid; consequences in §7.
+`MusicModeActivity` / the `Reverse*`/`Radar*` overlay widgets that the offline pass listed **do not
+exist** under those names in this APK. **[corrected]** Reverse is entirely the gateway's job (§5).
+
+Runs as **`android.uid.system`** and is platform-signed. Our normal-app launcher can **not** share
+that uid; consequences in §7.
 
 ---
 
-## 2. How it registers as HOME  [inferred — manifest not available]
+## 2. How it becomes "home"  [corrected]
 
-customerui's manifest is not in this dump, so the exact filter is inferred as the standard set
-(CAR_API §6.1). `MainActivity` is the HOME activity:
+**It does not register as Android HOME.** No `<category android:name="android.intent.category.HOME">`
+appears anywhere in the manifest. `MainActivity` and `EmptyActivity` only carry `MAIN`+`LAUNCHER`.
+
+`MainActivity` is a **stub** that never draws anything:
+
+```java
+// MainActivity.java:11-24  [confirmed]
+protected void onCreate(Bundle b){
+  super.onCreate(b);
+  String o = getIntent().getStringExtra("ScreenOrientation");
+  if ("SCREEN_ORIENTATION_LANDSCAPE".equals(o)) { if (getRequestedOrientation()!=0 && getDisplayId()!=0) setRequestedOrientation(0); }
+  else if ("SCREEN_ORIENTATION_PORTRAIT".equals(o) && getRequestedOrientation()!=1) setRequestedOrientation(1);
+  finish();                       // <-- returns immediately
+}
+```
+
+So "launching MainActivity" (which the gateway does from `DualScreenDisplayManage.java:402,419`,
+`HDMIManage.java:439,456`, `HDMIOutUtils.java:40` — eventcenter) is just a way to **force screen
+orientation**, not to show the launcher.
+
+**The real home UI is a window inflated by name.** The root home layout is:
 
 ```xml
-<activity android:name="com.szchoiceway.customerui.MainActivity" ...>
-  <intent-filter>
-    <action   android:name="android.intent.action.MAIN"/>
-    <category  android:name="android.intent.category.HOME"/>
-    <category  android:name="android.intent.category.DEFAULT"/>
-    <category  android:name="android.intent.category.LAUNCHER"/>
-  </intent-filter>
-</activity>
+<!-- res/layout/layout_launcher_zxw.xml  [confirmed] -->
+<com.szchoiceway.customerui.views.LauncherView
+    android:theme="@style/Theme.Customerui" android:background="?attr/colorOnPrimary"
+    android:layout_width="match_parent" android:layout_height="match_parent"/>
 ```
 
-Corroboration that `MainActivity` is treated as "home to return to": the gateway explicitly
-re-launches `ComponentName(customerui, "com.szchoiceway.customerui.MainActivity")` whenever it needs
-to bring the launcher forward — e.g. leaving dual-screen (`DualScreenDisplayManage.java:402,419`) and
-HDMI transitions (`HDMIManage.java:439,456`, `HDMIOutUtils.java:40`). Mode enum has `SRC_HOME=43`
-(`EventUtils.java:2034`).
+`layout_launcher_zxw` is referenced **only in `R.java`** — nothing inside customerui inflates it — so
+it is inflated from **another process** (the gateway, via `createPackageContext("com.szchoiceway.customerui")`),
+exactly the mechanism the notes already documented for the side window and status bar (§3). This is
+why MainActivity can finish immediately: the launcher content lives in a system window, not an activity.
 
-For **our** launcher: replacing HOME is a normal-app operation. To actually take over, either
-uninstall/disable customerui or win the HOME chooser. Both `com.szchoiceway.customerui` and
-`com.android.atslcarconsole` (`EventUtils.java:206`, `CARCONSOLE_PACKAGE_NAME`) are HOME candidates
-on this device.
+**Skin selection.** `LauncherView` reads integer SysVar **`uiNumberKey`**
+(`SystemPropertiesHelps.I.uiNumberKey`) and inflates one of ~55 per-OEM roots
+(`LauncherView.java:40-188` **[confirmed]**). Mapping excerpt:
 
----
-
-## 3. Home-screen cards / widgets and their data sources
-
-The stock home grid is a **configurable icon list**, not fixed widgets. The default order is defined
-gateway-side and mirrored by the launcher:
-
-```
-Customer.java:51  DEFAULT_ICON_CONFIG =
-  "ICON_NAVI,ICON_RADIO,ICON_MUSIC,ICON_AIR,ICON_CONSOLE,ICON_PIC,ICON_BT,ICON_MOVIE,
-   ICON_CARPLAY,ICON_DVD,ICON_CUSTOMIZE,ICON_EXPLORER,ICON_PHONE_APP,ICON_SET,ICON_APPLIST,
-   ICON_DVR,ICON_360_CAM,ICON_FILE_MANAGER,ICON_MORESETTING"
-```
-`Customer.java:280-306` maps each `ICON_*` tag → a label string resource (`lbl_nav`, `lbl_radio`,
-`lbl_music`, `lbl_air`, `lbl_360`, `lbl_applist`, …). The **icon order is a persisted setting** the
-launcher reads/writes: SysVar `Sys_Function_Icon_Config_Key` (`SysProviderOpt.java:308`), the home
-page choice `Sys_Home_Page_Display` (`:323`), and hidden apps `SYS_LAUNCHER_APP_HIDE_KEY` (`:337`).
-
-Live-data cards and where each pulls its data (all cross-referenced to CAR_API §1.3/§3.2):
-
-| Card | Data source (broadcast / SysVar / AIDL) | CAR_API |
+| `uiNumberKey` | root layout | skin |
 |---|---|---|
-| **Media / now-playing** | Broadcasts `com.choiceway.musicplayer.ZXW_MUSIC_PLAY_SONG_NAME_EVT` / `_ARTIST_NAME_EVT` / `_ALBUM_NAME_EVT` / `_PLAYFILE_EVT` (String `*_EXTRA`); or AIDL `getValidModeInfor()/getValidPlayState()/getValidCurTrack/Time()`. Music screen is `MusicModeActivity` (`EventService.java:3197`). The `CoverFlowView`/`CoverFlowAdapter` classes are the album-art carousel. | §1.3, §3.2, §6.3 |
-| **Radio** | Broadcasts `ZXW_RADIO_INFO_EVT` / `com.szchoiceway.radio.frequency` (`BROADCAST_RADIO_FREQUENCY_EVENT`, extra `com.szchoiceway.radio.frequency_extra`); or AIDL `getRadioFreq/Band/Num()`. Control via `sendRadioKey/sendUserFreq`. Presets in SysVar `Rdo_MyFavorite0..5`. | §1.3, §2.3, §3.2 |
-| **Climate / A/C display** | Broadcast `com.szchoiceway.canbus.carairstruct` → Parcelable `com.szchoiceway.canbus.CarAirState` (extra `com.choiceway.canbus.carairstruct.airstate`); or AIDL `getAirData(int,byte[])`. Show/hide driven by `SHOW_CAR_AIR_EVT`/`HIDE_CAR_AIR_EVT`/`ACTION_SHOW_CAR_AIR_WND_EVENT` (`EventService.java:8970-8973`). A/C bar visibility from SysVar `Sys_BarAirShow_Set`. | §1.3, §5 |
-| **Navigation** | Configured nav pkg/class in SysVar `Set_NavPackageName`/`Set_NavClassName`; nav-sound broadcasts `ACTION_NAVI_START/STOP_PLAY_SOUND`. `ICON_NAVI` → `lbl_nav`. | §6.3, §2.3 |
-| **Clock** | Standard Android time (no car API); day/night styling per §4. | — |
-| **Shortcuts / function icons** | SysVar `Sys_Function_Icon_Config_Key` (order) + `SYS_LAUNCHER_APP_HIDE_KEY` (hidden) + customized-app slots `SET_CustomizedPackageName_KEY0..6`. | §2.3, §6.3 |
-| **Outside temp / trip / TPMS** (if shown) | Broadcasts `CAN_CAR_OUT_SIDE_TEMP_EVT` (int + String), `CAN_TPMS_DATA_EVT`, `CAN_CAR_TIRP_INFO`, `CAN_FUEL_CONSUMPTION_INFOR`. | §1.3 |
+| **default (else)** | **`launcher_common_land`** → `com.szchoiceway.view.LauncherLandView` | **the plain "zxw" launcher — our unit** |
+| 1200 / 1201 / 1202 | `bba_benz` / `bba_bwm` / `bba_audi` | Benz / BMW / Audi (force night) |
+| 1041 / 1045 / 1053 | `benz_launcher_view` / `benz2` / `benz_second` | Benz variants |
+| 1038 / 1046 / 1043 / 1800 | porsche / porsche_second / porsche_768 / ch_porsche | Porsche |
+| 1044 / 1050 | lexus / lexus_gyroscope | Lexus |
+| 1039 / 1040 | cheku_bentian / cheku_lincoln | Honda / Lincoln (cheku) |
+| 5000 / 5001 / 5100 / 5200 | wrangler / zhihang_alphard / yuntang / zhiyin_alphard | Toyota/Jeep skins |
+| 10008 / 10009 / 10001 / 10007 | bentley / mazda_axela / vertical_default / vertical_benz | misc |
+| 1051 / 1052 / 1500 / 1600 / 1900 | byd_ts / tanke_300 / hrui / trda / yimi | misc |
 
-**Shared floating UI hosted BY customerui, inflated BY the gateway** — important architectural note.
-The status bar and side windows are *not* drawn by the gateway from its own resources; the gateway
-opens a remote package context on customerui and inflates **customerui's** layouts/ids by name:
+Because our device shows the plain grid, its `uiNumberKey` is the default bucket, and the gateway's
+by-name inflation of `layout_status_bar_zxw` / `layout_left_side_window_view_zxw` (the **`_zxw`** =
+default resources) matches. **To confirm the exact number on the device:**
+`content query --uri content://com.szchoiceway.eventcenter.SysVarProvider/SysVar` and look for the
+`uiNumberKey` row (a.k.a. `sys_ui_number_key`).
 
-- Side window: `createPackageContext("com.szchoiceway.customerui")` → inflate layout
-  `layout_left_side_window_view_zxw` (`SideWindow.java:98-103`; base helper `BaseWindow.java:162-167`).
-- Custom status bar buttons (ids resolved in customerui's `R.id`, `CustomStatusbar.java:57-72`):
-  `ibtscreenshot, btn_home (SocketUtils.VIEW_BUTTON_HOME), btnShowApp, btnUp, btnDown, btnTask,
-  btnWifiStatus, btnAirplanemode, btnBTStatus, btnCast, btnHotspot, btnBlackScreen, btnDataroaming`.
-  A long-press on the "task" button broadcasts `ACTION_SPLITSCREEN` (`CustomStatusbar.java`).
-
-If we replace customerui we must either (a) keep those exact layout/id names so the gateway's
-`SideWindow`/`CustomStatusbar` keep working, or (b) also stop the gateway from drawing them and draw
-our own status/side bars. Config of that bar: SysVar `Sys_Statusbar_Icon_Config_Key`,
-`Sys_customer_statusbar`, `SYS_SHOW_TOOL_NAVI_BAR_WND` (CAR_API §2.3/§6.3).
+For **our** launcher: since customerui is not a HOME app, "taking over HOME" the Android way is a
+non-issue — but there is also no HOME app to fall back on. The practical replacement path is to draw
+our own window / register as HOME ourselves and stop the gateway from inflating `layout_launcher_zxw`.
+Both `com.szchoiceway.customerui` and `com.android.atslcarconsole` (`EventUtils.java:206`, eventcenter)
+are the OEM's home candidates.
 
 ---
 
-## 4. Launcher ↔ gateway handshake, day/night theming, key control
+## 3. Home-screen composition & data sources
 
-**UI-mode / day-night handshake** (bidirectional broadcasts):
-- gateway → launcher: `ACTION_EVENTCENTER_TO_LAUNCHER_UIMODE_EVENT`
-  (`EventUtils.java:66`), sent from `sendDayNightUiModeToLauncher(int)` with extra
-  `EXTRA_DAY_NIGHT_UIMODE` (int) — `EventService.java:14856-14860`.
-- launcher → gateway: `ACTION_LAUNCHER_TO_EVENTCENTER_UIMODE_EVENT` (`EventUtils.java:76`), received
-  at `EvtModel.java:1076-1080`, reads `EXTRA_DAY_NIGHT_UIMODE` and calls `setDayNightMode(int)`.
+### 3a. Default "zxw" home = `LauncherLandView`  [confirmed]
 
-So the launcher both **receives** the current day/night mode and can **push** a mode back. For raw
-illumination our launcher can also listen to `ACTION_DAY_BACKLIGHT_CHAGNED` /
-`ACTION_NIGHT_BACKLIGHT_CHAGNED` (protected — needs the permission) and read SysVar
-`Sys_Day_Night_Mode` (CAR_API §1.3/§2.3). The stock UI's `DayNightImageButton`/`DayNightImageBtnDrawable`
-widgets swap drawables on this signal — our Compose theme should key off the same event.
+`launcher_common_land` (in `res/layout-xhdpi/`) is just `com.szchoiceway.view.LauncherLandView`.
+`LauncherLandView` builds a full-screen **`ViewPager`** (`launcher_land_view.xml` — root
+`SmpDnFrameLayout` with day/night wallpaper `icon_bg_desktop_bg_1` / `…_night`, `LauncherLandView.java:468,474`):
 
-**Launcher → gateway control:** send `com.szchoiceway.ACTION_LAUNCHER_KEY_CTRL`
-(`ACTION_LAUNCHER_KEY_CTRL`) with String extra `EXTRA_LAUNCHER_KEY_WORD`. Handled in
-`startLauncherCtrl(Intent)` — `EventService.java:12953-12989`. Recognized keywords (prefix match):
+- **Page 0 = "negative / minus-one screen"** — widget dashboard,
+  `page_menu_one_negative_screen_land.xml` (`LauncherLandView.java:475`). Layout percentages
+  (of full 1920×720): **TimeCard 18 % width** (left), then a right block with **`dashboard`
+  VirtualView 72 %** + **weather/music column 26 %** (`WeatherInfoView` `weather_view_type=11` 35 % +
+  `MusicInfoView` `type=1` 63 %), and a bottom **`ItemAppInfoOneNegScreenView` 25 % height**.
+  (`v_navi`/`v_navi_space` weather slot is hidden by code at `:477-478`.)
+- **Pages 1…N = the app-icon grid** — each page is `page_launcher_recycler_view.xml`
+  (= `com.szchoiceway.view.LauncherLandAppListView`, `LauncherLandView.java:481`).
 
-| `LauncherKeyWord` prefix | Gateway action |
-|---|---|
-| `BlackScreen` | toggle black-screen (`setSysBlackScreenState(true)`) |
-| `DIM` | `ProccessDIMKey()` (dim toggle) |
-| `Power` | `onPowerClicked(true)` |
-| `TaskList` | recents (`onShowRecentTaskList()` on API>29, else broadcast `ACTION_SHOW_TASK_LIST`) |
-| `StatusBar` | show/hide custom status bar (handler msg 297) |
-| `Setting` | open settings mode (`postRunModeActivity(SRC_SETUP)`) |
+### 3b. The icon grid — real 1920×720 metrics  [confirmed]
 
-Also useful: `Sidebar_function_action` (`SIDEBAR_FUNCTION_ACTION`, extra `Sidebar_function_extra`) →
-`startSidebarFunctionCtrl` (`EventService.java:14594`); `ACTION_MORE_SETTINGS` opens the settings app
-or the password-gated factory page depending on `getCustomerType()` (`EvtModel.java:914-935`).
+`LauncherLandAppListView extends ItemAppListView`. Grid geometry
+(`ItemAppListView.java:139-162 setRowsAndColumns()`):
 
-**Customer/OEM variant** gates behavior: `getCustomerType()` (`EventService.java:4376`) reads/writes
-SysVar `Sys_CustomerType` (`SysProviderOpt.java:287`; `EventService.java:6725,6868,11672`). e.g.
-`customerType==1` routes "more settings" through the nav password page (`EvtModel.java:915-926`).
-Our launcher can read `Sys_CustomerType` to match layout expectations.
+```
+ratio = width/height ;  for 1920x720 ratio = 2.667
+  ratio <= 2.2            -> 3 rows x 5 cols
+  2.2 < ratio < 3.0       -> 2 rows x 6 cols   <-- OUR DEVICE (12 icons/page)
+  3.0 <= ratio < 3.4      -> 2 rows x 7 cols
+  ratio >= 3.4            -> 2 rows x 8 cols
+  uiNumberKey == 10008    -> 2 rows x 5 cols (Bentley)
+```
 
----
+- **1920×720 = 2 rows × 6 columns = 12 icons per page**, paged horizontally
+  (`LinearLayoutManagerX.PageGrid2(orientation=0, rows, cols).isAutoSetItemWH(true)`,
+  `ItemAppListView.java:119-126`). `isAutoSetItemWH(true)` = cells auto-sized to fill the page, so
+  there is **no fixed cell dp** — cells fill `(pageW − 80dp margins) / 6` × `(pageH − 90dp) / 2`.
+- Page container margins/indicator (`item_launcher_recycler_view.xml` **[confirmed]**):
+  RecyclerView `marginLeft/Right = 40dp`, `marginTop/Bottom = 45dp`; `IndicatorView` bottom-center,
+  `marginBottom 30dp`, dots `25dp × 5dp`, `5dp` spacing, selected `#0096ff`.
+- **Icon cell** (`item_app_info_phone_gird_rec.xml`, chosen when `isLandRectangleScreen()`,
+  `AppListItemBeanView.java:22` **[confirmed]**): vertical `SmpDnLinearLayout`, centered; icon
+  `RoundedImageView` **93 dp × 93 dp, corner radius 15 dp**; label `SmpDnTextView` **20 sp**,
+  `marginTop 5dp`, 1 line, day `#000` / night `#fff`; press feedback scale/alpha **0.9**.
+- Icons are **drag-reorderable**; order persists to SysVar **`desktopStyleAppOrderKey`**
+  (`LauncherLandAppListView.java:113`, `SystemPropertiesHelps.java:809`). The app set comes from
+  `AppFilterHelps.Other.queryAppInfoList()` (installed apps) — **not** a fixed widget list.
+- The status-bar height is padded in at the top (`ItemAppListView.java:136`,
+  `DisplayHelps.getStatusBarHeight`).
 
-## 5. Reverse trigger & SWC keys (how the launcher copes)
+### 3c. Confirmed device-specific composition `launcher_main_common_land_1920_720`  [confirmed / key]
 
-**Reverse.** The launcher does **little** here — reverse is owned by the gateway + a dedicated
-activity, which draws over whatever is on screen:
-- Gateway detects reverse from the MCU 0x71 sys-event (byte1 bit `0x02`, `EventService.java:2354`),
-  calls `startBackcar()` and broadcasts `ACTION_BACKCAR_START` / `_END` (**protected**,
-  `EventService.java:8978,8994`). CAR_API §1.3/§5.
-- The reverse camera UI is the gateway/aux stack (`com.szchoiceway.view.BackCarActivity`, CAR_API §7;
-  aux app `com.szchoiceway.auxcamera`). customerui *has* its own overlay widgets
-  (`ReverseAssistLineView`, `ReverseCarTrackView`, `RadarViewUp/Down`) but on this device the
-  full-screen reverse view is the gateway's.
-- For **our** launcher: just listen for `ACTION_BACKCAR_START/END` to pause/hide home animations and
-  restore on `_END`. Radar overlay data = `MCU_CAR_CAN_RADAR_INFO` (byte[] `CAR_CAN_DATA`), steering
-  trajectory = `ZXW_CAN_WHEEL_TRACK_EVT` (int angle). Reverse tunables in SysVar
-  (`Sys_backcar_fullscreen`, `Sys_Backcar_speed_threshold`, `Sys_Reverse_Assist_Line_Key`,
-  `Sys_TrackLineType`, `Sys_BackCar_Display_Radar_Key`). CAR_API §2.3. **The protected broadcasts
-  need `com.szchoiceway.permission.broadcast`** (see §7).
+`res/layout/launcher_main_common_land_1920_720.xml` is a **fixed clock + grid** composition explicitly
+tuned for 1920×720 (root `SmpDnCslView`, day bg `gb_land_bj_1920_720`, night `gb_land_bj_night`):
 
-**SWC / steering-wheel & panel keys** (CAR_API §4 — listen to all three paths):
-1. `STEER_WHEEL_INFOR` (protected) — extras `STEER_WHEEL_INFOR_LPARAM` (key idx), `_WPARAM`
-   (3=down,4=up), `_VOLTAGE`. `EventService.java:2846-2857`.
-2. `ACTION_HOST_MCU_BUTTON_KEY` (`HostKeyWord` int, `HostKeyStatus` byte) + `MCU_KEY_INFOR`
-   (`MCU_KEY_VALUE` int). Unprotected.
-3. Injected Android KeyEvents (`sendKeyDownUpSync`) — ordinary `onKeyDown` catches media/home keys.
-
-Keycode constants `CAR_KEY_*` (`HOME=2, FAV=3, PREV=4, NEXT=5, MENU=6, MEDIA=8, RADIO=9, BACK=10`,
-`EventUtils.java:1000-1014`) and `MCU_KEY_SYS_*` (`HOME=76, MENU=77, ESC=78`). The stock launcher maps
-`HOME` → bring `MainActivity` forward; `MENU` → status bar; media keys → the media card. Wheel-key
-learning uses activities `CarWheelActivity`/`McuWheelActivity` and SysVar `wheel_key_learn_custom`
-(`SYS_WHEEL_INDEX_CUSTOM_KEY`) — our launcher can reuse the gateway's learned mapping rather than
-re-implement learning.
-
----
-
-## 6. App launching / drawer
-
-- **Drawer entry point** = mode `SRC_APPLIST`. On landscape (`EventApp.getOrientation()!=0`) the
-  gateway does **not** start a separate activity — it broadcasts `ZXW_ACTION_LAUNCHER_ALLAPPS_START_EVT`
-  (`ACTION_LAUNCHER_ALLAPPS_START_EVT`, `EventUtils.java:74`) with extra `LAUNCHER_EXTRA="AppList"`,
-  and **the launcher itself opens its in-process drawer** (`EventService.java:8221-8227`). In portrait
-  it launches the standalone `AppLauncherListActivity`. Our 1920x720 unit is landscape, so we should
-  **register a receiver for `ZXW_ACTION_LAUNCHER_ALLAPPS_START_EVT`** and show our own drawer.
-- The home grid launches apps by resolving the `ICON_*` config (§3) to package/class. Customized user
-  slots live in SysVar `SET_CustomizedPackageName_KEY0..6`; hidden apps in `SYS_LAUNCHER_APP_HIDE_KEY`.
-- Mode launches for built-ins are done by the gateway via
-  `EventUtils.startActivityIfNotRuning(pkg, cls)` per `SRC_*` (`EventService.java:8200-8240`), e.g.
-  `SRC_SETUP` → settings app, `SRC_EXPLORER`/`SRC_DVR`/`SRC_AUX`/`SRC_PHONELINK`/`SRC_BT_ECAR`. A
-  launcher tile can either `startActivity` directly or ask the gateway by sending a mode
-  (`ACTION_LAUNCHER_KEY_CTRL` "Setting", or AIDL `sendMode/postRunModeActivity`).
-
----
-
-## 7. Permissions / uid the stock launcher relies on (and what we must do)
-
-customerui runs as **`android.uid.system`** and is platform-signed. Capabilities that depend on that:
-
-| Capability stock launcher has | Our normal-app launcher | Fix |
+| Element | Constraint (fraction of 1920×720) | ≈ px |
 |---|---|---|
-| Receive **protected** events: `ACTION_BACKCAR_START/END`, `STEER_WHEEL_INFOR`, day/night backlight | ⚠️ only if it can hold `com.szchoiceway.permission.broadcast` (likely `signature` → normal app silently misses them) | Build as **privileged/system app**: platform-sign + push to `/system/priv-app`, whitelist the perm. Device is rooted → feasible. |
-| **Write** SysVar (`Sys_Function_Icon_Config_Key`, icon order, hidden apps, reverse tunables) | ❌ as normal app | system uid / root; from shell `content update --uri content://com.szchoiceway.eventcenter.SysVarProvider/SysVar ...` |
-| **Read** SysVar, bind `EventService` (read-only AIDL), receive **unprotected** events (media, radio, ACC, outside-temp, `ZXW_ACTION_LAUNCHER_ALLAPPS_START_EVT`) | ✅ | works as a plain HOME app |
-| Have the gateway inflate its status/side bar from our resources | only if we keep the exact layout/id names of §3 | otherwise draw our own bars |
-| `WRITE_SECURE_SETTINGS`, inject KeyEvents, split-screen control | ❌ | requires `/system/priv-app` + platform key |
+| `vwTimeCard` (`TimeCard`) | left, full height, **width 14.6 %** | ≈ 280 × 720 |
+| `layout_ViewPager` block | right, full height, **width 89 %** | ≈ 1709 × 720 |
+| ↳ `leftBounds` / `rightBounds` gutters | **2.5 %** each of the block | ≈ 43 px |
+| ↳ `viewPager` (`com.android.internal.widget.ViewPager` — needs system app) | **95 %** of the block | ≈ 1624 × 720 |
+| ↳ `BtInfoView` overlay | full width, **height 17 %** | ≈ 1709 × 122 |
+| `lottie_home_float` (`lottie/home_float_click.json`) | over TimeCard | **105 × 105 dp** |
+| `vwBottom` reserved strip | bottom, **height 10 %** | ≈ 1920 × 72 |
 
-**Recommendation (mirrors CAR_API §6.4):** ship the replacement as a **normal HOME app** for the
-first cut (HOME + SysVar reads + AIDL reads + unprotected broadcasts already give a usable launcher:
-media, radio, climate-read, outside temp, drawer, day/night-via-SysVar, app launching). Then, to get
-reverse/SWC/protected day-night and to persist icon config, **re-sign with the platform key and
-install to `/system/priv-app`** with `com.szchoiceway.permission.broadcast` (and optionally
-`android.uid.system`) whitelisted — practical because the unit is rooted.
+So on our panel: **clock column ~14.6 % (~280 px) on the far left, paged icon grid fills ~89 % on the
+right**, with ~2.5 % inner gutters and a ~10 % bottom strip. (This resource is R-referenced only, so it
+too is inflated by name — a variant of the negative-screen composition; the two share `TimeCard` +
+`ViewPager`.)
+
+### 3d. The clock (`TimeCard`)  [confirmed]
+
+`TimeCard` inflates a **1920×720-specific** layout `layout_item_time_info_land_1920_720.xml`
+(`TimeCard.java:31`): hours & minutes each **90 sp**, AM/PM & date labels **20 sp**, small
+±10 dp nudges. So the clock is plain Android time, big 90 sp digits (no car API).
+
+### 3e. Live-data widgets — data sources  [confirmed / refined]
+
+| Widget (class) | How it actually gets data | vs CAR_API / prior note |
+|---|---|---|
+| **Media** (`view.item.MusicInfoView`, layout `layout_item_music_info_ui1`) | Binds a **`ZxwMediaBean`** abstraction — `getMediaTitle()/getMediaArtist()/getMediaCurrentTimeStr()/getMediaTotalTimeStr()/getMediaComponent().getLabel()` (`MusicInfoView.java:200-214`). Fed by AIDL valid-mode + `MediaNotificationService`; broadcast triggers `VALID_MODE_INFOR_CHANGE`, `ZXW_ACTION_NOTIIFY_MEDIA_PLAY_PATH` (`IBroadcastImp.java`). **[corrected]** — it does **not** listen to the raw `ZXW_MUSIC_PLAY_SONG_NAME_EVT` broadcasts the offline note assumed; use `getValidModeInfor()/getValidCurTrack()` per CAR_API §3.2/§6.3 |
+| **Weather** (`view.item.WeatherInfoView`) | **Online weather API** — `resultsDTO.getAir().getCity().getQuality()` etc. (`WeatherInfoView.java:132`); layouts `desktop_weather_info` / `layout_item_weather_info_land` / `screesaver_weather_info` (`:200-205`). **[new]** — this is Internet weather, **not** a CAN signal |
+| **Radio** | `RadioWidget*` + `RadioService`; radio actions resolve via `EventUtils` (`EventUtils.java` has `ZXW_RADIO_INFO`). Consistent with CAR_API §2.3 (`getRadioFreq/Band`) |
+| **Climate / A/C** | Broadcast **`com.choiceway.canbus.carairstruct`** → `CarAirState` parcelable, registered in `IBroadcastImp.java`. Matches CAR_API §1.3/§5. **[confirmed]** |
+| **BT status** (`view.item.BtInfoView`) | `com.szchoiceway.btsuite.HBCP_EVT_*` (power/connected-device/HSHF status), `IBroadcastImp.java`. **[new]** |
+| **Outside temp** | `com.choiceway.eventcenter.CanUtils.CAN_CAR_OUT_SIDE_TEMP_EVT` (+`_EXTRA_STR`), `IBroadcastImp.java`. Matches CAR_API §1.3 **[confirmed]** |
+| **SWC / keys** | `com.choiceway.eventcenter.EventUtils.STEER_WHEEL_INFOR`, `MCU_KEY_INFOR`, `CMD_PANEL_STUDY_INFOR`, `ZXW_ORIGINAL_MCU_KEY_FOCUS_MOVE_EVT`, `ACTION_CLICK_SYSTEM_KEYCODE_EVENT`, `IBroadcastImp.java`. Matches CAR_API §4 **[confirmed]** |
+| **Nav** | SysVar `Set_NavPackageName`/`Set_NavClassName` (`SysProviderOpt.java`); `weather_view_type=11` slot in the neg-screen is nav/weather. |
+| **Dashboard/gauges** (`view.item.VirtualView`) | 72 %-wide virtual-instrument view on the negative screen (data via gyro/meter services) **[new]** |
+
+### 3f. `ICON_*` / `Sys_Function_Icon_Config_Key`  [refined]
+
+The `ICON_NAVI,ICON_RADIO,…` catalog + `Sys_Function_Icon_Config_Key` live in the **per-OEM
+`Customer*` profile classes** (`customerui/customer/CustomerKW.java`, `CustomerKSP.java`, `CustomerCK.java`,
+`CustomerCHWY.java`, `CustomerKLD.java`, … **[confirmed present]**). That is an **older / alternate**
+menu mechanism used by some skins. **Our default skin's home grid uses `desktopStyleAppOrderKey`**
+(drag order) + `queryAppInfoList` instead (§3b). So for a replacement, follow §3b, not the ICON_ list —
+but the ICON_ config still governs the fixed function tiles on OEM skins that use `Customer*`.
+
+### 3g. Shared floating UI hosted BY customerui, inflated BY the gateway  [confirmed]
+
+Still true and now verified — all three are thin custom-View wrappers:
+
+- **Side window**: `layout_left_side_window_view_zxw.xml` = `com.szchoiceway.customerui.views.BaseLeftNavBarView`
+  (draws its own children). Inflated by gateway `SideWindow.java:98-103` (eventcenter). **[confirmed]**
+- **Status bar**: `layout_status_bar_zxw.xml` = `views.StatusBarView`;
+  `layout_tool_status_bar_zxw.xml` = `views.ToolStatusBarView`. The `btn*` ids the gateway's
+  `CustomStatusbar.java` resolves (`ibtscreenshot, btn_home, btnShowApp, btnUp, btnDown, btnTask,
+  btnWifiStatus, btnAirplanemode, btnBTStatus, btnCast, btnHotspot, btnBlackScreen, btnDataroaming`)
+  are built by those View classes (they also appear in skin layouts such as `land_status_view.xml`,
+  `bba_audi_status_view.xml`, `layout_navi_bar_*`). **[confirmed]**
+- **System nav bar** (`sys_nav_land_status_view.xml`): symmetric left/right blocks each `250dp` wide,
+  value labels `120×100dp`, a center `view_pager` (media/air/weather pager: `sys_nav_item_media`,
+  `sys_nav_item_air`, `sys_nav_item_weather`), double-button vol/media glyphs `48×137dp`. **[new]**
+
+If we replace customerui we must either (a) keep those exact layout/id names so the gateway keeps
+inflating them, or (b) also stop the gateway drawing them and draw our own. Config SysVars unchanged:
+`Sys_Statusbar_Icon_Config_Key`, `Sys_customer_statusbar`, `SYS_SHOW_TOOL_NAVI_BAR_WND` (CAR_API §2.3/§6.3).
 
 ---
 
-## 8. 1920x720 layout metrics
+## 4. Launcher ↔ gateway handshake, day/night, key control
 
-No customerui dimens are available (APK not pulled). What we know:
-- Panel is **1920x720 landscape**, Android 13 (CAR_API header). Geometry is exposed via SysVar
-  `Sys_Screen_Width` / `Sys_Screen_Height` / `Sys_Screen_Density` / `Sys_Landscape`
-  (`SysProviderOpt.java`, CAR_API §2.3) — read these instead of hard-coding.
-- Orientation drives drawer behavior: landscape (`getOrientation()!=0`) uses the in-process drawer via
-  `ZXW_ACTION_LAUNCHER_ALLAPPS_START_EVT` (§6).
-- **To recover the real dp grid / card sizes**, decompile customerui *with* resources when the device
-  is back: `MainActivity` layout + `layout_left_side_window_view_zxw` + the status-bar layout hosting
-  the `btn*` ids in §3. This is the one section that genuinely needs the APK.
+Runtime broadcast registry: `com/zxw/lib/ui/broadcast/IBroadcastImp.java` (customerui registers these
+**dynamically** — the manifest has **no** static `<receiver>` for gateway events; its 45 `<receiver>`
+entries are all AppWidget providers). Confirmed actions customerui listens to:
+`com.szchoiceway.ACTION_LAUNCHER_KEY_CTRL`, `…EventUtils.STEER_WHEEL_INFOR`, `…MCU_KEY_INFOR`,
+`…VALID_MODE_INFOR_CHANGE`, `…ZXW_ACTION_NOTIIFY_MEDIA_PLAY_PATH`, `…ACTION_ACC_SLEEP_STATUS_EVT`,
+`…ACTION_CLICK_SYSTEM_KEYCODE_EVENT`, `…CMD_PANEL_STUDY_INFOR`, `…ZXW_ORIGINAL_MCU_KEY_FOCUS_MOVE_EVT`,
+`com.choiceway.canbus.carairstruct`, `CAN_CAR_OUT_SIDE_TEMP_EVT`, `HBCP_EVT_*` (BT),
+`com.szchoiceway.action.ACTION_SINGLE_DOUBLE_BUTTON_FUNCTION_SELECTION`,
+`com.szchoiceway.EventUtils.ACTION_REFRESH_CUSTOMER_UI`, and a per-launcher `uiModeNightChanged`
+(`com.szchoiceway.uiModeNightChanged`). **[confirmed / expanded]**
+
+**Day/night** — the offline pass's broadcast pair
+(`ACTION_EVENTCENTER_TO_LAUNCHER_UIMODE_EVENT` ⇄ `ACTION_LAUNCHER_TO_EVENTCENTER_UIMODE_EVENT`) is an
+**eventcenter-side** constant; **inside customerui the day/night switch is done by
+`SettingsSystemHelps.SystemPropertiesX.setUiModeNight/​setUiModeDay` + the local `uiModeNightChanged`
+broadcast + `ConfigurationHelps.curUIModeNight()`** (`LauncherView.java:47-76`) driving the
+`SmpDn*` day/night views (`app:*_day` / `app:*_night` attrs everywhere, e.g. `launcher_land_view.xml`).
+**[refined]** Benz/BMW/Audi skins force night (`setUiModeNight(true,2)`, `LauncherView.java:44-48`).
+Our Compose theme should key off `uiModeNightChanged` / SysVar `Sys_Day_Night_Mode`.
+
+**Launcher → gateway control** (`com.szchoiceway.ACTION_LAUNCHER_KEY_CTRL`, String extra
+`EXTRA_LAUNCHER_KEY_WORD`) — still handled gateway-side (`EventService.java:12953-12989`, eventcenter);
+keyword prefixes `BlackScreen / DIM / Power / TaskList / StatusBar / Setting`. customerui **sends** these
+(it registers the action in `IBroadcastImp`). `Sidebar_function_action`, `ACTION_MORE_SETTINGS`
+unchanged. **[inferred — gateway side]**
+
+**Customer/OEM variant** now has a customerui-side counterpart: the `Customer*` profile classes
+(`customerui/customer/*`) + the integer **`uiNumberKey`** SysVar (§2) select skin/behavior; the
+gateway's `Sys_CustomerType` still gates "more settings". **[refined]**
 
 ---
 
-## 9. Confirm-when-online checklist (all §-items marked [inferred] until then)
+## 5. Reverse trigger & SWC keys  [confirmed — gateway owns reverse]
 
-1. Pull APK, jadx `-d mcu-analysis/customerui-src`, plus a resource pass.
-2. Verify `MainActivity` HOME intent-filter (§2) and `sharedUserId="android.uid.system"` (§7).
-3. Read the home layout dimens for 1920x720 (§8) and the status/side-bar layouts (§3).
-4. Confirm receivers: `ZXW_ACTION_LAUNCHER_ALLAPPS_START_EVT`, `ACTION_EVENTCENTER_TO_LAUNCHER_UIMODE_EVENT`,
-   `ACTION_BACKCAR_START/END`, `STEER_WHEEL_INFOR` (§4-6) and whether it declares
-   `uses-permission com.szchoiceway.permission.broadcast`.
-5. Confirm the `<permission android:protectionLevel>` for the Choiceway broadcast (still unknown —
-   canbus2 APK corrupt; CAR_API §1.1).
+Confirmed: customerui has **no** reverse/radar activity of its own (the `Reverse*`/`Radar*` classes the
+offline pass guessed are absent). It only **listens** to SWC/key events (`STEER_WHEEL_INFOR`,
+`MCU_KEY_INFOR`, `ACTION_CLICK_SYSTEM_KEYCODE_EVENT` in `IBroadcastImp.java`). Reverse is entirely the
+gateway + `com.szchoiceway.auxcamera` / `com.ivicar.avm`:
+
+- Gateway detects reverse from MCU 0x71 (`EventService.java:2354`, eventcenter), broadcasts
+  **protected** `ACTION_BACKCAR_START` / `_END`. CAR_API §1.3/§5.
+- For **our** launcher: listen for `ACTION_BACKCAR_START/END` to pause/restore home. Radar =
+  `MCU_CAR_CAN_RADAR_INFO`, trajectory = `ZXW_CAN_WHEEL_TRACK_EVT`. **These are protected → need
+  `android.uid.system` (§7).** Reverse tunables in SysVar unchanged.
+
+**SWC** (CAR_API §4) — listen to `STEER_WHEEL_INFOR` (protected), `ACTION_HOST_MCU_BUTTON_KEY` /
+`MCU_KEY_INFOR` (unprotected), and injected KeyEvents. Keycode constants `CAR_KEY_*`,
+`MCU_KEY_SYS_*` per eventcenter. Wheel-learn: customerui has **no** `CarWheelActivity/McuWheelActivity`
+(also absent — those are gateway/settings side). **[corrected]**
+
+---
+
+## 6. App launching / drawer  [confirmed]
+
+- **Drawer** = `AppLauncherListActivity` (`singleInstance`). Its content root is also chosen by
+  `uiNumberKey` (`AppLauncherListActivity.java:20+`); the **default** bucket uses the same
+  `ItemAppListView` grid engine as the home pages (§3b) → **2×6 on 1920×720**, drag-orderable via
+  `desktopStyleAppOrderKey`. App set from `AppFilterHelps.queryAppInfoList()`.
+- Landscape (our unit): the gateway broadcasts `ZXW_ACTION_LAUNCHER_ALLAPPS_START_EVT` (extra
+  `LAUNCHER_EXTRA="AppList"`) and the launcher opens its in-process drawer; customerui registers this
+  action (`EventUtils.java`, customerui). So **register a receiver for
+  `ZXW_ACTION_LAUNCHER_ALLAPPS_START_EVT`** in our launcher. **[confirmed]**
+- Built-in mode launches (`SRC_SETUP`, `SRC_EXPLORER`, `SRC_DVR`, …) stay gateway-driven via
+  `EventUtils.startActivityIfNotRuning` (eventcenter). A tile can `startActivity` directly or send a
+  mode. **[inferred — gateway side]**
+
+---
+
+## 7. Permissions / uid  [corrected]
+
+customerui runs as **`android.uid.system`** + platform-signed. Full custom-permission audit of its
+manifest: **it declares NO custom permissions** — no `<permission>`, no
+`uses-permission com.szchoiceway.permission.broadcast`, nothing OEM-specific. Its non-Android
+uses-permissions list is **empty**. **[corrected — the offline note guessed it held that permission]**
+It receives protected broadcasts (`ACTION_BACKCAR_START/END`, `STEER_WHEEL_INFOR`, backlight) **purely
+by virtue of `sharedUserId=android.uid.system` + the platform signature.** It does hold the strong
+platform perms `WRITE_SECURE_SETTINGS`, `INJECT_EVENTS`, `INTERNAL_SYSTEM_WINDOW`,
+`MANAGE_ACTIVITY_TASKS`, `START_TASKS_FROM_RECENTS`, `REMOVE_TASKS`, `READ_PRIVILEGED_PHONE_STATE`,
+`INTERACT_ACROSS_USERS`, `SET_WALLPAPER`, `NETWORK_STACK` (manifest lines 14-40).
+
+Consequence for our replacement is unchanged but the *mechanism* is now clear: **holding the Choiceway
+permission is not an option (it doesn't exist)**; to get protected broadcasts + SysVar writes we must
+ship as a **platform-signed system app under `android.uid.system`** (or `/system/priv-app` with those
+platform perms), which the rooted unit allows. As a plain HOME app we still get: SysVar reads, AIDL
+reads, unprotected broadcasts (media/radio/air/outside-temp/BT/`ALLAPPS`), app launching, day/night via
+SysVar — a usable first cut (CAR_API §6.4).
+
+| Capability | Normal-app launcher | Fix |
+|---|---|---|
+| Protected events (`BACKCAR`, `STEER_WHEEL`, backlight) | ❌ (perm doesn't exist to request) | platform-sign + `android.uid.system` |
+| Write SysVar (`desktopStyleAppOrderKey`, icon order, tunables) | ❌ | system uid / root / `content update …SysVarProvider/SysVar` |
+| Read SysVar, bind `EventService`, unprotected broadcasts | ✅ | plain app |
+| Gateway inflates our status/side/nav bars | keep exact `_zxw` layout/id names | else draw our own |
+| `com.android.internal.widget.ViewPager`, INJECT_EVENTS, WRITE_SECURE_SETTINGS, task control | ❌ | `/system/priv-app` + platform key |
+
+---
+
+## 8. 1920×720 layout metrics — CONFIRMED  [confirmed]
+
+Panel **1920×720 landscape**, Android 13. Read geometry from SysVar `Sys_Screen_Width/Height/Density`
+at runtime; but the launcher's own numbers are now known:
+
+**Default home (skin = default), from the confirmed resources above:**
+
+- **Skin selector**: SysVar `uiNumberKey`; default bucket → `LauncherLandView` (§2).
+- **Grid**: **2 rows × 6 columns = 12 icons/page**, horizontal paging, auto-sized cells
+  (`ItemAppListView.java:139-162,119-126`). Page insets **40 dp L/R, 45 dp T/B**; page indicator
+  dots **25×5 dp**, 5 dp gap, `marginBottom 30dp`, selected `#0096ff` (`item_launcher_recycler_view.xml`).
+- **Icon cell**: icon **93×93 dp** rounded **15 dp**; label **20 sp**, `marginTop 5dp`; press scale 0.9
+  (`item_app_info_phone_gird_rec.xml`).
+- **Clock (`TimeCard`)**: `layout_item_time_info_land_1920_720.xml` — hours+minutes **90 sp**,
+  labels **20 sp**.
+- **Fixed 1920×720 composition** `launcher_main_common_land_1920_720.xml`:
+  clock **14.6 % (~280 px)** left, grid block **89 % (~1709 px)** right, inner gutters **2.5 %** each,
+  `viewPager` **95 %** of block, `BtInfoView` overlay **17 %** height, `vwBottom` strip **10 %** height,
+  home-float lottie **105×105 dp**. Backgrounds `gb_land_bj_1920_720` (day) / `gb_land_bj_night`.
+- **Negative screen** (page 0) `page_menu_one_negative_screen_land.xml`: TimeCard **18 %** + dashboard
+  **72 %** + weather(35 %)/music(63 %) column **26 %** + bottom app-info bar **25 %** height;
+  right padding 30 dp.
+- **System nav bar** `sys_nav_land_status_view.xml`: side blocks **250 dp**, value labels **120×100 dp**,
+  center media/air/weather `view_pager`, vol/media glyphs **48×137 dp**.
+- Note the fixed composition uses `com.android.internal.widget.ViewPager` (system-app API).
+
+Everything is in `mcu-analysis/customerui-src/resources/res/` (base `layout/`, plus
+`layout-hdpi-1920x720/` which only overrides a `cheku_binli` variant — the default uses base `layout/`
++ code-computed sizes, so there is **no** `dimens.xml` under `values-hdpi-1920x720/`, only `drawables.xml`).
+
+---
+
+## 9. Confirm-when-online checklist — RESULTS
+
+1. ✅ **Done** — APK pulled, jadx `-d customerui-src` **with** resources (946 layouts + arsc).
+2. ✅ `sharedUserId="android.uid.system"` **confirmed** (manifest:3). ❗ **`MainActivity` has NO HOME
+   filter** — it is a stub that finishes; home is a **window** inflating `layout_launcher_zxw`
+   (`LauncherView`) by name (§2). **[corrected]**
+3. ✅ **1920×720 dimens recovered** (§3b, §3c, §8) — 2×6 grid, 93 dp icons/20 sp labels, 14.6 %/89 %
+   split; status/side/nav bars are `StatusBarView`/`ToolStatusBarView`/`BaseLeftNavBarView`/
+   `sys_nav_land_status_view` (§3g).
+4. ✅ Receivers are **runtime-registered** (`IBroadcastImp.java`), not in the manifest. Confirmed:
+   `ZXW_ACTION_LAUNCHER_ALLAPPS_START_EVT`, `STEER_WHEEL_INFOR`, `MCU_KEY_INFOR`, `carairstruct`,
+   `CAN_CAR_OUT_SIDE_TEMP_EVT`, `HBCP_EVT_*`, `ACTION_LAUNCHER_KEY_CTRL`, local `uiModeNightChanged`
+   (§4). Day/night in-app uses `setUiModeNight/Day` (not the eventcenter UIMODE broadcast pair). ❗
+   **customerui declares NO `com.szchoiceway.permission.broadcast`** (or any custom perm) — protected
+   events come via `android.uid.system` only (§7). **[corrected]**
+5. ⬜ Choiceway broadcast `protectionLevel` — still not answerable from customerui (it declares no
+   `<permission>`; the definition lives in eventcenter/canbus, and canbus2 was corrupt — CAR_API §1.1).
+   But customerui's reliance on `android.uid.system` (not a permission) implies the protection is
+   `signature|system`-class.
+
+### Net effect for our launcher
+Build the default-skin equivalent: full-screen `ViewPager`, **2 rows × 6 icon grid** (93 dp rounded-15
+icons, 20 sp labels, 40/45 dp insets, dot indicator), a **left ~14.6 % clock column (90 sp)** and
+negative-screen widgets (dashboard 72 % + weather 26 % + media). Media via AIDL `getValidModeInfor()`
+(not raw music broadcasts); weather is Internet, not CAN; climate via `carairstruct`. First cut = plain
+app; platform-sign into `android.uid.system` later for protected reverse/SWC + SysVar writes.
