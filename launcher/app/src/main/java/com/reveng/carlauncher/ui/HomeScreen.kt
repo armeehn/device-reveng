@@ -19,12 +19,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.focusGroup
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -40,6 +42,10 @@ import com.reveng.carlauncher.carlib.CarEvents
 import com.reveng.carlauncher.carlib.CarService
 import com.reveng.carlauncher.data.LauncherSettings // v0.6
 import com.reveng.carlauncher.data.SettingsStore // v0.6
+import com.reveng.carlauncher.input.FocusTarget // v0.8 SWC navigation
+import com.reveng.carlauncher.input.LauncherFocus // v0.8
+import com.reveng.carlauncher.input.LocalLauncherFocus // v0.8
+import com.reveng.carlauncher.input.launcherFocusTarget // v0.8
 import com.reveng.carlauncher.media.NowPlayingRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -82,6 +88,26 @@ fun HomeScreen(
     val userApps = apps.filter { !it.isSystem }
     val systemApps = apps.filter { it.isSystem }
 
+    // v0.8: the roving focus ring shared with the SWC / DPAD key dispatcher (MainActivity).
+    val focus = LocalLauncherFocus.current
+    val quickApps = userApps.take(4)
+    SideEffect {
+        // Keep the focus model's view of the layout in sync so navigation skips hidden regions.
+        focus.showMedia = settings.showMedia
+        focus.showClimate = settings.showClimate
+        focus.showRadio = settings.showRadio
+        focus.quickCount = quickApps.size
+        // CENTER activation for the focused region (grid tiles launch via GridFocus).
+        focus.onActivate = { target ->
+            when (target) {
+                is FocusTarget.Media -> nowPlaying.playPause()
+                is FocusTarget.Grid -> focus.grid.launch(target.index)
+                is FocusTarget.Quick -> quickApps.getOrNull(target.index)?.let(appRepository::launch)
+                else -> {} // Climate / Nav / Radio are glanceable, no primary action
+            }
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
             StatusBar(
@@ -97,36 +123,49 @@ fun HomeScreen(
             Row(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .focusGroup(), // v0.8: one focus group for the whole Home layout
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 // ---- LEFT: media over climate (glance zone) --------------------
                 Column(
                     modifier = Modifier
                         .weight(0.30f)
-                        .fillMaxHeight(),
+                        .fillMaxHeight()
+                        .focusGroup(),
                 ) {
                     // v0.6: media/climate cards are individually toggleable in Settings.
+                    // v0.8: wrap card call-sites in a focus-ring highlight (cards untouched).
                     if (settings.showMedia) {
-                        MediaCard(
-                            now = media,
-                            onPlayPause = nowPlaying::playPause,
-                            onNext = nowPlaying::next,
-                            onPrev = nowPlaying::prev,
+                        Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .weight(1f),
-                        )
+                                .weight(1f)
+                                .launcherFocusTarget(focus, FocusTarget.Media),
+                        ) {
+                            MediaCard(
+                                now = media,
+                                onPlayPause = nowPlaying::playPause,
+                                onNext = nowPlaying::next,
+                                onPrev = nowPlaying::prev,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        }
                     }
                     if (settings.showClimate) {
                         if (settings.showMedia) Spacer(Modifier.height(16.dp))
-                        ClimateReadout(
-                            carService = carService,
-                            carEvents = carEvents,
+                        Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(130.dp),
-                        )
+                                .height(130.dp)
+                                .launcherFocusTarget(focus, FocusTarget.Climate),
+                        ) {
+                            ClimateReadout(
+                                carService = carService,
+                                carEvents = carEvents,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        }
                     }
                 }
 
@@ -134,16 +173,22 @@ fun HomeScreen(
                 Column(
                     modifier = Modifier
                         .weight(0.40f)
-                        .fillMaxHeight(),
+                        .fillMaxHeight()
+                        .focusGroup(),
                 ) {
                     // v0.7: navigation tile (turn-by-turn/ETA + parking sensors) at top of center.
-                    NavCard(
-                        carEvents = carEvents,
-                        radar = radar,
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(150.dp),
-                    )
+                            .height(150.dp)
+                            .launcherFocusTarget(focus, FocusTarget.Nav),
+                    ) {
+                        NavCard(
+                            carEvents = carEvents,
+                            radar = radar,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
                     Spacer(Modifier.height(16.dp))
                     Text(
                         text = stringResource(R.string.app_drawer_title),
@@ -159,6 +204,7 @@ fun HomeScreen(
                             .fillMaxWidth()
                             .weight(1f), // v0.7: take remaining height below NavCard
                         columns = settings.gridColumns, // v0.6: grid density from Settings
+                        gridFocus = focus.grid, // v0.8: drive/highlight tile focus
                     )
                 }
 
@@ -166,11 +212,13 @@ fun HomeScreen(
                 Column(
                     modifier = Modifier
                         .weight(0.30f)
-                        .fillMaxHeight(),
+                        .fillMaxHeight()
+                        .focusGroup(),
                 ) {
                     QuickLaunchColumn(
-                        apps = userApps.take(4),
+                        apps = quickApps,
                         onLaunch = appRepository::launch,
+                        focus = focus, // v0.8
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f),
@@ -178,12 +226,17 @@ fun HomeScreen(
                     // v0.6: radio card is toggleable in Settings.
                     if (settings.showRadio) {
                         Spacer(Modifier.height(16.dp))
-                        RadioCard(
-                            carService = carService,
+                        Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(180.dp),
-                        )
+                                .height(180.dp)
+                                .launcherFocusTarget(focus, FocusTarget.Radio),
+                        ) {
+                            RadioCard(
+                                carService = carService,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        }
                     }
                 }
             }
@@ -216,6 +269,7 @@ private fun QuickLaunchColumn(
     apps: List<AppInfo>,
     onLaunch: (AppInfo) -> Unit,
     modifier: Modifier = Modifier,
+    focus: LauncherFocus? = null, // v0.8: draw the focus ring on the focused row
 ) {
     Column(
         modifier = modifier,
@@ -227,19 +281,24 @@ private fun QuickLaunchColumn(
             color = MaterialTheme.colorScheme.onBackground,
             modifier = Modifier.padding(start = 8.dp, bottom = 4.dp),
         )
-        apps.forEach { app ->
-            QuickLaunchRow(app = app, onClick = { onLaunch(app) })
+        apps.forEachIndexed { index, app ->
+            val rowModifier = if (focus != null) {
+                Modifier.launcherFocusTarget(focus, FocusTarget.Quick(index), cornerRadiusDp = 15)
+            } else {
+                Modifier
+            }
+            QuickLaunchRow(app = app, onClick = { onLaunch(app) }, modifier = rowModifier)
         }
     }
 }
 
 @Composable
-private fun QuickLaunchRow(app: AppInfo, onClick: () -> Unit) {
+private fun QuickLaunchRow(app: AppInfo, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val bmp = remember(app.packageName + app.activityName) {
         app.icon.toBitmap(width = 108, height = 108).asImageBitmap()
     }
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(15.dp))
             .clickable(onClick = onClick)

@@ -1,6 +1,7 @@
 package com.reveng.carlauncher
 
 import android.os.Bundle
+import android.view.KeyEvent
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -8,6 +9,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -20,8 +22,13 @@ import com.reveng.carlauncher.carlib.CarService
 import com.reveng.carlauncher.data.DayNightMode // v0.6
 import com.reveng.carlauncher.data.SettingsStore // v0.6
 import com.reveng.carlauncher.data.ThemeStore
+import com.reveng.carlauncher.input.LauncherFocus // v0.8 SWC navigation
+import com.reveng.carlauncher.input.LocalLauncherFocus // v0.8
+import com.reveng.carlauncher.input.NavKey // v0.8
+import com.reveng.carlauncher.input.SwcNavigator // v0.8
 import com.reveng.carlauncher.media.NowPlayingRepository
 import com.reveng.carlauncher.ui.HomeScreen
+import kotlinx.coroutines.launch
 import com.reveng.carlauncher.ui.SettingsScreen // v0.6
 import com.reveng.carlauncher.ui.ThemeEditorScreen
 import com.reveng.carlauncher.ui.ThemesScreen
@@ -48,6 +55,14 @@ class MainActivity : ComponentActivity() {
     private lateinit var themeStore: ThemeStore
     private lateinit var settingsStore: SettingsStore // v0.6
 
+    // v0.8: roving focus ring for steering-wheel / DPAD navigation. Held as a field so the
+    // key dispatcher below and the Compose tree (via LocalLauncherFocus) share one instance.
+    private val launcherFocus = LauncherFocus()
+
+    // v0.8: hoisted top-level screen state so the Back/Home keys (handled outside Compose in
+    // dispatchKeyEvent) can return to Home from a sub-screen.
+    private val screenState = mutableStateOf<Screen>(Screen.Home)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -60,6 +75,13 @@ class MainActivity : ComponentActivity() {
         nowPlaying = NowPlayingRepository(applicationContext).also { it.start(lifecycleScope) }
         themeStore = ThemeStore(applicationContext)
         settingsStore = SettingsStore(applicationContext) // v0.6
+
+        // v0.8: input source (a) — vendor STEER_WHEEL_INFOR broadcasts as CAR_KEY_* codes.
+        lifecycleScope.launch {
+            carEvents.swcKeys.collect { key ->
+                SwcNavigator.fromSwc(key)?.let { handleNav(it) }
+            }
+        }
 
         setContent {
             // Day/night from the vendor illumination broadcast (CAR_API §1.3).
@@ -75,9 +97,10 @@ class MainActivity : ComponentActivity() {
             val activeTheme by themeStore.activeTheme.collectAsStateWithLifecycle()
             val allThemes by themeStore.allThemes.collectAsStateWithLifecycle()
 
-            var screen by remember { mutableStateOf<Screen>(Screen.Home) }
+            var screen by screenState // v0.8: hoisted to a field (Back/Home keys)
 
             CarLauncherTheme(theme = activeTheme, night = night) {
+              CompositionLocalProvider(LocalLauncherFocus provides launcherFocus) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background,
@@ -132,8 +155,45 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                 }
+              }
             }
         }
+    }
+
+    /**
+     * v0.8: input source (b) — real Android [KeyEvent]s (DPAD / ENTER / MEDIA_* and any vendor
+     * codes surfacing as KeyEvents). Consumed only when we actually act, so system Back on Home
+     * and dialog Back still work.
+     */
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        val nav = SwcNavigator.fromKeyEvent(event.keyCode)
+        if (nav != null && event.action == KeyEvent.ACTION_DOWN && handleNav(nav)) {
+            return true
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
+    /**
+     * Route a decoded [NavKey]. Media transport reaches the active MediaController regardless of
+     * focus; directional / CENTER drive the focus ring while on Home; Back/Home return Home from
+     * a sub-screen. Returns true when the key was consumed.
+     */
+    private fun handleNav(nav: NavKey): Boolean = when (nav) {
+        NavKey.MEDIA_NEXT -> { nowPlaying.next(); true }
+        NavKey.MEDIA_PREV -> { nowPlaying.prev(); true }
+        NavKey.MEDIA_PLAY_PAUSE -> { nowPlaying.playPause(); true }
+        NavKey.HOME -> {
+            screenState.value = Screen.Home
+            launcherFocus.reset()
+            true
+        }
+        NavKey.BACK ->
+            if (screenState.value != Screen.Home) {
+                screenState.value = Screen.Home
+                true
+            } else false // let the system / a dialog handle Back on Home
+        NavKey.CENTER, NavKey.UP, NavKey.DOWN, NavKey.LEFT, NavKey.RIGHT ->
+            if (screenState.value == Screen.Home) launcherFocus.onKey(nav) else false
     }
 
     override fun onDestroy() {
