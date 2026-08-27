@@ -169,6 +169,16 @@ class CarEvents(private val appContext: Context) {
      */
     val climate: StateFlow<ClimateState?> = _climate.asStateFlow()
 
+    // v0.7 --- Parking radar (CAR_API §1.3 MCU_CAR_CAN_RADAR_INFO) ------------
+    private val _radar = MutableStateFlow<RadarState?>(null)
+    /**
+     * Latest parking-sensor frame decoded from `MCU_CAR_CAN_RADAR_INFO` (byte[] CAR_CAN_DATA),
+     * or null until the first frame arrives. The frame is unprotected (a normal app receives
+     * it), typically only while reversing / at low speed. Byte layout is GUESSED — see
+     * [RadarState].
+     */
+    val radar: StateFlow<RadarState?> = _radar.asStateFlow()
+
     /**
      * Numeric speed in km/h.
      *
@@ -211,6 +221,13 @@ class CarEvents(private val appContext: Context) {
 
                 ACTION_DAY_BACKLIGHT_CHANGED -> updateDayNight(DayNight.DAY)
                 ACTION_NIGHT_BACKLIGHT_CHANGED -> updateDayNight(DayNight.NIGHT)
+
+                // v0.7: raw parking-radar frame → best-effort decode (offsets GUESSED).
+                MCU_CAR_CAN_RADAR_INFO -> {
+                    val bytes = intent.getByteArrayExtra(EXTRA_CAR_CAN_DATA)
+                    val rs = RadarState.fromRadarData(bytes)
+                    if (rs.valid) _radar.value = rs
+                }
 
                 CAR_AIR_STATE_ACTION -> {
                     // The primary extra is a Parcelable CarAirState we can't deserialize
