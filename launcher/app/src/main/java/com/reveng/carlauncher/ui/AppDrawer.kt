@@ -83,6 +83,7 @@ fun AppDrawer(
     systemApps: List<AppInfo>,
     onLaunch: (AppInfo) -> Unit,
     modifier: Modifier = Modifier,
+    columns: Int = 0, // v0.6: 0 = adaptive sizing; >0 = fixed column count (SettingsStore)
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -133,6 +134,7 @@ fun AppDrawer(
             onToggleFavorite = toggleFavorite,
             onReorder = { newOrder -> scope.launch { orderStore.setOrder(newOrder.map { it.packageName }) } },
             onOpenSystem = { showSystem = true },
+            columns = columns, // v0.6 density
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f),
@@ -166,6 +168,7 @@ private fun ReorderableAppGrid(
     onToggleFavorite: (AppInfo) -> Unit,
     onReorder: (List<AppInfo>) -> Unit,
     onOpenSystem: () -> Unit,
+    columns: Int = 0, // v0.6: 0=adaptive, >0=fixed
     modifier: Modifier = Modifier,
 ) {
     val gridState = rememberLazyGridState()
@@ -240,7 +243,7 @@ private fun ReorderableAppGrid(
 
     LazyVerticalGrid(
         state = gridState,
-        columns = GridCells.Adaptive(minSize = 140.dp),
+        columns = if (columns > 0) GridCells.Fixed(columns) else GridCells.Adaptive(minSize = 140.dp),
         modifier = modifier.then(dragModifier),
         contentPadding = PaddingValues(16.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),

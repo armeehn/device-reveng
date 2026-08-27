@@ -17,9 +17,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import com.reveng.carlauncher.carlib.CarEvents
 import com.reveng.carlauncher.carlib.CarService
+import com.reveng.carlauncher.data.DayNightMode // v0.6
+import com.reveng.carlauncher.data.SettingsStore // v0.6
 import com.reveng.carlauncher.data.ThemeStore
 import com.reveng.carlauncher.media.NowPlayingRepository
 import com.reveng.carlauncher.ui.HomeScreen
+import com.reveng.carlauncher.ui.SettingsScreen // v0.6
 import com.reveng.carlauncher.ui.ThemeEditorScreen
 import com.reveng.carlauncher.ui.ThemesScreen
 import com.reveng.carlauncher.ui.theme.CarLauncherTheme
@@ -43,6 +46,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var appRepository: AppRepository
     private lateinit var nowPlaying: NowPlayingRepository
     private lateinit var themeStore: ThemeStore
+    private lateinit var settingsStore: SettingsStore // v0.6
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -55,11 +59,18 @@ class MainActivity : ComponentActivity() {
         appRepository = AppRepository(this)
         nowPlaying = NowPlayingRepository(applicationContext).also { it.start(lifecycleScope) }
         themeStore = ThemeStore(applicationContext)
+        settingsStore = SettingsStore(applicationContext) // v0.6
 
         setContent {
             // Day/night from the vendor illumination broadcast (CAR_API §1.3).
             val dayNight by carEvents.dayNight.collectAsStateWithLifecycle()
-            val night = dayNight == CarEvents.DayNight.NIGHT
+            // v0.6: the Settings/QuickControls day-night mode can override the car signal.
+            val settings by settingsStore.settings.collectAsStateWithLifecycle()
+            val night = when (settings.dayNightMode) {
+                DayNightMode.FORCE_DAY -> false
+                DayNightMode.FORCE_NIGHT -> true
+                DayNightMode.AUTO -> dayNight == CarEvents.DayNight.NIGHT
+            }
 
             val activeTheme by themeStore.activeTheme.collectAsStateWithLifecycle()
             val allThemes by themeStore.allThemes.collectAsStateWithLifecycle()
@@ -78,6 +89,15 @@ class MainActivity : ComponentActivity() {
                             appRepository = appRepository,
                             nowPlaying = nowPlaying,
                             onOpenThemes = { screen = Screen.Themes },
+                            // v0.6: wire settings + a Settings-screen entry point.
+                            settingsStore = settingsStore,
+                            onOpenSettings = { screen = Screen.Settings },
+                        )
+
+                        // v0.6: launcher Settings screen.
+                        Screen.Settings -> SettingsScreen(
+                            settingsStore = settingsStore,
+                            onBack = { screen = Screen.Home },
                         )
 
                         Screen.Themes -> ThemesScreen(
@@ -127,6 +147,7 @@ class MainActivity : ComponentActivity() {
     private sealed interface Screen {
         data object Home : Screen
         data object Themes : Screen
+        data object Settings : Screen // v0.6
         data class Editor(val theme: CarTheme) : Screen
     }
 }
