@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Simple car glyph centered in the adaptive-icon safe zone. -->
+    <path
+        android:fillColor="#2F81F7"
+        android:pathData="M34,46 L38,36 C39,33 41,32 44,32 L64,32 C67,32 69,33 70,36 L74,46 L78,47 C80,47 81,49 81,51 L81,64 C81,66 80,67 78,67 L74,67 L74,70 C74,72 72,73 70,73 L66,73 C64,73 62,72 62,70 L62,67 L46,67 L46,70 C46,72 44,73 42,73 L38,73 C36,73 34,72 34,70 L34,67 L30,67 C28,67 27,66 27,64 L27,51 C27,49 28,47 30,47 Z" />
+    <path
+        android:fillColor="#0B0E11"
+        android:pathData="M40,42 L68,42 L65,37 L43,37 Z" />
+    <path
+        android:fillColor="#0B0E11"
+        android:pathData="M34,54 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0" />
+    <path
+        android:fillColor="#0B0E11"
+        android:pathData="M74,54 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0" />
+</vector>

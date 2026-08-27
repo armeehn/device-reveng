@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!--
+      QUERY_ALL_PACKAGES: the app drawer enumerates every launchable activity via
+      PackageManager.queryIntentActivities(MAIN/LAUNCHER). On API 30+ that is filtered by
+      package visibility, so a HOME app needs broad visibility. QUERY_ALL_PACKAGES is a
+      "sensitive" permission on Play, but this is a side-loaded head-unit HOME launcher, not
+      a Play app. On this rooted device it can also be granted as a privileged/system app
+      (push to /system/priv-app; it is a signature|privileged permission). A narrower
+      alternative is a <queries> element with the MAIN/LAUNCHER intent — included below too.
+    -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
+        tools:ignore="QueryAllPackagesPermission" />
+
+    <!--
+      Protected car broadcasts (reverse / SWC / day-night) ride this vendor permission
+      (CAR_API §1.1). Very likely protectionLevel="signature": a normal app will not be
+      granted it and silently misses those events; as a privileged/system app it starts
+      working with no code change. Declared in :carlib's manifest too and merged here.
+    -->
+    <uses-permission android:name="com.szchoiceway.permission.broadcast" />
+
+    <!-- Narrow visibility fallback if QUERY_ALL_PACKAGES is ever stripped. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.CarLauncher">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:screenOrientation="landscape"
+            android:configChanges="orientation|screenSize|keyboardHidden|uiMode|density"
+            android:theme="@style/Theme.CarLauncher"
+            android:stateNotNeeded="true"
+            tools:ignore="DiscouragedApi">
+
+            <!--
+              COMPANION HOME: MAIN + HOME + DEFAULT + LAUNCHER. This registers us as an
+              alternative launcher; the user still picks the default HOME from the system
+              chooser (CAR_API §6.1). The stock launcher is com.szchoiceway.customerui.
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+
+</manifest>
