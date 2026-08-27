@@ -65,6 +65,7 @@ fun HomeScreen(
 ) {
     val reverse by carEvents.reverse.collectAsStateSafe(initial = false)
     val media by nowPlaying.state.collectAsStateSafe(initial = null)
+    val radar by carEvents.radar.collectAsStateSafe(initial = null) // v0.7 parking sensors
 
     var apps by remember { mutableStateOf<List<AppInfo>>(emptyList()) }
     LaunchedEffect(Unit) {
@@ -114,6 +115,15 @@ fun HomeScreen(
                         .weight(0.40f)
                         .fillMaxHeight(),
                 ) {
+                    // v0.7: navigation tile (turn-by-turn/ETA + parking sensors) at top of center.
+                    NavCard(
+                        carEvents = carEvents,
+                        radar = radar,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(150.dp),
+                    )
+                    Spacer(Modifier.height(16.dp))
                     Text(
                         text = stringResource(R.string.app_drawer_title),
                         style = MaterialTheme.typography.titleLarge,
@@ -124,7 +134,9 @@ fun HomeScreen(
                         apps = userApps,
                         systemApps = systemApps,
                         onLaunch = appRepository::launch,
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f), // v0.7: take remaining height below NavCard
                     )
                 }
 
@@ -154,6 +166,19 @@ fun HomeScreen(
 
         // Full-screen reverse camera overlay, above the home content (unchanged).
         ReverseOverlay(visible = reverse, modifier = Modifier.fillMaxSize())
+
+        // v0.7: parking-sensor zones overlaid on the reverse camera (radar frames arrive
+        // while reversing). Only renders when a real frame is present.
+        if (reverse) {
+            RadarView(
+                state = radar,
+                showPlaceholder = false,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(horizontal = 48.dp, vertical = 32.dp),
+            )
+        }
     }
 }
 
