@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+      The reverse/SWC/day-night broadcasts are sent by the vendor gateway with
+      com.szchoiceway.permission.broadcast (CAR_API §1.1). Its protectionLevel is
+      almost certainly `signature`, so a normal app cannot be granted it and will
+      silently miss those broadcasts. We still declare the <uses-permission> so that,
+      once the app is installed as a privileged/system app (pushed to /system/priv-app
+      + platform-signed on this rooted device), the receivers start working with no
+      code change. As a normal app, CarEvents falls back to the unprotected MCU-level
+      reverse events (MCU_MSG_BACKCAR_START/END).
+    -->
+    <uses-permission android:name="com.szchoiceway.permission.broadcast" />
+
+</manifest>
