@@ -61,6 +61,7 @@ fun HomeScreen(
     carService: CarService,
     appRepository: AppRepository,
     nowPlaying: NowPlayingRepository,
+    onOpenThemes: () -> Unit = {},
 ) {
     val reverse by carEvents.reverse.collectAsStateSafe(initial = false)
     val media by nowPlaying.state.collectAsStateSafe(initial = null)
@@ -74,7 +75,7 @@ fun HomeScreen(
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
-            StatusBar(carEvents = carEvents)
+            StatusBar(carEvents = carEvents, onOpenThemes = onOpenThemes)
 
             Row(
                 modifier = Modifier
