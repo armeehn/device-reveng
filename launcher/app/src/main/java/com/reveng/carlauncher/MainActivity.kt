@@ -53,6 +53,7 @@ class MainActivity : ComponentActivity() {
                 ) {
                     HomeScreen(
                         carEvents = carEvents,
+                        carService = carService,
                         appRepository = appRepository,
                         nowPlaying = nowPlaying,
                     )
