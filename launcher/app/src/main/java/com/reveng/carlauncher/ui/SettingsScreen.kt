@@ -1,8 +1,5 @@
 package com.reveng.carlauncher.ui
 
-import android.content.Context
-import android.content.Intent
-import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -19,6 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -26,13 +24,21 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.reveng.carlauncher.HomeRole
 import com.reveng.carlauncher.data.DayNightMode
 import com.reveng.carlauncher.data.LauncherSettings
 import com.reveng.carlauncher.data.SettingsStore
@@ -54,6 +60,20 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val settings by settingsStore.settings.collectAsStateSafe(initial = LauncherSettings())
+
+    // v1.0: live "are we the default HOME?" status, re-checked whenever this screen resumes
+    // (e.g. after returning from the system Home-settings panel).
+    var isDefaultHome by remember { mutableStateOf(HomeRole.isDefaultHome(context)) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                isDefaultHome = HomeRole.isDefaultHome(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         // ---- Header --------------------------------------------------------
@@ -82,18 +102,35 @@ fun SettingsScreen(
         ) {
             // ---- Default home ---------------------------------------------
             SettingsSection(title = "Default home") {
-                Text(
-                    text = "This launcher registers as a HOME app, but Android still asks you to " +
-                        "pick the default. Open home settings and choose \"Car Launcher\".",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.size(12.dp))
-                ActionButton(
-                    icon = Icons.Filled.Home,
-                    label = "Set as default home",
-                    onClick = { openHomeSettings(context) },
-                )
+                if (isDefaultHome) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Filled.CheckCircle,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(22.dp),
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            text = "Car Launcher is your default home.",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                } else {
+                    Text(
+                        text = "This launcher registers as a HOME app, but Android still asks you to " +
+                            "pick the default. Set it below and choose \"Car Launcher\".",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.size(12.dp))
+                    ActionButton(
+                        icon = Icons.Filled.Home,
+                        label = "Set as default home",
+                        onClick = { HomeRole.requestSetDefaultHome(context) },
+                    )
+                }
             }
 
             // ---- Grid density ---------------------------------------------
@@ -272,20 +309,5 @@ private fun ModeChip(label: String, selected: Boolean, onClick: () -> Unit) {
         contentAlignment = Alignment.Center,
     ) {
         Text(text = label, style = MaterialTheme.typography.labelLarge, color = fg)
-    }
-}
-
-private fun openHomeSettings(context: Context) {
-    runCatching {
-        context.startActivity(
-            Intent(Settings.ACTION_HOME_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-        )
-    }.onFailure {
-        // Fallback: general settings if the home-settings panel isn't resolvable.
-        runCatching {
-            context.startActivity(
-                Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-            )
-        }
     }
 }

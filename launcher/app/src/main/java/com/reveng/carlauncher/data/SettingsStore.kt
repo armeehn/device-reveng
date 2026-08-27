@@ -58,6 +58,23 @@ class SettingsStore(context: Context) {
     private val ds = context.applicationContext.settingsDataStore
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
+    /**
+     * v1.0 — first-run flag driving the one-shot onboarding flow.
+     *
+     * Nullable on purpose: the initial value is `null` = "not yet read from disk", so
+     * MainActivity can hold a plain themed frame until the real value arrives instead of
+     * flashing the onboarding screen at every returning user (the stored default is `true`,
+     * so a naive non-null initial would mis-route). `true` = show onboarding once,
+     * `false` = onboarding already completed/skipped.
+     */
+    val firstRun: StateFlow<Boolean?> =
+        ds.data
+            .map { prefs -> prefs[FIRST_RUN_KEY] ?: true }
+            .stateIn(scope, SharingStarted.Eagerly, null)
+
+    /** Mark onboarding as done so it never shows again (called on Finish or Skip). */
+    fun setFirstRunComplete() = scope.launch { ds.edit { it[FIRST_RUN_KEY] = false } }
+
     /** The resolved launcher settings, observed by MainActivity / HomeScreen / QuickControls. */
     val settings: StateFlow<LauncherSettings> =
         ds.data
@@ -99,5 +116,6 @@ class SettingsStore(context: Context) {
         val SHOW_CLIMATE_KEY = booleanPreferencesKey("show_climate")
         val SHOW_NAV_KEY = booleanPreferencesKey("show_nav")
         val DAY_NIGHT_MODE_KEY = stringPreferencesKey("day_night_mode")
+        val FIRST_RUN_KEY = booleanPreferencesKey("first_run") // v1.0 onboarding gate
     }
 }
