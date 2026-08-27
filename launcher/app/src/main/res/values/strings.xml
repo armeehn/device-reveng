@@ -4,5 +4,6 @@
     <string name="app_drawer_title">Apps</string>
     <string name="media_placeholder_title">Media</string>
     <string name="media_placeholder_subtitle">No source connected</string>
+    <string name="media_playing">Now playing</string>
     <string name="reverse_overlay_hint">Reverse camera</string>
 </resources>

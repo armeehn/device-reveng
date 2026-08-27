@@ -26,6 +26,7 @@ import com.reveng.carlauncher.AppInfo
 import com.reveng.carlauncher.AppRepository
 import com.reveng.carlauncher.R
 import com.reveng.carlauncher.carlib.CarEvents
+import com.reveng.carlauncher.media.NowPlayingRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -41,9 +42,11 @@ import kotlinx.coroutines.withContext
 fun HomeScreen(
     carEvents: CarEvents,
     appRepository: AppRepository,
+    nowPlaying: NowPlayingRepository,
 ) {
     val context = LocalContext.current
     val reverse by carEvents.reverse.collectAsStateSafe(initial = false)
+    val media by nowPlaying.state.collectAsStateSafe(initial = null)
 
     var apps by remember { mutableStateOf<List<AppInfo>>(emptyList()) }
     LaunchedEffect(Unit) {
@@ -84,6 +87,10 @@ fun HomeScreen(
                         .padding(end = 24.dp, top = 8.dp, bottom = 24.dp),
                 ) {
                     MediaCard(
+                        now = media,
+                        onPlayPause = nowPlaying::playPause,
+                        onNext = nowPlaying::next,
+                        onPrev = nowPlaying::prev,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(160.dp),

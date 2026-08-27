@@ -2,6 +2,7 @@ package com.reveng.carlauncher
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.content.pm.ResolveInfo
 import android.graphics.drawable.Drawable
@@ -13,19 +14,59 @@ data class AppInfo(
     val packageName: String,
     val activityName: String,
     val icon: Drawable,
+    /** True = vendor/engineering/system app hidden behind the "System" folder. */
+    val isSystem: Boolean,
 )
 
 /**
  * Enumerates and launches installed apps for the drawer (CAR_API §6.3, "App list").
  *
- * On API 30+ this depends on package visibility — see the QUERY_ALL_PACKAGES permission /
- * <queries> element in AndroidManifest.xml.
+ * Apps are classified into "user" (main grid) vs "system" (tucked into a System folder) so
+ * the home screen isn't cluttered with vendor/engineering tools (TestTools, CanbusDebug,
+ * ApkInstall, the atslcarconsole shell, AOSP samples, …). Classification is data-driven via
+ * [alwaysShow] / [alwaysHidePrefixes]; the raw FLAG_SYSTEM bit is the fallback.
+ *
+ * On API 30+ enumeration depends on package visibility — see QUERY_ALL_PACKAGES / <queries>
+ * in AndroidManifest.xml.
  */
 class AppRepository(private val context: Context) {
 
     private val pm: PackageManager = context.packageManager
 
-    /** All MAIN/LAUNCHER activities, sorted by label, minus ourselves. */
+    /** Curated launchers that ARE system apps but should always stay on the home grid. */
+    private val alwaysShow = setOf(
+        "com.android.vending",              // Play Store
+        "com.google.android.apps.maps",     // Maps
+        "com.android.settings",             // Settings
+        "com.topjohnwu.magisk",             // Magisk
+        "com.android.chrome",
+        "com.google.android.projection.gearhead", // Android Auto
+        "com.google.android.googlequicksearchbox",
+        "org.codeaurora.snapcam",           // camera
+    )
+
+    /** Package prefixes to always push into the System folder regardless of flags. */
+    private val alwaysHidePrefixes = listOf(
+        "com.szchoiceway.",
+        "com.choiceway.",
+        "com.lfg.szchoiceway.",
+        "com.zjinnova.",                    // zlink internals (Android Auto/CarPlay handled elsewhere)
+        "com.ivicar.",
+        "com.syu.",
+        "com.android.atslcarconsole",       // vendor console shell
+        "com.example.android.",             // AOSP sample leftovers
+        "com.mmbox.",
+    )
+
+    private fun classifySystem(ai: ApplicationInfo): Boolean {
+        val pkg = ai.packageName
+        if (pkg in alwaysShow) return false
+        if (alwaysHidePrefixes.any { pkg.startsWith(it) }) return true
+        val sys = ai.flags and (ApplicationInfo.FLAG_SYSTEM or ApplicationInfo.FLAG_UPDATED_SYSTEM_APP)
+        return sys != 0
+    }
+
+    /** All MAIN/LAUNCHER activities, sorted by label, minus ourselves, tagged user/system. */
     fun loadApps(): List<AppInfo> {
         val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
         val flags = PackageManager.ResolveInfoFlags.of(0L)
@@ -46,6 +87,7 @@ class AppRepository(private val context: Context) {
                     packageName = ai.packageName,
                     activityName = ai.name,
                     icon = ri.loadIcon(pm),
+                    isSystem = classifySystem(ai.applicationInfo),
                 )
             }
             .distinctBy { it.packageName + "/" + it.activityName }
