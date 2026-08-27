@@ -72,7 +72,7 @@ dependencies {
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 
-    // App-local persistence for the theme system (active theme id + user themes as JSON).
+    // DataStore Preferences — app-local persistence (theme system v0.5 + drawer favorites/order v0.4).
     implementation("androidx.datastore:datastore-preferences:1.1.1")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
