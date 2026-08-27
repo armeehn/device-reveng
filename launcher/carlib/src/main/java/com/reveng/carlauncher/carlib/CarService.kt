@@ -100,7 +100,7 @@ class CarService(private val appContext: Context) {
     fun getValidMode(): Int? = call { getValidMode() }
     fun isBackCarConnected(): Boolean = call { IsBackCarConneted() } ?: false
     fun getRadioFreq(): Int? = call { getRadioFreq() }
-    fun getMainVolume(): Int? = call { getMainVolval() }
+    fun getMainVolume(): Int? = call { getMainVolval().toInt() }
     fun getMcuVer(): String? = call { getCanVer() }
 
     fun sendMode(mode: Int, flag: Boolean) { call { sendMode(mode, flag) } }
