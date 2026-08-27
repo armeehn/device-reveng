@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Base platform theme. The real UI is Compose (Material3, see ui/theme/Theme.kt);
+      this XML theme only styles the window before Compose takes over. We use a
+      no-action-bar Material dark background so there is no white flash on launch.
+    -->
+    <style name="Theme.CarLauncher" parent="android:Theme.Material.NoActionBar.Fullscreen">
+        <item name="android:windowBackground">@color/car_background</item>
+        <item name="android:statusBarColor">@color/car_background</item>
+        <item name="android:navigationBarColor">@color/car_background</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowFullscreen">true</item>
+    </style>
+</resources>
