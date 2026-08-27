@@ -71,7 +71,8 @@ fun HomeScreen(
                         modifier = Modifier.padding(start = 24.dp, top = 8.dp, bottom = 4.dp),
                     )
                     AppDrawer(
-                        apps = apps,
+                        apps = apps.filter { !it.isSystem },
+                        systemApps = apps.filter { it.isSystem },
                         onLaunch = appRepository::launch,
                         modifier = Modifier.fillMaxSize(),
                     )
