@@ -1,0 +1,6 @@
+id=netblock_zjinnova
+name=ZLink net-block (zjinnova + Bugly)
+version=v1.0
+versionCode=1
+author=device-reveng
+description=Systemless hosts null-route for ZLink vendor phone-home (zjinnova.com/.net) and Tencent Bugly/RQD telemetry. Keeps the licensed CarPlay engine; only fences its network. Reversible: disable/remove this module.

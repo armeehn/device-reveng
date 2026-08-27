@@ -1,0 +1,23 @@
+# Systemless hosts overlay (Magisk). Base localhost + ZLink null-routes.
+127.0.0.1   localhost
+::1         localhost
+
+# --- ZLink vendor phone-home (activation / update / config) ---
+127.0.0.1   www.zjinnova.com
+127.0.0.1   com.zjinnova.net
+127.0.0.1   url.zjinnova.com
+127.0.0.1   zjinnova.com
+127.0.0.1   api.zjinnova.com
+::1         www.zjinnova.com
+::1         com.zjinnova.net
+::1         url.zjinnova.com
+
+# --- Tencent Bugly / RQD crash+analytics telemetry ---
+127.0.0.1   bugly.qq.com
+127.0.0.1   android.bugly.qq.com
+127.0.0.1   rqd.qq.com
+127.0.0.1   pingma.qq.com
+127.0.0.1   mta.qq.com
+::1         bugly.qq.com
+::1         android.bugly.qq.com
+::1         rqd.qq.com
