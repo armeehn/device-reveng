@@ -101,6 +101,12 @@ class CarEvents(private val appContext: Context) {
         const val CAR_AIR_STATE_ACTION = "com.szchoiceway.canbus.carairstruct"
         /** Parcelable com.szchoiceway.canbus.CarAirState (class not bundled — TODO). */
         const val EXTRA_CAR_AIR_STATE = "com.choiceway.canbus.carairstruct.airstate"
+        /** Candidate byte[] extra keys the gateway may also attach (CAR_API §5). GUESSED. */
+        private val AIR_BYTE_EXTRA_KEYS = arrayOf(
+            "EventUtils.CAR_AIR_DATA",
+            "CAR_AIR_DATA",
+            "EventUtils.CAR_CAN_DATA",
+        )
 
         // ---- SWC keycodes (CAR_API §4, CAR_KEY_*) ---------------------------
         const val CAR_KEY_POWER = 1
@@ -154,6 +160,15 @@ class CarEvents(private val appContext: Context) {
     /** Discrete steering-wheel key presses/releases. */
     val swcKeys: SharedFlow<SwcKey> = _swcKeys.asSharedFlow()
 
+    private val _climate = MutableStateFlow<ClimateState?>(null)
+    /**
+     * Latest HVAC snapshot decoded from the `carairstruct` broadcast, or null if none has
+     * been decoded. The vendor Parcelable class isn't bundled, so this is only populated when
+     * the gateway also attaches a raw byte[] frame (best-effort); otherwise consumers fall
+     * back to AIDL `getAirData()`.
+     */
+    val climate: StateFlow<ClimateState?> = _climate.asStateFlow()
+
     /**
      * Numeric speed in km/h.
      *
@@ -197,6 +212,20 @@ class CarEvents(private val appContext: Context) {
                 ACTION_DAY_BACKLIGHT_CHANGED -> updateDayNight(DayNight.DAY)
                 ACTION_NIGHT_BACKLIGHT_CHANGED -> updateDayNight(DayNight.NIGHT)
 
+                CAR_AIR_STATE_ACTION -> {
+                    // The primary extra is a Parcelable CarAirState we can't deserialize
+                    // (class not bundled). Best-effort: pick up a raw byte[] frame if the
+                    // gateway also attached one, and decode it. Otherwise leave the flow as-is
+                    // so consumers fall back to AIDL getAirData().
+                    val bytes = AIR_BYTE_EXTRA_KEYS.firstNotNullOfOrNull { key ->
+                        runCatching { intent.getByteArrayExtra(key) }.getOrNull()
+                    }
+                    if (bytes != null) {
+                        val cs = ClimateState.fromAirData(bytes)
+                        if (cs.valid) _climate.value = cs
+                    }
+                }
+
                 else -> Log.d(TAG, "unhandled action: ${intent?.action}")
             }
         }
@@ -238,6 +267,7 @@ class CarEvents(private val appContext: Context) {
             addAction(ACTION_DAY_BACKLIGHT_CHANGED)
             addAction(ACTION_NIGHT_BACKLIGHT_CHANGED)
             addAction(MCU_CAR_CAN_RADAR_INFO)
+            addAction(CAR_AIR_STATE_ACTION)
         }
         // Vendor gateway is a separate app -> this is not an app-internal broadcast,
         // so it must be exported on API 33+ (RECEIVER_EXPORTED).

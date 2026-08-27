@@ -35,6 +35,18 @@ class CarService(private val appContext: Context) {
         private const val TAG = "CarService"
         const val BIND_ACTION = "com.szchoiceway.eventcenter.EventService"
         const val BIND_PACKAGE = "com.szchoiceway.eventcenter"
+
+        // ---- Radio key codes for sendRadioKey(int) --------------------------
+        // ⚠ GUESSED: the concrete CAR_RADIO_KEY_* opcodes were NOT recovered from the
+        // decompile (CAR_API §3.2 lists sendRadioKey(int) but not its value table). These
+        // are best-effort guesses following the common vendor convention
+        // (0=band toggle, 1=seek-down, 2=seek-up). Verify on-device.
+        const val RADIO_KEY_BAND = 0
+        const val RADIO_KEY_SEEK_DOWN = 1
+        const val RADIO_KEY_SEEK_UP = 2
+
+        /** Radio band ordinal → true when it's an AM band (getRadioBand()). GUESSED split. */
+        fun isAmBand(band: Int): Boolean = band >= 3
     }
 
     private val _connected = MutableStateFlow(false)
@@ -100,12 +112,25 @@ class CarService(private val appContext: Context) {
     fun getValidMode(): Int? = call { getValidMode() }
     fun isBackCarConnected(): Boolean = call { IsBackCarConneted() } ?: false
     fun getRadioFreq(): Int? = call { getRadioFreq() }
+    fun getRadioBand(): Int? = call { getRadioBand() }
     fun getMainVolume(): Int? = call { getMainVolval().toInt() }
+    fun isMuteOn(): Boolean = call { IsMuteOn() } ?: false
     fun getMcuVer(): String? = call { getCanVer() }
+
+    /** Read the raw HVAC frame (CAR_API §5). ⚠ Param semantics GUESSED (0 = query). */
+    fun getAirData(): ByteArray? = call { getAirData(0, ByteArray(64)) }
 
     fun sendMode(mode: Int, flag: Boolean) { call { sendMode(mode, flag) } }
     fun sendWheelKey(key: Int) { call { sendWheelKey(key) } }
     fun setMute(mute: Boolean) { call { sendMuteState(mute) } }
+
+    // ---- Radio control (CAR_API §3.2). All guarded; ⚠ key codes GUESSED. -----
+    fun sendRadioKey(key: Int) { call { sendRadioKey(key) } }
+    /** Tune to an absolute frequency value (units are the same as getRadioFreq()). */
+    fun sendUserFreq(freq: Int, direct: Boolean = true) { call { sendUserFreq(freq, direct) } }
+    fun radioBandToggle() = sendRadioKey(RADIO_KEY_BAND)
+    fun radioSeekDown() = sendRadioKey(RADIO_KEY_SEEK_DOWN)
+    fun radioSeekUp() = sendRadioKey(RADIO_KEY_SEEK_UP)
 
     /** Typed SysVar passthrough (alternative to the ContentResolver in [SysVar]). */
     fun getSettingString(key: String, def: String): String? =
