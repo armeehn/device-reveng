@@ -58,3 +58,50 @@ jobs:
           name: carlauncher-debug-apk
           path: launcher/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+
+  # v2.9 — a cold-start budget, so a startup regression fails a PR instead of
+  # being noticed months later in the car.
+  #
+  # WHAT THIS NUMBER IS, AND IS NOT. It is measured on an x86_64 emulator on a
+  # GitHub runner, not on the QCM6125 head unit, so it is NOT a device figure and
+  # must never be quoted as one. It is a tripwire: same image, same APK shape,
+  # same procedure every run, so a large jump means we made startup worse.
+  # The debug build is what gets installed because release is arm64-only
+  # (app/build.gradle.kts) — debug adds x86_64 for exactly this kind of run.
+  cold-start:
+    runs-on: ubuntu-latest
+    needs: build
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: carlauncher-debug-apk
+          path: apk
+
+      # The emulator needs KVM, which the ubuntu-latest image has but does not
+      # expose to the runner user by default.
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      # API 33 matches the head unit's Android 13. AOSP ATD image: no Play
+      # services, so the measurement is not polluted by GMS starting up.
+      - name: Measure cold start
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 33
+          target: aosp_atd
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: .github/scripts/cold-start.sh apk

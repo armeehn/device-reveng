@@ -162,6 +162,124 @@ new work stays inside that budget: no `rememberInfiniteTransition`, no `basicMar
 `beep()` — wired to steering-wheel presses, keyboard keys and dialog buttons. The beep follows
 the vendor's `Set_TouchBeep` preference instead of adding a competing one.
 
+## Root-native tier (v2.9)
+
+The vendor's platform signing key is **confirmed unobtainable**, so the launcher can never
+be a platform-signed system app and the old "install to `/system/priv-app`" tier is closed
+for good. Magisk root plus permissive SELinux buys back most of what CAR_API §6.4 reserved
+for signature-level access. This is that tier.
+
+Everything below **degrades silently without root** — no dialog, no error, the v2.5
+behaviour stands. Settings ▸ **Root tier** shows what is actually working.
+
+### Protected broadcasts, captured as root
+
+`STEER_WHEEL_INFOR` and the day/night backlight events are sent with
+`com.szchoiceway.permission.broadcast` (CAR_API §1.1), almost certainly `signature`. AMS's
+`checkComponentPermission` short-circuits to GRANTED for uid 0 before it consults granted
+permissions, so a **root process** receives them without holding anything.
+
+`carlib/RootBroadcastHelper` is that process: our own APK's dex run under
+`su` as a bare `app_process`, registering a receiver on the system context and printing one
+line per event. `carlib/RootBroadcastBridge` reads those lines back and feeds them into the
+existing `CarEvents` flows, so **no consumer changed** — `swcKeys`, `reverse` and `dayNight`
+simply become reliable. `CarEvents.rootCapture` goes true on the first captured event.
+
+Parsing `logcat` was the other option and was rejected: AOSP's event log records broadcast
+*discards* and receiver *finishes*, never a dispatch carrying extras — and an SWC press is
+nothing but its extras. Guessing at undocumented vendor debug lines to recover a key index
+would mis-decode steering-wheel keys, which is worse than not having them.
+
+### Persistent root write channel
+
+`SysVar.putString` forked a `su` per write, which the settings suite made audible on every
+slider tick. `carlib/RootSession` holds one `su` open and serialises commands over its
+stdin, behind the existing `RootShell.exec` API (libsu → RootSession → `su -c`).
+
+**The shell-injection protections are unchanged.** `RootSession` only changes the transport
+of an already-built command; callers still single-quote every interpolated value (now via
+the one shared `RootShell.quote`) and still SQL-escape what goes inside a `--where`. A
+command containing a newline would split into two root commands on a stdin channel, so such
+a command is refused and falls back to `su -c`, where a newline is safely inside one argv
+entry.
+
+### Vendor status & nav bar
+
+Settings ▸ Root tier ▸ **Hide vendor bars** writes the SysVar keys
+`Sys_Statusbar_Icon_Config_Key` and `SYS_SHOW_TOOL_NAVI_BAR_WND` (CAR_API §6.3) — the
+*persistent* config the vendor stack reads for itself, so it survives a reboot.
+
+Both are **GUESSED** and the toggle is opt-in for that reason: the first key is an icon
+*list*, not a flag, and the second is quoted in CAR_API in the vendor's constant-name form,
+whose stored keyname usually differs. Three things keep that safe — the toggle only writes a
+key that **already exists** in the live table (a wrong guess changes nothing rather than
+inserting junk into the vehicle's config store), it records each key's original value before
+the first hide, and turning it off writes those originals back verbatim.
+
+### Sole-HOME mode, and how to get back
+
+`pm disable-user com.szchoiceway.customerui`, behind a destructive confirm (which the v2.5
+parked-only lock withholds while the car is moving).
+
+The vendor launcher is **not** an Android HOME app — no activity of it declares
+`category.HOME` (`../CUSTOMERUI_NOTES.md` §0) — so disabling it cannot orphan the HOME role.
+The real risk is that the gateway inflates its status bar and side-window layouts *out of*
+that package via `createPackageContext` (CUSTOMERUI_NOTES §3g), and how it copes with the
+package being gone is untested.
+
+**Recovery, in order of how little it needs to work:**
+
+1. **Automatic, no action needed.** Disabling arms a rollback *before* it disables, in a
+   detached root shell that init reparents:
+
+   ```sh
+   sleep 180; [ -f /data/local/tmp/carlauncher_keep_sole_home ] \
+     || pm enable com.szchoiceway.customerui; \
+     rm -f /data/local/tmp/carlauncher_keep_sole_home
+   ```
+
+   The launcher can be killed, ANR'd or uninstalled and the vendor launcher still comes back
+   after 180 s. Tapping **Keep it disabled** within that window writes the keep-file and
+   stands the rollback down.
+
+   **The one gap:** a reboot or ACC power-off inside the 180 s kills that shell and the
+   rollback never fires. Use step 2 or 3.
+
+2. **Over adb**, with the unit powered and USB connected:
+
+   ```sh
+   adb shell pm enable com.szchoiceway.customerui
+   ```
+
+   This needs no working launcher UI and no Magisk prompt — `pm enable` runs as the shell
+   user. This is the instruction the in-app dialog quotes, verbatim.
+
+3. **On the unit, with no adb.** Any terminal app with root:
+
+   ```sh
+   su -c 'pm enable com.szchoiceway.customerui'
+   ```
+
+   If our launcher itself is what is broken, press HOME and pick another home from the
+   chooser first — our HOME registration is one of several, not exclusive.
+
+4. **Last resort.** The disable is per-user state, so a factory reset restores it; the APK
+   was never removed (`disable-user`, not `uninstall`), so there is nothing to reinstall.
+
+### Startup
+
+`app/src/main/baseline-prof.txt` + `androidx.profileinstaller` give the cold-start path an
+ART profile — the side-loaded install has no Play install step to deliver one. The profile is
+hand-written rather than generated from a macrobenchmark run, because we have one head unit
+and it is a car; the header of that file records the trade-off and what to do instead once a
+device run is possible.
+
+`.github/workflows/launcher-ci.yml` gains a `cold-start` job that installs the debug APK on
+an API 33 emulator, applies the profile with `pm compile -m speed-profile`, and fails if the
+median of five `am start -W` runs exceeds a budget. **That number is an emulator figure and
+must never be quoted as a head-unit one** — it is a regression tripwire, set loose until real
+runs exist to calibrate it.
+
 ## Known TODOs
 
 - **`IEventService.aidl`** declares only a subset of methods and its transaction

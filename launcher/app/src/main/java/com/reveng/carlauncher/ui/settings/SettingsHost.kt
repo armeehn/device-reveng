@@ -13,6 +13,7 @@ import com.reveng.carlauncher.carlib.CarEvents
 import com.reveng.carlauncher.carlib.CarService
 import com.reveng.carlauncher.data.CarSettingsController
 import com.reveng.carlauncher.data.RadioPresetsStore
+import com.reveng.carlauncher.data.RootTierController // v2.9
 import com.reveng.carlauncher.data.SettingsStore
 import com.reveng.carlauncher.ui.ParkedOnly // v2.5
 
@@ -35,6 +36,7 @@ fun SettingsHost(
     carService: CarService,
     carEvents: CarEvents,
     radioPresetsStore: RadioPresetsStore,
+    rootTier: RootTierController, // v2.9
     onExit: () -> Unit,
 ) {
     val backStack = remember { mutableStateListOf<SettingsRoute>(SettingsRoute.Hub) }
@@ -117,6 +119,14 @@ fun SettingsHost(
                 onBack = ::pop,
             )
 
+            // v2.9: root-only capabilities, including the one destructive action in the app.
+            SettingsRoute.RootTier -> RootTierSettingsScreen(
+                controller = controller,
+                rootTier = rootTier,
+                carEvents = carEvents,
+                onBack = ::pop,
+            )
+
             SettingsRoute.System -> SystemSettingsScreen(
                 controller = controller,
                 carService = carService,
@@ -150,6 +160,7 @@ sealed interface SettingsRoute {
     data object Radio : SettingsRoute
     data object SteeringWheel : SettingsRoute
     data object Power : SettingsRoute
+    data object RootTier : SettingsRoute // v2.9
     data object System : SettingsRoute
     data object Advanced : SettingsRoute
 }
