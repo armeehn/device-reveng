@@ -70,7 +70,9 @@ import kotlin.math.hypot
  * App-drawer grid — v0.4 "App Drawer 2.0". On top of the original scrollable grid + "System"
  * folder (vendor/engineering apps behind one tile), this adds:
  *
- *  - **Search**: a live, case-insensitive substring filter over app labels ([DrawerSearchBar]).
+ *  - **Search**: v2.3 — a rofi-style full-screen [SearchOverlay] with its own in-Compose
+ *    keyboard (the vendor IME ignores night mode and ate half the screen); the bar at the top
+ *    of the drawer ([DrawerSearchTrigger]) just opens it.
  *  - **Favorites**: long-press-then-release an app to (un)favorite it; favorites are pinned in a
  *    horizontal row above the grid. Persisted via [FavoritesStore] (DataStore Preferences).
  *  - **Drag-to-reorder**: long-press-drag a tile to reorder the main grid; the custom order is
@@ -98,7 +100,7 @@ fun AppDrawer(
 
     val favorites by favoritesStore.favorites.collectAsStateSafe(initial = emptySet())
     val savedOrder by orderStore.order.collectAsStateSafe(initial = emptyList())
-    var query by remember { mutableStateOf("") }
+    var showSearch by remember { mutableStateOf(false) } // v2.3 full-screen search overlay
     var showSystem by remember { mutableStateOf(false) }
 
     // Apply the user's saved order first (by package), everything else alphabetically after.
@@ -108,18 +110,13 @@ fun AppDrawer(
             compareBy({ rank[it.packageName] ?: Int.MAX_VALUE }, { it.label.lowercase() }),
         )
     }
-    val filtered = remember(orderedApps, query) {
-        val q = query.trim()
-        if (q.isEmpty()) orderedApps else orderedApps.filter { it.label.contains(q, ignoreCase = true) }
-    }
-    val favoriteApps = filtered.filter { it.packageName in favorites }
+    val favoriteApps = orderedApps.filter { it.packageName in favorites }
 
     val toggleFavorite: (AppInfo) -> Unit = { app -> scope.launch { favoritesStore.toggle(app.packageName) } }
 
     Column(modifier = modifier.fillMaxSize()) {
-        DrawerSearchBar(
-            query = query,
-            onQueryChange = { query = it },
+        DrawerSearchTrigger(
+            onClick = { showSearch = true },
             modifier = Modifier.padding(top = 4.dp, bottom = 4.dp),
         )
 
@@ -132,10 +129,10 @@ fun AppDrawer(
         }
 
         ReorderableAppGrid(
-            apps = filtered,
+            apps = orderedApps,
             favorites = favorites,
             systemApps = systemApps,
-            reorderEnabled = query.isBlank(),
+            reorderEnabled = true,
             onLaunch = onLaunch,
             onToggleFavorite = toggleFavorite,
             onReorder = { newOrder -> scope.launch { orderStore.setOrder(newOrder.map { it.packageName }) } },
@@ -145,6 +142,14 @@ fun AppDrawer(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f),
+        )
+    }
+
+    if (showSearch) {
+        SearchOverlay(
+            apps = orderedApps,
+            onLaunch = { onLaunch(it); showSearch = false },
+            onDismiss = { showSearch = false },
         )
     }
 
@@ -516,10 +521,11 @@ private fun SystemFolderDialog(
 
 /**
  * Convert a launcher [android.graphics.drawable.Drawable] icon into a Compose Painter by
- * rasterizing to a bitmap. Kept simple (no Coil dependency).
+ * rasterizing to a bitmap. Kept simple (no Coil dependency). Internal: [SearchOverlay]'s
+ * result tiles reuse it.
  */
 @Composable
-private fun rememberDrawablePainter(app: AppInfo): Painter {
+internal fun rememberDrawablePainter(app: AppInfo): Painter {
     val bmp = remember(app.packageName + app.activityName) {
         app.icon.toBitmap(width = 144, height = 144).asImageBitmap()
     }
