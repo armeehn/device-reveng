@@ -1,5 +1,6 @@
 package com.reveng.carlauncher.ui.settings
 
+import com.reveng.carlauncher.ui.theme.carCard
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -14,7 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
+import com.reveng.carlauncher.ui.theme.carShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -104,7 +105,7 @@ fun SettingsIconTile(icon: ImageVector, label: String, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .size(48.dp)
-            .clip(RoundedCornerShape(14.dp))
+            .clip(carShape(14.dp))
             .background(MaterialTheme.colorScheme.surface)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
@@ -124,7 +125,8 @@ fun SettingsSection(title: String? = null, content: @Composable () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
+            .carCard()
+            .clip(carShape(18.dp))
             .background(MaterialTheme.colorScheme.surface)
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -153,7 +155,8 @@ fun SettingsCategoryCard(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
+            .carCard()
+            .clip(carShape(18.dp))
             .background(MaterialTheme.colorScheme.surface)
             .clickable(onClick = onClick)
             .padding(horizontal = 20.dp, vertical = 18.dp),
@@ -162,7 +165,7 @@ fun SettingsCategoryCard(
         Box(
             modifier = Modifier
                 .size(44.dp)
-                .clip(RoundedCornerShape(12.dp))
+                .clip(carShape(12.dp))
                 .background(MaterialTheme.colorScheme.primaryContainer),
             contentAlignment = Alignment.Center,
         ) {
@@ -444,7 +447,7 @@ fun VolumeSlider(
             Box(
                 modifier = Modifier
                     .size(36.dp)
-                    .clip(RoundedCornerShape(10.dp))
+                    .clip(carShape(10.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant),
                 contentAlignment = Alignment.Center,
             ) {
@@ -492,7 +495,7 @@ private fun StepButton(glyph: String, enabled: Boolean, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .size(44.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(carShape(12.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant)
             .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
@@ -523,7 +526,7 @@ fun DialogTextButton(
     val fg = if (filled) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
     Row(
         modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
+            .clip(carShape(14.dp))
             .background(bg)
             .clickable(onClick = onClick)
             .padding(vertical = 14.dp),
@@ -539,7 +542,7 @@ fun DialogTextButton(
 fun ValueBadge(text: String) {
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(10.dp))
+            .clip(carShape(10.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant)
             .padding(horizontal = 12.dp, vertical = 6.dp),
     ) {

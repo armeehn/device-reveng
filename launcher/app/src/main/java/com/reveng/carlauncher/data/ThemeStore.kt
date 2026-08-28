@@ -9,6 +9,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.reveng.carlauncher.ui.theme.BuiltInThemes
 import com.reveng.carlauncher.ui.theme.CarTheme
 import com.reveng.carlauncher.ui.theme.ThemeColors
+import com.reveng.carlauncher.ui.theme.ThemeStyle
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -126,6 +127,11 @@ private fun CarTheme.toJson(): JSONObject = JSONObject().apply {
     put("isBuiltIn", isBuiltIn)
     put("day", day.toJson())
     put("night", night.toJson())
+    put("style", JSONObject().apply {
+        put("cornerScale", style.cornerScale.toDouble())
+        put("monoType", style.monoType)
+        put("hardEdge", style.hardEdge)
+    })
 }
 
 private fun themeFromJson(o: JSONObject): CarTheme = CarTheme(
@@ -134,6 +140,14 @@ private fun themeFromJson(o: JSONObject): CarTheme = CarTheme(
     isBuiltIn = o.optBoolean("isBuiltIn", false),
     day = colorsFromJson(o.getJSONObject("day")),
     night = colorsFromJson(o.getJSONObject("night")),
+    // Themes saved before v2.4 have no "style" — they get the default (original look).
+    style = o.optJSONObject("style")?.let {
+        ThemeStyle(
+            cornerScale = it.optDouble("cornerScale", 1.0).toFloat(),
+            monoType = it.optBoolean("monoType", false),
+            hardEdge = it.optBoolean("hardEdge", false),
+        )
+    } ?: ThemeStyle(),
 )
 
 private fun ThemeColors.toJson(): JSONObject = JSONObject().apply {
@@ -145,6 +159,8 @@ private fun ThemeColors.toJson(): JSONObject = JSONObject().apply {
     put("onSurface", onSurface)
     put("onSurfaceMuted", onSurfaceMuted)
     put("error", error)
+    put("accent2", accent2)
+    put("accent3", accent3)
 }
 
 private fun colorsFromJson(o: JSONObject): ThemeColors = ThemeColors(
@@ -156,4 +172,6 @@ private fun colorsFromJson(o: JSONObject): ThemeColors = ThemeColors(
     onSurface = o.getLong("onSurface"),
     onSurfaceMuted = o.getLong("onSurfaceMuted"),
     error = o.getLong("error"),
+    accent2 = o.optLong("accent2", 0),
+    accent3 = o.optLong("accent3", 0),
 )

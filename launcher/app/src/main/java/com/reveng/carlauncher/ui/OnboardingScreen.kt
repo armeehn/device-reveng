@@ -27,7 +27,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
+import com.reveng.carlauncher.ui.theme.carShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
@@ -221,13 +221,13 @@ private fun ThemeStep(
                     val active = theme.id == activeId
                     Column(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(18.dp))
+                            .clip(carShape(18.dp))
                             .background(MaterialTheme.colorScheme.surface)
                             .border(
                                 if (active) 3.dp else 1.dp,
                                 if (active) MaterialTheme.colorScheme.primary
                                 else MaterialTheme.colorScheme.surfaceVariant,
-                                RoundedCornerShape(18.dp),
+                                carShape(18.dp),
                             )
                             .clickable { onSelect(theme) }
                             .padding(14.dp),
@@ -301,13 +301,13 @@ private fun AppPickTile(app: AppInfo, selected: Boolean, onClick: () -> Unit) {
     }
     Column(
         modifier = Modifier
-            .clip(RoundedCornerShape(18.dp))
+            .clip(carShape(18.dp))
             .background(MaterialTheme.colorScheme.surface)
             .border(
                 if (selected) 3.dp else 1.dp,
                 if (selected) MaterialTheme.colorScheme.primary
                 else MaterialTheme.colorScheme.surfaceVariant,
-                RoundedCornerShape(18.dp),
+                carShape(18.dp),
             )
             .clickable(onClick = onClick)
             .padding(vertical = 16.dp, horizontal = 8.dp),
@@ -437,7 +437,7 @@ private fun StepDots(current: Int, total: Int) {
                 modifier = Modifier
                     .height(10.dp)
                     .width(if (on) 26.dp else 10.dp)
-                    .clip(RoundedCornerShape(5.dp))
+                    .clip(carShape(5.dp))
                     .background(
                         if (on) MaterialTheme.colorScheme.primary
                         else MaterialTheme.colorScheme.surfaceVariant,
@@ -460,7 +460,7 @@ private fun PillButton(
     Row(
         modifier = Modifier
             .height(56.dp)
-            .clip(RoundedCornerShape(28.dp))
+            .clip(carShape(28.dp))
             .background(bg)
             .clickable(onClick = onClick)
             .padding(horizontal = 28.dp),
