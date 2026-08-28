@@ -11,11 +11,14 @@ import java.io.InputStreamReader
  *   * writing the SysVar provider requires system uid or root, and
  *   * a few gateway actions are cleaner to trigger via `am broadcast` from a root shell.
  *
- * Two backends:
+ * Three backends, in order:
  *   1. [libsu] (com.github.topjohnwu.libsu:core) — preferred: keeps one persistent `su`
  *      session, handles quoting/exit codes robustly. Used automatically if the class is on
  *      the classpath at runtime (it is declared in carlib/build.gradle.kts).
- *   2. A pure [ProcessBuilder] `su -c` fallback — used if libsu is absent or errors. No
+ *   2. v2.9 [RootSession] — our own persistent `su` channel, so the no-libsu path is no longer
+ *      a fork per command. Matters because the settings suite writes SysVar on every control
+ *      change (see the KDoc there).
+ *   3. A pure [ProcessBuilder] `su -c` fallback — used if the other two are absent or error. No
  *      extra dependency required.
  *
  * All calls are BLOCKING — invoke from a background thread / coroutine Dispatchers.IO.
@@ -47,18 +50,34 @@ object RootShell {
     }
 
     /**
-     * Run [command] as root. Prefers libsu, falls back to ProcessBuilder.
+     * Run [command] as root. Prefers libsu, then the v2.9 persistent channel, then ProcessBuilder.
      */
     fun exec(command: String): Result {
         if (libsuPresent) {
             runCatching { return execLibsu(command) }
                 .onFailure { Log.w(TAG, "libsu path failed, falling back to su -c", it) }
         }
+        // v2.9: reuse one open `su` instead of forking per command. Returns null when it cannot
+        // serve this command at all (no root, or a newline that would split into two commands),
+        // in which case the per-call backend below still runs it correctly.
+        RootSession.exec(command)?.let { return it }
+
         return execProcessBuilder(command)
     }
 
     /** Convenience: run multiple commands in one root session. */
     fun exec(vararg commands: String): Result = exec(commands.joinToString(" && "))
+
+    /**
+     * v2.9 — wrap [s] in single quotes, escaping any embedded single quote, for exactly one shell
+     * level.
+     *
+     * Every backend hands the command to one shell, so an interpolated value that is not quoted
+     * here executes as root: a bare value with a space breaks argument splitting, and `;`, `$()`
+     * or backticks run as commands. This is the single implementation — [SysVar] and the v2.9
+     * root helpers all route through it rather than keeping private copies that could drift.
+     */
+    fun quote(s: String): String = "'" + s.replace("'", "'\\''") + "'"
 
     // ---- libsu backend (reflection so the dep stays optional) ---------------
     private fun execLibsu(command: String): Result {

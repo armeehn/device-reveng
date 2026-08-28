@@ -39,6 +39,7 @@ import com.reveng.carlauncher.data.DayNightMode // v0.6
 import com.reveng.carlauncher.data.DriverSide // v2.8
 import com.reveng.carlauncher.data.RadioPresetsStore // v0.9
 import com.reveng.carlauncher.data.Reachability // v2.8
+import com.reveng.carlauncher.data.RootTierController // v2.9
 import com.reveng.carlauncher.data.SettingKeys // v2.5 touch beep
 import com.reveng.carlauncher.data.SettingsStore // v0.6
 import com.reveng.carlauncher.data.SystemChrome // v2.5
@@ -95,6 +96,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var settingsStore: SettingsStore // v0.6
     private lateinit var radioPresetsStore: RadioPresetsStore // v0.9
     private lateinit var carSettingsController: CarSettingsController // v1.1 settings suite
+    private lateinit var rootTierController: RootTierController // v2.9
 
     // v3.0 cockpit: driver profiles need the stores they write through to, and the gateway
     // handshake needs to outlive any one screen.
@@ -155,6 +157,7 @@ class MainActivity : ComponentActivity() {
         settingsStore = SettingsStore(applicationContext) // v0.6
         radioPresetsStore = RadioPresetsStore(applicationContext, lifecycleScope) // v0.9
         carSettingsController = CarSettingsController(applicationContext, lifecycleScope) // v1.1
+        rootTierController = RootTierController(applicationContext, lifecycleScope) // v2.9
 
         // v3.0: driver profiles + the vendor-gateway UIMODE channel.
         favoritesStore = FavoritesStore(applicationContext, lifecycleScope)
@@ -433,6 +436,7 @@ class MainActivity : ComponentActivity() {
                                 carService = carService,
                                 carEvents = carEvents,
                                 radioPresetsStore = radioPresetsStore,
+                                rootTier = rootTierController, // v2.9
                                 onExit = { screen = Screen.Home },
                                 initialRoute = s.initialRoute,
                             )
