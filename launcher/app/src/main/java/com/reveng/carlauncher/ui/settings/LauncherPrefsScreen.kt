@@ -141,6 +141,21 @@ fun LauncherPrefsScreen(
             )
         }
 
+        // v0.4.2: text-to-speech. Off by default — a launcher that talks unasked is worse
+        // than silent (LAUNCHER_DESIGN eyes-free posture; pairs with the car's own beep feedback).
+        SettingsSection(title = "Read aloud") {
+            ToggleSetting(
+                "Read now-playing aloud",
+                settings.readNowPlaying,
+                settingsStore::setReadNowPlaying,
+            )
+            ToggleSetting(
+                "Read notifications aloud",
+                settings.readNotifications,
+                settingsStore::setReadNotifications,
+            )
+        }
+
         SettingsSection(title = "Top bar & shade") {
             Text(
                 text = "The launcher can show its own swipe-from-top Quick Controls shade " +

@@ -73,6 +73,7 @@ import com.reveng.carlauncher.ui.RadioScreen // v2.6
 import com.reveng.carlauncher.ui.rememberClockNight // v2.7
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay // v2.6
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.reveng.carlauncher.ui.OnboardingScreen // v1.0
@@ -102,6 +103,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var nowPlaying: NowPlayingRepository
     private lateinit var themeStore: ThemeStore
     private lateinit var settingsStore: SettingsStore // v0.6
+    private lateinit var speechController: com.reveng.carlauncher.media.SpeechController // v0.4.2 TTS
     private lateinit var radioPresetsStore: RadioPresetsStore // v0.9
     private lateinit var carSettingsController: CarSettingsController // v1.1 settings suite
     private lateinit var rootTierController: RootTierController // v2.9
@@ -168,6 +170,22 @@ class MainActivity : ComponentActivity() {
         nowPlaying = NowPlayingRepository(applicationContext).also { it.start(lifecycleScope) }
         themeStore = ThemeStore(applicationContext)
         settingsStore = SettingsStore(applicationContext) // v0.6
+
+        // v0.4.2: text-to-speech — announces the now-playing track when the user opts in
+        // (SettingsStore.readNowPlaying, off by default). The controller no-ops until its engine
+        // is ready and stays silent while the toggle is off.
+        speechController = com.reveng.carlauncher.media.SpeechController(applicationContext).also {
+            it.observeNowPlaying(
+                lifecycleScope,
+                nowPlaying.state,
+                settingsStore.settings.map { s -> s.readNowPlaying },
+            )
+            it.observeNotifications(
+                lifecycleScope,
+                com.reveng.carlauncher.notif.NotificationRepository.items,
+                settingsStore.settings.map { s -> s.readNotifications },
+            )
+        }
         radioPresetsStore = RadioPresetsStore(applicationContext, lifecycleScope) // v0.9
         carSettingsController = CarSettingsController(applicationContext, lifecycleScope) // v1.1
         rootTierController = RootTierController(applicationContext, lifecycleScope) // v2.9
@@ -468,6 +486,11 @@ class MainActivity : ComponentActivity() {
                                 onDelete = { profile ->
                                     lifecycleScope.launch { profilesStore.delete(profile.id) }
                                 },
+                                onRename = { profile, newName ->
+                                    // v0.4.2: upsert keys by id, so this replaces the name in place
+                                    // and keeps active status and the bundled settings untouched.
+                                    lifecycleScope.launch { profilesStore.upsert(profile.copy(name = newName)) }
+                                },
                                 onBack = { screen = Screen.Home },
                             )
 
@@ -746,6 +769,7 @@ class MainActivity : ComponentActivity() {
         carEvents.unregister()
         carService.unbind()
         nowPlaying.stop()
+        speechController.shutdown() // v0.4.2 TTS
         carSettingsController.release() // v1.1
         themeStore.release()
         settingsStore.release()
