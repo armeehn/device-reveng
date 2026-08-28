@@ -134,7 +134,9 @@ private fun decodeThemes(json: String?): List<CarTheme> {
     }
 }
 
-private fun CarTheme.toJson(): JSONObject = JSONObject().apply {
+// v2.7: internal, not private — ThemeTransfer reuses the exact same codec for import/export so a
+// file on disk and a row in DataStore can never drift into two different formats.
+internal fun CarTheme.toJson(): JSONObject = JSONObject().apply {
     put("id", id)
     put("name", name)
     put("isBuiltIn", isBuiltIn)
@@ -147,7 +149,7 @@ private fun CarTheme.toJson(): JSONObject = JSONObject().apply {
     })
 }
 
-private fun themeFromJson(o: JSONObject): CarTheme = CarTheme(
+internal fun themeFromJson(o: JSONObject): CarTheme = CarTheme(
     id = o.getString("id"),
     name = o.getString("name"),
     isBuiltIn = o.optBoolean("isBuiltIn", false),

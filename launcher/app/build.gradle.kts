@@ -13,8 +13,8 @@ android {
         applicationId = "com.reveng.carlauncher"
         minSdk = 33
         targetSdk = 33
-        versionCode = 33
-        versionName = "2.4.1"
+        versionCode = 49
+        versionName = "4.0.1"
 
         // Single head-unit target: arm64 landscape @240dpi, 1920x720.
         ndk { abiFilters += "arm64-v8a" }
@@ -96,5 +96,15 @@ dependencies {
     // DataStore Preferences — app-local persistence (theme system v0.5 + drawer favorites/order v0.4).
     implementation("androidx.datastore:datastore-preferences:1.1.1")
 
+    // v2.9 ProfileInstaller — writes src/main/baseline-prof.txt (which AGP compiles into the APK)
+    // into the app's ART profile on first run, so the cold-start path is AOT-compiled from the
+    // second launch. Required here because the unit side-loads: the Play Store install path that
+    // normally applies a baseline profile never runs.
+    implementation("androidx.profileinstaller:profileinstaller:1.3.1")
+
     debugImplementation("androidx.compose.ui:ui-tooling")
+
+    // JVM unit tests for the pure logic (preset codec, frequency formatting, theme table).
+    // See carlib/build.gradle.kts for why there is no Robolectric.
+    testImplementation("junit:junit:4.13.2")
 }

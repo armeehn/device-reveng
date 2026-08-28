@@ -7,23 +7,33 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountCircle // v3.0
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.PowerSettingsNew
+import androidx.compose.material.icons.filled.Movie // v2.7
+import androidx.compose.material.icons.filled.Notifications // v2.7
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Settings // v0.6
+import androidx.compose.material.icons.filled.Speed // v3.0
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.reveng.carlauncher.carlib.CarEvents
 import com.reveng.carlauncher.carlib.CarService // v0.6
+import com.reveng.carlauncher.data.DayNightMode
+import com.reveng.carlauncher.data.LauncherSettings
 import com.reveng.carlauncher.data.SettingsStore // v0.6
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
@@ -33,6 +43,9 @@ import java.util.Locale
 /**
  * Top status bar: live clock + car status chips (ACC power, day/night).
  * Data comes from [CarEvents] state flows (CAR_API §1.3, §6.3).
+ *
+ * The sun/moon chip toggles the day/night theme ([SettingsStore.setDayNightMode]); the
+ * power chip stays an ACC status light but opens Settings → Power & sleep on tap.
  */
 @Composable
 fun StatusBar(
@@ -43,9 +56,34 @@ fun StatusBar(
     onOpenSettings: () -> Unit = {},
     carService: CarService? = null,
     settingsStore: SettingsStore? = null,
+    onOpenPowerSettings: () -> Unit = {},
+    // v3.0: cockpit dashboard + driver-profile switcher.
+    onOpenDashboard: () -> Unit = {},
+    onOpenProfiles: () -> Unit = {},
+    // v2.7: the two parked-only shelves. Optional so previews and any un-wired caller still
+    // compose; a null callback simply hides its icon rather than putting a dead one on screen.
+    onOpenNotifications: (() -> Unit)? = null,
+    onOpenContinueWatching: (() -> Unit)? = null,
 ) {
     val accOn by carEvents.accOn.collectAsStateSafe(initial = true)
     val dayNight by carEvents.dayNight.collectAsStateSafe(initial = CarEvents.DayNight.DAY)
+    val settings by (settingsStore?.settings?.collectAsStateSafe(initial = LauncherSettings())
+        ?: remember { mutableStateOf(LauncherSettings()) })
+
+    // Effective night state: the forced day/night mode wins over the car illumination
+    // signal — same resolution MainActivity uses to pick the theme, so the icon always
+    // matches what's on screen. v2.7 adds CLOCK + the AUTO clock-fallback; mirror both here.
+    val carNight = dayNight == CarEvents.DayNight.NIGHT
+    val illuminationSeen by carEvents.illuminationSeen.collectAsStateSafe(initial = false)
+    val clockNight by rememberClockNight(settings.nightStartHour, settings.nightEndHour)
+    val night = when (settings.dayNightMode) {
+        DayNightMode.FORCE_DAY -> false
+        DayNightMode.FORCE_NIGHT -> true
+        DayNightMode.CLOCK -> clockNight
+        DayNightMode.AUTO ->
+            if (settings.clockFallback && !illuminationSeen) clockNight
+            else carNight
+    }
 
     val time by produceState(initialValue = nowString()) {
         while (true) {
@@ -71,19 +109,77 @@ fun StatusBar(
             horizontalArrangement = Arrangement.spacedBy(20.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            // v3.1: always-visible Wi-Fi / BT / volume / brightness chips. Display-only;
+            // tapping the group opens the same Quick Controls panel as the Tune icon, and
+            // closing it bumps refreshKey so the volume/brightness chips re-read at once.
+            var quickOpen by remember { mutableStateOf(false) }
+            var quickClosed by remember { mutableIntStateOf(0) }
+            StatusIndicators(
+                carService = carService,
+                refreshKey = quickClosed,
+                onOpen = if (carService != null && settingsStore != null) {
+                    { quickOpen = true }
+                } else {
+                    null
+                },
+            )
+            if (carService != null && settingsStore != null) {
+                QuickControlsDialogHost(
+                    open = quickOpen,
+                    onDismiss = {
+                        quickOpen = false
+                        quickClosed++
+                    },
+                    carService = carService,
+                    settingsStore = settingsStore,
+                )
+            }
+
             Icon(
-                imageVector = if (dayNight == CarEvents.DayNight.NIGHT)
-                    Icons.Filled.DarkMode else Icons.Filled.LightMode,
-                contentDescription = "Illumination mode",
+                imageVector = if (night) Icons.Filled.DarkMode else Icons.Filled.LightMode,
+                contentDescription = "Toggle day/night theme",
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(28.dp),
+                modifier = Modifier
+                    .size(28.dp)
+                    .clickable(enabled = settingsStore != null) {
+                        // Flip the theme. A flip that lands back on what the car signal
+                        // already says becomes AUTO, so the launcher resumes following
+                        // the car instead of staying pinned to a forced mode.
+                        val target = !night
+                        settingsStore?.setDayNightMode(
+                            when {
+                                target == carNight -> DayNightMode.AUTO
+                                target -> DayNightMode.FORCE_NIGHT
+                                else -> DayNightMode.FORCE_DAY
+                            }
+                        )
+                    },
             )
             Icon(
                 imageVector = Icons.Filled.PowerSettingsNew,
-                contentDescription = "ACC power",
+                contentDescription = "Power & sleep",
                 tint = if (accOn) MaterialTheme.colorScheme.primary else Color.Gray,
-                modifier = Modifier.size(28.dp),
+                modifier = Modifier
+                    .size(28.dp)
+                    .clickable(onClick = onOpenPowerSettings),
             )
+            // v2.7 shelves. Both screens are parked-only, so the icons are dimmed and inert while
+            // the car is moving instead of vanishing — a status bar that reflows at every red
+            // light is its own distraction.
+            if (onOpenNotifications != null) {
+                ShelfIcon(
+                    icon = Icons.Filled.Notifications,
+                    label = "Notifications",
+                    onClick = onOpenNotifications,
+                )
+            }
+            if (onOpenContinueWatching != null) {
+                ShelfIcon(
+                    icon = Icons.Filled.Movie,
+                    label = "Continue watching",
+                    onClick = onOpenContinueWatching,
+                )
+            }
             Icon(
                 imageVector = Icons.Filled.Palette,
                 contentDescription = "Themes",
@@ -96,6 +192,24 @@ fun StatusBar(
             if (carService != null && settingsStore != null) {
                 QuickControlsButton(carService = carService, settingsStore = settingsStore)
             }
+            // v3.0: the cockpit dashboard and the driver-profile switcher. Both live here so
+            // each is exactly two taps from Home, which is the §3.0 requirement for profiles.
+            Icon(
+                imageVector = Icons.Filled.Speed,
+                contentDescription = "Vehicle dashboard",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .size(28.dp)
+                    .clickable(onClick = withTapFeedback(onOpenDashboard)),
+            )
+            Icon(
+                imageVector = Icons.Filled.AccountCircle,
+                contentDescription = "Driver profiles",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .size(28.dp)
+                    .clickable(onClick = withTapFeedback(onOpenProfiles)),
+            )
             // v0.6: Settings gear -> SettingsScreen.
             Icon(
                 imageVector = Icons.Filled.Settings,
@@ -108,6 +222,32 @@ fun StatusBar(
         }
     }
 }
+
+/** v2.7 — a status-bar entry point for a parked-only screen: dimmed and inert while moving. */
+@Composable
+private fun ShelfIcon(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    onClick: () -> Unit,
+) {
+    val locked = LocalParkedOnlyLock.current
+    val tint = if (locked) {
+        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = LOCKED_ICON_ALPHA)
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Icon(
+        imageVector = icon,
+        contentDescription = if (locked) "$label — available when parked" else label,
+        tint = tint,
+        modifier = Modifier
+            .size(28.dp)
+            .clickable(enabled = !locked, onClick = onClick),
+    )
+}
+
+/** Material's standard disabled-content opacity. */
+private const val LOCKED_ICON_ALPHA = 0.38f
 
 private fun nowString(): String =
     SimpleDateFormat("EEE  HH:mm", Locale.getDefault()).format(Date())

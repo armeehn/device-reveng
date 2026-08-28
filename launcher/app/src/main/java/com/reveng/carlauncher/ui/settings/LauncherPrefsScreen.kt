@@ -16,6 +16,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -28,11 +29,20 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle // v2.8
 import com.reveng.carlauncher.HomeRole
+import com.reveng.carlauncher.carlib.CarEvents // v2.5
+import com.reveng.carlauncher.carlib.GpsSpeedSource // v2.5
+import com.reveng.carlauncher.carlib.RootShell // v2.5 shade
+import com.reveng.carlauncher.data.CarSettingsController // v2.8
 import com.reveng.carlauncher.data.DayNightMode
+import com.reveng.carlauncher.data.DriverSideMode // v2.8
 import com.reveng.carlauncher.data.LauncherSettings
+import com.reveng.carlauncher.data.SettingKeys // v2.8
 import com.reveng.carlauncher.data.SettingsStore
 import com.reveng.carlauncher.ui.collectAsStateSafe
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * v1.1 — the launcher's own preferences, migrated from the original flat SettingsScreen into
@@ -44,9 +54,19 @@ import com.reveng.carlauncher.ui.collectAsStateSafe
 fun LauncherPrefsScreen(
     settingsStore: SettingsStore,
     onBack: () -> Unit,
+    carEvents: CarEvents? = null, // v2.5 motion gating (null keeps previews working)
+    controller: CarSettingsController? = null, // v2.8 raw Sys_CarType readout
 ) {
     val context = LocalContext.current
     val settings by settingsStore.settings.collectAsStateSafe(initial = LauncherSettings())
+
+    // v2.5: gate the "replace system bars" toggle on root — the suppression is a root shell op.
+    // Probed once off the main thread; defaults to enabled so the toggle isn't wrongly greyed
+    // before the probe resolves on a rooted unit.
+    var rootAvailable by remember { mutableStateOf(true) }
+    LaunchedEffect(Unit) {
+        rootAvailable = withContext(Dispatchers.IO) { RootShell.isRootAvailable() }
+    }
 
     var isDefaultHome by remember { mutableStateOf(HomeRole.isDefaultHome(context)) }
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -111,6 +131,55 @@ fun LauncherPrefsScreen(
             ToggleSetting("Navigation", settings.showNav, settingsStore::setShowNav)
         }
 
+        SettingsSection(title = "Top bar & shade") {
+            Text(
+                text = "The launcher can show its own swipe-from-top Quick Controls shade " +
+                    "(volume, brightness, day/night, Wi-Fi, Bluetooth) that matches your theme.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.size(12.dp))
+            ToggleSetting(
+                label = "Swipe-down Quick Controls",
+                description = "Swipe from the top edge of Home to open the launcher shade.",
+                checked = settings.shadeEnabled,
+                onChange = settingsStore::setShadeEnabled,
+            )
+            ToggleSetting(
+                label = "Replace the system top bar",
+                description = if (rootAvailable)
+                    "Hide the vendor status bar and Android pull-down so only the " +
+                        "launcher shade shows. Reversible; the vendor status bar returns " +
+                        "fully after a reboot when turned off."
+                else "Needs root — the vendor bars can't be suppressed on this build without it.",
+                checked = settings.replaceSystemBars,
+                onChange = settingsStore::setReplaceSystemBars,
+                enabled = rootAvailable,
+            )
+        }
+
+        // v2.8 — the reachability mirror (LAUNCHER_DESIGN §2.5).
+        SettingsSection(title = "Reachability mirror") {
+            Text(
+                text = "Puts the quick-launch and radio column under the driver's hand. In a " +
+                    "right-hand-drive car it swaps to the left of the screen.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.size(12.dp))
+            PickerSetting(
+                label = "Driver's side",
+                current = settings.driverSideMode,
+                options = listOf(
+                    DriverSideMode.AUTO to "Auto (from the car)",
+                    DriverSideMode.LHD to "Left-hand drive",
+                    DriverSideMode.RHD to "Right-hand drive",
+                ),
+                onSelect = settingsStore::setDriverSideMode,
+            )
+            CarTypeRow(controller = controller)
+        }
+
         SettingsSection(title = "Day / night mode") {
             Text(
                 text = "Auto follows the car's illumination signal. Force day or night to " +
@@ -126,12 +195,143 @@ fun LauncherPrefsScreen(
                     DayNightMode.AUTO to "Auto (follow car)",
                     DayNightMode.FORCE_DAY to "Force day",
                     DayNightMode.FORCE_NIGHT to "Force night",
+                    DayNightMode.CLOCK to "Clock", // v2.7
                 ),
                 onSelect = settingsStore::setDayNightMode,
             )
         }
+
+        // v2.7 — the clock stand-in for a missing illumination signal.
+        SettingsSection(title = "Clock day / night") {
+            Text(
+                text = illuminationHint(carEvents),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.size(12.dp))
+            ToggleSetting(
+                label = "Use the clock when the car says nothing",
+                checked = settings.clockFallback,
+                onChange = settingsStore::setClockFallback,
+                description = "Only applies in Auto, and only until an illumination broadcast " +
+                    "arrives. \"Clock\" mode above always uses these hours.",
+            )
+            SliderSetting(
+                label = "Night starts",
+                value = settings.nightStartHour,
+                range = LauncherSettings.MIN_HOUR..LauncherSettings.MAX_HOUR,
+                onChange = settingsStore::setNightStartHour,
+                format = ::hourLabel,
+            )
+            SliderSetting(
+                label = "Night ends",
+                value = settings.nightEndHour,
+                range = LauncherSettings.MIN_HOUR..LauncherSettings.MAX_HOUR,
+                onChange = settingsStore::setNightEndHour,
+                format = ::hourLabel,
+            )
+        }
+
+        // v2.5 — the parked-only gate (LAUNCHER_DESIGN §1.4).
+        SettingsSection(title = "Motion gating") {
+            Text(
+                text = "Hide search, the theme editor, the SysVar browser and destructive " +
+                    "actions while the car is moving.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.size(12.dp))
+            ToggleSetting(
+                "Enforce parked-only features",
+                settings.motionGateEnabled,
+                settingsStore::setMotionGateEnabled,
+            )
+            Spacer(Modifier.size(12.dp))
+            MotionStatusRow(carEvents = carEvents)
+        }
     }
 }
+
+/**
+ * v2.5 — live speed and verdict, so the gate is diagnosable on the bench.
+ *
+ * Without this the driver has no way to tell "the gate is open because I am parked" from "the
+ * gate is open because GPS never got a fix" — the two look identical from the outside, and the
+ * second is the one worth knowing about.
+ */
+@Composable
+private fun MotionStatusRow(carEvents: CarEvents?) {
+    if (carEvents == null) {
+        return
+    }
+    val speed by carEvents.speedKmh.collectAsStateSafe(initial = GpsSpeedSource.SPEED_UNKNOWN)
+    val motion by carEvents.motion.collectAsStateSafe(initial = CarEvents.Motion.UNKNOWN)
+
+    val speedText = if (speed < 0) "no GPS fix" else "$speed km/h"
+    val verdict = when (motion) {
+        CarEvents.Motion.MOVING -> "moving — parked-only features hidden"
+        CarEvents.Motion.PARKED -> "parked — everything available"
+        CarEvents.Motion.UNKNOWN -> "unknown — gate open (fails open by design)"
+    }
+
+    Text(
+        text = "Speed: $speedText · $verdict",
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+/**
+ * v2.8 — the live raw `Sys_CarType`, next to the override that ignores it.
+ *
+ * Auto has nothing to go on. CAR_API §2.3 calls the key a "car model/type profile id" and the
+ * value domain was never recovered, so [com.reveng.carlauncher.data.Reachability] ships an empty
+ * mapping table and Auto always answers LHD. Showing the raw value is the only honest thing this
+ * row can do: it turns "Auto is wrong for me" into a value a user can report, which is what would
+ * let the table stop being empty.
+ */
+@Composable
+private fun CarTypeRow(controller: CarSettingsController?) {
+    if (controller == null) {
+        return
+    }
+    val snapshot by controller.snapshot.collectAsStateWithLifecycle()
+    val carType = snapshot[SettingKeys.CAR_TYPE]
+
+    InfoRow(
+        label = "Car profile (Sys_CarType)",
+        value = if (carType.isNullOrBlank()) "not set" else carType,
+    )
+    Text(
+        text = "Auto cannot read a driver's side out of this value — no mapping was ever " +
+            "recovered — so it stays left-hand drive. Set the override if that is wrong.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+/**
+ * v2.7 — say whether the car has ever actually reported illumination.
+ *
+ * This is the whole reason the fallback exists, and the one fact the driver cannot get anywhere
+ * else: a launcher sitting in day colours looks the same whether the car said "day" or said
+ * nothing at all. The same diagnosis-over-guesswork argument as the v2.5 motion status row.
+ */
+@Composable
+private fun illuminationHint(carEvents: CarEvents?): String {
+    if (carEvents == null) {
+        return "Uses the hours below when the car's illumination signal is absent."
+    }
+    val seen by carEvents.illuminationSeen.collectAsStateSafe(initial = false)
+    if (seen) {
+        return "The car is reporting illumination, so Auto follows it and these hours are unused."
+    }
+    return "No illumination broadcast has arrived this session — the signal is permission-gated " +
+        "and usually silent on a normal install, which is what these hours are for."
+}
+
+/** Whole hours only; a 24-position slider is already as fine as this control should get. */
+private fun hourLabel(hour: Int): String = "%02d:00".format(hour)
 
 @Composable
 private fun ColumnChip(count: Int, selected: Boolean, onClick: () -> Unit) {
