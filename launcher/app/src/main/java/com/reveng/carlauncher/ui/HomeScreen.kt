@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope // v2.8
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -43,6 +44,7 @@ import com.reveng.carlauncher.AppRepository
 import com.reveng.carlauncher.R
 import com.reveng.carlauncher.carlib.CarEvents
 import com.reveng.carlauncher.carlib.CarService
+import com.reveng.carlauncher.data.DriverSide // v2.8
 import com.reveng.carlauncher.data.LauncherSettings // v0.6
 import com.reveng.carlauncher.data.SettingsStore // v0.6
 import com.reveng.carlauncher.input.FocusTarget // v0.8 SWC navigation
@@ -81,6 +83,11 @@ fun HomeScreen(
     // v2.6: the glance cards deep-link into their full screens (§3.3, §3.4).
     onOpenMedia: () -> Unit = {},
     onOpenRadio: () -> Unit = {},
+    // v3.0: cockpit dashboard + driver profiles, reached from the status bar.
+    onOpenDashboard: () -> Unit = {},
+    onOpenProfiles: () -> Unit = {},
+    // v2.8: reachability mirror (LAUNCHER_DESIGN §2.5). LHD is the default everywhere.
+    driverSide: DriverSide = DriverSide.LEFT,
 ) {
     val reverse by carEvents.reverse.collectAsStateSafe(initial = false)
     val media by nowPlaying.state.collectAsStateSafe(initial = null)
@@ -118,6 +125,16 @@ fun HomeScreen(
                 else -> {} // Climate / Nav are glanceable, no primary action
             }
         }
+        // v2.8: long CENTER. Each case mirrors the touch long-press that already exists, so the
+        // wheel gains no gesture the screen doesn't have. Media has no touch long-press, and
+        // play/pause is the one thing a driver wants from the card without opening it.
+        focus.onSecondary = { target ->
+            when (target) {
+                is FocusTarget.Grid -> { focus.grid.longPress(target.index); true }
+                is FocusTarget.Media -> { nowPlaying.playPause(); true }
+                else -> false
+            }
+        }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -131,16 +148,16 @@ fun HomeScreen(
                 carService = carService,
                 settingsStore = settingsStore,
                 onOpenPowerSettings = onOpenPowerSettings,
+                onOpenDashboard = onOpenDashboard, // v3.0
+                onOpenProfiles = onOpenProfiles, // v3.0
             )
 
-            Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-                    .focusGroup(), // v0.8: one focus group for the whole Home layout
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                // ---- LEFT: media over climate (glance zone) --------------------
+            // v2.8: the two side columns are declared once and *ordered* by the reachability
+            // mirror (LAUNCHER_DESIGN §2.5). Declaring them as composable lambdas rather than
+            // duplicating the Row for each orientation keeps one definition of each column, so a
+            // change to the media card can't silently apply to only one kind of car.
+            val glanceColumn: @Composable RowScope.() -> Unit = {
+                // ---- media over climate (glance zone) --------------------------
                 Column(
                     modifier = Modifier
                         .weight(0.30f)
@@ -187,8 +204,10 @@ fun HomeScreen(
                         }
                     }
                 }
+            }
 
-                // ---- CENTER: the app-drawer grid (widest) ----------------------
+            // ---- CENTER: the app-drawer grid (widest). Symmetric, so it never moves. -------
+            val centerColumn: @Composable RowScope.() -> Unit = {
                 Column(
                     modifier = Modifier
                         .weight(0.40f)
@@ -230,8 +249,10 @@ fun HomeScreen(
                         gridFocus = focus.grid, // v0.8: drive/highlight tile focus
                     )
                 }
+            }
 
-                // ---- RIGHT: quick-launch column + radio (driver thumb zone) -----
+            // ---- quick-launch column + radio (driver thumb zone) --------------------------
+            val thumbColumn: @Composable RowScope.() -> Unit = {
                 Column(
                     modifier = Modifier
                         .weight(0.30f)
@@ -263,6 +284,25 @@ fun HomeScreen(
                             )
                         }
                     }
+                }
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .focusGroup(), // v0.8: one focus group for the whole Home layout
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                // v2.8: RHD puts the thumb column on the left so it stays under the driver's hand.
+                if (driverSide == DriverSide.RIGHT) {
+                    thumbColumn()
+                    centerColumn()
+                    glanceColumn()
+                } else {
+                    glanceColumn()
+                    centerColumn()
+                    thumbColumn()
                 }
             }
         }
