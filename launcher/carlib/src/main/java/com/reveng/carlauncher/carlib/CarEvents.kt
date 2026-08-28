@@ -97,6 +97,47 @@ class CarEvents(private val appContext: Context) {
             "com.choiceway.eventcenter.EventUtils.MCU_CAR_CAN_RADAR_INFO"
         const val EXTRA_CAR_CAN_DATA = "EventUtils.CAR_CAN_DATA"
 
+        // ---- v0.4.3: CAN bulk-frame capture (CAR_API §1.3) — unprotected -----
+        // Bulk CAN state frame — the route to a real speed reading (CAR_API line 109; the
+        // CAN_BASIC_EVT receiver is confirmed in EvtModel.java). The fully-qualified action
+        // strings follow the vendor's EventUtils.* convention but are GUESSED at that prefix;
+        // the CanCaptureScreen exists precisely to confirm which action + extra actually arrive.
+        // CONFIRMED on GT6-CAR (dumpsys broadcasts, engine on): the bulk frame rides
+        // MCU_MSG_CAN_ALL_INFO (com.choiceway prefix) and MCU_CAR_CAN_INFO (com.SZchoiceway
+        // prefix - note the different vendor prefix). CAN_BASIC_EVT was not observed.
+        const val MCU_MSG_CAN_ALL_INFO =
+            "com.choiceway.eventcenter.EventUtils.MCU_MSG_CAN_ALL_INFO"
+        const val MCU_CAR_CAN_INFO =
+            "com.szchoiceway.eventcenter.EventUtils.MCU_CAR_CAN_INFO"
+        const val CAN_BASIC_EVT =
+            "com.choiceway.eventcenter.EventUtils.CAN_BASIC_EVT"
+
+        // ---- v0.4.3: radio info sniffer (CAR_API line 113) — unprotected ----
+        // Both radio broadcasts, captured raw. Actions are CONFIRMED consts; only the
+        // action of ZXW_RADIO_INFO_EVT was recovered (payload never traced), so the sniffer
+        // exists to discover what extras it and the frequency broadcast actually carry -- the
+        // one route to a station name (README "Known TODOs").
+        const val ZXW_RADIO_INFO_EVT =
+            "com.choiceway.eventcenter.EventUtils.ZXW_RADIO_INFO_EVT"
+        const val RADIO_FREQUENCY_EVENT = "com.szchoiceway.radio.frequency"
+
+        // ---- v0.4.3: vehicle data sniffer (CAR_API line 111) — unprotected --
+        // A cluster of CONFIRMED-const CAN events whose payloads were never decoded. One
+        // generic sniffer captures every extra of each: to pin the key names v3.0 guesses
+        // (outside temp, steering) and to open the ones with no reader at all (TPMS, seat,
+        // fuel, trip computer, centre console). FQ strings follow the EventUtils.* convention.
+        const val CAN_TPMS_DATA_EVT = "com.choiceway.eventcenter.EventUtils.CAN_TPMS_DATA_EVT"
+        const val CAN_SEAT_DATA_EVT = "com.choiceway.eventcenter.EventUtils.CAN_SEAT_DATA_EVT"
+        const val CAN_SLS_DATA_EVT = "com.choiceway.eventcenter.EventUtils.CAN_SLS_DATA_EVT"
+        const val CAN_FUEL_CONSUMPTION_INFOR = "com.choiceway.eventcenter.EventUtils.CAN_FUEL_CONSUMPTION_INFOR"
+        const val CAN_CENTER_CONSOLE_INFOR = "com.choiceway.eventcenter.EventUtils.CAN_CENTER_CONSOLE_INFOR"
+        const val CAN_CAR_TIRP_INFO = "com.choiceway.eventcenter.EventUtils.CAN_CAR_TIRP_INFO"
+        val VEHICLE_SNIFF_ACTIONS = arrayOf(
+            CAN_TPMS_DATA_EVT, CAN_SEAT_DATA_EVT, CAN_SLS_DATA_EVT,
+            CAN_FUEL_CONSUMPTION_INFOR, CAN_CENTER_CONSOLE_INFOR, CAN_CAR_TIRP_INFO,
+            CAN_CAR_OUT_SIDE_TEMP_EVT, ZXW_CAN_WHEEL_TRACK_EVT,
+        )
+
         // ---- Climate (CAR_API §1.3) — unprotected ---------------------------
         const val CAR_AIR_STATE_ACTION = "com.szchoiceway.canbus.carairstruct"
         /** Parcelable com.szchoiceway.canbus.CarAirState (class not bundled — TODO). */
@@ -280,6 +321,34 @@ class CarEvents(private val appContext: Context) {
      */
     val radarRaw: StateFlow<RadarFrame?> = _radarRaw.asStateFlow()
 
+    // v0.4.3 --- Undecoded CAN bulk frame, for the capture view ----------------
+    private val _canRaw = MutableStateFlow<CanFrame?>(null)
+    /**
+     * v0.4.3 — the last CAN bulk-frame broadcast (CAN_BASIC_EVT / MCU_CAR_CAN_INFO), with every
+     * extra captured and any byte[] payload kept undecoded. Null until a frame arrives (which, on a
+     * normal app or off a car, may be never — the action strings and payload key are unconfirmed;
+     * [com.reveng.carlauncher.ui.settings.CanCaptureScreen] is the instrument that confirms them).
+     */
+    val canRaw: StateFlow<CanFrame?> = _canRaw.asStateFlow()
+
+    // v0.4.3 --- Undecoded radio info broadcast, for the capture view -----------
+    private val _radioInfoRaw = MutableStateFlow<CanFrame?>(null)
+    /**
+     * v0.4.3 - the last radio broadcast (ZXW_RADIO_INFO_EVT / com.szchoiceway.radio.frequency),
+     * every extra captured undecoded. The route to a station name RadioScreen cannot show today;
+     * null until a frame arrives (never off a car / tuner).
+     */
+    val radioInfoRaw: StateFlow<CanFrame?> = _radioInfoRaw.asStateFlow()
+
+    // v0.4.3 --- Vehicle-data sniffer: last frame per confirmed-but-undecoded action --------
+    private val _vehicleSniff = MutableStateFlow<Map<String, CanFrame>>(emptyMap())
+    /**
+     * v0.4.3 - the latest broadcast per action in [VEHICLE_SNIFF_ACTIONS], every extra kept
+     * undecoded, so the extra key names (guessed for temp/steering, unknown for the rest) are
+     * confirmed on a car. Empty until a frame of a given action arrives.
+     */
+    val vehicleSniff: StateFlow<Map<String, CanFrame>> = _vehicleSniff.asStateFlow()
+
     /**
      * Numeric speed in km/h, or [GpsSpeedSource.SPEED_UNKNOWN] when it cannot be read.
      *
@@ -370,6 +439,13 @@ class CarEvents(private val appContext: Context) {
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
+            // v0.4.3: capture any sniffed vehicle-data action raw, before the typed handlers.
+            intent?.action?.let { a ->
+                if (a in VEHICLE_SNIFF_ACTIONS) {
+                    _vehicleSniff.value = _vehicleSniff.value +
+                        (a to CanFrame.from(intent, System.currentTimeMillis()))
+                }
+            }
             when (val action = intent?.action) {
                 MCU_MSG_BACKCAR_START -> updateReverse(true)
                 MCU_MSG_BACKCAR_END -> updateReverse(false)
@@ -425,6 +501,16 @@ class CarEvents(private val appContext: Context) {
                     }
                     val rs = RadarState.fromRadarData(bytes)
                     if (rs.valid) _radar.value = rs
+                }
+
+                // v0.4.3: bulk CAN frame — capture every extra + any byte[] payload, undecoded.
+                MCU_CAR_CAN_INFO, MCU_MSG_CAN_ALL_INFO, CAN_BASIC_EVT -> {
+                    _canRaw.value = CanFrame.from(intent, System.currentTimeMillis())
+                }
+
+                // v0.4.3: radio info sniff - capture every extra of either radio broadcast.
+                ZXW_RADIO_INFO_EVT, RADIO_FREQUENCY_EVENT -> {
+                    _radioInfoRaw.value = CanFrame.from(intent, System.currentTimeMillis())
                 }
 
                 CAR_AIR_STATE_ACTION -> {
@@ -532,6 +618,17 @@ class CarEvents(private val appContext: Context) {
             addAction(ACTION_DAY_BACKLIGHT_CHANGED)
             addAction(ACTION_NIGHT_BACKLIGHT_CHANGED)
             addAction(MCU_CAR_CAN_RADAR_INFO)
+            addAction(MCU_CAR_CAN_INFO) // v0.4.3 CAN bulk-frame capture
+            addAction(MCU_MSG_CAN_ALL_INFO) // v0.4.3 (confirmed bulk frame on GT6-CAR)
+            addAction(CAN_BASIC_EVT) // v0.4.3
+            addAction(ZXW_RADIO_INFO_EVT) // v0.4.3 radio sniffer
+            addAction(RADIO_FREQUENCY_EVENT) // v0.4.3
+            addAction(CAN_TPMS_DATA_EVT) // v0.4.3 vehicle sniffer
+            addAction(CAN_SEAT_DATA_EVT) // v0.4.3
+            addAction(CAN_SLS_DATA_EVT) // v0.4.3
+            addAction(CAN_FUEL_CONSUMPTION_INFOR) // v0.4.3
+            addAction(CAN_CENTER_CONSOLE_INFOR) // v0.4.3
+            addAction(CAN_CAR_TIRP_INFO) // v0.4.3
             addAction(CAR_AIR_STATE_ACTION)
             addAction(CAN_CAR_OUT_SIDE_TEMP_EVT) // v3.0
             addAction(ZXW_CAN_WHEEL_TRACK_EVT) // v3.0

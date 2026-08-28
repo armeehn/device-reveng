@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.BrightnessMedium
+import androidx.compose.material.icons.filled.DataObject
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.GridView
@@ -128,6 +129,24 @@ fun SettingsHub(
                 title = "System & about",
                 subtitle = "Versions, car profile, screen, reset & reboot",
                 onClick = { onOpen(SettingsRoute.System) },
+            )
+            SettingsCategoryCard(
+                icon = Icons.Filled.DataObject,
+                title = "CAN frame capture",
+                subtitle = "Raw CAN bulk frame — the route to real speed (diagnostic)",
+                onClick = { onOpen(SettingsRoute.CanCapture) },
+            )
+            SettingsCategoryCard(
+                icon = Icons.Filled.Radio,
+                title = "Radio info capture",
+                subtitle = "Raw radio broadcast -- the route to a station name (diagnostic)",
+                onClick = { onOpen(SettingsRoute.RadioInfoCapture) },
+            )
+            SettingsCategoryCard(
+                icon = Icons.Filled.DirectionsCar,
+                title = "Vehicle data capture",
+                subtitle = "Sniff undecoded CAN events: trip, fuel, TPMS, seat (diagnostic)",
+                onClick = { onOpen(SettingsRoute.VehicleDataCapture) },
             )
             SettingsCategoryCard(
                 icon = Icons.Filled.Tune,
