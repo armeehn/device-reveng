@@ -18,6 +18,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -71,6 +75,32 @@ fun StatusBar(
             horizontalArrangement = Arrangement.spacedBy(20.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            // v3.1: always-visible Wi-Fi / BT / volume / brightness chips. Display-only;
+            // tapping the group opens the same Quick Controls panel as the Tune icon, and
+            // closing it bumps refreshKey so the volume/brightness chips re-read at once.
+            var quickOpen by remember { mutableStateOf(false) }
+            var quickClosed by remember { mutableIntStateOf(0) }
+            StatusIndicators(
+                carService = carService,
+                refreshKey = quickClosed,
+                onOpen = if (carService != null && settingsStore != null) {
+                    { quickOpen = true }
+                } else {
+                    null
+                },
+            )
+            if (carService != null && settingsStore != null) {
+                QuickControlsDialogHost(
+                    open = quickOpen,
+                    onDismiss = {
+                        quickOpen = false
+                        quickClosed++
+                    },
+                    carService = carService,
+                    settingsStore = settingsStore,
+                )
+            }
+
             Icon(
                 imageVector = if (dayNight == CarEvents.DayNight.NIGHT)
                     Icons.Filled.DarkMode else Icons.Filled.LightMode,
