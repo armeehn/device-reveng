@@ -118,6 +118,12 @@ fun SettingsHost(
                 onBack = ::pop,
             )
 
+            // v0.4.3: generic sniffer over the confirmed-but-undecoded CAN event cluster.
+            SettingsRoute.VehicleDataCapture -> VehicleDataCaptureScreen(
+                carEvents = carEvents,
+                onBack = ::pop,
+            )
+
             SettingsRoute.Audio -> AudioSettingsScreen(
                 controller = controller,
                 carService = carService,
@@ -188,6 +194,7 @@ sealed interface SettingsRoute {
     data object RadarCapture : SettingsRoute // v2.8
     data object CanCapture : SettingsRoute // v0.4.3
     data object RadioInfoCapture : SettingsRoute // v0.4.3
+    data object VehicleDataCapture : SettingsRoute // v0.4.3
     data object Audio : SettingsRoute
     data object Climate : SettingsRoute
     data object Radio : SettingsRoute

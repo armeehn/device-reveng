@@ -116,6 +116,23 @@ class CarEvents(private val appContext: Context) {
             "com.choiceway.eventcenter.EventUtils.ZXW_RADIO_INFO_EVT"
         const val RADIO_FREQUENCY_EVENT = "com.szchoiceway.radio.frequency"
 
+        // ---- v0.4.3: vehicle data sniffer (CAR_API line 111) — unprotected --
+        // A cluster of CONFIRMED-const CAN events whose payloads were never decoded. One
+        // generic sniffer captures every extra of each: to pin the key names v3.0 guesses
+        // (outside temp, steering) and to open the ones with no reader at all (TPMS, seat,
+        // fuel, trip computer, centre console). FQ strings follow the EventUtils.* convention.
+        const val CAN_TPMS_DATA_EVT = "com.choiceway.eventcenter.EventUtils.CAN_TPMS_DATA_EVT"
+        const val CAN_SEAT_DATA_EVT = "com.choiceway.eventcenter.EventUtils.CAN_SEAT_DATA_EVT"
+        const val CAN_SLS_DATA_EVT = "com.choiceway.eventcenter.EventUtils.CAN_SLS_DATA_EVT"
+        const val CAN_FUEL_CONSUMPTION_INFOR = "com.choiceway.eventcenter.EventUtils.CAN_FUEL_CONSUMPTION_INFOR"
+        const val CAN_CENTER_CONSOLE_INFOR = "com.choiceway.eventcenter.EventUtils.CAN_CENTER_CONSOLE_INFOR"
+        const val CAN_CAR_TIRP_INFO = "com.choiceway.eventcenter.EventUtils.CAN_CAR_TIRP_INFO"
+        val VEHICLE_SNIFF_ACTIONS = arrayOf(
+            CAN_TPMS_DATA_EVT, CAN_SEAT_DATA_EVT, CAN_SLS_DATA_EVT,
+            CAN_FUEL_CONSUMPTION_INFOR, CAN_CENTER_CONSOLE_INFOR, CAN_CAR_TIRP_INFO,
+            CAN_CAR_OUT_SIDE_TEMP_EVT, ZXW_CAN_WHEEL_TRACK_EVT,
+        )
+
         // ---- Climate (CAR_API §1.3) — unprotected ---------------------------
         const val CAR_AIR_STATE_ACTION = "com.szchoiceway.canbus.carairstruct"
         /** Parcelable com.szchoiceway.canbus.CarAirState (class not bundled — TODO). */
@@ -318,6 +335,15 @@ class CarEvents(private val appContext: Context) {
      */
     val radioInfoRaw: StateFlow<CanFrame?> = _radioInfoRaw.asStateFlow()
 
+    // v0.4.3 --- Vehicle-data sniffer: last frame per confirmed-but-undecoded action --------
+    private val _vehicleSniff = MutableStateFlow<Map<String, CanFrame>>(emptyMap())
+    /**
+     * v0.4.3 - the latest broadcast per action in [VEHICLE_SNIFF_ACTIONS], every extra kept
+     * undecoded, so the extra key names (guessed for temp/steering, unknown for the rest) are
+     * confirmed on a car. Empty until a frame of a given action arrives.
+     */
+    val vehicleSniff: StateFlow<Map<String, CanFrame>> = _vehicleSniff.asStateFlow()
+
     /**
      * Numeric speed in km/h, or [GpsSpeedSource.SPEED_UNKNOWN] when it cannot be read.
      *
@@ -408,6 +434,13 @@ class CarEvents(private val appContext: Context) {
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
+            // v0.4.3: capture any sniffed vehicle-data action raw, before the typed handlers.
+            intent?.action?.let { a ->
+                if (a in VEHICLE_SNIFF_ACTIONS) {
+                    _vehicleSniff.value = _vehicleSniff.value +
+                        (a to CanFrame.from(intent, System.currentTimeMillis()))
+                }
+            }
             when (val action = intent?.action) {
                 MCU_MSG_BACKCAR_START -> updateReverse(true)
                 MCU_MSG_BACKCAR_END -> updateReverse(false)
@@ -584,6 +617,12 @@ class CarEvents(private val appContext: Context) {
             addAction(CAN_BASIC_EVT) // v0.4.3
             addAction(ZXW_RADIO_INFO_EVT) // v0.4.3 radio sniffer
             addAction(RADIO_FREQUENCY_EVENT) // v0.4.3
+            addAction(CAN_TPMS_DATA_EVT) // v0.4.3 vehicle sniffer
+            addAction(CAN_SEAT_DATA_EVT) // v0.4.3
+            addAction(CAN_SLS_DATA_EVT) // v0.4.3
+            addAction(CAN_FUEL_CONSUMPTION_INFOR) // v0.4.3
+            addAction(CAN_CENTER_CONSOLE_INFOR) // v0.4.3
+            addAction(CAN_CAR_TIRP_INFO) // v0.4.3
             addAction(CAR_AIR_STATE_ACTION)
             addAction(CAN_CAR_OUT_SIDE_TEMP_EVT) // v3.0
             addAction(ZXW_CAN_WHEEL_TRACK_EVT) // v3.0

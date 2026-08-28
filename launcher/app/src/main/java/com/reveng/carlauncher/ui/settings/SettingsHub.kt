@@ -122,6 +122,12 @@ fun SettingsHub(
                 onClick = { onOpen(SettingsRoute.RadioInfoCapture) },
             )
             SettingsCategoryCard(
+                icon = Icons.Filled.DirectionsCar,
+                title = "Vehicle data capture",
+                subtitle = "Sniff undecoded CAN events: trip, fuel, TPMS, seat (diagnostic)",
+                onClick = { onOpen(SettingsRoute.VehicleDataCapture) },
+            )
+            SettingsCategoryCard(
                 icon = Icons.Filled.Tune,
                 title = "All settings (advanced)",
                 subtitle = "Raw SysVar browser — every vendor key",
