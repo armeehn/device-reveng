@@ -462,6 +462,11 @@ class MainActivity : ComponentActivity() {
                                 onDelete = { profile ->
                                     lifecycleScope.launch { profilesStore.delete(profile.id) }
                                 },
+                                onRename = { profile, newName ->
+                                    // v0.4.2: upsert keys by id, so this replaces the name in place
+                                    // and keeps active status and the bundled settings untouched.
+                                    lifecycleScope.launch { profilesStore.upsert(profile.copy(name = newName)) }
+                                },
                                 onBack = { screen = Screen.Home },
                             )
 
