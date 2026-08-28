@@ -32,6 +32,7 @@ import com.reveng.carlauncher.data.DayNightMode // v0.6
 import com.reveng.carlauncher.data.RadioPresetsStore // v0.9
 import com.reveng.carlauncher.data.SettingKeys // v2.5 touch beep
 import com.reveng.carlauncher.data.SettingsStore // v0.6
+import com.reveng.carlauncher.data.SystemChrome // v2.5
 import com.reveng.carlauncher.data.ThemeStore
 import com.reveng.carlauncher.input.LauncherFocus // v0.8 SWC navigation
 import com.reveng.carlauncher.input.LocalLauncherFocus // v0.8
@@ -43,6 +44,7 @@ import com.reveng.carlauncher.ui.HomeScreen
 import com.reveng.carlauncher.ui.LocalCarFeedback // v2.5
 import com.reveng.carlauncher.ui.ParkedOnly // v2.5
 import com.reveng.carlauncher.ui.ProvideParkedOnlyLock // v2.5
+import com.reveng.carlauncher.ui.ShadeOverlay // v2.5 shade
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -156,6 +158,15 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
+            // v2.5: apply the vendor-bar suppression choice. Keyed on the setting so a toggle
+            // takes effect at once; also re-asserted on every start because the `cmd statusbar`
+            // half of the suppression is runtime-only and lost when SystemUI restarts (reboot).
+            LaunchedEffect(settings.replaceSystemBars) {
+                withContext(Dispatchers.IO) {
+                    SystemChrome.apply(settings.replaceSystemBars)
+                }
+            }
+
             val activeTheme by themeStore.activeTheme.collectAsStateWithLifecycle()
             val allThemes by themeStore.allThemes.collectAsStateWithLifecycle()
 
@@ -214,21 +225,28 @@ class MainActivity : ComponentActivity() {
                                 },
                             )
 
-                            Screen.Home -> HomeScreen(
-                                carEvents = carEvents,
+                            // v2.5: wrap Home in the launcher's own swipe-from-top shade.
+                            Screen.Home -> ShadeOverlay(
                                 carService = carService,
-                                appRepository = appRepository,
-                                nowPlaying = nowPlaying,
-                                onOpenThemes = { screen = Screen.Themes },
-                                // v0.6: wire settings + a Settings-screen entry point.
                                 settingsStore = settingsStore,
-                                onOpenSettings = { screen = Screen.Settings() },
-                                radioPresetsStore = radioPresetsStore, // v0.9 Radio 2.0
-                                // Status-bar power chip deep-links to Power & sleep.
-                                onOpenPowerSettings = {
-                                    screen = Screen.Settings(SettingsRoute.Power)
-                                },
-                            )
+                                enabled = settings.shadeEnabled, // v2.5 shade
+                            ) {
+                                HomeScreen(
+                                    carEvents = carEvents,
+                                    carService = carService,
+                                    appRepository = appRepository,
+                                    nowPlaying = nowPlaying,
+                                    onOpenThemes = { screen = Screen.Themes },
+                                    // v0.6: wire settings + a Settings-screen entry point.
+                                    settingsStore = settingsStore,
+                                    onOpenSettings = { screen = Screen.Settings() },
+                                    radioPresetsStore = radioPresetsStore, // v0.9 Radio 2.0
+                                    // Status-bar power chip deep-links to Power & sleep.
+                                    onOpenPowerSettings = {
+                                        screen = Screen.Settings(SettingsRoute.Power)
+                                    },
+                                )
+                            }
 
                             // v1.1: full settings suite — categorized, reskinned vendor mirror.
                             is Screen.Settings -> SettingsHost(
