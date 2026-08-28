@@ -162,6 +162,49 @@ new work stays inside that budget: no `rememberInfiniteTransition`, no `basicMar
 `beep()` — wired to steering-wheel presses, keyboard keys and dialog buttons. The beep follows
 the vendor's `Set_TouchBeep` preference instead of adding a competing one.
 
+## Media & Radio screens (v2.6)
+
+The Home cards were always glance surfaces in a 30 %-wide column. `ui/MediaScreen.kt` and
+`ui/RadioScreen.kt` are the full screens you land on to actually operate playback and the
+tuner (LAUNCHER_DESIGN §3.3 / §3.4). Reached three ways: tapping a card body, CENTER on a
+focused card, or the steering wheel's MEDIA / RADIO keys.
+
+**MediaScreen** — large art, 40 sp title, 96 dp transport targets, and a source picker over
+every live `MediaSession`. Scrubbing is parked-only (v2.5 gate): dragging to a target position
+is a sustained, eyes-on gesture, so while moving the same progress renders as a read-only bar.
+Transport stays available while moving — skip and play/pause are single forgiving presses that
+exist on the wheel anyway, and withholding them would push the driver to their phone.
+
+**RadioScreen** — 48 sp frequency, band toggle, seek, six preset slots with save / recall /
+delete, and the tuner's status flags.
+
+### What the firmware does not have
+
+Two things §3.3/§3.4 planned turned out not to exist, so they are not built:
+
+- **No RDS text.** The 144-method AIDL has no PS (station name) or RT (radio text) getter.
+  `getRadioPTYName` (ordinal 19) returns the programme *genre* — "Pop Music" — not a station.
+  So the screen shows the indicators that do exist (RDS / TA / AF / TP / stereo + PTY genre)
+  rather than an empty scroller. `ZXW_RADIO_INFO_EVT` may carry more, but only its action
+  string was recovered: no sender was traced and no payload extra is named.
+- **No scan.** `getRadioAMSState` / `getRadioAPSState` report whether an auto-store or
+  auto-preset-scan is *running*; nothing starts one. Seek is the whole control surface.
+
+Preset sync with the vendor's `Rdo_MyFavorite0..5` is **read-only** for the same reason: the
+encoding of those SysVar values is documented nowhere, and writing a guessed format would
+corrupt the vendor radio's presets irreversibly. RadioScreen displays the raw strings, which is
+exactly the capture needed to work the format out on-device — after which two-way sync is safe.
+
+Vendor *source* switching (Bluetooth / USB / built-in) is likewise read-only: `sendMode(int,
+boolean)` is ordinal 1 and confirmed, but its value table is not in the decompile, so
+MediaScreen names the current source via `getValidModeTitleInfor()` and does not offer to
+change it.
+
+Both screens poll rather than subscribe. `setRadioCallback` exists, but the `ICallbackfn`
+signature was never recovered, so registering it would be a guess. Blocking AIDL reads stay off
+the composition body — doing them inline once spun a main-thread IPC recomposition loop while
+seeking.
+
 ## Known TODOs
 
 - **`IEventService.aidl`** declares only a subset of methods and its transaction
@@ -173,5 +216,12 @@ the vendor's `Set_TouchBeep` preference instead of adding a competing one.
   making: it is available at power-on and indoors, where GPS is not.
 - **Reverse camera feed** — `ReverseOverlay` is a black placeholder; embed a `SurfaceView`
   bound to the reverse video input, or host `com.szchoiceway.view.BackCarActivity`.
-- **Climate / radio widgets** — placeholders only; wire `CarAirState` / `ZXW_RADIO_INFO_EVT`.
+- **Climate widget** — placeholder only; wire `CarAirState`.
+- **`ZXW_RADIO_INFO_EVT`** — the action string is known but its payload is not, and no sender
+  was traced. Capturing it on-device would replace RadioScreen's 3 s poll with a push, and may
+  be the only route to a station name (see v2.6 above).
+- **`Rdo_MyFavorite0..5` encoding** — capture the raw values (RadioScreen shows them) to make
+  two-way preset sync with the vendor radio safe.
+- **Vendor `sendMode` value table** — needed before MediaScreen can switch the car between
+  Bluetooth / USB / the built-in player.
 ```
