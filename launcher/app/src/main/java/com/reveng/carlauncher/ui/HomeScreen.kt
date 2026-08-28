@@ -82,6 +82,9 @@ fun HomeScreen(
     // v2.6: the glance cards deep-link into their full screens (§3.3, §3.4).
     onOpenMedia: () -> Unit = {},
     onOpenRadio: () -> Unit = {},
+    // v3.0: cockpit dashboard + driver profiles, reached from the status bar.
+    onOpenDashboard: () -> Unit = {},
+    onOpenProfiles: () -> Unit = {},
     // v2.8: reachability mirror (LAUNCHER_DESIGN §2.5). LHD is the default everywhere.
     driverSide: DriverSide = DriverSide.LEFT,
 ) {
@@ -143,6 +146,8 @@ fun HomeScreen(
                 onOpenSettings = onOpenSettings,
                 carService = carService,
                 settingsStore = settingsStore,
+                onOpenDashboard = onOpenDashboard, // v3.0
+                onOpenProfiles = onOpenProfiles, // v3.0
             )
 
             // v2.8: the two side columns are declared once and *ordered* by the reachability

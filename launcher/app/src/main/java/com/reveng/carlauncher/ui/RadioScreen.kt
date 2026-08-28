@@ -80,6 +80,21 @@ fun RadioScreen(
     var refresh by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
 
+    /**
+     * Drive one tuner control, then re-poll.
+     *
+     * Off the main thread deliberately: `sendRadioKey` / `sendUserFreq` are not `oneway` in the
+     * AIDL, so each is a *blocking* binder round-trip to the vendor gateway. Calling them inline
+     * from a click handler puts IPC on the main thread, which is the same shape as the jank that
+     * reached ANR on the settings radio screen — only there it was the reads.
+     */
+    fun control(action: () -> Unit) {
+        scope.launch {
+            withContext(Dispatchers.IO) { runCatching(action) }
+            refresh++
+        }
+    }
+
     val tuner by produceState(initialValue = TunerState.UNKNOWN, refresh) {
         while (true) {
             value = withContext(Dispatchers.IO) { readTuner(carService) }
@@ -111,10 +126,7 @@ fun RadioScreen(
             PresetRow(
                 presets = presets.take(PRESET_SLOTS),
                 activeFreq = tuner.freq,
-                onRecall = { preset ->
-                    carService.sendUserFreq(preset.freq)
-                    refresh++
-                },
+                onRecall = { preset -> control { carService.sendUserFreq(preset.freq) } },
                 onDelete = { preset ->
                     scope.launch { presetsStore?.remove(preset) }
                 },
@@ -127,9 +139,9 @@ fun RadioScreen(
             )
 
             TunerControls(
-                onSeekDown = { carService.radioSeekDown(); refresh++ },
-                onBand = { carService.radioBandToggle(); refresh++ },
-                onSeekUp = { carService.radioSeekUp(); refresh++ },
+                onSeekDown = { control { carService.radioSeekDown() } },
+                onBand = { control { carService.radioBandToggle() } },
+                onSeekUp = { control { carService.radioSeekUp() } },
             )
 
             VendorPresetLine(values = vendorPresets)
