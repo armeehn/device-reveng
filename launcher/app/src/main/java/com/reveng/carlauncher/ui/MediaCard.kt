@@ -1,5 +1,6 @@
 package com.reveng.carlauncher.ui
 
+import com.reveng.carlauncher.ui.theme.carCard
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -14,7 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
+import com.reveng.carlauncher.ui.theme.carShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
@@ -73,7 +74,8 @@ fun MediaCard(
     onCycleSource: () -> Unit = {},       // v0.9
 ) {
     Card(
-        modifier = modifier,
+        // Riposte hard-edge chrome; accent rotation (SEC.01) starts pink on the media card.
+        modifier = modifier.carCard(accent = MaterialTheme.colorScheme.primary),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
@@ -92,7 +94,7 @@ fun MediaCard(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .clip(RoundedCornerShape(0.dp))
+                        .clip(carShape(0.dp))
                         .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.78f)),
                 )
             }
@@ -106,7 +108,7 @@ fun MediaCard(
                     Box(
                         modifier = Modifier
                             .size(56.dp)
-                            .clip(RoundedCornerShape(8.dp)),
+                            .clip(carShape(8.dp)),
                         contentAlignment = Alignment.Center,
                     ) {
                         if (art != null) {
@@ -251,7 +253,7 @@ private fun SeekBar(now: NowPlaying, onSeek: (Long) -> Unit) {
 private fun SourceChip(label: String, canCycle: Boolean, onClick: () -> Unit) {
     Surface(
         color = MaterialTheme.colorScheme.secondaryContainer,
-        shape = RoundedCornerShape(50),
+        shape = carShape(50),
         modifier = Modifier
             .then(if (canCycle) Modifier.clickable(onClick = onClick) else Modifier),
     ) {

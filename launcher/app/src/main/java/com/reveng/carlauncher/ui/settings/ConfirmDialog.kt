@@ -1,5 +1,6 @@
 package com.reveng.carlauncher.ui.settings
 
+import com.reveng.carlauncher.ui.theme.carCard
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -9,7 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
+import com.reveng.carlauncher.ui.theme.carShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -38,7 +39,8 @@ fun ConfirmDialog(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(22.dp))
+                .carCard()
+                .clip(carShape(22.dp))
                 .background(MaterialTheme.colorScheme.surface)
                 .padding(24.dp),
         ) {
@@ -93,7 +95,7 @@ private fun DialogButton(
     val fg = if (filled) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
     Row(
         modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
+            .clip(carShape(14.dp))
             .background(bg)
             .clickable(onClick = onClick)
             .padding(vertical = 14.dp),
