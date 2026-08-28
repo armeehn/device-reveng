@@ -4,7 +4,7 @@ import android.view.KeyEvent
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.shape.RoundedCornerShape
+import com.reveng.carlauncher.ui.theme.carShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -270,7 +270,7 @@ fun Modifier.launcherFocusTarget(
     }
     val scale by animateFloatAsState(if (focused) 1.03f else 1f, label = "focusScale")
     val ring = MaterialTheme.colorScheme.primary
-    val shape = RoundedCornerShape(cornerRadiusDp.dp)
+    val shape = carShape(cornerRadiusDp.dp)
     return this
         .graphicsLayer { scaleX = scale; scaleY = scale }
         .then(if (focused) Modifier.border(3.dp, ring, shape) else Modifier)

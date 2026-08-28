@@ -1,5 +1,6 @@
 package com.reveng.carlauncher.ui
 
+import com.reveng.carlauncher.ui.theme.carCard
 import android.content.Context
 import android.content.Intent
 import android.provider.Settings
@@ -13,7 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
+import com.reveng.carlauncher.ui.theme.carShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
@@ -102,11 +103,12 @@ private fun QuickControlsDialog(
 ) {
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(
-            shape = RoundedCornerShape(24.dp),
+            shape = carShape(24.dp),
             color = MaterialTheme.colorScheme.surface,
             modifier = Modifier
                 .fillMaxWidth(0.6f)
-                .padding(8.dp),
+                .padding(8.dp)
+                .carCard(),
         ) {
             QuickControlsPanel(
                 carService = carService,
@@ -325,7 +327,7 @@ private fun ShortcutChip(
 ) {
     Row(
         modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
+            .clip(carShape(14.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant)
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 14.dp),
@@ -359,7 +361,7 @@ private fun SegmentChip(
     val fg = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
     Row(
         modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
+            .clip(carShape(12.dp))
             .background(bg)
             .clickable(onClick = onClick)
             .padding(vertical = 12.dp),

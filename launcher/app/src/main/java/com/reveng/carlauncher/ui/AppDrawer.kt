@@ -1,5 +1,6 @@
 package com.reveng.carlauncher.ui
 
+import com.reveng.carlauncher.ui.theme.carCard
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -26,7 +27,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
+import com.reveng.carlauncher.ui.theme.carShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Star
@@ -364,7 +365,7 @@ private fun FavoriteChip(
     }
     Row(
         modifier = Modifier
-            .clip(RoundedCornerShape(14.dp))
+            .clip(carShape(14.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(horizontal = 12.dp, vertical = 8.dp),
@@ -398,7 +399,7 @@ private fun AppTile(
     onLongClick: (() -> Unit)? = null,
     focused: Boolean = false, // v0.8: SWC/DPAD focus ring
 ) {
-    val shape = RoundedCornerShape(16.dp)
+    val shape = carShape(16.dp)
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -442,7 +443,7 @@ private fun AppTile(
 /** The "System" folder entry — a folder-styled tile showing an apps icon + count. */
 @Composable
 private fun SystemFolderTile(count: Int, onClick: () -> Unit, focused: Boolean = false) {
-    val shape = RoundedCornerShape(16.dp)
+    val shape = carShape(16.dp)
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -459,7 +460,7 @@ private fun SystemFolderTile(count: Int, onClick: () -> Unit, focused: Boolean =
         Box(
             modifier = Modifier
                 .size(72.dp)
-                .clip(RoundedCornerShape(18.dp))
+                .clip(carShape(18.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant),
             contentAlignment = Alignment.Center,
         ) {
@@ -490,11 +491,12 @@ private fun SystemFolderDialog(
 ) {
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(
-            shape = RoundedCornerShape(24.dp),
+            shape = carShape(24.dp),
             color = MaterialTheme.colorScheme.surface,
             modifier = Modifier
                 .fillMaxWidth(0.9f)
-                .fillMaxHeight(0.85f),
+                .fillMaxHeight(0.85f)
+                .carCard(),
         ) {
             Column(Modifier.padding(16.dp)) {
                 Text(

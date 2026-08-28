@@ -16,7 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
+import com.reveng.carlauncher.ui.theme.carShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -197,7 +197,7 @@ fun ThemeEditorScreen(
 private fun VariantToggle(editingNight: Boolean, onChange: (Boolean) -> Unit) {
     Row(
         modifier = Modifier
-            .clip(RoundedCornerShape(12.dp))
+            .clip(carShape(12.dp))
             .background(MaterialTheme.colorScheme.surface)
             .padding(4.dp),
     ) {
@@ -210,7 +210,7 @@ private fun VariantToggle(editingNight: Boolean, onChange: (Boolean) -> Unit) {
 private fun SegItem(label: String, selected: Boolean, onClick: () -> Unit) {
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(9.dp))
+            .clip(carShape(9.dp))
             .background(if (selected) MaterialTheme.colorScheme.primary else Color.Transparent)
             .clickable(onClick = onClick)
             .padding(horizontal = 20.dp, vertical = 8.dp),
@@ -229,7 +229,7 @@ private fun RoleRow(label: String, color: Color, selected: Boolean, onClick: () 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(carShape(12.dp))
             .background(
                 if (selected) MaterialTheme.colorScheme.surfaceVariant
                 else MaterialTheme.colorScheme.surface
@@ -241,9 +241,9 @@ private fun RoleRow(label: String, color: Color, selected: Boolean, onClick: () 
         Box(
             modifier = Modifier
                 .size(28.dp)
-                .clip(RoundedCornerShape(7.dp))
+                .clip(carShape(7.dp))
                 .background(color)
-                .border(1.dp, MaterialTheme.colorScheme.onSurfaceVariant, RoundedCornerShape(7.dp)),
+                .border(1.dp, MaterialTheme.colorScheme.onSurfaceVariant, carShape(7.dp)),
         )
         Spacer(Modifier.width(12.dp))
         Text(
@@ -279,9 +279,9 @@ private fun ColorPicker(color: Long, onColor: (Long) -> Unit) {
             modifier = Modifier
                 .fillMaxWidth()
                 .height(72.dp)
-                .clip(RoundedCornerShape(12.dp))
+                .clip(carShape(12.dp))
                 .background(Color(color))
-                .border(1.dp, MaterialTheme.colorScheme.onSurfaceVariant, RoundedCornerShape(12.dp)),
+                .border(1.dp, MaterialTheme.colorScheme.onSurfaceVariant, carShape(12.dp)),
         )
 
         ChannelSlider("R", r, Color(0xFFE5534B)) { onColor(pack(it, g, b)) }
@@ -332,7 +332,7 @@ private fun ChannelSlider(label: String, value: Int, tint: Color, onValue: (Int)
 private fun TextButtonTile(label: String, onClick: () -> Unit) {
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(12.dp))
+            .clip(carShape(12.dp))
             .background(MaterialTheme.colorScheme.primary)
             .clickable(onClick = onClick)
             .padding(horizontal = 28.dp, vertical = 12.dp),
