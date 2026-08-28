@@ -361,8 +361,10 @@ private fun parseHex(input: String): Long? {
 }
 
 private fun colorToArgbLong(color: Color): Long {
-    val r = (color.red * 255f).toInt()
-    val g = (color.green * 255f).toInt()
-    val b = (color.blue * 255f).toInt()
+    // Round, don't truncate: (channel * 255).toInt() floors, so the hex readout shown next to
+    // the swatch could differ by one per channel from the actual stored color.
+    val r = Math.round(color.red * 255f)
+    val g = Math.round(color.green * 255f)
+    val b = Math.round(color.blue * 255f)
     return pack(r, g, b)
 }

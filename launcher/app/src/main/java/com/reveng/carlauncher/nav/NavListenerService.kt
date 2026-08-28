@@ -32,18 +32,28 @@ class NavListenerService : NotificationListenerService() {
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification?) {
-        if (sbn?.packageName == NavRepository.MAPS_PACKAGE) NavRepository.clear()
+        // Only the ongoing navigation notification ending should clear the card. Dismissing a
+        // non-nav Maps notification (commute suggestion, "rate this place", share, etc.) while a
+        // trip is running must NOT blank the nav card. Also re-scan for another still-posted
+        // ongoing Maps notification before clearing, to survive a transient replace/remove.
+        if (sbn == null || !isOngoingMaps(sbn)) return
+        val stillNavigating = runCatching {
+            activeNotifications?.any { it.key != sbn.key && isOngoingMaps(it) } == true
+        }.getOrDefault(false)
+        if (!stillNavigating) NavRepository.clear()
+    }
+
+    /** True only for Google Maps' ongoing (persistent) navigation notification. */
+    private fun isOngoingMaps(sbn: StatusBarNotification): Boolean {
+        if (sbn.packageName != NavRepository.MAPS_PACKAGE) return false
+        val n = sbn.notification ?: return false
+        // GUESS — verify on-device: search / "commute" notifications are dismissible, not ongoing.
+        return sbn.isOngoing || (n.flags and Notification.FLAG_ONGOING_EVENT) != 0
     }
 
     private fun handle(sbn: StatusBarNotification) {
-        if (sbn.packageName != NavRepository.MAPS_PACKAGE) return
+        if (!isOngoingMaps(sbn)) return
         val extras = sbn.notification?.extras ?: return
-
-        // Only ongoing (persistent) notifications are the active-navigation card; the search /
-        // "commute" style notifications are dismissible. GUESS — verify on-device.
-        val ongoing = sbn.isOngoing ||
-            (sbn.notification.flags and Notification.FLAG_ONGOING_EVENT) != 0
-        if (!ongoing) return
 
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)
         val text = extras.getCharSequence(Notification.EXTRA_TEXT)
