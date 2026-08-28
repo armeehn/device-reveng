@@ -178,6 +178,21 @@ class CarEvents(private val appContext: Context) {
     /** Latest day/night illumination state for theming. */
     val dayNight: StateFlow<DayNight> = _dayNight.asStateFlow()
 
+    private val _illuminationSeen = MutableStateFlow(false)
+    /**
+     * v2.7 — true once an illumination broadcast has actually arrived.
+     *
+     * [dayNight] cannot answer this. It starts at [DayNight.DAY] and stays there both when the car
+     * really is reporting daylight and when the broadcast never arrives at all — and on a normal
+     * (non-privileged) install it never arrives, because ACTION_DAY/NIGHT_BACKLIGHT_CHANGED ride
+     * `com.szchoiceway.permission.broadcast`, which is very likely `signature` (CAR_API §1.1).
+     *
+     * The launcher's clock-based day/night fallback keys off this flag: a unit that is genuinely
+     * hearing the car keeps following the car, and only a silent one falls back to the clock.
+     * Latched, never cleared — one broadcast proves the signal exists for the rest of the session.
+     */
+    val illuminationSeen: StateFlow<Boolean> = _illuminationSeen.asStateFlow()
+
     private val _swcKeys = MutableSharedFlow<SwcKey>(extraBufferCapacity = 16)
     /** Discrete steering-wheel key presses/releases. */
     val swcKeys: SharedFlow<SwcKey> = _swcKeys.asSharedFlow()
@@ -303,6 +318,7 @@ class CarEvents(private val appContext: Context) {
 
     private fun updateDayNight(mode: DayNight) {
         _dayNight.value = mode
+        _illuminationSeen.value = true // v2.7
         listeners.forEach { it.onDayNight(mode) }
     }
 

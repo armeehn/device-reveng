@@ -29,20 +29,27 @@ import com.reveng.carlauncher.carlib.CarService
 import com.reveng.carlauncher.carlib.RootShell
 import com.reveng.carlauncher.data.CarSettingsController // v1.1 settings suite
 import com.reveng.carlauncher.data.DayNightMode // v0.6
+import com.reveng.carlauncher.data.NotificationFilterStore // v2.7
 import com.reveng.carlauncher.data.RadioPresetsStore // v0.9
 import com.reveng.carlauncher.data.SettingKeys // v2.5 touch beep
 import com.reveng.carlauncher.data.SettingsStore // v0.6
 import com.reveng.carlauncher.data.ThemeStore
+import com.reveng.carlauncher.data.WatchHistoryStore // v2.7
 import com.reveng.carlauncher.input.LauncherFocus // v0.8 SWC navigation
 import com.reveng.carlauncher.input.LocalLauncherFocus // v0.8
 import com.reveng.carlauncher.input.NavKey // v0.8
 import com.reveng.carlauncher.input.SwcNavigator // v0.8
+import com.reveng.carlauncher.media.ContinueWatchingRepository // v2.7
 import com.reveng.carlauncher.media.NowPlayingRepository
+import com.reveng.carlauncher.notif.NotificationRepository // v2.7
 import com.reveng.carlauncher.ui.CarFeedback // v2.5
+import com.reveng.carlauncher.ui.ContinueWatchingScreen // v2.7
 import com.reveng.carlauncher.ui.HomeScreen
 import com.reveng.carlauncher.ui.LocalCarFeedback // v2.5
+import com.reveng.carlauncher.ui.NotificationShelfScreen // v2.7
 import com.reveng.carlauncher.ui.ParkedOnly // v2.5
 import com.reveng.carlauncher.ui.ProvideParkedOnlyLock // v2.5
+import com.reveng.carlauncher.ui.rememberClockNight // v2.7
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -74,6 +81,9 @@ class MainActivity : ComponentActivity() {
     private lateinit var settingsStore: SettingsStore // v0.6
     private lateinit var radioPresetsStore: RadioPresetsStore // v0.9
     private lateinit var carSettingsController: CarSettingsController // v1.1 settings suite
+    private lateinit var watchHistoryStore: WatchHistoryStore // v2.7
+    private lateinit var continueWatching: ContinueWatchingRepository // v2.7
+    private lateinit var notificationFilter: NotificationFilterStore // v2.7
 
     // v0.8: roving focus ring for steering-wheel / DPAD navigation. Held as a field so the
     // key dispatcher below and the Compose tree (via LocalLauncherFocus) share one instance.
@@ -116,6 +126,19 @@ class MainActivity : ComponentActivity() {
         radioPresetsStore = RadioPresetsStore(applicationContext, lifecycleScope) // v0.9
         carSettingsController = CarSettingsController(applicationContext, lifecycleScope) // v1.1
 
+        // v2.7: the continue-watching shelf rides the media stack we already have — it records
+        // Jellyfin sessions as they play, so it must start with the launcher, not with the screen.
+        watchHistoryStore = WatchHistoryStore(applicationContext, lifecycleScope)
+        continueWatching = ContinueWatchingRepository(applicationContext, watchHistoryStore)
+            .also { it.observe(lifecycleScope, nowPlaying.state) }
+
+        // v2.7: the notification shelf's listener. Root-enable off the main thread — this shells
+        // out, and a launcher that blocks its first frame on `su` is a launcher that looks broken.
+        notificationFilter = NotificationFilterStore(applicationContext, lifecycleScope)
+        lifecycleScope.launch(Dispatchers.IO) {
+            NotificationRepository.ensureListenerEnabled(applicationContext)
+        }
+
         // v2.5: beep follows the vendor Set_TouchBeep SysVar, read fresh at each tap so a change
         // in the settings suite applies without rebuilding anything.
         carFeedback = CarFeedback(
@@ -140,10 +163,19 @@ class MainActivity : ComponentActivity() {
             val dayNight by carEvents.dayNight.collectAsStateWithLifecycle()
             // v0.6: the Settings/QuickControls day-night mode can override the car signal.
             val settings by settingsStore.settings.collectAsStateWithLifecycle()
+
+            // v2.7: the clock stand-in. AUTO only falls back once we can say the car has never
+            // spoken — a unit that IS hearing illumination keeps following it, because the car
+            // knows about tunnels and the clock does not.
+            val illuminationSeen by carEvents.illuminationSeen.collectAsStateWithLifecycle()
+            val clockNight by rememberClockNight(settings.nightStartHour, settings.nightEndHour)
             val night = when (settings.dayNightMode) {
                 DayNightMode.FORCE_DAY -> false
                 DayNightMode.FORCE_NIGHT -> true
-                DayNightMode.AUTO -> dayNight == CarEvents.DayNight.NIGHT
+                DayNightMode.CLOCK -> clockNight
+                DayNightMode.AUTO ->
+                    if (settings.clockFallback && !illuminationSeen) clockNight
+                    else dayNight == CarEvents.DayNight.NIGHT
             }
 
             // Mirror our day/night into the SYSTEM night mode. The soft keyboard is a separate
@@ -223,6 +255,9 @@ class MainActivity : ComponentActivity() {
                                 settingsStore = settingsStore,
                                 onOpenSettings = { screen = Screen.Settings },
                                 radioPresetsStore = radioPresetsStore, // v0.9 Radio 2.0
+                                // v2.7 shelves
+                                onOpenNotifications = { screen = Screen.Notifications },
+                                onOpenContinueWatching = { screen = Screen.ContinueWatching },
                             )
 
                             // v1.1: full settings suite — categorized, reskinned vendor mirror.
@@ -243,6 +278,12 @@ class MainActivity : ComponentActivity() {
                                 onDuplicate = { themeStore.duplicate(it) },
                                 onEdit = { screen = Screen.Editor(it) },
                                 onDelete = { themeStore.delete(it.id) },
+                                // v2.7: an imported file lands as a new user theme and becomes
+                                // active immediately — you imported it to look at it.
+                                onImport = {
+                                    themeStore.upsert(it)
+                                    themeStore.setActive(it.id)
+                                },
                                 onNew = {
                                     // An unsaved draft off the active theme; persisted only on Save.
                                     val draft = activeTheme.copy(
@@ -254,6 +295,46 @@ class MainActivity : ComponentActivity() {
                                 },
                                 onBack = { screen = Screen.Home },
                             )
+
+                            // v2.7 §1.4: reading a list of prose off a screen is the textbook
+                            // distraction case, so both shelves are parked-only. Gated here, like
+                            // the theme editor, so neither screen has to know about motion.
+                            Screen.Notifications -> ParkedOnly(
+                                feature = "The notification shelf",
+                                onBack = { screen = Screen.Home },
+                            ) {
+                                val items by NotificationRepository.items
+                                    .collectAsStateWithLifecycle()
+                                val muted by notificationFilter.muted
+                                    .collectAsStateWithLifecycle()
+                                NotificationShelfScreen(
+                                    items = items,
+                                    muted = muted,
+                                    listenerEnabled = remember {
+                                        NotificationRepository.isListenerEnabled(applicationContext)
+                                    },
+                                    onSetMuted = notificationFilter::setMuted,
+                                    onDismiss = NotificationRepository::dismiss,
+                                    onOpenApp = {
+                                        NotificationRepository.launchSource(this@MainActivity, it)
+                                    },
+                                    onBack = { screen = Screen.Home },
+                                )
+                            }
+
+                            Screen.ContinueWatching -> ParkedOnly(
+                                feature = "Continue watching",
+                                onBack = { screen = Screen.Home },
+                            ) {
+                                val shelf by continueWatching.shelf.collectAsStateWithLifecycle()
+                                ContinueWatchingScreen(
+                                    entries = shelf,
+                                    jellyfinLabel = remember { continueWatching.jellyfinLabel() },
+                                    onOpenJellyfin = { continueWatching.openJellyfin() },
+                                    onForget = { continueWatching.forget(lifecycleScope, it) },
+                                    onBack = { screen = Screen.Home },
+                                )
+                            }
 
                             // v2.5 §1.4: colour-picking is fine-grained and attention-heavy —
                             // parked-only. Gated here rather than inside the editor so the
@@ -389,6 +470,8 @@ class MainActivity : ComponentActivity() {
         data object Home : Screen
         data object Themes : Screen
         data object Settings : Screen // v0.6
+        data object Notifications : Screen // v2.7
+        data object ContinueWatching : Screen // v2.7
         data class Editor(val theme: CarTheme) : Screen
     }
 }

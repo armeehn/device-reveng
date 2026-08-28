@@ -10,6 +10,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.PowerSettingsNew
+import androidx.compose.material.icons.filled.Movie // v2.7
+import androidx.compose.material.icons.filled.Notifications // v2.7
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Settings // v0.6
 import androidx.compose.material3.Icon
@@ -43,6 +45,10 @@ fun StatusBar(
     onOpenSettings: () -> Unit = {},
     carService: CarService? = null,
     settingsStore: SettingsStore? = null,
+    // v2.7: the two parked-only shelves. Optional so previews and any un-wired caller still
+    // compose; a null callback simply hides its icon rather than putting a dead one on screen.
+    onOpenNotifications: (() -> Unit)? = null,
+    onOpenContinueWatching: (() -> Unit)? = null,
 ) {
     val accOn by carEvents.accOn.collectAsStateSafe(initial = true)
     val dayNight by carEvents.dayNight.collectAsStateSafe(initial = CarEvents.DayNight.DAY)
@@ -84,6 +90,23 @@ fun StatusBar(
                 tint = if (accOn) MaterialTheme.colorScheme.primary else Color.Gray,
                 modifier = Modifier.size(28.dp),
             )
+            // v2.7 shelves. Both screens are parked-only, so the icons are dimmed and inert while
+            // the car is moving instead of vanishing — a status bar that reflows at every red
+            // light is its own distraction.
+            if (onOpenNotifications != null) {
+                ShelfIcon(
+                    icon = Icons.Filled.Notifications,
+                    label = "Notifications",
+                    onClick = onOpenNotifications,
+                )
+            }
+            if (onOpenContinueWatching != null) {
+                ShelfIcon(
+                    icon = Icons.Filled.Movie,
+                    label = "Continue watching",
+                    onClick = onOpenContinueWatching,
+                )
+            }
             Icon(
                 imageVector = Icons.Filled.Palette,
                 contentDescription = "Themes",
@@ -108,6 +131,32 @@ fun StatusBar(
         }
     }
 }
+
+/** v2.7 — a status-bar entry point for a parked-only screen: dimmed and inert while moving. */
+@Composable
+private fun ShelfIcon(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    onClick: () -> Unit,
+) {
+    val locked = LocalParkedOnlyLock.current
+    val tint = if (locked) {
+        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = LOCKED_ICON_ALPHA)
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Icon(
+        imageVector = icon,
+        contentDescription = if (locked) "$label — available when parked" else label,
+        tint = tint,
+        modifier = Modifier
+            .size(28.dp)
+            .clickable(enabled = !locked, onClick = onClick),
+    )
+}
+
+/** Material's standard disabled-content opacity. */
+private const val LOCKED_ICON_ALPHA = 0.38f
 
 private fun nowString(): String =
     SimpleDateFormat("EEE  HH:mm", Locale.getDefault()).format(Date())

@@ -25,18 +25,29 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.FileDownload // v2.7
+import androidx.compose.material.icons.filled.FileUpload // v2.7
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext // v2.7
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog // v2.7
+import com.reveng.carlauncher.data.ThemeTransfer // v2.7
+import com.reveng.carlauncher.ui.settings.DialogTextButton // v2.7
 import com.reveng.carlauncher.ui.theme.CarTheme
 import com.reveng.carlauncher.ui.theme.ThemeColors
+import java.io.File // v2.7
 
 /**
  * Themes screen (LAUNCHER_DESIGN v0.5): lists built-in presets and user themes with a
@@ -56,7 +67,16 @@ fun ThemesScreen(
     onDelete: (CarTheme) -> Unit,
     onNew: () -> Unit,
     onBack: () -> Unit,
+    onImport: (CarTheme) -> Unit = {}, // v2.7
 ) {
+    // v2.7 — theme import/export. The file work happens inline on the composition thread: these
+    // are single-digit-kilobyte writes to app-private storage, and the result has to be reported
+    // in the same gesture. If a theme ever grows large enough to make that a stutter, the fix is
+    // a coroutine here, not a different storage location.
+    val context = LocalContext.current
+    var importing by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf<String?>(null) }
+
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
             modifier = Modifier
@@ -73,6 +93,12 @@ fun ThemesScreen(
                 fontWeight = FontWeight.SemiBold,
             )
             Spacer(Modifier.weight(1f))
+            IconTile(
+                icon = Icons.Filled.FileDownload,
+                label = "Import theme",
+                onClick = { importing = true },
+            )
+            Spacer(Modifier.width(8.dp))
             IconTile(icon = Icons.Filled.Add, label = "New theme", onClick = onNew, filled = true)
         }
 
@@ -93,8 +119,111 @@ fun ThemesScreen(
                     onDuplicate = { onDuplicate(theme) },
                     onEdit = { onEdit(theme) },
                     onDelete = { onDelete(theme) },
+                    onExport = {
+                        val file = ThemeTransfer.export(context, theme)
+                        message = if (file != null) "Exported to ${file.absolutePath}"
+                        else "Export failed — external storage unavailable."
+                    },
                 )
             }
+        }
+    }
+
+    if (importing) {
+        ImportThemeDialog(
+            files = ThemeTransfer.listImportable(context),
+            onPick = { file ->
+                importing = false
+                val theme = ThemeTransfer.import(file)
+                if (theme == null) {
+                    message = "${file.name} is not a readable theme file."
+                } else {
+                    onImport(theme)
+                }
+            },
+            onDismiss = { importing = false },
+        )
+    }
+
+    message?.let { text ->
+        MessageDialog(text = text, onDismiss = { message = null })
+    }
+}
+
+/**
+ * v2.7 — pick a theme file to import.
+ *
+ * A plain list of what is in the directory rather than a system file picker: the vendor's document
+ * UI is another un-theme-able system screen, and the only files that can be here are ones the owner
+ * pushed. When the list is empty the dialog's job is to say *where* to put a file, since that is
+ * the only thing the driver could possibly be missing.
+ */
+@Composable
+private fun ImportThemeDialog(files: List<File>, onPick: (File) -> Unit, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(carShape(22.dp))
+                .background(MaterialTheme.colorScheme.surface)
+                .padding(24.dp),
+        ) {
+            Text(
+                text = "Import theme",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(Modifier.height(12.dp))
+
+            if (files.isEmpty()) {
+                Text(
+                    text = "No theme files found. Push one to " +
+                        "${ThemeTransfer.directory(context)?.absolutePath ?: "external storage"} " +
+                        "and reopen this dialog.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                files.forEach { file ->
+                    Text(
+                        text = file.name,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(carShape(12.dp))
+                            .clickable { onPick(file) }
+                            .padding(horizontal = 12.dp, vertical = 14.dp),
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(20.dp))
+            DialogTextButton("Close", onDismiss, filled = false, modifier = Modifier.fillMaxWidth())
+        }
+    }
+}
+
+/** One-line outcome report (an exported path, a rejected file). Dismiss is the only action. */
+@Composable
+private fun MessageDialog(text: String, onDismiss: () -> Unit) {
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(carShape(22.dp))
+                .background(MaterialTheme.colorScheme.surface)
+                .padding(24.dp),
+        ) {
+            Text(
+                text = text,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Spacer(Modifier.height(20.dp))
+            DialogTextButton("OK", onDismiss, filled = true, modifier = Modifier.fillMaxWidth())
         }
     }
 }
@@ -108,6 +237,7 @@ private fun ThemeCard(
     onDuplicate: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
+    onExport: () -> Unit, // v2.7
 ) {
     val borderColor =
         if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
@@ -151,6 +281,9 @@ private fun ThemeCard(
         Spacer(Modifier.height(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             IconTile(icon = Icons.Filled.ContentCopy, label = "Duplicate", onClick = onDuplicate)
+            // v2.7: built-ins export too — the fastest way to hand-author a theme is to pull a
+            // preset, edit the hex values on a real keyboard, and push it back.
+            IconTile(icon = Icons.Filled.FileUpload, label = "Export", onClick = onExport)
             if (!theme.isBuiltIn) {
                 IconTile(icon = Icons.Filled.Edit, label = "Edit", onClick = onEdit)
                 IconTile(icon = Icons.Filled.Delete, label = "Delete", onClick = onDelete)

@@ -31,8 +31,12 @@ import kotlinx.coroutines.launch
  * mirroring the [ThemeStore] pattern (own DataStore file, no extra serialization dep).
  */
 
-/** Day/night theming policy for the launcher (overrides CarEvents.dayNight when forced). */
-enum class DayNightMode { AUTO, FORCE_DAY, FORCE_NIGHT }
+/**
+ * Day/night theming policy for the launcher (overrides CarEvents.dayNight when forced).
+ *
+ * v2.7 adds [CLOCK]. Persisted by name, so a stored AUTO/FORCE_* is unaffected by the new entry.
+ */
+enum class DayNightMode { AUTO, FORCE_DAY, FORCE_NIGHT, CLOCK }
 
 /** Immutable snapshot of all launcher settings. */
 data class LauncherSettings(
@@ -49,12 +53,38 @@ data class LauncherSettings(
      * hide the theme editor and SysVar browser with no way to get them back.
      */
     val motionGateEnabled: Boolean = true,
+    /**
+     * v2.7 — let the clock stand in for the car's illumination signal when that signal never
+     * arrives (see `CarEvents.illuminationSeen`).
+     *
+     * Off by default, deliberately. On this unit the backlight broadcasts are permission-gated and
+     * usually silent, so switching this on by default would start dimming every existing install at
+     * dusk with no warning. A launcher that changes how the car looks after an update, without
+     * being asked, is a bug however defensible the reasoning.
+     */
+    val clockFallback: Boolean = false,
+    /** Hour (0-23) the clock fallback calls night. */
+    val nightStartHour: Int = DEFAULT_NIGHT_START_HOUR,
+    /** Hour (0-23) the clock fallback calls day again. */
+    val nightEndHour: Int = DEFAULT_NIGHT_END_HOUR,
 ) {
     companion object {
         /** 0 = adaptive/auto sizing; otherwise a fixed column count. */
         const val DEFAULT_GRID_COLUMNS = 3
         const val MIN_GRID_COLUMNS = 2
         const val MAX_GRID_COLUMNS = 6
+
+        /**
+         * v2.7 — a fixed evening/morning window rather than computed civil twilight. Real sunset
+         * needs a date, a latitude and a longitude; the launcher has GPS only intermittently (and
+         * only with the v2.5 location grant), so a solar calculation would be wrong exactly when
+         * the fallback matters most — no fix, indoors, at power-on. Two hours the driver can set
+         * are honest about being an approximation.
+         */
+        const val DEFAULT_NIGHT_START_HOUR = 19
+        const val DEFAULT_NIGHT_END_HOUR = 7
+        const val MIN_HOUR = 0
+        const val MAX_HOUR = 23
     }
 }
 
@@ -100,6 +130,12 @@ class SettingsStore(context: Context) {
                         DayNightMode.valueOf(prefs[DAY_NIGHT_MODE_KEY] ?: DayNightMode.AUTO.name)
                     }.getOrDefault(DayNightMode.AUTO),
                     motionGateEnabled = prefs[MOTION_GATE_KEY] ?: true, // v2.5
+                    // v2.7 clock day/night fallback
+                    clockFallback = prefs[CLOCK_FALLBACK_KEY] ?: false,
+                    nightStartHour = prefs[NIGHT_START_KEY]
+                        ?: LauncherSettings.DEFAULT_NIGHT_START_HOUR,
+                    nightEndHour = prefs[NIGHT_END_KEY]
+                        ?: LauncherSettings.DEFAULT_NIGHT_END_HOUR,
                 )
             }
             .stateIn(scope, SharingStarted.Eagerly, LauncherSettings())
@@ -126,6 +162,22 @@ class SettingsStore(context: Context) {
         ds.edit { it[MOTION_GATE_KEY] = enabled }
     }
 
+    /** v2.7 — use the clock when the car's illumination signal never arrives. */
+    fun setClockFallback(enabled: Boolean) = scope.launch {
+        ds.edit { it[CLOCK_FALLBACK_KEY] = enabled }
+    }
+
+    fun setNightStartHour(hour: Int) = scope.launch {
+        ds.edit { it[NIGHT_START_KEY] = clampHour(hour) }
+    }
+
+    fun setNightEndHour(hour: Int) = scope.launch {
+        ds.edit { it[NIGHT_END_KEY] = clampHour(hour) }
+    }
+
+    private fun clampHour(hour: Int): Int =
+        hour.coerceIn(LauncherSettings.MIN_HOUR, LauncherSettings.MAX_HOUR)
+
     private companion object {
         val GRID_COLUMNS_KEY = intPreferencesKey("grid_columns")
         val SHOW_MEDIA_KEY = booleanPreferencesKey("show_media")
@@ -135,5 +187,8 @@ class SettingsStore(context: Context) {
         val DAY_NIGHT_MODE_KEY = stringPreferencesKey("day_night_mode")
         val FIRST_RUN_KEY = booleanPreferencesKey("first_run") // v1.0 onboarding gate
         val MOTION_GATE_KEY = booleanPreferencesKey("motion_gate") // v2.5 parked-only gate
+        val CLOCK_FALLBACK_KEY = booleanPreferencesKey("clock_fallback") // v2.7
+        val NIGHT_START_KEY = intPreferencesKey("night_start_hour") // v2.7
+        val NIGHT_END_KEY = intPreferencesKey("night_end_hour") // v2.7
     }
 }

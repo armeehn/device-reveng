@@ -162,6 +162,127 @@ new work stays inside that budget: no `rememberInfiniteTransition`, no `basicMar
 `beep()` — wired to steering-wheel presses, keyboard keys and dialog buttons. The beep follows
 the vendor's `Set_TouchBeep` preference instead of adding a competing one.
 
+## Content & comfort (v2.7)
+
+### Jellyfin ("jellybelly")
+
+The Jellyfin Android client is just another `MediaSession`, so the media stack already surfaced it
+with no work — the MediaCard source chip names it and the transport controls drive it. v2.7 adds
+the two things that were missing: a **quick-launch preset** (`media/JellyfinApp.pinFirst` moves the
+tile to the front of the driver's thumb column when a client is installed — ordering only, nothing
+new is added to the drawer) and a **parked-only "continue watching" shelf**.
+
+**What the shelf is, precisely.** It lists what *this head unit* has played, recovered from the
+Jellyfin app's MediaSession metadata and persisted in `data/WatchHistoryStore`. It is **not** the
+server's Continue Watching row. That row is `GET /Users/{id}/Items/Resume` behind authentication,
+and reaching it would mean this APK carrying a tailnet URL and a credential that belong to the
+owner, not to a launcher. **No API client was written and none should be.** The screen says so in
+its own subtitle, because a shelf that implied it had talked to the server would make the first
+missing episode read as a bug rather than a boundary.
+
+Consequences, stated once so nobody re-discovers them:
+
+- Anything watched on a phone or a TV never touched this device's media stack, so it is not here.
+- Tapping a row opens Jellyfin at its home screen. Resuming a specific item needs the server item
+  GUID, which needs credentials — there is no deep link to build.
+- The position/duration pair is whatever the session last published. A player that stops updating
+  on pause leaves the row slightly stale. It is a hint, not a bookmark. Rows whose session
+  published no duration say so rather than drawing a bar at zero.
+- Only Jellyfin sessions are recorded. The media stack sees every player on the unit, and a
+  "continue watching" shelf full of radio adverts would be worse than an empty one.
+
+The candidate packages (`org.jellyfin.mobile`, `org.jellyfin.androidtv`) are upstream application
+IDs; which one — if either — is installed on this unit is **GUESSED** and resolved at runtime.
+
+### Notification shelf
+
+`notif/ShelfListenerService` is a third `NotificationListenerService` (the media one is empty by
+design, the nav one reads only Maps). It keeps at most 40 recent notifications **in memory only**,
+never on disk, and drops what does not belong on a shelf: our own, ongoing ones (media transport
+and Maps' turn-by-turn already have cards; sync bars would pin themselves to the top forever),
+group summaries, and anything with neither title nor text.
+
+Per-app filtering is a **deny** list (`data/NotificationFilterStore`) applied at render time, so
+un-muting an app brings its already-captured notifications straight back. An allow list would make
+a newly installed app silently invisible, which is the failure mode where nobody notices the
+feature is dropping things.
+
+No notification *actions*, no reply. Those are PendingIntents that can do anything, and firing
+arbitrary app intents off a launcher shelf is not something to do with someone sitting in a car.
+A row does two things: open the source app, or dismiss.
+
+Parked-only, and the listener needs the same grant as the other two:
+
+```sh
+adb shell cmd notification allow_listener com.reveng.carlauncher/com.reveng.carlauncher.notif.ShelfListenerService
+```
+
+### The keyboard, everywhere
+
+`ui/keyboard/CarKeyboard.kt` is the v2.3 search QWERTY extracted and given a shift latch
+(off → one-shot → locked) and a symbol layer. `ui/keyboard/CarTextField.kt` wraps it: the field on
+the page is a display-only tile, and tapping it opens a full-screen editor that owns the keyboard.
+
+Nothing in the app is a focusable text field any more, so **the vendor IME has no way to appear** —
+which was the point. It ignores night mode, cannot be themed, and eats half of a 720px screen.
+Every text field now themes with `CarTheme`: app search, the theme name and hex fields, the SysVar
+browser's search box and its raw value editor.
+
+What that costs, honestly: no caret placement, no selection, no clipboard, no autocomplete. Editing
+is append-and-backspace. The symbol layer is curated (`!@#$%^&*()-_=+[]{}|\,.:;'"?/`), so angle
+brackets, tilde and backtick have to be pushed in over adb.
+
+Motion gating comes free: `CarTextField` is inert while the parked-only lock holds and an open
+editor abandons the edit if the car pulls away. Every text field in the app is gated by
+construction rather than by remembering to wrap each one.
+
+### Theme quality of life
+
+**Import / export** (`data/ThemeTransfer`) writes a theme as JSON — the same codec `ThemeStore`
+persists with, so a file and a stored theme cannot drift — into the app's external files directory:
+
+```sh
+adb pull /sdcard/Android/data/com.reveng.carlauncher/files/themes/
+adb push mytheme.json /sdcard/Android/data/com.reveng.carlauncher/files/themes/
+```
+
+That path needs no runtime permission on API 33. `Downloads` was rejected (scoped storage makes a
+plain `File` write there need MediaStore or `MANAGE_EXTERNAL_STORAGE` — a lot of permission surface
+for a colour file) and so was `ACTION_CREATE_DOCUMENT` (another un-theme-able system screen, which
+is the problem this release exists to reduce). Built-ins export too: pull a preset, edit the hex on
+a real keyboard, push it back. An import always lands as a **new** user theme with a fresh id, so a
+hand-edited file cannot shadow a preset or overwrite something already on the unit.
+
+**Clock day/night.** `CarEvents.illuminationSeen` (new) latches true the first time an
+`ACTION_DAY/NIGHT_BACKLIGHT_CHANGED` broadcast actually arrives. `dayNight` alone could never tell
+"the car said day" from "the car said nothing" — and on a normal install it says nothing, because
+those broadcasts ride `com.szchoiceway.permission.broadcast` (very likely `signature`, CAR_API
+§1.1). So the unit sits in day colours at midnight.
+
+Settings ▸ Launcher ▸ **Clock day / night** offers two hours (default 19:00 → 07:00) used by a new
+`DayNightMode.CLOCK`, plus an opt-in fallback that applies those hours *in Auto* only while
+`illuminationSeen` is false. **Off by default on purpose:** switching it on for every existing
+install would start dimming screens at dusk without being asked. The section states on screen
+whether the car has actually reported illumination this session, for the same
+diagnosis-over-guesswork reason as the v2.5 motion status row.
+
+No solar calculation. Real civil twilight needs a date and a position, and this launcher's position
+comes from the same GPS the motion gate has to fail open around — no fix in a garage, none at
+power-on, none at all without the location grant. A window the driver sets is honest about being an
+approximation; a sunset calculation would be wrong exactly when it matters.
+
+### Not built, and why
+
+- **A real Jellyfin "continue watching" feed.** Needs the server URL and a credential. Out of
+  scope by instruction and by judgement; see above.
+- **Per-item resume / deep links into Jellyfin.** Same reason — item GUIDs come from the API.
+- **Notification actions and inline reply.** Deliberate, see above.
+- **Anything requiring the head unit.** None of v2.7 could be run on the physical device from
+  here. What is genuinely unverified: whether a Jellyfin client is installed at all and under
+  which package; whether `cmd notification allow_listener` grants the third listener as reliably
+  as the first two; how much of the shelf survives the vendor's own notification handling; and
+  whether the extracted keyboard's key sizes still read well on the real 240dpi panel.
+
 ## Known TODOs
 
 - **`IEventService.aidl`** declares only a subset of methods and its transaction

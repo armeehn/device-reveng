@@ -49,6 +49,7 @@ import com.reveng.carlauncher.input.FocusTarget // v0.8 SWC navigation
 import com.reveng.carlauncher.input.LauncherFocus // v0.8
 import com.reveng.carlauncher.input.LocalLauncherFocus // v0.8
 import com.reveng.carlauncher.input.launcherFocusTarget // v0.8
+import com.reveng.carlauncher.media.JellyfinApp // v2.7
 import com.reveng.carlauncher.media.NowPlayingRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -77,6 +78,8 @@ fun HomeScreen(
     settingsStore: SettingsStore? = null,
     onOpenSettings: () -> Unit = {},
     radioPresetsStore: com.reveng.carlauncher.data.RadioPresetsStore? = null, // v0.9 Radio 2.0
+    onOpenNotifications: (() -> Unit)? = null, // v2.7
+    onOpenContinueWatching: (() -> Unit)? = null, // v2.7
 ) {
     val reverse by carEvents.reverse.collectAsStateSafe(initial = false)
     val media by nowPlaying.state.collectAsStateSafe(initial = null)
@@ -94,7 +97,9 @@ fun HomeScreen(
 
     // v0.8: the roving focus ring shared with the SWC / DPAD key dispatcher (MainActivity).
     val focus = LocalLauncherFocus.current
-    val quickApps = userApps.take(4)
+    // v2.7: the Jellyfin quick-launch preset. Ordering only — the tile was already in the drawer,
+    // this just puts it in the driver's thumb column instead of alphabetically wherever it fell.
+    val quickApps = JellyfinApp.pinFirst(userApps) { it.packageName }.take(QUICK_LAUNCH_SLOTS)
     SideEffect {
         // Keep the focus model's view of the layout in sync so navigation skips hidden regions.
         focus.showMedia = settings.showMedia
@@ -123,6 +128,8 @@ fun HomeScreen(
                 onOpenSettings = onOpenSettings,
                 carService = carService,
                 settingsStore = settingsStore,
+                onOpenNotifications = onOpenNotifications, // v2.7
+                onOpenContinueWatching = onOpenContinueWatching, // v2.7
             )
 
             Row(
@@ -259,6 +266,9 @@ fun HomeScreen(
         ReverseOverlay(visible = reverse, radar = radar, modifier = Modifier.fillMaxSize())
     }
 }
+
+/** How many tiles the right-hand thumb column holds before the RadioCard claims the rest. */
+private const val QUICK_LAUNCH_SLOTS = 4
 
 /**
  * A compact quick-launch column of the driver's most-used apps (LAUNCHER_DESIGN §2.4).
