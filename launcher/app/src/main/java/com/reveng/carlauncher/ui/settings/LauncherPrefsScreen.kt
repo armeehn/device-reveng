@@ -29,6 +29,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.reveng.carlauncher.HomeRole
+import com.reveng.carlauncher.carlib.CarEvents // v2.5
+import com.reveng.carlauncher.carlib.GpsSpeedSource // v2.5
 import com.reveng.carlauncher.data.DayNightMode
 import com.reveng.carlauncher.data.LauncherSettings
 import com.reveng.carlauncher.data.SettingsStore
@@ -44,6 +46,7 @@ import com.reveng.carlauncher.ui.collectAsStateSafe
 fun LauncherPrefsScreen(
     settingsStore: SettingsStore,
     onBack: () -> Unit,
+    carEvents: CarEvents? = null, // v2.5 motion gating (null keeps previews working)
 ) {
     val context = LocalContext.current
     val settings by settingsStore.settings.collectAsStateSafe(initial = LauncherSettings())
@@ -130,7 +133,54 @@ fun LauncherPrefsScreen(
                 onSelect = settingsStore::setDayNightMode,
             )
         }
+
+        // v2.5 — the parked-only gate (LAUNCHER_DESIGN §1.4).
+        SettingsSection(title = "Motion gating") {
+            Text(
+                text = "Hide search, the theme editor, the SysVar browser and destructive " +
+                    "actions while the car is moving.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.size(12.dp))
+            ToggleSetting(
+                "Enforce parked-only features",
+                settings.motionGateEnabled,
+                settingsStore::setMotionGateEnabled,
+            )
+            Spacer(Modifier.size(12.dp))
+            MotionStatusRow(carEvents = carEvents)
+        }
     }
+}
+
+/**
+ * v2.5 — live speed and verdict, so the gate is diagnosable on the bench.
+ *
+ * Without this the driver has no way to tell "the gate is open because I am parked" from "the
+ * gate is open because GPS never got a fix" — the two look identical from the outside, and the
+ * second is the one worth knowing about.
+ */
+@Composable
+private fun MotionStatusRow(carEvents: CarEvents?) {
+    if (carEvents == null) {
+        return
+    }
+    val speed by carEvents.speedKmh.collectAsStateSafe(initial = GpsSpeedSource.SPEED_UNKNOWN)
+    val motion by carEvents.motion.collectAsStateSafe(initial = CarEvents.Motion.UNKNOWN)
+
+    val speedText = if (speed < 0) "no GPS fix" else "$speed km/h"
+    val verdict = when (motion) {
+        CarEvents.Motion.MOVING -> "moving — parked-only features hidden"
+        CarEvents.Motion.PARKED -> "parked — everything available"
+        CarEvents.Motion.UNKNOWN -> "unknown — gate open (fails open by design)"
+    }
+
+    Text(
+        text = "Speed: $speedText · $verdict",
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 @Composable

@@ -42,6 +42,13 @@ data class LauncherSettings(
     val showClimate: Boolean = true,
     val showNav: Boolean = true,
     val dayNightMode: DayNightMode = DayNightMode.AUTO,
+    /**
+     * v2.5 — enforce the LAUNCHER_DESIGN §1.4 parked-only rules. On by default: the gate is a
+     * safety feature, so it must be opted *out* of, not into. The escape hatch exists because
+     * the gate rests on GPS speed, and a bench or garage session with a bad fix would otherwise
+     * hide the theme editor and SysVar browser with no way to get them back.
+     */
+    val motionGateEnabled: Boolean = true,
 ) {
     companion object {
         /** 0 = adaptive/auto sizing; otherwise a fixed column count. */
@@ -92,6 +99,7 @@ class SettingsStore(context: Context) {
                     dayNightMode = runCatching {
                         DayNightMode.valueOf(prefs[DAY_NIGHT_MODE_KEY] ?: DayNightMode.AUTO.name)
                     }.getOrDefault(DayNightMode.AUTO),
+                    motionGateEnabled = prefs[MOTION_GATE_KEY] ?: true, // v2.5
                 )
             }
             .stateIn(scope, SharingStarted.Eagerly, LauncherSettings())
@@ -113,6 +121,11 @@ class SettingsStore(context: Context) {
         ds.edit { it[DAY_NIGHT_MODE_KEY] = mode.name }
     }
 
+    /** v2.5 — turn the parked-only gate on or off. */
+    fun setMotionGateEnabled(enabled: Boolean) = scope.launch {
+        ds.edit { it[MOTION_GATE_KEY] = enabled }
+    }
+
     private companion object {
         val GRID_COLUMNS_KEY = intPreferencesKey("grid_columns")
         val SHOW_MEDIA_KEY = booleanPreferencesKey("show_media")
@@ -121,5 +134,6 @@ class SettingsStore(context: Context) {
         val SHOW_NAV_KEY = booleanPreferencesKey("show_nav")
         val DAY_NIGHT_MODE_KEY = stringPreferencesKey("day_night_mode")
         val FIRST_RUN_KEY = booleanPreferencesKey("first_run") // v1.0 onboarding gate
+        val MOTION_GATE_KEY = booleanPreferencesKey("motion_gate") // v2.5 parked-only gate
     }
 }

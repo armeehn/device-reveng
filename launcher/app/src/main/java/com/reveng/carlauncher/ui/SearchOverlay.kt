@@ -29,6 +29,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -56,6 +57,17 @@ fun SearchOverlay(
     onLaunch: (AppInfo) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    // v2.5 §1.4: text entry is parked-only. If the car pulls away with search open we close it
+    // rather than swapping a notice in behind the modal — a full-screen keyboard is the worst
+    // thing to leave in front of a driver who has just started moving, and Home is a safe place
+    // to land. The drawer's trigger below refuses to reopen it while the lock holds.
+    val locked = LocalParkedOnlyLock.current
+    LaunchedEffect(locked) {
+        if (locked) {
+            onDismiss()
+        }
+    }
+
     var query by remember { mutableStateOf("") }
     val results = remember(apps, query) {
         val q = query.trim()
@@ -233,6 +245,9 @@ private fun RowScope.SearchKey(
     weight: Float = 1f,
     onPress: () -> Unit,
 ) {
+    // v2.5 §1.4: keys are small and struck in quick succession, so each accepted press gets an
+    // eyes-free confirmation.
+    val press = withTapFeedback(onPress)
     Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier
@@ -240,7 +255,7 @@ private fun RowScope.SearchKey(
             .height(72.dp)
             .clip(RoundedCornerShape(10.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant)
-            .clickable(onClick = onPress),
+            .clickable(onClick = press),
     ) {
         Text(
             text = label,
@@ -250,9 +265,20 @@ private fun RowScope.SearchKey(
     }
 }
 
-/** The tappable search-bar lookalike at the top of the drawer; opens [SearchOverlay]. */
+/**
+ * The tappable search-bar lookalike at the top of the drawer; opens [SearchOverlay].
+ *
+ * v2.5: while the parked-only lock holds it stays visible but inert, and says why. Hiding it
+ * outright would reflow the drawer every time the car stops at a light.
+ */
 @Composable
 fun DrawerSearchTrigger(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val locked = LocalParkedOnlyLock.current
+    val tint = if (locked) {
+        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = DISABLED_ALPHA)
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
@@ -261,19 +287,22 @@ fun DrawerSearchTrigger(onClick: () -> Unit, modifier: Modifier = Modifier) {
             .height(56.dp)
             .clip(RoundedCornerShape(16.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant)
-            .clickable(onClick = onClick)
+            .clickable(enabled = !locked, onClick = onClick)
             .padding(horizontal = 16.dp),
     ) {
         Icon(
             imageVector = Icons.Filled.Search,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            tint = tint,
         )
         Spacer(Modifier.width(12.dp))
         Text(
-            text = "Search apps",
+            text = if (locked) "Search — available when parked" else "Search apps",
             style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = tint,
         )
     }
 }
+
+/** Material's standard disabled-content opacity. */
+private const val DISABLED_ALPHA = 0.38f
