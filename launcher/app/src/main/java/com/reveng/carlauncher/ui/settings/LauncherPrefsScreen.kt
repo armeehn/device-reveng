@@ -131,6 +131,16 @@ fun LauncherPrefsScreen(
             ToggleSetting("Navigation", settings.showNav, settingsStore::setShowNav)
         }
 
+        // v0.4.2: text-to-speech. Off by default — a launcher that talks unasked is worse
+        // than silent (LAUNCHER_DESIGN eyes-free posture; pairs with the car's own beep feedback).
+        SettingsSection(title = "Read aloud") {
+            ToggleSetting(
+                "Read now-playing aloud",
+                settings.readNowPlaying,
+                settingsStore::setReadNowPlaying,
+            )
+        }
+
         SettingsSection(title = "Top bar & shade") {
             Text(
                 text = "The launcher can show its own swipe-from-top Quick Controls shade " +
