@@ -30,6 +30,7 @@ import com.reveng.carlauncher.carlib.RootShell
 import com.reveng.carlauncher.data.CarSettingsController // v1.1 settings suite
 import com.reveng.carlauncher.data.DayNightMode // v0.6
 import com.reveng.carlauncher.data.RadioPresetsStore // v0.9
+import com.reveng.carlauncher.data.RootTierController // v2.9
 import com.reveng.carlauncher.data.SettingKeys // v2.5 touch beep
 import com.reveng.carlauncher.data.SettingsStore // v0.6
 import com.reveng.carlauncher.data.ThemeStore
@@ -74,6 +75,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var settingsStore: SettingsStore // v0.6
     private lateinit var radioPresetsStore: RadioPresetsStore // v0.9
     private lateinit var carSettingsController: CarSettingsController // v1.1 settings suite
+    private lateinit var rootTierController: RootTierController // v2.9
 
     // v0.8: roving focus ring for steering-wheel / DPAD navigation. Held as a field so the
     // key dispatcher below and the Compose tree (via LocalLauncherFocus) share one instance.
@@ -115,6 +117,7 @@ class MainActivity : ComponentActivity() {
         settingsStore = SettingsStore(applicationContext) // v0.6
         radioPresetsStore = RadioPresetsStore(applicationContext, lifecycleScope) // v0.9
         carSettingsController = CarSettingsController(applicationContext, lifecycleScope) // v1.1
+        rootTierController = RootTierController(applicationContext, lifecycleScope) // v2.9
 
         // v2.5: beep follows the vendor Set_TouchBeep SysVar, read fresh at each tap so a change
         // in the settings suite applies without rebuilding anything.
@@ -232,6 +235,7 @@ class MainActivity : ComponentActivity() {
                                 carService = carService,
                                 carEvents = carEvents,
                                 radioPresetsStore = radioPresetsStore,
+                                rootTier = rootTierController, // v2.9
                                 onExit = { screen = Screen.Home },
                             )
 
