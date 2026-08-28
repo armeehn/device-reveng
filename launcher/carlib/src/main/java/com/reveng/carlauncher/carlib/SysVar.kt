@@ -175,7 +175,14 @@ class SysVar(private val context: Context) {
         val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
             override fun onChange(selfChange: Boolean, uri: Uri?) = onChange(uri)
         }
-        context.contentResolver.registerContentObserver(CONTENT_URI, true, observer)
+        // The vendor provider may be absent — a non-vendor build, an emulator, or the vendor
+        // service being down — and registerContentObserver throws SecurityException for a missing
+        // authority. Every other SysVar entry point is guarded; this one wasn't, so that
+        // exception propagated out of CarSettingsController.<init> and crashed the launcher on
+        // startup. Degrade gracefully to "no change notifications" instead.
+        runCatching {
+            context.contentResolver.registerContentObserver(CONTENT_URI, true, observer)
+        }.onFailure { Log.w(TAG, "registerContentObserver failed (provider absent?): ${it.message}") }
         return observer
     }
 

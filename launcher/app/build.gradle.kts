@@ -24,6 +24,11 @@ android {
         debug {
             isMinifyEnabled = false
             applicationIdSuffix = ".debug"
+            // Also package x86_64 native libs (androidx graphics-path + datastore ship .so) so a
+            // debug build installs on a KVM-accelerated x86_64 emulator for local prototyping.
+            // Merges with defaultConfig's arm64-v8a, so debug still installs on the head unit too;
+            // release stays arm64-only (unchanged shipping artifact).
+            ndk { abiFilters += "x86_64" }
         }
         release {
             // v1.0: shrink + obfuscate for a much smaller side-load APK. The KEEP rules that
