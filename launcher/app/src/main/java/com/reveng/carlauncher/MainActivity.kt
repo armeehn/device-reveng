@@ -12,11 +12,13 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts // v2.5
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.Box // v2.8
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect // v2.8
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState // v2.6
@@ -30,12 +32,17 @@ import com.reveng.carlauncher.carlib.CarService
 import com.reveng.carlauncher.carlib.RootShell
 import com.reveng.carlauncher.data.CarSettingsController // v1.1 settings suite
 import com.reveng.carlauncher.data.DayNightMode // v0.6
+import com.reveng.carlauncher.data.DriverSide // v2.8
 import com.reveng.carlauncher.data.RadioPresetsStore // v0.9
+import com.reveng.carlauncher.data.Reachability // v2.8
 import com.reveng.carlauncher.data.SettingKeys // v2.5 touch beep
 import com.reveng.carlauncher.data.SettingsStore // v0.6
 import com.reveng.carlauncher.data.ThemeStore
+import com.reveng.carlauncher.input.KeyBridge // v2.8
+import com.reveng.carlauncher.input.KeyPump // v2.8
 import com.reveng.carlauncher.input.LauncherFocus // v0.8 SWC navigation
 import com.reveng.carlauncher.input.LocalLauncherFocus // v0.8
+import com.reveng.carlauncher.input.NavEvent // v2.8
 import com.reveng.carlauncher.input.NavKey // v0.8
 import com.reveng.carlauncher.input.SwcNavigator // v0.8
 import com.reveng.carlauncher.media.NowPlayingRepository
@@ -45,6 +52,7 @@ import com.reveng.carlauncher.ui.LocalCarFeedback // v2.5
 import com.reveng.carlauncher.ui.MediaScreen // v2.6
 import com.reveng.carlauncher.ui.ParkedOnly // v2.5
 import com.reveng.carlauncher.ui.ProvideParkedOnlyLock // v2.5
+import com.reveng.carlauncher.ui.RadarSideStrip // v2.8
 import com.reveng.carlauncher.ui.RadioScreen // v2.6
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay // v2.6
@@ -91,6 +99,11 @@ class MainActivity : ComponentActivity() {
     // composition (handleNav), and that is the case §1.4 cares about most.
     private lateinit var carFeedback: CarFeedback
 
+    // v2.8: one press-timing model for both input sources (see KeyPump), and the bridge that
+    // carries a decoded key into Compose's focus system on every screen that is not Home.
+    private lateinit var keyPump: KeyPump
+    private val keyBridge by lazy { KeyBridge(window) }
+
     /**
      * v2.5: the location grant that lets [com.reveng.carlauncher.carlib.GpsSpeedSource] read road
      * speed. [CarEvents.register] runs before the user can answer, so its first attempt finds no
@@ -132,10 +145,26 @@ class MainActivity : ComponentActivity() {
         // v2.5: ask once for the location permission behind the parked-only gate.
         requestLocationPermissionIfNeeded()
 
+        keyPump = KeyPump(lifecycleScope, ::onNavEvent) // v2.8
+
         // v0.8: input source (a) — vendor STEER_WHEEL_INFOR broadcasts as CAR_KEY_* codes.
+        // v2.8: the broadcast carries the press state, so feed the pump both edges rather than
+        // dropping the release — held-repeat and long-press both need to know when it ended.
         lifecycleScope.launch {
             carEvents.swcKeys.collect { key ->
-                SwcNavigator.fromSwc(key)?.let { handleNav(it) }
+                val nav = SwcNavigator.fromCarKey(key.keyIndex) ?: return@collect
+                if (key.down) keyPump.down(nav) else keyPump.up(nav)
+            }
+        }
+
+        // v2.8: reverse is an interruption, not navigation. The vendor composites its reverse
+        // window over us and takes the screen; when it hands the screen back, put the ring where
+        // the driver left it instead of making them find their place again.
+        lifecycleScope.launch {
+            carEvents.reverse.collect { engaged ->
+                keyPump.cancel() // a key held as the window changed has no meaningful release
+                if (engaged) launcherFocus.saveForInterruption()
+                else launcherFocus.restoreAfterInterruption()
             }
         }
 
@@ -195,6 +224,26 @@ class MainActivity : ComponentActivity() {
                     .filter { it.isNotBlank() }
             }
 
+            // v2.8: the reachability mirror (LAUNCHER_DESIGN §2.5). Resolved here rather than in
+            // HomeScreen because the focus ring lives outside composition and needs it too.
+            val driverSide = Reachability.resolve(
+                settings.driverSideMode,
+                sysVars[SettingKeys.CAR_TYPE],
+            )
+            SideEffect { launcherFocus.mirrored = driverSide == DriverSide.RIGHT }
+
+            // v2.8: the low-speed maneuvering strips. Hidden in reverse — the vendor owns the
+            // screen then, and ReverseOverlay's coexistence rule is that we never contend for it.
+            // Hidden too while the decode is unconfirmed: an arc that reads "clear" off a guessed
+            // byte offset is a safety claim we have not earned.
+            val reverse by carEvents.reverse.collectAsStateWithLifecycle()
+            val radar by carEvents.radar.collectAsStateWithLifecycle()
+            val speedKmh by carEvents.speedKmh.collectAsStateWithLifecycle()
+            val maneuvering = settings.radarLayoutConfirmed &&
+                !reverse &&
+                speedKmh <= MANEUVER_MAX_KMH &&
+                screen != Screen.Onboarding
+
             CarLauncherTheme(theme = activeTheme, night = night) {
               CompositionLocalProvider(
                   LocalLauncherFocus provides launcherFocus,
@@ -205,6 +254,9 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background,
                 ) {
+                  // v2.8: the maneuvering strips sit above every screen, so the box wraps the
+                  // whole switch rather than living inside Home.
+                  Box(modifier = Modifier.fillMaxSize()) {
                     // v1.0: crossfade top-level screen transitions (Home ↔ Themes ↔ Settings ↔
                     // Editor ↔ Onboarding) instead of a hard swap. While firstRun is unresolved
                     // we render nothing but the themed Surface — a fast, jank-free first frame.
@@ -249,6 +301,7 @@ class MainActivity : ComponentActivity() {
                                 // v2.6: the glance cards deep-link into their full screens.
                                 onOpenMedia = { screen = Screen.Media },
                                 onOpenRadio = { screen = Screen.Radio },
+                                driverSide = driverSide, // v2.8 reachability mirror
                             )
 
                             // v2.6: the full media player (§3.3).
@@ -327,6 +380,12 @@ class MainActivity : ComponentActivity() {
                         }
                       }
                     }
+
+                    // v2.8: proximity rails on the screen edges while creeping forward.
+                    if (maneuvering) {
+                        RadarSideStrip(state = radar)
+                    }
+                  }
                 }
                }
               }
@@ -350,30 +409,72 @@ class MainActivity : ComponentActivity() {
 
     /**
      * v0.8: input source (b) — real Android [KeyEvent]s (DPAD / ENTER / MEDIA_* and any vendor
-     * codes surfacing as KeyEvents). Consumed only when we actually act, so system Back on Home
-     * and dialog Back still work.
+     * codes surfacing as KeyEvents).
+     *
+     * v2.8: these now go through [keyPump] like the broadcast keys, which means we consume both
+     * edges of any key we recognise and re-emit the paced version ourselves. The system's own
+     * auto-repeat (`repeatCount > 0`) is dropped: it fires at the platform's keyboard rate, and
+     * the whole point of the pump is that a car's rate is not a keyboard's.
+     *
+     * A key we don't recognise still falls through untouched, so anything with its own handler
+     * (volume, power) is unaffected. BACK is consumed here but handed back to the system in
+     * [onNavEvent] when no screen wanted it.
      */
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        val nav = SwcNavigator.fromKeyEvent(event.keyCode)
-        if (nav != null && event.action == KeyEvent.ACTION_DOWN && handleNav(nav)) {
-            return true
+        val nav = SwcNavigator.fromKeyEvent(event.keyCode) ?: return super.dispatchKeyEvent(event)
+
+        when (event.action) {
+            KeyEvent.ACTION_DOWN -> if (event.repeatCount == 0) keyPump.down(nav)
+            KeyEvent.ACTION_UP -> keyPump.up(nav)
+            else -> return super.dispatchKeyEvent(event)
         }
-        return super.dispatchKeyEvent(event)
+        return true
     }
 
     /**
-     * Route a decoded [NavKey]. Media transport reaches the active MediaController regardless of
-     * focus; directional / CENTER drive the focus ring while on Home; Back/Home return Home from
-     * a sub-screen. Returns true when the key was consumed.
+     * v2.8 — act on one paced press from [keyPump].
+     *
+     * Feedback fires only on a genuine first press: v2.5 §1.4 wants the driver to feel that a
+     * wheel press landed, but confirming every auto-repeat tick would turn holding the tuner into
+     * a burst of beeps and buzzes that says nothing.
      */
-    private fun handleNav(nav: NavKey): Boolean {
-        val consumed = routeNav(nav)
-        // v2.5 §1.4: a wheel press is the one input the driver makes without looking, so confirm
-        // it. Only on consumption — buzzing for a key we ignored would report a lie.
-        if (consumed) {
-            carFeedback.tap()
+    private fun onNavEvent(event: NavEvent) {
+        val consumed = when (event) {
+            is NavEvent.Press -> routeNav(event.key)
+            is NavEvent.LongPress -> routeLong(event.key)
         }
-        return consumed
+
+        if (consumed) {
+            if (event !is NavEvent.Press || !event.repeat) {
+                carFeedback.tap()
+            }
+            return
+        }
+
+        // A BACK nothing claimed is the system's — Home, or a screen with nothing left to pop.
+        // We consumed the KeyEvent to time it, so we owe the system the press back.
+        if (event is NavEvent.Press && event.key == NavKey.BACK) {
+            onBackPressedDispatcher.onBackPressed()
+        }
+    }
+
+    /**
+     * v2.8 — long-press secondary actions.
+     *
+     * BACK is the escape hatch: from anywhere, at any settings depth, one long press is Home.
+     * Without it a driver lost four screens deep in the settings suite has to count their way
+     * back out. CENTER's secondary action belongs to whatever holds focus, so Home delegates it
+     * to [LauncherFocus]; off Home there is no per-item secondary action to delegate to, and
+     * inventing one that varies by screen would be worse than the key doing nothing.
+     */
+    private fun routeLong(nav: NavKey): Boolean = when (nav) {
+        NavKey.BACK -> {
+            screenState.value = Screen.Home
+            launcherFocus.reset()
+            true
+        }
+        NavKey.CENTER -> screenState.value == Screen.Home && launcherFocus.onLongPress()
+        else -> false
     }
 
     private fun routeNav(nav: NavKey): Boolean = when (nav) {
@@ -406,8 +507,13 @@ class MainActivity : ComponentActivity() {
             // Themes / Editor / Media / Radio are flat top-level screens -> straight Home.
             else -> { screenState.value = Screen.Home; true }
         }
-        NavKey.CENTER, NavKey.UP, NavKey.DOWN, NavKey.LEFT, NavKey.RIGHT ->
-            if (screenState.value == Screen.Home) launcherFocus.onKey(nav) else false
+        // v2.8: Home keeps its hand-written ring; every other screen is driven through
+        // [KeyBridge], which moves Compose's own focus and wraps at the edges.
+        NavKey.CENTER, NavKey.UP, NavKey.DOWN, NavKey.LEFT, NavKey.RIGHT -> when {
+            screenState.value == Screen.Home -> launcherFocus.onKey(nav)
+            nav == NavKey.CENTER -> keyBridge.activate()
+            else -> keyBridge.move(nav)
+        }
     }
 
     /**
@@ -439,6 +545,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        keyPump.cancel() // v2.8: drop any held key and its repeat timer
         carEvents.unregister()
         carService.unbind()
         nowPlaying.stop()
@@ -464,3 +571,11 @@ private const val VENDOR_SOURCE_POLL_MS = 5_000L
 
 /** The vendor stores exactly six radio favourites: `Rdo_MyFavorite0..5` (CAR_API §2.3). */
 private const val VENDOR_PRESET_SLOTS = 6
+
+/**
+ * v2.8 — above this the maneuvering strips are noise, not information: the sensors stop reporting
+ * anyway and nothing within their range is still a parking obstacle. Walking pace with margin.
+ * An unknown speed ([com.reveng.carlauncher.carlib.GpsSpeedSource.SPEED_UNKNOWN], negative) passes,
+ * which is deliberate — the multi-storey car park where GPS has no fix is exactly where this helps.
+ */
+private const val MANEUVER_MAX_KMH = 15

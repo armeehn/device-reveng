@@ -3,6 +3,7 @@ package com.reveng.carlauncher.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import com.reveng.carlauncher.input.focusRing // v2.8
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -116,7 +117,8 @@ private fun ThemeCard(
             .clip(carShape(18.dp))
             .background(MaterialTheme.colorScheme.surface)
             .border(if (isActive) 2.dp else 1.dp, borderColor, carShape(18.dp))
-            .clickable(onClick = onSetActive)
+            .focusRing(cornerRadiusDp = 18)
+            .clickable(onClick = onSetActive) // v2.8 ring
             .padding(14.dp),
     ) {
         ThemePreviewSwatch(
@@ -230,6 +232,7 @@ fun IconTile(
                 if (filled) MaterialTheme.colorScheme.primary
                 else MaterialTheme.colorScheme.surfaceVariant
             )
+            .focusRing()
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
