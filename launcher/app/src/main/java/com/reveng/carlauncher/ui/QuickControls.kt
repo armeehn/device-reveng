@@ -96,6 +96,27 @@ fun QuickControlsButton(
     }
 }
 
+/**
+ * v3.1 — the same dialog with its open state hoisted to the caller: lets the status chips
+ * (or any future affordance) open Quick Controls without duplicating the panel.
+ * [QuickControlsButton] above keeps its own private state and is unchanged.
+ */
+@Composable
+fun QuickControlsDialogHost(
+    open: Boolean,
+    onDismiss: () -> Unit,
+    carService: CarService,
+    settingsStore: SettingsStore,
+) {
+    if (open) {
+        QuickControlsDialog(
+            carService = carService,
+            settingsStore = settingsStore,
+            onDismiss = onDismiss,
+        )
+    }
+}
+
 @Composable
 private fun QuickControlsDialog(
     carService: CarService,
