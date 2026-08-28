@@ -278,6 +278,18 @@ class CarEvents(private val appContext: Context) {
     private val _speedKmh = MutableStateFlow(GpsSpeedSource.SPEED_UNKNOWN)
     val speedKmh: StateFlow<Int> = _speedKmh.asStateFlow()
 
+    private val _rootCapture = MutableStateFlow(false)
+    /**
+     * v2.9 — true once the root helper has actually delivered a protected broadcast.
+     *
+     * Not "root is available" and not "the helper started": only a real captured event proves the
+     * whole chain works, and the chain has several links that can fail quietly on an unfamiliar
+     * unit (see [RootBroadcastHelper]). Surfaced so Settings can say which source the reverse and
+     * steering-wheel state is really coming from — "no wheel keys because none were pressed" and
+     * "no wheel keys because capture never started" look identical otherwise.
+     */
+    val rootCapture: StateFlow<Boolean> = _rootCapture.asStateFlow()
+
     private val _motion = MutableStateFlow(Motion.UNKNOWN)
     /**
      * v2.5 — the safety gate's view of [speedKmh], with the [MOVING_ABOVE_KMH] /
@@ -323,6 +335,15 @@ class CarEvents(private val appContext: Context) {
      */
     private val speedSource = GpsSpeedSource(appContext) { kmh -> updateSpeed(kmh) }
 
+    /**
+     * v2.9 — root capture of the `signature`-guarded broadcasts. Owned here for the same reason
+     * [speedSource] is: consumers keep one front door and never learn which source filled a flow.
+     */
+    private val rootBridge = RootBroadcastBridge(appContext) { action, ints ->
+        _rootCapture.value = true
+        handleProtected(action, ints)
+    }
+
     // Copy-on-write: a listener may add/remove itself from inside its own callback while we
     // are iterating during dispatch, which would throw ConcurrentModificationException on a
     // plain mutableSet; it also makes concurrent add/remove from other threads safe.
@@ -334,9 +355,9 @@ class CarEvents(private val appContext: Context) {
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            when (intent?.action) {
-                ACTION_BACKCAR_START, MCU_MSG_BACKCAR_START -> updateReverse(true)
-                ACTION_BACKCAR_END, MCU_MSG_BACKCAR_END -> updateReverse(false)
+            when (val action = intent?.action) {
+                MCU_MSG_BACKCAR_START -> updateReverse(true)
+                MCU_MSG_BACKCAR_END -> updateReverse(false)
 
                 ACTION_ACC_OPEN_CLOSE_EVT -> {
                     val on = intent.getIntExtra(EXTRA_ACC_STATUS, 1) == 1
@@ -369,17 +390,16 @@ class CarEvents(private val appContext: Context) {
                     if (angle != null) _steeringAngle.value = angle
                 }
 
-                STEER_WHEEL_INFOR -> {
-                    val idx = intent.getIntExtra(EXTRA_SWC_LPARAM, 0)
-                    val st = intent.getIntExtra(EXTRA_SWC_WPARAM, 0)
-                    val v = intent.getIntExtra(EXTRA_SWC_VOLTAGE, 0)
-                    val key = SwcKey(idx, down = st == SWC_STATE_DOWN, voltage = v)
-                    _swcKeys.tryEmit(key)
-                    listeners.forEach { it.onSwcKey(key) }
+                // v2.9: the protected set. Still filtered for here, because a privileged/system
+                // install DOES receive them directly and must not need the root helper. When root
+                // capture is live we drop these instead: on such an install both paths deliver the
+                // same event, and a duplicate SwcKey is a second key press as far as the focus ring
+                // is concerned. handleProtected parses STEER_WHEEL_INFOR into the same SwcKey the
+                // v3.0 inline handler did, so SWC input is unchanged; root-capture dedup is added.
+                ACTION_BACKCAR_START, ACTION_BACKCAR_END, STEER_WHEEL_INFOR,
+                ACTION_DAY_BACKLIGHT_CHANGED, ACTION_NIGHT_BACKLIGHT_CHANGED -> {
+                    if (!_rootCapture.value) handleProtected(action, swcIntExtras(intent))
                 }
-
-                ACTION_DAY_BACKLIGHT_CHANGED -> updateDayNight(DayNight.DAY)
-                ACTION_NIGHT_BACKLIGHT_CHANGED -> updateDayNight(DayNight.NIGHT)
 
                 // v0.7: raw parking-radar frame → best-effort decode (offsets GUESSED).
                 MCU_CAR_CAN_RADAR_INFO -> {
@@ -411,6 +431,44 @@ class CarEvents(private val appContext: Context) {
         }
     }
 
+    /**
+     * v2.9 — apply one protected event, whatever carried it. Both the in-process receiver and the
+     * root helper land here so the two sources cannot drift apart in how they decode an event.
+     *
+     * [ints] holds only the extras that action defines; a missing one falls back to the same
+     * default the v2.5 receiver used.
+     */
+    private fun handleProtected(action: String, ints: Map<String, Int>) {
+        when (action) {
+            ACTION_BACKCAR_START -> updateReverse(true)
+            ACTION_BACKCAR_END -> updateReverse(false)
+            ACTION_DAY_BACKLIGHT_CHANGED -> updateDayNight(DayNight.DAY)
+            ACTION_NIGHT_BACKLIGHT_CHANGED -> updateDayNight(DayNight.NIGHT)
+
+            STEER_WHEEL_INFOR -> {
+                val key = SwcKey(
+                    keyIndex = ints[EXTRA_SWC_LPARAM] ?: 0,
+                    down = (ints[EXTRA_SWC_WPARAM] ?: 0) == SWC_STATE_DOWN,
+                    voltage = ints[EXTRA_SWC_VOLTAGE] ?: 0,
+                )
+                _swcKeys.tryEmit(key)
+                listeners.forEach { it.onSwcKey(key) }
+            }
+        }
+    }
+
+    /** v2.9 — the int extras [handleProtected] may want, read off a directly-received Intent. */
+    private fun swcIntExtras(intent: Intent): Map<String, Int> {
+        if (intent.action != STEER_WHEEL_INFOR) {
+            return emptyMap()
+        }
+        return mapOf(
+            EXTRA_SWC_LPARAM to intent.getIntExtra(EXTRA_SWC_LPARAM, 0),
+            EXTRA_SWC_WPARAM to intent.getIntExtra(EXTRA_SWC_WPARAM, 0),
+            EXTRA_SWC_VOLTAGE to intent.getIntExtra(EXTRA_SWC_VOLTAGE, 0),
+        )
+    }
+
     private fun updateReverse(engaged: Boolean) {
         if (_reverse.value != engaged) {
             _reverse.value = engaged
@@ -437,6 +495,11 @@ class CarEvents(private val appContext: Context) {
      * receiver. As a normal app the protected ones are silently never delivered; as a
      * privileged/system app holding [PERMISSION_CHOICEWAY_BROADCAST] they start flowing
      * with no code change.
+     *
+     * v2.9 also starts the root capture ([RootBroadcastBridge]), which gets the protected events
+     * on a plain user install of a rooted unit — the tier that replaced "platform-signed system
+     * app" once the vendor key was confirmed unobtainable. It degrades silently: with no root
+     * nothing changes and the v2.5 fallbacks stand.
      */
     fun register() {
         if (registered) return
@@ -469,6 +532,7 @@ class CarEvents(private val appContext: Context) {
         // v2.5: GPS is a separate subsystem from the gateway broadcasts, but it feeds the same
         // front door, so it shares this lifecycle instead of asking every caller to manage it.
         speedSource.start()
+        rootBridge.start() // v2.9
         Log.i(TAG, "CarEvents registered")
     }
 
@@ -476,6 +540,7 @@ class CarEvents(private val appContext: Context) {
         if (!registered) return
         runCatching { appContext.unregisterReceiver(receiver) }
         speedSource.stop() // v2.5
+        rootBridge.stop() // v2.9
         registered = false
     }
 
