@@ -17,7 +17,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
+import com.reveng.carlauncher.ui.theme.carShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -317,7 +317,7 @@ private fun QuickLaunchRow(app: AppInfo, onClick: () -> Unit, modifier: Modifier
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(15.dp))
+            .clip(carShape(15.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 8.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,

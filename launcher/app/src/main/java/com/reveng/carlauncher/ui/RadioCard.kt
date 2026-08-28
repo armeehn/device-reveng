@@ -1,5 +1,6 @@
 package com.reveng.carlauncher.ui
 
+import com.reveng.carlauncher.ui.theme.carCard
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
@@ -14,7 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
+import com.reveng.carlauncher.ui.theme.carShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.FastRewind
@@ -94,7 +95,7 @@ fun RadioCard(
         ?: remember { androidx.compose.runtime.mutableStateOf(emptyList<RadioPreset>()) })
 
     Card(
-        modifier = modifier,
+        modifier = modifier.carCard(accent = MaterialTheme.colorScheme.primary), // rotation wraps to pink
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
     ) {
         if (!info.available) {
@@ -219,7 +220,7 @@ private fun StationStrip(
             Surface(
                 color = if (active) MaterialTheme.colorScheme.primaryContainer
                 else MaterialTheme.colorScheme.secondaryContainer,
-                shape = RoundedCornerShape(50),
+                shape = carShape(50),
                 modifier = Modifier.combinedClickable(
                     onClick = { onRecall(p) },
                     onLongClick = { onDelete(p) },

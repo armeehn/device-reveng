@@ -1,5 +1,6 @@
 package com.reveng.carlauncher.ui
 
+import com.reveng.carlauncher.ui.theme.carCard
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -67,7 +68,9 @@ fun NavCard(
     }
 
     Card(
-        modifier = modifier.clickable { NavRepository.launchMaps(context) },
+        modifier = modifier
+            .carCard(accent = MaterialTheme.colorScheme.secondary) // teal in rotation
+            .clickable { NavRepository.launchMaps(context) },
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
     ) {
         Column(
