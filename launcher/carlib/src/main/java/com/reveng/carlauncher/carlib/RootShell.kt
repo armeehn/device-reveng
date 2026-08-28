@@ -82,10 +82,18 @@ object RootShell {
             val process = ProcessBuilder("su", "-c", command)
                 .redirectErrorStream(false)
                 .start()
+            // Drain stderr concurrently with stdout. Reading stdout to EOF first would
+            // deadlock if the command writes more than the stderr pipe buffer (~64 KB) while
+            // still producing stdout: the child blocks writing stderr, never closes stdout, and
+            // our stdout read blocks forever.
+            val errLines = ArrayList<String>()
+            val errThread = Thread {
+                runCatching { errLines.addAll(process.errorStream.readLines()) }
+            }.apply { isDaemon = true; start() }
             val out = process.inputStream.readLines()
-            val err = process.errorStream.readLines()
+            errThread.join()
             val code = process.waitFor()
-            Result(code, out, err)
+            Result(code, out, errLines)
         } catch (t: Throwable) {
             Log.e(TAG, "su -c failed: $command", t)
             Result(-1, emptyList(), listOf(t.message ?: t.toString()))

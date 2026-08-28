@@ -264,7 +264,8 @@ private fun RadioUnavailable() {
  * encodings: AM in kHz, FM either in 10 kHz units (8750 = 87.5 MHz) or kHz (95000).
  * ⚠ GUESSED encoding — verify on-device.
  */
-private fun formatFreqLabel(band: Int, freq: Int): String {
+internal fun formatFreqLabel(band: Int, freq: Int): String {
+    if (freq <= 0) return "--"
     if (CarService.isAmBand(band)) {
         val khz = if (freq > 30000) freq / 1000 else freq
         return "$khz kHz"

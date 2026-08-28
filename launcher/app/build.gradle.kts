@@ -13,8 +13,8 @@ android {
         applicationId = "com.reveng.carlauncher"
         minSdk = 33
         targetSdk = 33
-        versionCode = 32
-        versionName = "2.4.0"
+        versionCode = 33
+        versionName = "2.4.1"
 
         // Single head-unit target: arm64 landscape @240dpi, 1920x720.
         ndk { abiFilters += "arm64-v8a" }
@@ -24,6 +24,11 @@ android {
         debug {
             isMinifyEnabled = false
             applicationIdSuffix = ".debug"
+            // Also package x86_64 native libs (androidx graphics-path + datastore ship .so) so a
+            // debug build installs on a KVM-accelerated x86_64 emulator for local prototyping.
+            // Merges with defaultConfig's arm64-v8a, so debug still installs on the head unit too;
+            // release stays arm64-only (unchanged shipping artifact).
+            ndk { abiFilters += "x86_64" }
         }
         release {
             // v1.0: shrink + obfuscate for a much smaller side-load APK. The KEEP rules that
