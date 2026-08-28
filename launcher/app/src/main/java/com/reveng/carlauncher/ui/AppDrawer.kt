@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -33,12 +34,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -50,6 +53,8 @@ import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -61,6 +66,7 @@ import com.reveng.carlauncher.AppInfo
 import com.reveng.carlauncher.data.AppOrderStore
 import com.reveng.carlauncher.data.FavoritesStore
 import com.reveng.carlauncher.input.GridFocus // v0.8 SWC navigation
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 import kotlin.math.hypot
 
@@ -114,7 +120,23 @@ fun AppDrawer(
 
     val toggleFavorite: (AppInfo) -> Unit = { app -> scope.launch { favoritesStore.toggle(app.packageName) } }
 
-    Column(modifier = modifier.fillMaxSize()) {
+    // The head unit has no reliable nav-bar Back to close the IME, so dismiss it on every
+    // natural exit from a search: launching an app, scrolling the results, or the IME's own
+    // Search action ([DrawerSearchBar]). The query (and filter) survive dismissal.
+    val keyboard = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
+    val dismissKeyboard: () -> Unit = {
+        keyboard?.hide()
+        focusManager.clearFocus()
+    }
+    val launchApp: (AppInfo) -> Unit = { app ->
+        dismissKeyboard()
+        onLaunch(app)
+    }
+
+    // imePadding: the grid shrinks above the soft keyboard instead of being covered by it
+    // (edge-to-edge window + adjustResize; only 720px of height to work with).
+    Column(modifier = modifier.fillMaxSize().imePadding()) {
         DrawerSearchBar(
             query = query,
             onQueryChange = { query = it },
@@ -124,7 +146,7 @@ fun AppDrawer(
         if (favoriteApps.isNotEmpty()) {
             FavoritesRow(
                 apps = favoriteApps,
-                onLaunch = onLaunch,
+                onLaunch = launchApp,
                 onToggleFavorite = toggleFavorite,
             )
         }
@@ -134,10 +156,11 @@ fun AppDrawer(
             favorites = favorites,
             systemApps = systemApps,
             reorderEnabled = query.isBlank(),
-            onLaunch = onLaunch,
+            onLaunch = launchApp,
             onToggleFavorite = toggleFavorite,
             onReorder = { newOrder -> scope.launch { orderStore.setOrder(newOrder.map { it.packageName }) } },
             onOpenSystem = { showSystem = true },
+            onUserScroll = dismissKeyboard,
             columns = columns, // v0.6 density
             gridFocus = gridFocus, // v0.8
             modifier = Modifier
@@ -149,7 +172,7 @@ fun AppDrawer(
     if (showSystem) {
         SystemFolderDialog(
             systemApps = systemApps,
-            onLaunch = { onLaunch(it); showSystem = false },
+            onLaunch = { launchApp(it); showSystem = false },
             onDismiss = { showSystem = false },
         )
     }
@@ -173,11 +196,15 @@ private fun ReorderableAppGrid(
     onToggleFavorite: (AppInfo) -> Unit,
     onReorder: (List<AppInfo>) -> Unit,
     onOpenSystem: () -> Unit,
+    onUserScroll: () -> Unit = {},
     columns: Int = 0, // v0.6: 0=adaptive, >0=fixed
     gridFocus: GridFocus? = null, // v0.8
     modifier: Modifier = Modifier,
 ) {
     val gridState = rememberLazyGridState()
+    LaunchedEffect(gridState) {
+        snapshotFlow { gridState.isScrollInProgress }.filter { it }.collect { onUserScroll() }
+    }
     // Live, locally-reorderable copy; resets whenever the source list changes (order persisted
     // -> flow re-emits -> new `apps`).
     var items by remember(apps) { mutableStateOf(apps) }
