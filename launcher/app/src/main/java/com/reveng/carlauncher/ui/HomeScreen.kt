@@ -22,6 +22,7 @@ import com.reveng.carlauncher.ui.theme.carShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect // v4.1
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
@@ -52,6 +53,8 @@ import com.reveng.carlauncher.input.LauncherFocus // v0.8
 import com.reveng.carlauncher.input.LocalLauncherFocus // v0.8
 import com.reveng.carlauncher.input.launcherFocusTarget // v0.8
 import com.reveng.carlauncher.media.JellyfinApp // v2.7
+import com.reveng.carlauncher.media.MiniScreenController // v4.1
+import com.reveng.carlauncher.media.MiniScreenState // v4.1
 import com.reveng.carlauncher.media.NowPlayingRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -91,6 +94,7 @@ fun HomeScreen(
     driverSide: DriverSide = DriverSide.LEFT,
     onOpenNotifications: (() -> Unit)? = null, // v2.7
     onOpenContinueWatching: (() -> Unit)? = null, // v2.7
+    miniScreen: MiniScreenController? = null, // v4.1 video mini screen (null keeps previews)
 ) {
     val reverse by carEvents.reverse.collectAsStateSafe(initial = false)
     val media by nowPlaying.state.collectAsStateSafe(initial = null)
@@ -174,6 +178,45 @@ fun HomeScreen(
                     // v0.6: media/climate cards are individually toggleable in Settings.
                     // v0.8: wrap card call-sites in a focus-ring highlight (cards untouched).
                     if (settings.showMedia) {
+                        // v4.1: while a video session is on screen (and the car is parked), the
+                        // media card's slot hosts the video mini screen instead — a freeform
+                        // window positioned over the card by MiniScreenController.
+                        val parkedLock = LocalParkedOnlyLock.current
+                        val miniState by (miniScreen?.state?.collectAsStateSafe(
+                            initial = MiniScreenState.Hidden,
+                        ) ?: remember { mutableStateOf(MiniScreenState.Hidden) })
+                        val userClosed by (miniScreen?.userClosed?.collectAsStateSafe(initial = null)
+                            ?: remember { mutableStateOf<String?>(null) })
+                        val videoNow = media?.takeIf { it.isVideo && it.sourcePackage != null }
+                        val miniWanted = settings.videoMiniScreen &&
+                            miniScreen != null &&
+                            videoNow != null &&
+                            !parkedLock &&
+                            userClosed != videoNow.sourcePackage
+                        var miniBounds by remember { mutableStateOf<android.graphics.Rect?>(null) }
+
+                        // Launch once bounds are known; re-runs on session change. show() is
+                        // idempotent per package, so layout-settling re-reports are harmless.
+                        LaunchedEffect(miniWanted, videoNow?.sourcePackage, miniBounds) {
+                            val b = miniBounds
+                            val pkg = videoNow?.sourcePackage
+                            if (miniWanted && pkg != null && b != null) miniScreen?.show(pkg, b)
+                        }
+                        // Conditions dropped (moving, video ended, toggle off) -> take it down.
+                        LaunchedEffect(miniWanted, miniState) {
+                            if (!miniWanted && miniState is MiniScreenState.Active) {
+                                miniScreen?.dismiss()
+                            }
+                        }
+                        // Session moved on or stopped -> a Close from the driver stops binding.
+                        LaunchedEffect(videoNow?.sourcePackage) {
+                            if (videoNow == null) miniScreen?.clearUserClosed()
+                        }
+                        // Leaving Home (sub-screen, widget toggled off) always removes the window.
+                        DisposableEffect(Unit) {
+                            onDispose { miniScreen?.dismiss() }
+                        }
+
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -184,15 +227,26 @@ fun HomeScreen(
                                 // catches the art / title area.
                                 .clickable(onClick = onOpenMedia),
                         ) {
-                            MediaCard(
-                                now = media,
-                                onPlayPause = nowPlaying::playPause,
-                                onNext = nowPlaying::next,
-                                onPrev = nowPlaying::prev,
-                                onSeek = nowPlaying::seekTo,
-                                onCycleSource = nowPlaying::cycleSession,
-                                modifier = Modifier.fillMaxSize(),
-                            )
+                            if (miniWanted && videoNow != null) {
+                                VideoMiniCard(
+                                    now = videoNow,
+                                    state = miniState,
+                                    onSlotPositioned = { miniBounds = it },
+                                    onExpand = { miniScreen?.expand() },
+                                    onClose = { miniScreen?.dismiss(userClosed = true) },
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            } else {
+                                MediaCard(
+                                    now = media,
+                                    onPlayPause = nowPlaying::playPause,
+                                    onNext = nowPlaying::next,
+                                    onPrev = nowPlaying::prev,
+                                    onSeek = nowPlaying::seekTo,
+                                    onCycleSource = nowPlaying::cycleSession,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
                         }
                     }
                     if (settings.showClimate) {

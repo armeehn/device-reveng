@@ -14,7 +14,6 @@ android {
         minSdk = 33
         targetSdk = 33
         versionCode = 51
-        // Display versions are down-shifted by a factor of 10 (old vX.Y.Z -> v0.X.Y.Z);
         // 1.0.0 is reserved for the polished public release. versionCode keeps climbing normally.
         versionName = "0.4.0.1"
 
