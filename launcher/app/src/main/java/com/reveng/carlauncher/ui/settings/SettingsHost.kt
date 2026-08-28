@@ -187,6 +187,12 @@ fun SettingsHost(
 
             // v2.5 §1.4: the raw SysVar browser is 455 keys of free-text editing over live
             // vehicle config — the most attention-hungry screen in the app, and parked-only.
+            // v0.4.7: dump the live SysVar table to JSON for offline RE.
+            SettingsRoute.SysVarExport -> SysVarExportScreen(
+                controller = controller,
+                onBack = ::pop,
+            )
+
             SettingsRoute.Advanced -> ParkedOnly(
                 feature = "The SysVar browser",
                 onBack = ::pop,
@@ -222,4 +228,5 @@ sealed interface SettingsRoute {
     data object RootTier : SettingsRoute // v2.9
     data object System : SettingsRoute
     data object Advanced : SettingsRoute
+    data object SysVarExport : SettingsRoute // v0.4.7
 }
