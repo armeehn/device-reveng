@@ -1,12 +1,15 @@
 package com.reveng.carlauncher
 
+import android.Manifest // v2.5
 import android.content.Intent
+import android.content.pm.PackageManager // v2.5
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts // v2.5
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.fillMaxSize
@@ -27,6 +30,7 @@ import com.reveng.carlauncher.carlib.RootShell
 import com.reveng.carlauncher.data.CarSettingsController // v1.1 settings suite
 import com.reveng.carlauncher.data.DayNightMode // v0.6
 import com.reveng.carlauncher.data.RadioPresetsStore // v0.9
+import com.reveng.carlauncher.data.SettingKeys // v2.5 touch beep
 import com.reveng.carlauncher.data.SettingsStore // v0.6
 import com.reveng.carlauncher.data.ThemeStore
 import com.reveng.carlauncher.input.LauncherFocus // v0.8 SWC navigation
@@ -34,7 +38,11 @@ import com.reveng.carlauncher.input.LocalLauncherFocus // v0.8
 import com.reveng.carlauncher.input.NavKey // v0.8
 import com.reveng.carlauncher.input.SwcNavigator // v0.8
 import com.reveng.carlauncher.media.NowPlayingRepository
+import com.reveng.carlauncher.ui.CarFeedback // v2.5
 import com.reveng.carlauncher.ui.HomeScreen
+import com.reveng.carlauncher.ui.LocalCarFeedback // v2.5
+import com.reveng.carlauncher.ui.ParkedOnly // v2.5
+import com.reveng.carlauncher.ui.ProvideParkedOnlyLock // v2.5
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -76,6 +84,24 @@ class MainActivity : ComponentActivity() {
     // dispatchKeyEvent) can return to Home from a sub-screen.
     private val screenState = mutableStateOf<Screen>(Screen.Home)
 
+    // v2.5: eyes-free tap confirmation. Held as a field because SWC keys are handled outside
+    // composition (handleNav), and that is the case §1.4 cares about most.
+    private lateinit var carFeedback: CarFeedback
+
+    /**
+     * v2.5: the location grant that lets [com.reveng.carlauncher.carlib.GpsSpeedSource] read road
+     * speed. [CarEvents.register] runs before the user can answer, so its first attempt finds no
+     * permission; this callback starts the source once the answer is yes. A denial is not fatal —
+     * speed stays unknown and the parked-only gate fails open by design.
+     */
+    private val locationPermission = registerForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) {
+            carEvents.startSpeedSource()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -90,6 +116,18 @@ class MainActivity : ComponentActivity() {
         settingsStore = SettingsStore(applicationContext) // v0.6
         radioPresetsStore = RadioPresetsStore(applicationContext, lifecycleScope) // v0.9
         carSettingsController = CarSettingsController(applicationContext, lifecycleScope) // v1.1
+
+        // v2.5: beep follows the vendor Set_TouchBeep SysVar, read fresh at each tap so a change
+        // in the settings suite applies without rebuilding anything.
+        carFeedback = CarFeedback(
+            view = window.decorView,
+            carService = carService,
+            scope = lifecycleScope,
+            beepEnabled = { carSettingsController.getBoolean(SettingKeys.TOUCH_BEEP, false) },
+        )
+
+        // v2.5: ask once for the location permission behind the parked-only gate.
+        requestLocationPermissionIfNeeded()
 
         // v0.8: input source (a) — vendor STEER_WHEEL_INFOR broadcasts as CAR_KEY_* codes.
         lifecycleScope.launch {
@@ -129,8 +167,18 @@ class MainActivity : ComponentActivity() {
             val firstRun by settingsStore.firstRun.collectAsStateWithLifecycle()
             var routed by remember { mutableStateOf(false) }
 
+            // v2.5: the parked-only verdict. Gated features block on MOVING only — UNKNOWN
+            // fails open, see CarEvents.motion.
+            val motion by carEvents.motion.collectAsStateWithLifecycle()
+            val parkedOnlyLock =
+                settings.motionGateEnabled && motion == CarEvents.Motion.MOVING
+
             CarLauncherTheme(theme = activeTheme, night = night) {
-              CompositionLocalProvider(LocalLauncherFocus provides launcherFocus) {
+              CompositionLocalProvider(
+                  LocalLauncherFocus provides launcherFocus,
+                  LocalCarFeedback provides carFeedback, // v2.5
+              ) {
+               ProvideParkedOnlyLock(locked = parkedOnlyLock) { // v2.5
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background,
@@ -213,23 +261,46 @@ class MainActivity : ComponentActivity() {
                                 onBack = { screen = Screen.Home },
                             )
 
-                            is Screen.Editor -> ThemeEditorScreen(
-                                source = s.theme,
-                                night = night,
-                                onSave = {
-                                    themeStore.upsert(it)
-                                    themeStore.setActive(it.id)
-                                    screen = Screen.Themes
-                                },
-                                onCancel = { screen = Screen.Themes },
-                            )
+                            // v2.5 §1.4: colour-picking is fine-grained and attention-heavy —
+                            // parked-only. Gated here rather than inside the editor so the
+                            // editor keeps knowing nothing about motion.
+                            is Screen.Editor -> ParkedOnly(
+                                feature = "The theme editor",
+                                onBack = { screen = Screen.Themes },
+                            ) {
+                                ThemeEditorScreen(
+                                    source = s.theme,
+                                    night = night,
+                                    onSave = {
+                                        themeStore.upsert(it)
+                                        themeStore.setActive(it.id)
+                                        screen = Screen.Themes
+                                    },
+                                    onCancel = { screen = Screen.Themes },
+                                )
+                            }
                         }
                       }
                     }
                 }
+               }
               }
             }
         }
+    }
+
+    /**
+     * v2.5: ask for the location permission that backs the parked-only gate, once, and only when
+     * it is actually missing. Android stops showing the prompt after repeated denials, which is
+     * the correct outcome: the gate then fails open and the launcher stays fully usable.
+     */
+    private fun requestLocationPermissionIfNeeded() {
+        val granted = checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
+        if (granted) {
+            return
+        }
+        locationPermission.launch(Manifest.permission.ACCESS_FINE_LOCATION)
     }
 
     /**
@@ -250,7 +321,17 @@ class MainActivity : ComponentActivity() {
      * focus; directional / CENTER drive the focus ring while on Home; Back/Home return Home from
      * a sub-screen. Returns true when the key was consumed.
      */
-    private fun handleNav(nav: NavKey): Boolean = when (nav) {
+    private fun handleNav(nav: NavKey): Boolean {
+        val consumed = routeNav(nav)
+        // v2.5 §1.4: a wheel press is the one input the driver makes without looking, so confirm
+        // it. Only on consumption — buzzing for a key we ignored would report a lie.
+        if (consumed) {
+            carFeedback.tap()
+        }
+        return consumed
+    }
+
+    private fun routeNav(nav: NavKey): Boolean = when (nav) {
         NavKey.MEDIA_NEXT -> { nowPlaying.next(); true }
         NavKey.MEDIA_PREV -> { nowPlaying.prev(); true }
         NavKey.MEDIA_PLAY_PAUSE -> { nowPlaying.playPause(); true }
