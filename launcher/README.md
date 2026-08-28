@@ -118,14 +118,59 @@ writes), `data/SettingKeys` (curated key catalog), `ui/settings/*` (the reskinne
 firmware naming (the vendor settings APK that holds the value tables isn't in the decompile),
 so each guessed mapping is annotated in-code and the Advanced browser shows the true strings.
 
+## Motion awareness (v2.5)
+
+`CarEvents.speedKmh` is real. The gateway broadcasts no numeric speed
+(`SHOW_CAR_SPEED_EVENT` is a show/hide toggle, CAR_API §1.3), so `carlib/GpsSpeedSource`
+reads it from the GNSS receiver — the one source a normal app can use — smooths the jitter,
+and reverts to unknown after 5 s without a fix rather than reporting a stationary car.
+
+`CarEvents.motion` turns that into the `PARKED` / `MOVING` / `UNKNOWN` verdict behind the
+LAUNCHER_DESIGN §1.4 rules, with an 8 km/h ↑ / 3 km/h ↓ hysteresis band so a car creeping in
+traffic can't flap the gate.
+
+**Unknown fails open.** Blocking on `UNKNOWN` would lock the driver out of their own launcher
+in a garage, an underground car park, or on a unit where the location permission was never
+granted — permanently and with no signal as to why. We only ever fail open with *no* reading;
+any live fix above 3 km/h resolves to `MOVING`.
+
+Parked-only, via the `LocalParkedOnlyLock` composition local (`ui/ParkedOnly.kt`):
+
+- app search and its keyboard (open search closes itself if the car pulls away),
+- the theme editor,
+- the advanced SysVar browser,
+- destructive confirmations (reboot, factory reset).
+
+Settings ▸ Launcher ▸ **Motion gating** toggles enforcement and shows the live speed and
+verdict — needed to tell "gate open because parked" from "gate open because GPS never fixed",
+which look identical from the outside.
+
+Grant the permission with:
+
+```sh
+adb shell pm grant com.reveng.carlauncher android.permission.ACCESS_FINE_LOCATION
+```
+
+### Motion budget
+
+Nothing animates on a loop, and no transition exceeds **400 ms** (today's longest is the 320 ms
+onboarding slide). A moving car is when an animation is most distracting and least noticed, so
+new work stays inside that budget: no `rememberInfiniteTransition`, no `basicMarquee`, and no
+`tween` above 400 ms on a surface that can be on screen while driving.
+
+`ui/CarFeedback.kt` gives eyes-free confirmation on accepted input — haptics plus the car's own
+`beep()` — wired to steering-wheel presses, keyboard keys and dialog buttons. The beep follows
+the vendor's `Set_TouchBeep` preference instead of adding a competing one.
+
 ## Known TODOs
 
 - **`IEventService.aidl`** declares only a subset of methods and its transaction
   **ordinals almost certainly do not match** the real service — regenerate from the
   decompiled `IEventService.java` preserving method order before relying on any call.
 - **`ICallbackfn.aidl`** signature is a placeholder; verify against the device.
-- **Numeric speed** is not broadcast cleanly — `CarEvents.speedKmh` stays `-1` until wired
-  to the CAN frame / GPS / AIDL (CAR_API §1.3 note).
+- **Numeric speed** now comes from GPS (v2.5, above). The gateway still broadcasts none, so
+  decoding the CAN bulk frame (`CAN_BASIC_EVT` / `MCU_CAR_CAN_INFO`) remains the upgrade worth
+  making: it is available at power-on and indoors, where GPS is not.
 - **Reverse camera feed** — `ReverseOverlay` is a black placeholder; embed a `SurfaceView`
   bound to the reverse video input, or host `com.szchoiceway.view.BackCarActivity`.
 - **Climate / radio widgets** — placeholders only; wire `CarAirState` / `ZXW_RADIO_INFO_EVT`.
