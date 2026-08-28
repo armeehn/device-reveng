@@ -140,6 +140,24 @@ class CarEvents(private val appContext: Context) {
          */
         const val MOVING_ABOVE_KMH = 8
         const val PARKED_BELOW_KMH = 3
+
+        /**
+         * Apply the hysteresis band. Note the band's *entry* case: with no previous verdict, a
+         * live fix between [PARKED_BELOW_KMH] and [MOVING_ABOVE_KMH] resolves to [Motion.MOVING],
+         * not PARKED — we can see the car is not stationary, so the gate closes.
+         *
+         * Pure and instance-free, so it sits on the companion where a unit test can reach it
+         * without standing up a Context. `internal`, not public: the verdict is published through
+         * [motion], and a second public entry point would let a consumer read a raw speed past
+         * the smoothing and staleness rules that feed it.
+         */
+        internal fun nextMotion(current: Motion, kmh: Int): Motion = when {
+            kmh < 0 -> Motion.UNKNOWN
+            kmh >= MOVING_ABOVE_KMH -> Motion.MOVING
+            kmh <= PARKED_BELOW_KMH -> Motion.PARKED
+            current == Motion.UNKNOWN -> Motion.MOVING
+            else -> current
+        }
     }
 
     /** A steering-wheel key event decoded from [STEER_WHEEL_INFOR]. */
@@ -310,19 +328,6 @@ class CarEvents(private val appContext: Context) {
     private fun updateSpeed(kmh: Int) {
         _speedKmh.value = kmh
         _motion.value = nextMotion(_motion.value, kmh)
-    }
-
-    /**
-     * Apply the hysteresis band. Note the band's *entry* case: with no previous verdict, a live
-     * fix between [PARKED_BELOW_KMH] and [MOVING_ABOVE_KMH] resolves to [Motion.MOVING], not
-     * PARKED — we can see the car is not stationary, so the gate closes.
-     */
-    private fun nextMotion(current: Motion, kmh: Int): Motion = when {
-        kmh < 0 -> Motion.UNKNOWN
-        kmh >= MOVING_ABOVE_KMH -> Motion.MOVING
-        kmh <= PARKED_BELOW_KMH -> Motion.PARKED
-        current == Motion.UNKNOWN -> Motion.MOVING
-        else -> current
     }
 
     /**
