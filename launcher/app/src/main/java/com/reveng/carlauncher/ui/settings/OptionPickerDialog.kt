@@ -1,5 +1,6 @@
 package com.reveng.carlauncher.ui.settings
 
+import com.reveng.carlauncher.ui.theme.carCard
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -12,7 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
+import com.reveng.carlauncher.ui.theme.carShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
@@ -47,7 +48,8 @@ fun <T> OptionPickerDialog(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(22.dp))
+                .carCard()
+                .clip(carShape(22.dp))
                 .background(MaterialTheme.colorScheme.surface)
                 .padding(vertical = 20.dp),
         ) {
