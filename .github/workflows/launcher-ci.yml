@@ -1,0 +1,60 @@
+name: launcher-ci
+
+# Compile the head-unit launcher on every push/PR that touches it.
+# No test sources exist yet; the release assemble (with R8 + resource
+# shrinking) is the real signal — it's exactly what gets side-loaded.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "launcher/**"
+      - ".github/workflows/launcher-ci.yml"
+  pull_request:
+    paths:
+      - "launcher/**"
+      - ".github/workflows/launcher-ci.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: launcher-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: launcher
+    steps:
+      - uses: actions/checkout@v4
+
+      # Kotlin/AGP toolchain requires JDK 17 (system JDKs newer than 21
+      # break the Kotlin compile — see launcher/README).
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # Gradle + configuration caching keyed off the wrapper/lockstate.
+      - uses: gradle/actions/setup-gradle@v4
+
+      # The runner image ships the Android SDK; AGP resolves it via
+      # ANDROID_HOME and downloads any missing platform/build-tools itself.
+      - name: Build release and debug APKs
+        run: ./gradlew --no-daemon assembleRelease assembleDebug
+
+      - name: Upload release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: carlauncher-release-apk
+          path: launcher/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: carlauncher-debug-apk
+          path: launcher/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
