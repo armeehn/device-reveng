@@ -43,6 +43,11 @@ class AppRepository(private val context: Context) {
         "com.google.android.projection.gearhead", // Android Auto
         "com.google.android.googlequicksearchbox",
         "org.codeaurora.snapcam",           // camera
+        // Zlink phone-projection receiver. It keeps exactly one launcher alias enabled for
+        // whichever protocol is configured (features.launcher.CarPlayActivity today; the
+        // AutoActivity/HiCarActivity/... aliases when the unit is switched), so this surfaces
+        // a single "CarPlay" tile on the main grid rather than the whole vendor suite.
+        "com.zjinnova.zlink",
     )
 
     /** Package prefixes to always push into the System folder regardless of flags. */
@@ -50,7 +55,7 @@ class AppRepository(private val context: Context) {
         "com.szchoiceway.",
         "com.choiceway.",
         "com.lfg.szchoiceway.",
-        "com.zjinnova.",                    // zlink internals (Android Auto/CarPlay handled elsewhere)
+        "com.zjinnova.",                    // zlink internals (com.zjinnova.zlink itself is alwaysShow)
         "com.ivicar.",
         "com.syu.",
         "com.android.atslcarconsole",       // vendor console shell
