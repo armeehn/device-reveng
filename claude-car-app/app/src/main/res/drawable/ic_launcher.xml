@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Sunburst asterisk on warm dark — reads as "Claude" at grid-icon size. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#1F1B16"
+        android:pathData="M14,0 L94,0 A14,14 0 0 1 108,14 L108,94 A14,14 0 0 1 94,108 L14,108 A14,14 0 0 1 0,94 L0,14 A14,14 0 0 1 14,0 Z" />
+    <group android:pivotX="54" android:pivotY="54">
+        <path
+            android:fillColor="#D97757"
+            android:pathData="M50,18 L58,18 L56,46 L76,26 L82,32 L62,52 L90,50 L90,58 L62,56 L82,76 L76,82 L56,62 L58,90 L50,90 L52,62 L32,82 L26,76 L46,56 L18,58 L18,50 L46,52 L26,32 L32,26 L52,46 Z" />
+    </group>
+</vector>
