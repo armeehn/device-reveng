@@ -45,6 +45,12 @@ data class LauncherSettings(
     val showRadio: Boolean = true,
     val showClimate: Boolean = true,
     val showNav: Boolean = true,
+    /**
+     * v4.1 — float a playing video app as a freeform mini window over the home media card.
+     * On by default: it is inert until a video session exists, parked-only via the motion
+     * gate, and fails closed (no window) when freeform support can't be enabled.
+     */
+    val videoMiniScreen: Boolean = true,
     val dayNightMode: DayNightMode = DayNightMode.AUTO,
     /**
      * v2.5 — enforce the LAUNCHER_DESIGN §1.4 parked-only rules. On by default: the gate is a
@@ -148,6 +154,7 @@ class SettingsStore(context: Context) {
                     showRadio = prefs[SHOW_RADIO_KEY] ?: true,
                     showClimate = prefs[SHOW_CLIMATE_KEY] ?: true,
                     showNav = prefs[SHOW_NAV_KEY] ?: true,
+                    videoMiniScreen = prefs[VIDEO_MINI_KEY] ?: true, // v4.1
                     dayNightMode = runCatching {
                         DayNightMode.valueOf(prefs[DAY_NIGHT_MODE_KEY] ?: DayNightMode.AUTO.name)
                     }.getOrDefault(DayNightMode.AUTO),
@@ -182,6 +189,11 @@ class SettingsStore(context: Context) {
     fun setShowRadio(show: Boolean) = scope.launch { ds.edit { it[SHOW_RADIO_KEY] = show } }
     fun setShowClimate(show: Boolean) = scope.launch { ds.edit { it[SHOW_CLIMATE_KEY] = show } }
     fun setShowNav(show: Boolean) = scope.launch { ds.edit { it[SHOW_NAV_KEY] = show } }
+
+    /** v4.1 — the video mini screen on Home. */
+    fun setVideoMiniScreen(enabled: Boolean) = scope.launch {
+        ds.edit { it[VIDEO_MINI_KEY] = enabled }
+    }
 
     fun setDayNightMode(mode: DayNightMode) = scope.launch {
         ds.edit { it[DAY_NIGHT_MODE_KEY] = mode.name }
@@ -241,6 +253,7 @@ class SettingsStore(context: Context) {
         val SHOW_RADIO_KEY = booleanPreferencesKey("show_radio")
         val SHOW_CLIMATE_KEY = booleanPreferencesKey("show_climate")
         val SHOW_NAV_KEY = booleanPreferencesKey("show_nav")
+        val VIDEO_MINI_KEY = booleanPreferencesKey("video_mini_screen") // v4.1
         val DAY_NIGHT_MODE_KEY = stringPreferencesKey("day_night_mode")
         val FIRST_RUN_KEY = booleanPreferencesKey("first_run") // v1.0 onboarding gate
         val MOTION_GATE_KEY = booleanPreferencesKey("motion_gate") // v2.5 parked-only gate
