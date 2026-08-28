@@ -3,10 +3,13 @@ package com.reveng.carlauncher.ui.settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.BrightnessMedium
 import androidx.compose.material.icons.filled.DataObject
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.HealthAndSafety
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.Security // v2.9
@@ -48,6 +51,12 @@ fun SettingsHub(
                 title = "Launcher",
                 subtitle = "Home widgets, grid density, default home, day/night",
                 onClick = { onOpen(SettingsRoute.LauncherPrefs) },
+            )
+            SettingsCategoryCard(
+                icon = Icons.Filled.GridView,
+                title = "App directory",
+                subtitle = "Move apps to Home/System or hide them from the drawer",
+                onClick = { onOpen(SettingsRoute.AppDirectory) },
             )
             SettingsCategoryCard(
                 icon = Icons.Filled.BrightnessMedium,
@@ -102,6 +111,18 @@ fun SettingsHub(
                 title = "Root tier",
                 subtitle = "Protected broadcasts, vendor bars, sole-HOME mode",
                 onClick = { onOpen(SettingsRoute.RootTier) },
+            )
+            SettingsCategoryCard(
+                icon = Icons.Filled.HealthAndSafety,
+                title = "Setup doctor",
+                subtitle = "Check & repair the grants a reinstall drops",
+                onClick = { onOpen(SettingsRoute.SetupDoctor) },
+            )
+            SettingsCategoryCard(
+                icon = Icons.Filled.Backup,
+                title = "Backup & restore",
+                subtitle = "Save & restore themes, layout, profiles",
+                onClick = { onOpen(SettingsRoute.Backup) },
             )
             SettingsCategoryCard(
                 icon = Icons.Filled.Info,

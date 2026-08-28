@@ -79,6 +79,22 @@ fun SettingsHost(
                 controller = controller, // v2.8 raw Sys_CarType next to the mirror override
             )
 
+            // v0.4.2: custom app directory — per-app Home/System/Hidden placement over the drawer.
+            SettingsRoute.AppDirectory -> AppDirectoryScreen(
+                onBack = ::pop,
+            )
+
+            // v0.4.2: setup doctor — probes the grants a reinstall drops and repairs them (root).
+            SettingsRoute.SetupDoctor -> SetupDoctorScreen(
+                controller = controller,
+                onBack = ::pop,
+            )
+
+            // v0.4.2: back up / restore the whole launcher state (DataStore file snapshot).
+            SettingsRoute.Backup -> BackupSettingsScreen(
+                onBack = ::pop,
+            )
+
             SettingsRoute.Display -> DisplaySettingsScreen(
                 controller = controller,
                 carService = carService,
@@ -188,6 +204,9 @@ fun SettingsHost(
 sealed interface SettingsRoute {
     data object Hub : SettingsRoute
     data object LauncherPrefs : SettingsRoute
+    data object AppDirectory : SettingsRoute // v0.4.2
+    data object SetupDoctor : SettingsRoute // v0.4.2
+    data object Backup : SettingsRoute // v0.4.2
     data object Display : SettingsRoute
     data object ReverseCamera : SettingsRoute
     data object Radar : SettingsRoute

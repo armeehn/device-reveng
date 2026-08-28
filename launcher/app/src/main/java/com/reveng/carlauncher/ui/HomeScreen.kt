@@ -22,11 +22,13 @@ import com.reveng.carlauncher.ui.theme.carShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect // v4.1
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,6 +36,7 @@ import androidx.compose.foundation.focusGroup
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -44,14 +47,19 @@ import com.reveng.carlauncher.AppRepository
 import com.reveng.carlauncher.R
 import com.reveng.carlauncher.carlib.CarEvents
 import com.reveng.carlauncher.carlib.CarService
+import com.reveng.carlauncher.data.AppDirectoryStore // v0.4.2 custom app directory
 import com.reveng.carlauncher.data.DriverSide // v2.8
 import com.reveng.carlauncher.data.LauncherSettings // v0.6
+import com.reveng.carlauncher.data.Placement // v0.4.2
+import com.reveng.carlauncher.data.effectivePlacement // v0.4.2
 import com.reveng.carlauncher.data.SettingsStore // v0.6
 import com.reveng.carlauncher.input.FocusTarget // v0.8 SWC navigation
 import com.reveng.carlauncher.input.LauncherFocus // v0.8
 import com.reveng.carlauncher.input.LocalLauncherFocus // v0.8
 import com.reveng.carlauncher.input.launcherFocusTarget // v0.8
 import com.reveng.carlauncher.media.JellyfinApp // v2.7
+import com.reveng.carlauncher.media.MiniScreenController // v4.1
+import com.reveng.carlauncher.media.MiniScreenState // v4.1
 import com.reveng.carlauncher.media.NowPlayingRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -91,6 +99,7 @@ fun HomeScreen(
     driverSide: DriverSide = DriverSide.LEFT,
     onOpenNotifications: (() -> Unit)? = null, // v2.7
     onOpenContinueWatching: (() -> Unit)? = null, // v2.7
+    miniScreen: MiniScreenController? = null, // v4.1 video mini screen (null keeps previews)
 ) {
     val reverse by carEvents.reverse.collectAsStateSafe(initial = false)
     val media by nowPlaying.state.collectAsStateSafe(initial = null)
@@ -103,8 +112,19 @@ fun HomeScreen(
     LaunchedEffect(Unit) {
         apps = withContext(Dispatchers.IO) { appRepository.loadApps() }
     }
-    val userApps = apps.filter { !it.isSystem }
-    val systemApps = apps.filter { it.isSystem }
+
+    // v0.4.2 custom app directory: the user's per-app placement overrides the built-in
+    // user/system classification — pull a misclassified app to Home, tuck one into System, or
+    // hide it entirely. Absent override falls back to AppInfo.isSystem.
+    val appContext = LocalContext.current.applicationContext
+    val dirScope = rememberCoroutineScope()
+    val appDirectoryStore = remember { AppDirectoryStore(appContext, dirScope) }
+    val placements by appDirectoryStore.placements.collectAsStateSafe(initial = emptyMap())
+    // One pass: resolve each app's effective placement once and group. HIDDEN apps land in neither
+    // list, so they simply fall out.
+    val byPlacement = remember(apps, placements) { apps.groupBy { it.effectivePlacement(placements) } }
+    val userApps = byPlacement[Placement.HOME].orEmpty()
+    val systemApps = byPlacement[Placement.SYSTEM].orEmpty()
 
     // v0.8: the roving focus ring shared with the SWC / DPAD key dispatcher (MainActivity).
     val focus = LocalLauncherFocus.current
@@ -174,6 +194,45 @@ fun HomeScreen(
                     // v0.6: media/climate cards are individually toggleable in Settings.
                     // v0.8: wrap card call-sites in a focus-ring highlight (cards untouched).
                     if (settings.showMedia) {
+                        // v4.1: while a video session is on screen (and the car is parked), the
+                        // media card's slot hosts the video mini screen instead — a freeform
+                        // window positioned over the card by MiniScreenController.
+                        val parkedLock = LocalParkedOnlyLock.current
+                        val miniState by (miniScreen?.state?.collectAsStateSafe(
+                            initial = MiniScreenState.Hidden,
+                        ) ?: remember { mutableStateOf(MiniScreenState.Hidden) })
+                        val userClosed by (miniScreen?.userClosed?.collectAsStateSafe(initial = null)
+                            ?: remember { mutableStateOf<String?>(null) })
+                        val videoNow = media?.takeIf { it.isVideo && it.sourcePackage != null }
+                        val miniWanted = settings.videoMiniScreen &&
+                            miniScreen != null &&
+                            videoNow != null &&
+                            !parkedLock &&
+                            userClosed != videoNow.sourcePackage
+                        var miniBounds by remember { mutableStateOf<android.graphics.Rect?>(null) }
+
+                        // Launch once bounds are known; re-runs on session change. show() is
+                        // idempotent per package, so layout-settling re-reports are harmless.
+                        LaunchedEffect(miniWanted, videoNow?.sourcePackage, miniBounds) {
+                            val b = miniBounds
+                            val pkg = videoNow?.sourcePackage
+                            if (miniWanted && pkg != null && b != null) miniScreen?.show(pkg, b)
+                        }
+                        // Conditions dropped (moving, video ended, toggle off) -> take it down.
+                        LaunchedEffect(miniWanted, miniState) {
+                            if (!miniWanted && miniState is MiniScreenState.Active) {
+                                miniScreen?.dismiss()
+                            }
+                        }
+                        // Session moved on or stopped -> a Close from the driver stops binding.
+                        LaunchedEffect(videoNow?.sourcePackage) {
+                            if (videoNow == null) miniScreen?.clearUserClosed()
+                        }
+                        // Leaving Home (sub-screen, widget toggled off) always removes the window.
+                        DisposableEffect(Unit) {
+                            onDispose { miniScreen?.dismiss() }
+                        }
+
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -184,15 +243,26 @@ fun HomeScreen(
                                 // catches the art / title area.
                                 .clickable(onClick = onOpenMedia),
                         ) {
-                            MediaCard(
-                                now = media,
-                                onPlayPause = nowPlaying::playPause,
-                                onNext = nowPlaying::next,
-                                onPrev = nowPlaying::prev,
-                                onSeek = nowPlaying::seekTo,
-                                onCycleSource = nowPlaying::cycleSession,
-                                modifier = Modifier.fillMaxSize(),
-                            )
+                            if (miniWanted && videoNow != null) {
+                                VideoMiniCard(
+                                    now = videoNow,
+                                    state = miniState,
+                                    onSlotPositioned = { miniBounds = it },
+                                    onExpand = { miniScreen?.expand() },
+                                    onClose = { miniScreen?.dismiss(userClosed = true) },
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            } else {
+                                MediaCard(
+                                    now = media,
+                                    onPlayPause = nowPlaying::playPause,
+                                    onNext = nowPlaying::next,
+                                    onPrev = nowPlaying::prev,
+                                    onSeek = nowPlaying::seekTo,
+                                    onCycleSource = nowPlaying::cycleSession,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
                         }
                     }
                     if (settings.showClimate) {

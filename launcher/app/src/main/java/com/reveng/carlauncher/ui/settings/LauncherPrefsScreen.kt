@@ -129,6 +129,31 @@ fun LauncherPrefsScreen(
             ToggleSetting("Radio card", settings.showRadio, settingsStore::setShowRadio)
             ToggleSetting("Climate readout", settings.showClimate, settingsStore::setShowClimate)
             ToggleSetting("Navigation", settings.showNav, settingsStore::setShowNav)
+            ToggleSetting(
+                label = "Video mini screen",
+                description = if (rootAvailable)
+                    "When a video app is playing, float it as a small window over the " +
+                        "media card on Home. Parked only."
+                else "Needs root — enabling freeform windows on this build requires it.",
+                checked = settings.videoMiniScreen,
+                onChange = settingsStore::setVideoMiniScreen,
+                enabled = rootAvailable,
+            )
+        }
+
+        // v0.4.2: text-to-speech. Off by default — a launcher that talks unasked is worse
+        // than silent (LAUNCHER_DESIGN eyes-free posture; pairs with the car's own beep feedback).
+        SettingsSection(title = "Read aloud") {
+            ToggleSetting(
+                "Read now-playing aloud",
+                settings.readNowPlaying,
+                settingsStore::setReadNowPlaying,
+            )
+            ToggleSetting(
+                "Read notifications aloud",
+                settings.readNotifications,
+                settingsStore::setReadNotifications,
+            )
         }
 
         SettingsSection(title = "Top bar & shade") {

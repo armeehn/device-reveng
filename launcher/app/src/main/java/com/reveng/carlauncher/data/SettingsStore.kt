@@ -45,6 +45,12 @@ data class LauncherSettings(
     val showRadio: Boolean = true,
     val showClimate: Boolean = true,
     val showNav: Boolean = true,
+    /**
+     * v4.1 — float a playing video app as a freeform mini window over the home media card.
+     * On by default: it is inert until a video session exists, parked-only via the motion
+     * gate, and fails closed (no window) when freeform support can't be enabled.
+     */
+    val videoMiniScreen: Boolean = true,
     val dayNightMode: DayNightMode = DayNightMode.AUTO,
     /**
      * v2.5 — enforce the LAUNCHER_DESIGN §1.4 parked-only rules. On by default: the gate is a
@@ -85,6 +91,10 @@ data class LauncherSettings(
     val nightStartHour: Int = DEFAULT_NIGHT_START_HOUR,
     /** Hour (0-23) the clock fallback calls day again. */
     val nightEndHour: Int = DEFAULT_NIGHT_END_HOUR,
+    /** v0.4.2 — speak the now-playing track aloud (TTS). Off by default. */
+    val readNowPlaying: Boolean = false,
+    /** v0.4.2 — speak newly-arrived shelf notifications aloud (TTS). Off by default. */
+    val readNotifications: Boolean = false,
 ) {
     companion object {
         /** 0 = adaptive/auto sizing; otherwise a fixed column count. */
@@ -144,6 +154,7 @@ class SettingsStore(context: Context) {
                     showRadio = prefs[SHOW_RADIO_KEY] ?: true,
                     showClimate = prefs[SHOW_CLIMATE_KEY] ?: true,
                     showNav = prefs[SHOW_NAV_KEY] ?: true,
+                    videoMiniScreen = prefs[VIDEO_MINI_KEY] ?: true, // v4.1
                     dayNightMode = runCatching {
                         DayNightMode.valueOf(prefs[DAY_NIGHT_MODE_KEY] ?: DayNightMode.AUTO.name)
                     }.getOrDefault(DayNightMode.AUTO),
@@ -160,6 +171,8 @@ class SettingsStore(context: Context) {
                         ?: LauncherSettings.DEFAULT_NIGHT_START_HOUR,
                     nightEndHour = prefs[NIGHT_END_KEY]
                         ?: LauncherSettings.DEFAULT_NIGHT_END_HOUR,
+                    readNowPlaying = prefs[READ_NOW_PLAYING_KEY] ?: false, // v0.4.2
+                    readNotifications = prefs[READ_NOTIFICATIONS_KEY] ?: false, // v0.4.2
                 )
             }
             .stateIn(scope, SharingStarted.Eagerly, LauncherSettings())
@@ -176,6 +189,11 @@ class SettingsStore(context: Context) {
     fun setShowRadio(show: Boolean) = scope.launch { ds.edit { it[SHOW_RADIO_KEY] = show } }
     fun setShowClimate(show: Boolean) = scope.launch { ds.edit { it[SHOW_CLIMATE_KEY] = show } }
     fun setShowNav(show: Boolean) = scope.launch { ds.edit { it[SHOW_NAV_KEY] = show } }
+
+    /** v4.1 — the video mini screen on Home. */
+    fun setVideoMiniScreen(enabled: Boolean) = scope.launch {
+        ds.edit { it[VIDEO_MINI_KEY] = enabled }
+    }
 
     fun setDayNightMode(mode: DayNightMode) = scope.launch {
         ds.edit { it[DAY_NIGHT_MODE_KEY] = mode.name }
@@ -218,6 +236,16 @@ class SettingsStore(context: Context) {
     private fun clampHour(hour: Int): Int =
         hour.coerceIn(LauncherSettings.MIN_HOUR, LauncherSettings.MAX_HOUR)
 
+    /** v0.4.2 — speak the now-playing track aloud on change. */
+    fun setReadNowPlaying(enabled: Boolean) = scope.launch {
+        ds.edit { it[READ_NOW_PLAYING_KEY] = enabled }
+    }
+
+    /** v0.4.2 — speak newly-arrived shelf notifications aloud. */
+    fun setReadNotifications(enabled: Boolean) = scope.launch {
+        ds.edit { it[READ_NOTIFICATIONS_KEY] = enabled }
+    }
+
 
     private companion object {
         val GRID_COLUMNS_KEY = intPreferencesKey("grid_columns")
@@ -225,6 +253,7 @@ class SettingsStore(context: Context) {
         val SHOW_RADIO_KEY = booleanPreferencesKey("show_radio")
         val SHOW_CLIMATE_KEY = booleanPreferencesKey("show_climate")
         val SHOW_NAV_KEY = booleanPreferencesKey("show_nav")
+        val VIDEO_MINI_KEY = booleanPreferencesKey("video_mini_screen") // v4.1
         val DAY_NIGHT_MODE_KEY = stringPreferencesKey("day_night_mode")
         val FIRST_RUN_KEY = booleanPreferencesKey("first_run") // v1.0 onboarding gate
         val MOTION_GATE_KEY = booleanPreferencesKey("motion_gate") // v2.5 parked-only gate
@@ -235,5 +264,7 @@ class SettingsStore(context: Context) {
         val CLOCK_FALLBACK_KEY = booleanPreferencesKey("clock_fallback") // v2.7
         val NIGHT_START_KEY = intPreferencesKey("night_start_hour") // v2.7
         val NIGHT_END_KEY = intPreferencesKey("night_end_hour") // v2.7
+        val READ_NOW_PLAYING_KEY = booleanPreferencesKey("read_now_playing") // v0.4.2 TTS
+        val READ_NOTIFICATIONS_KEY = booleanPreferencesKey("read_notifications") // v0.4.2 TTS
     }
 }
