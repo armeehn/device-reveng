@@ -120,6 +120,18 @@ class CarService(private val appContext: Context) {
     fun isMuteOn(): Boolean = call { IsMuteOn() } ?: false
     fun getMcuVer(): String? = call { getMCUVer() }
 
+    // ---- v2.6: vendor source identity (CAR_API §3.2) -----------------------
+    /**
+     * The vendor's current source title (getValidModeTitleInfor, ordinal 63) — "Bluetooth",
+     * "USB", the built-in player, etc.
+     *
+     * Read-only on purpose. Switching sources is `sendMode(int, boolean)` (ordinal 1, confirmed),
+     * but the *value table* for that int appears nowhere in the decompile, so MediaScreen shows
+     * the vendor's source rather than offering to change it: sending an unverified opcode would
+     * put the head unit into an unknown mode with no way to predict which.
+     */
+    fun getValidModeTitle(): String? = call { getValidModeTitleInfor() }
+
     // ---- v2.0: System / About (CAR_API §3.2) -------------------------------
     /** MCU firmware version (getMCUVer, ordinal 32). */
     fun getMcuVersion(): String? = call { getMCUVer() }
@@ -164,6 +176,26 @@ class CarService(private val appContext: Context) {
     // v1.7 — RDS/TA status getters (AIDL ordinals 16 / 21). Read-only: no AIDL setter exists.
     fun getRadioRds(): Boolean? = call { getRadioRDSState() }
     fun getRadioTa(): Boolean? = call { getRadioTAState() }
+
+    // ---- v2.6: the rest of the tuner status surface -------------------------
+    // All getters. The AIDL has no radio setters beyond sendRadioKey/sendUserFreq, so RadioScreen
+    // reports these and cannot toggle them.
+    //
+    // ⚠ There is NO radio-text API. The roadmap asked for "RDS text", but the 144-method AIDL
+    // table contains no PS (station name) or RT (radio text) getter — only the on/off states
+    // below plus the programme-TYPE name, which is a genre ("Pop Music"), not a station. The
+    // ZXW_RADIO_INFO_EVT broadcast may carry more, but only its action string was recovered from
+    // the decompile: no sender was traced and no extra beyond a frequency one is named, so its
+    // payload is unknown. RadioScreen therefore shows the real indicator set and not a scroller
+    // it cannot fill.
+    /** Alternative Frequencies on/off (getRadioAFState, ordinal 20). */
+    fun getRadioAf(): Boolean? = call { getRadioAFState() }
+    /** Traffic Programme icon state (getRadioTPIconState, ordinal 27). */
+    fun getRadioTp(): Boolean? = call { getRadioTPIconState() }
+    /** Stereo icon state (getRadioSteroIconState, ordinal 26 — vendor's spelling). */
+    fun getRadioStereo(): Boolean? = call { getRadioSteroIconState() }
+    /** Programme-type *genre* name (getRadioPTYName, ordinal 19). Not the station name. */
+    fun getRadioPtyName(): String? = call { getRadioPTYName() }
 
     // ---- v1.5: Audio / EQ (CAR_API §3.2; ordinals confirmed in AIDL_ORDINALS.md) --------
     /** Current EQ preset index (getEQMode, ordinal 55). */

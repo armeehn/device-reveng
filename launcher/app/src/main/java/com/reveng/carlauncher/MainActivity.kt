@@ -1,12 +1,15 @@
 package com.reveng.carlauncher
 
+import android.Manifest // v2.5
 import android.content.Intent
+import android.content.pm.PackageManager // v2.5
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts // v2.5
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,6 +19,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState // v2.6
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -27,19 +31,30 @@ import com.reveng.carlauncher.carlib.RootShell
 import com.reveng.carlauncher.data.CarSettingsController // v1.1 settings suite
 import com.reveng.carlauncher.data.DayNightMode // v0.6
 import com.reveng.carlauncher.data.RadioPresetsStore // v0.9
+import com.reveng.carlauncher.data.SettingKeys // v2.5 touch beep
 import com.reveng.carlauncher.data.SettingsStore // v0.6
+import com.reveng.carlauncher.data.SystemChrome // v2.5
 import com.reveng.carlauncher.data.ThemeStore
 import com.reveng.carlauncher.input.LauncherFocus // v0.8 SWC navigation
 import com.reveng.carlauncher.input.LocalLauncherFocus // v0.8
 import com.reveng.carlauncher.input.NavKey // v0.8
 import com.reveng.carlauncher.input.SwcNavigator // v0.8
 import com.reveng.carlauncher.media.NowPlayingRepository
+import com.reveng.carlauncher.ui.CarFeedback // v2.5
 import com.reveng.carlauncher.ui.HomeScreen
+import com.reveng.carlauncher.ui.LocalCarFeedback // v2.5
+import com.reveng.carlauncher.ui.MediaScreen // v2.6
+import com.reveng.carlauncher.ui.ParkedOnly // v2.5
+import com.reveng.carlauncher.ui.ProvideParkedOnlyLock // v2.5
+import com.reveng.carlauncher.ui.ShadeOverlay // v2.5 shade
+import com.reveng.carlauncher.ui.RadioScreen // v2.6
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay // v2.6
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.reveng.carlauncher.ui.OnboardingScreen // v1.0
 import com.reveng.carlauncher.ui.settings.SettingsHost // v1.1 settings suite
+import com.reveng.carlauncher.ui.settings.SettingsRoute
 import com.reveng.carlauncher.ui.ThemeEditorScreen
 import com.reveng.carlauncher.ui.ThemesScreen
 import com.reveng.carlauncher.ui.theme.CarLauncherTheme
@@ -75,6 +90,24 @@ class MainActivity : ComponentActivity() {
     // dispatchKeyEvent) can return to Home from a sub-screen.
     private val screenState = mutableStateOf<Screen>(Screen.Home)
 
+    // v2.5: eyes-free tap confirmation. Held as a field because SWC keys are handled outside
+    // composition (handleNav), and that is the case §1.4 cares about most.
+    private lateinit var carFeedback: CarFeedback
+
+    /**
+     * v2.5: the location grant that lets [com.reveng.carlauncher.carlib.GpsSpeedSource] read road
+     * speed. [CarEvents.register] runs before the user can answer, so its first attempt finds no
+     * permission; this callback starts the source once the answer is yes. A denial is not fatal —
+     * speed stays unknown and the parked-only gate fails open by design.
+     */
+    private val locationPermission = registerForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) {
+            carEvents.startSpeedSource()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -89,6 +122,18 @@ class MainActivity : ComponentActivity() {
         settingsStore = SettingsStore(applicationContext) // v0.6
         radioPresetsStore = RadioPresetsStore(applicationContext, lifecycleScope) // v0.9
         carSettingsController = CarSettingsController(applicationContext, lifecycleScope) // v1.1
+
+        // v2.5: beep follows the vendor Set_TouchBeep SysVar, read fresh at each tap so a change
+        // in the settings suite applies without rebuilding anything.
+        carFeedback = CarFeedback(
+            view = window.decorView,
+            carService = carService,
+            scope = lifecycleScope,
+            beepEnabled = { carSettingsController.getBoolean(SettingKeys.TOUCH_BEEP, false) },
+        )
+
+        // v2.5: ask once for the location permission behind the parked-only gate.
+        requestLocationPermissionIfNeeded()
 
         // v0.8: input source (a) — vendor STEER_WHEEL_INFOR broadcasts as CAR_KEY_* codes.
         lifecycleScope.launch {
@@ -117,6 +162,15 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
+            // v2.5: apply the vendor-bar suppression choice. Keyed on the setting so a toggle
+            // takes effect at once; also re-asserted on every start because the `cmd statusbar`
+            // half of the suppression is runtime-only and lost when SystemUI restarts (reboot).
+            LaunchedEffect(settings.replaceSystemBars) {
+                withContext(Dispatchers.IO) {
+                    SystemChrome.apply(settings.replaceSystemBars)
+                }
+            }
+
             val activeTheme by themeStore.activeTheme.collectAsStateWithLifecycle()
             val allThemes by themeStore.allThemes.collectAsStateWithLifecycle()
 
@@ -128,8 +182,37 @@ class MainActivity : ComponentActivity() {
             val firstRun by settingsStore.firstRun.collectAsStateWithLifecycle()
             var routed by remember { mutableStateOf(false) }
 
+            // v2.5: the parked-only verdict. Gated features block on MOVING only — UNKNOWN
+            // fails open, see CarEvents.motion.
+            val motion by carEvents.motion.collectAsStateWithLifecycle()
+            val parkedOnlyLock =
+                settings.motionGateEnabled && motion == CarEvents.Motion.MOVING
+
+            // v2.6: the vendor's current source ("Bluetooth", "USB", …), polled off the main
+            // thread — a blocking AIDL read in a composition body once spun a main-thread IPC
+            // recomposition loop (see the incident note in RadioSettingsScreen).
+            val vendorSource by produceState<String?>(initialValue = null) {
+                while (true) {
+                    value = withContext(Dispatchers.IO) { carService.getValidModeTitle() }
+                    delay(VENDOR_SOURCE_POLL_MS)
+                }
+            }
+
+            // v2.6: the vendor's own radio presets, raw. Read-only — see RadioScreen for why we
+            // never write these back.
+            val sysVars by carSettingsController.snapshot.collectAsStateWithLifecycle()
+            val vendorPresets = remember(sysVars) {
+                (0 until VENDOR_PRESET_SLOTS)
+                    .mapNotNull { slot -> sysVars["${SettingKeys.RDO_FAVORITE_PREFIX}$slot"] }
+                    .filter { it.isNotBlank() }
+            }
+
             CarLauncherTheme(theme = activeTheme, night = night) {
-              CompositionLocalProvider(LocalLauncherFocus provides launcherFocus) {
+              CompositionLocalProvider(
+                  LocalLauncherFocus provides launcherFocus,
+                  LocalCarFeedback provides carFeedback, // v2.5
+              ) {
+               ProvideParkedOnlyLock(locked = parkedOnlyLock) { // v2.5
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background,
@@ -165,26 +248,66 @@ class MainActivity : ComponentActivity() {
                                 },
                             )
 
-                            Screen.Home -> HomeScreen(
-                                carEvents = carEvents,
+                            // v2.5: wrap Home in the launcher's own swipe-from-top shade.
+                            Screen.Home -> ShadeOverlay(
                                 carService = carService,
-                                appRepository = appRepository,
-                                nowPlaying = nowPlaying,
-                                onOpenThemes = { screen = Screen.Themes },
-                                // v0.6: wire settings + a Settings-screen entry point.
                                 settingsStore = settingsStore,
-                                onOpenSettings = { screen = Screen.Settings },
-                                radioPresetsStore = radioPresetsStore, // v0.9 Radio 2.0
+                                enabled = settings.shadeEnabled, // v2.5 shade
+                            ) {
+                                HomeScreen(
+                                    carEvents = carEvents,
+                                    carService = carService,
+                                    appRepository = appRepository,
+                                    nowPlaying = nowPlaying,
+                                    onOpenThemes = { screen = Screen.Themes },
+                                    // v0.6: wire settings + a Settings-screen entry point.
+                                    settingsStore = settingsStore,
+                                    onOpenSettings = { screen = Screen.Settings() },
+                                    radioPresetsStore = radioPresetsStore, // v0.9 Radio 2.0
+                                    // Status-bar power chip deep-links to Power & sleep.
+                                    onOpenPowerSettings = {
+                                        screen = Screen.Settings(SettingsRoute.Power)
+                                    },
+                                    // v2.6: the glance cards deep-link into their full screens.
+                                    onOpenMedia = { screen = Screen.Media },
+                                    onOpenRadio = { screen = Screen.Radio },
+                                )
+                            }
+
+                            // v2.6: the full media player (§3.3).
+                            Screen.Media -> {
+                                val now by nowPlaying.state.collectAsStateWithLifecycle()
+                                val sources by nowPlaying.sources.collectAsStateWithLifecycle()
+                                MediaScreen(
+                                    now = now,
+                                    sources = sources,
+                                    onPlayPause = nowPlaying::playPause,
+                                    onNext = nowPlaying::next,
+                                    onPrev = nowPlaying::prev,
+                                    onSeek = nowPlaying::seekTo,
+                                    onSelectSource = nowPlaying::selectSession,
+                                    onBack = { screen = Screen.Home },
+                                    vendorSource = vendorSource,
+                                )
+                            }
+
+                            // v2.6: the full tuner (§3.4).
+                            Screen.Radio -> RadioScreen(
+                                carService = carService,
+                                presetsStore = radioPresetsStore,
+                                onBack = { screen = Screen.Home },
+                                vendorPresets = vendorPresets,
                             )
 
                             // v1.1: full settings suite — categorized, reskinned vendor mirror.
-                            Screen.Settings -> SettingsHost(
+                            is Screen.Settings -> SettingsHost(
                                 settingsStore = settingsStore,
                                 controller = carSettingsController,
                                 carService = carService,
                                 carEvents = carEvents,
                                 radioPresetsStore = radioPresetsStore,
                                 onExit = { screen = Screen.Home },
+                                initialRoute = s.initialRoute,
                             )
 
                             Screen.Themes -> ThemesScreen(
@@ -207,23 +330,46 @@ class MainActivity : ComponentActivity() {
                                 onBack = { screen = Screen.Home },
                             )
 
-                            is Screen.Editor -> ThemeEditorScreen(
-                                source = s.theme,
-                                night = night,
-                                onSave = {
-                                    themeStore.upsert(it)
-                                    themeStore.setActive(it.id)
-                                    screen = Screen.Themes
-                                },
-                                onCancel = { screen = Screen.Themes },
-                            )
+                            // v2.5 §1.4: colour-picking is fine-grained and attention-heavy —
+                            // parked-only. Gated here rather than inside the editor so the
+                            // editor keeps knowing nothing about motion.
+                            is Screen.Editor -> ParkedOnly(
+                                feature = "The theme editor",
+                                onBack = { screen = Screen.Themes },
+                            ) {
+                                ThemeEditorScreen(
+                                    source = s.theme,
+                                    night = night,
+                                    onSave = {
+                                        themeStore.upsert(it)
+                                        themeStore.setActive(it.id)
+                                        screen = Screen.Themes
+                                    },
+                                    onCancel = { screen = Screen.Themes },
+                                )
+                            }
                         }
                       }
                     }
                 }
+               }
               }
             }
         }
+    }
+
+    /**
+     * v2.5: ask for the location permission that backs the parked-only gate, once, and only when
+     * it is actually missing. Android stops showing the prompt after repeated denials, which is
+     * the correct outcome: the gate then fails open and the launcher stays fully usable.
+     */
+    private fun requestLocationPermissionIfNeeded() {
+        val granted = checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
+        if (granted) {
+            return
+        }
+        locationPermission.launch(Manifest.permission.ACCESS_FINE_LOCATION)
     }
 
     /**
@@ -244,10 +390,32 @@ class MainActivity : ComponentActivity() {
      * focus; directional / CENTER drive the focus ring while on Home; Back/Home return Home from
      * a sub-screen. Returns true when the key was consumed.
      */
-    private fun handleNav(nav: NavKey): Boolean = when (nav) {
+    private fun handleNav(nav: NavKey): Boolean {
+        val consumed = routeNav(nav)
+        // v2.5 §1.4: a wheel press is the one input the driver makes without looking, so confirm
+        // it. Only on consumption — buzzing for a key we ignored would report a lie.
+        if (consumed) {
+            carFeedback.tap()
+        }
+        return consumed
+    }
+
+    private fun routeNav(nav: NavKey): Boolean = when (nav) {
         NavKey.MEDIA_NEXT -> { nowPlaying.next(); true }
         NavKey.MEDIA_PREV -> { nowPlaying.prev(); true }
         NavKey.MEDIA_PLAY_PAUSE -> { nowPlaying.playPause(); true }
+        // v2.6: the wheel's source keys open the full screens. A second press of MEDIA while
+        // already there toggles playback, so the transport that key used to give is still one
+        // press away rather than lost.
+        NavKey.OPEN_MEDIA -> {
+            if (screenState.value == Screen.Media) {
+                nowPlaying.playPause()
+            } else {
+                screenState.value = Screen.Media
+            }
+            true
+        }
+        NavKey.OPEN_RADIO -> { screenState.value = Screen.Radio; true }
         NavKey.HOME -> {
             screenState.value = Screen.Home
             launcherFocus.reset()
@@ -258,8 +426,9 @@ class MainActivity : ComponentActivity() {
             // v1.1: Settings owns its own back-stack (SettingsHost). Route Back through the
             // OnBackPressedDispatcher so its BackHandler pops one level (and exits to Home only
             // from the hub) instead of jumping straight Home from a deep settings screen.
-            Screen.Settings -> { onBackPressedDispatcher.onBackPressed(); true }
-            else -> { screenState.value = Screen.Home; true } // Themes / Editor -> Home
+            is Screen.Settings -> { onBackPressedDispatcher.onBackPressed(); true }
+            // Themes / Editor / Media / Radio are flat top-level screens -> straight Home.
+            else -> { screenState.value = Screen.Home; true }
         }
         NavKey.CENTER, NavKey.UP, NavKey.DOWN, NavKey.LEFT, NavKey.RIGHT ->
             if (screenState.value == Screen.Home) launcherFocus.onKey(nav) else false
@@ -307,7 +476,16 @@ class MainActivity : ComponentActivity() {
         data object Onboarding : Screen // v1.0 first-run flow
         data object Home : Screen
         data object Themes : Screen
-        data object Settings : Screen // v0.6
+        // v0.6; the optional route deep-links into a settings page (status-bar power chip).
+        data class Settings(val initialRoute: SettingsRoute? = null) : Screen
+        data object Media : Screen // v2.6 full media player (§3.3)
+        data object Radio : Screen // v2.6 full tuner (§3.4)
         data class Editor(val theme: CarTheme) : Screen
     }
 }
+
+/** v2.6 — the vendor source changes only when the driver changes it; polling it is a courtesy. */
+private const val VENDOR_SOURCE_POLL_MS = 5_000L
+
+/** The vendor stores exactly six radio favourites: `Rdo_MyFavorite0..5` (CAR_API §2.3). */
+private const val VENDOR_PRESET_SLOTS = 6

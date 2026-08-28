@@ -13,4 +13,26 @@
     -->
     <uses-permission android:name="com.szchoiceway.permission.broadcast" />
 
+    <!--
+      v2.5 ACCESS_FINE_LOCATION: GpsSpeedSource reads road speed from the GPS receiver, which is
+      the only numeric speed a normal app can obtain (the gateway broadcasts none — CAR_API
+      §1.3). It backs the LAUNCHER_DESIGN §1.4 parked-only gate, so it is declared here beside
+      the code that uses it and merged into the app manifest.
+
+      It is a runtime permission: MainActivity asks for it once. On this rooted unit it can also
+      be pre-granted with
+        `pm grant com.reveng.carlauncher android.permission.ACCESS_FINE_LOCATION`.
+      Denied, speed simply stays unknown and the gate fails open by design.
+
+      The head unit has no cell radio, so COARSE alone would not help: only the GNSS chip
+      produces a velocity, and it needs FINE.
+    -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+
+    <!--
+      The unit ships a GNSS receiver, but a missing one must not make the APK uninstallable:
+      GpsSpeedSource degrades to "speed unknown" on its own.
+    -->
+    <uses-feature android:name="android.hardware.location.gps" android:required="false" />
+
 </manifest>
