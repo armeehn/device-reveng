@@ -7,6 +7,7 @@ import androidx.compose.material.icons.filled.BrightnessMedium
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.HealthAndSafety
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.Security // v2.9
@@ -108,6 +109,12 @@ fun SettingsHub(
                 title = "Root tier",
                 subtitle = "Protected broadcasts, vendor bars, sole-HOME mode",
                 onClick = { onOpen(SettingsRoute.RootTier) },
+            )
+            SettingsCategoryCard(
+                icon = Icons.Filled.HealthAndSafety,
+                title = "Setup doctor",
+                subtitle = "Check & repair the grants a reinstall drops",
+                onClick = { onOpen(SettingsRoute.SetupDoctor) },
             )
             SettingsCategoryCard(
                 icon = Icons.Filled.Info,

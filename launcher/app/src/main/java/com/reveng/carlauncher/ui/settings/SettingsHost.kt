@@ -84,6 +84,12 @@ fun SettingsHost(
                 onBack = ::pop,
             )
 
+            // v0.4.2: setup doctor — probes the grants a reinstall drops and repairs them (root).
+            SettingsRoute.SetupDoctor -> SetupDoctorScreen(
+                controller = controller,
+                onBack = ::pop,
+            )
+
             SettingsRoute.Display -> DisplaySettingsScreen(
                 controller = controller,
                 carService = carService,
@@ -175,6 +181,7 @@ sealed interface SettingsRoute {
     data object Hub : SettingsRoute
     data object LauncherPrefs : SettingsRoute
     data object AppDirectory : SettingsRoute // v0.4.2
+    data object SetupDoctor : SettingsRoute // v0.4.2
     data object Display : SettingsRoute
     data object ReverseCamera : SettingsRoute
     data object Radar : SettingsRoute

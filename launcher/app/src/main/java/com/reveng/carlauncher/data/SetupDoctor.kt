@@ -1,0 +1,169 @@
+package com.reveng.carlauncher.data
+
+import android.content.Context
+import android.content.pm.PackageManager
+import android.provider.Settings
+import androidx.core.content.ContextCompat
+import com.reveng.carlauncher.carlib.RootShell
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+/**
+ * One environment check the launcher needs to actually work, and how to fix it. [ok] is the live
+ * state; [adbCommand] is the copy-paste fix over adb (always available); [rootCommand] is the same
+ * fix runnable in-app via [RootShell] when root is present, or null when only adb can do it.
+ */
+data class DoctorCheck(
+    val id: String,
+    val title: String,
+    val detail: String,
+    val ok: Boolean,
+    val adbCommand: String,
+    val rootCommand: String?,
+)
+
+/**
+ * v0.4.2 — the Setup Doctor.
+ *
+ * A fresh side-load silently loses the grants the launcher's features depend on: the location
+ * permission the motion gate reads, the Bluetooth-status permission the chips read, and the three
+ * notification-listener bindings (media / nav / shelf). Nothing errors — the features just quietly
+ * do nothing, which reads as "the launcher is broken" rather than "a grant is missing" (see the
+ * grants-after-reinstall hazard the project has hit repeatedly).
+ *
+ * This probes each grant and, when root is present, repairs it in-app; without root it prints the
+ * exact adb command per row. Every check keys off [Context.getPackageName] at runtime, so it is
+ * correct under the `.debug` applicationId too — the fixes target the app that is actually running.
+ */
+class SetupDoctor(
+    context: Context,
+    private val scope: CoroutineScope,
+) {
+    private val appContext = context.applicationContext
+    private val pkg = appContext.packageName
+
+    private val _checks = MutableStateFlow<List<DoctorCheck>>(emptyList())
+    val checks: StateFlow<List<DoctorCheck>> = _checks.asStateFlow()
+
+    private val _repairing = MutableStateFlow(false)
+    val repairing: StateFlow<Boolean> = _repairing.asStateFlow()
+
+    init {
+        refresh()
+    }
+
+    fun refresh() {
+        scope.launch {
+            _checks.value = withContext(Dispatchers.IO) { probe() }
+        }
+    }
+
+    /** Run every failing, root-fixable check's repair via one root session, then re-probe. */
+    fun repairAll() {
+        scope.launch {
+            _repairing.value = true
+            withContext(Dispatchers.IO) {
+                val commands = probe()
+                    .filter { !it.ok && it.rootCommand != null }
+                    .map { it.rootCommand!! }
+                if (commands.isNotEmpty() && runCatching { RootShell.isRootAvailable() }.getOrDefault(false)) {
+                    // Each command is independent; run them together so a single su round-trip
+                    // grants everything. RootShell refuses newline-bearing commands, and none here
+                    // contain one (fixed package/component/permission strings).
+                    runCatching { RootShell.exec(*commands.toTypedArray()) }
+                }
+            }
+            _checks.value = withContext(Dispatchers.IO) { probe() }
+            _repairing.value = false
+        }
+    }
+
+    private fun probe(): List<DoctorCheck> {
+        val enabledListeners = enabledNotificationListeners()
+        val checks = mutableListOf<DoctorCheck>()
+
+        checks += permissionCheck(
+            id = "location",
+            title = "Location permission",
+            detail = "Needed for the motion gate — parked-only features stay locked without it.",
+            permission = android.Manifest.permission.ACCESS_FINE_LOCATION,
+        )
+        checks += permissionCheck(
+            id = "bluetooth",
+            title = "Bluetooth permission",
+            detail = "Needed for the Bluetooth status chip.",
+            permission = android.Manifest.permission.BLUETOOTH_CONNECT,
+        )
+        checks += listenerCheck(
+            id = "listener_media",
+            title = "Media notification listener",
+            detail = "Needed to read active media sessions for the now-playing card.",
+            component = "$pkg/com.reveng.carlauncher.media.MediaListenerService",
+            enabled = enabledListeners,
+        )
+        checks += listenerCheck(
+            id = "listener_nav",
+            title = "Navigation notification listener",
+            detail = "Needed to read Google Maps' turn-by-turn for the nav card.",
+            component = "$pkg/com.reveng.carlauncher.nav.NavListenerService",
+            enabled = enabledListeners,
+        )
+        checks += listenerCheck(
+            id = "listener_shelf",
+            title = "Notification shelf listener",
+            detail = "Needed for the parked-only notification shelf.",
+            component = "$pkg/com.reveng.carlauncher.notif.ShelfListenerService",
+            enabled = enabledListeners,
+        )
+        return checks
+    }
+
+    private fun permissionCheck(
+        id: String,
+        title: String,
+        detail: String,
+        permission: String,
+    ): DoctorCheck {
+        val granted = ContextCompat.checkSelfPermission(appContext, permission) ==
+            PackageManager.PERMISSION_GRANTED
+        return DoctorCheck(
+            id = id,
+            title = title,
+            detail = detail,
+            ok = granted,
+            adbCommand = "adb shell pm grant $pkg $permission",
+            rootCommand = "pm grant $pkg $permission",
+        )
+    }
+
+    private fun listenerCheck(
+        id: String,
+        title: String,
+        detail: String,
+        component: String,
+        enabled: Set<String>,
+    ): DoctorCheck {
+        return DoctorCheck(
+            id = id,
+            title = title,
+            detail = detail,
+            ok = component in enabled,
+            adbCommand = "adb shell cmd notification allow_listener $component",
+            rootCommand = "cmd notification allow_listener $component",
+        )
+    }
+
+    /** Flattened component names of every currently-enabled notification listener on the device. */
+    private fun enabledNotificationListeners(): Set<String> {
+        val raw = Settings.Secure.getString(
+            appContext.contentResolver,
+            "enabled_notification_listeners",
+        ).orEmpty()
+        return raw.split(':').filter { it.isNotBlank() }.toSet()
+    }
+}
