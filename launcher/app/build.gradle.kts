@@ -13,7 +13,7 @@ android {
         applicationId = "com.reveng.carlauncher"
         minSdk = 33
         targetSdk = 33
-        versionCode = 42
+        versionCode = 45
         versionName = "3.1.0"
 
         // Single head-unit target: arm64 landscape @240dpi, 1920x720.
