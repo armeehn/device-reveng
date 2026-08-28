@@ -104,6 +104,24 @@
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
         </service>
+
+        <!--
+          v2.7 ShelfListenerService: collects dismissible notifications for the parked-only
+          notification shelf. A third listener rather than more work for the media one (which is
+          deliberately empty, existing only to make getActiveSessions() legal) or the nav one
+          (which reads Maps and nothing else) — the OS enables each independently, so the split
+          costs nothing at runtime and keeps three unrelated features off one component.
+          Enabled the same way as the others: `cmd notification allow_listener`.
+        -->
+        <service
+            android:name=".notif.ShelfListenerService"
+            android:exported="false"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
     </application>
 
 </manifest>
