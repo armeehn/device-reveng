@@ -11,12 +11,14 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -68,7 +70,9 @@ import kotlin.math.hypot
  * App-drawer grid — v0.4 "App Drawer 2.0". On top of the original scrollable grid + "System"
  * folder (vendor/engineering apps behind one tile), this adds:
  *
- *  - **Search**: a live, case-insensitive substring filter over app labels ([DrawerSearchBar]).
+ *  - **Search**: v2.3 — a rofi-style full-screen [SearchOverlay] with its own in-Compose
+ *    keyboard (the vendor IME ignores night mode and ate half the screen); the bar at the top
+ *    of the drawer ([DrawerSearchTrigger]) just opens it.
  *  - **Favorites**: long-press-then-release an app to (un)favorite it; favorites are pinned in a
  *    horizontal row above the grid. Persisted via [FavoritesStore] (DataStore Preferences).
  *  - **Drag-to-reorder**: long-press-drag a tile to reorder the main grid; the custom order is
@@ -96,7 +100,7 @@ fun AppDrawer(
 
     val favorites by favoritesStore.favorites.collectAsStateSafe(initial = emptySet())
     val savedOrder by orderStore.order.collectAsStateSafe(initial = emptyList())
-    var query by remember { mutableStateOf("") }
+    var showSearch by remember { mutableStateOf(false) } // v2.3 full-screen search overlay
     var showSystem by remember { mutableStateOf(false) }
 
     // Apply the user's saved order first (by package), everything else alphabetically after.
@@ -106,18 +110,13 @@ fun AppDrawer(
             compareBy({ rank[it.packageName] ?: Int.MAX_VALUE }, { it.label.lowercase() }),
         )
     }
-    val filtered = remember(orderedApps, query) {
-        val q = query.trim()
-        if (q.isEmpty()) orderedApps else orderedApps.filter { it.label.contains(q, ignoreCase = true) }
-    }
-    val favoriteApps = filtered.filter { it.packageName in favorites }
+    val favoriteApps = orderedApps.filter { it.packageName in favorites }
 
     val toggleFavorite: (AppInfo) -> Unit = { app -> scope.launch { favoritesStore.toggle(app.packageName) } }
 
     Column(modifier = modifier.fillMaxSize()) {
-        DrawerSearchBar(
-            query = query,
-            onQueryChange = { query = it },
+        DrawerSearchTrigger(
+            onClick = { showSearch = true },
             modifier = Modifier.padding(top = 4.dp, bottom = 4.dp),
         )
 
@@ -130,10 +129,10 @@ fun AppDrawer(
         }
 
         ReorderableAppGrid(
-            apps = filtered,
+            apps = orderedApps,
             favorites = favorites,
             systemApps = systemApps,
-            reorderEnabled = query.isBlank(),
+            reorderEnabled = true,
             onLaunch = onLaunch,
             onToggleFavorite = toggleFavorite,
             onReorder = { newOrder -> scope.launch { orderStore.setOrder(newOrder.map { it.packageName }) } },
@@ -143,6 +142,14 @@ fun AppDrawer(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f),
+        )
+    }
+
+    if (showSearch) {
+        SearchOverlay(
+            apps = orderedApps,
+            onLaunch = { onLaunch(it); showSearch = false },
+            onDismiss = { showSearch = false },
         )
     }
 
@@ -308,7 +315,7 @@ private fun ReorderableAppGrid(
     }
 }
 
-/** Pinned horizontal row of favorite apps above the grid. Long-press a tile to unfavorite. */
+/** Pinned horizontal row of favorite apps above the grid. Long-press a chip to unfavorite. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun FavoritesRow(
@@ -329,16 +336,55 @@ private fun FavoritesRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             items(apps, key = { "fav_" + it.packageName + "/" + it.activityName }) { app ->
-                Box(Modifier.width(112.dp)) {
-                    AppTile(
-                        app = app,
-                        onClick = { onLaunch(app) },
-                        favorite = true,
-                        onLongClick = { onToggleFavorite(app) },
-                    )
-                }
+                FavoriteChip(
+                    app = app,
+                    onClick = { onLaunch(app) },
+                    onLongClick = { onToggleFavorite(app) },
+                )
             }
         }
+    }
+}
+
+/**
+ * Compact icon + label chip for the Favorites row. The full [AppTile] (72dp icon, label
+ * underneath) is too tall for the center column — NavCard + search + favorites + grid must
+ * share ~400dp, so the tile's label ended up clipped off the bottom of the screen. The chip
+ * keeps the name beside the icon so it is always visible, and returns ~60dp to the grid.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun FavoriteChip(
+    app: AppInfo,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+) {
+    val bmp = remember(app.packageName + app.activityName) {
+        app.icon.toBitmap(width = 96, height = 96).asImageBitmap()
+    }
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Image(
+            bitmap = bmp,
+            contentDescription = app.label,
+            contentScale = ContentScale.Fit,
+            modifier = Modifier.size(36.dp),
+        )
+        Text(
+            text = app.label,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.widthIn(max = 140.dp),
+        )
     }
 }
 
@@ -475,10 +521,11 @@ private fun SystemFolderDialog(
 
 /**
  * Convert a launcher [android.graphics.drawable.Drawable] icon into a Compose Painter by
- * rasterizing to a bitmap. Kept simple (no Coil dependency).
+ * rasterizing to a bitmap. Kept simple (no Coil dependency). Internal: [SearchOverlay]'s
+ * result tiles reuse it.
  */
 @Composable
-private fun rememberDrawablePainter(app: AppInfo): Painter {
+internal fun rememberDrawablePainter(app: AppInfo): Painter {
     val bmp = remember(app.packageName + app.activityName) {
         app.icon.toBitmap(width = 144, height = 144).asImageBitmap()
     }

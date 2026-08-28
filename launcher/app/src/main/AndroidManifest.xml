@@ -55,6 +55,7 @@
             android:launchMode="singleTask"
             android:screenOrientation="landscape"
             android:configChanges="orientation|screenSize|keyboardHidden|uiMode|density"
+            android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.CarLauncher"
             android:stateNotNeeded="true"
             tools:ignore="DiscouragedApi">
