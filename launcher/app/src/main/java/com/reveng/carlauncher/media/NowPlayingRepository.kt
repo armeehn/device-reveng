@@ -52,6 +52,9 @@ data class NowPlaying(
     val sourceLabel: String? = null,
     /** Number of active sessions (>1 => the source chip offers "tap to cycle"). */
     val sessionCount: Int = 1,
+    // ---- v4.1 video mini screen ----
+    /** True when the owning app is a known video player (see [VideoApps]). */
+    val isVideo: Boolean = false,
 ) {
     /**
      * Live position interpolated to [now] (elapsedRealtime). While playing, advances the
@@ -276,6 +279,7 @@ class NowPlayingRepository(private val context: Context) {
             sourcePackage = c.packageName,
             sourceLabel = appLabel(c.packageName),
             sessionCount = lastControllers.size.coerceAtLeast(1),
+            isVideo = VideoApps.isVideo(c.packageName), // v4.1
         )
     }
 
