@@ -22,8 +22,13 @@
 set -euo pipefail
 
 APK_DIR="${1:-apk}"
+
+# The debug build carries applicationIdSuffix ".debug", but the suffix applies to the
+# application ID only — the namespace, and so the activity's class name, is unchanged. The
+# component is therefore <debug application id>/<undecorated class>, which look mismatched
+# side by side and are meant to.
 PACKAGE="com.reveng.carlauncher.debug"
-ACTIVITY="com.reveng.carlauncher/.MainActivity"
+ACTIVITY="com.reveng.carlauncher.MainActivity"
 RUNS=5
 BUDGET_MS=2500
 
@@ -39,7 +44,17 @@ adb install -r -t "$APK"
 adb shell pm grant "$PACKAGE" android.permission.ACCESS_FINE_LOCATION || true
 
 # Warm run, discarded: it is what writes and applies the ART profile.
-adb shell am start -W -n "$PACKAGE/$ACTIVITY" >/dev/null || true
+#
+# A launch failure is fatal here rather than tolerated. `am start` reports a bad component on
+# stdout and still exits 0, so the original `|| true` let a malformed component through this
+# step and surfaced it five runs later as "produced no TotalTime:" — which points at the
+# measurement loop instead of at the component that was actually wrong.
+warm="$(adb shell am start -W -n "$PACKAGE/$ACTIVITY" 2>&1)"
+if echo "$warm" | grep -qi 'error'; then
+  echo "could not launch $PACKAGE/$ACTIVITY:" >&2
+  echo "$warm" >&2
+  exit 1
+fi
 sleep 5
 adb shell pm compile -m speed-profile "$PACKAGE"
 
