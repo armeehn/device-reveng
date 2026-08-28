@@ -127,12 +127,6 @@ class MainActivity : ComponentActivity() {
             // returning user never flashes the onboarding screen.
             val firstRun by settingsStore.firstRun.collectAsStateWithLifecycle()
             var routed by remember { mutableStateOf(false) }
-            LaunchedEffect(firstRun) {
-                if (!routed && firstRun != null) {
-                    if (firstRun == true) screen = Screen.Onboarding
-                    routed = true
-                }
-            }
 
             CarLauncherTheme(theme = activeTheme, night = night) {
               CompositionLocalProvider(LocalLauncherFocus provides launcherFocus) {
@@ -145,11 +139,21 @@ class MainActivity : ComponentActivity() {
                     // we render nothing but the themed Surface — a fast, jank-free first frame.
                     if (firstRun == null) {
                         // holding frame: just the background Surface
-                    } else Crossfade(
+                    } else {
+                      // v1.0: apply first-run routing once, DURING composition and before the
+                      // Crossfade's first pass, so a genuine first boot composes straight to
+                      // Onboarding. Doing this in a post-composition LaunchedEffect made the
+                      // Crossfade render Home for a frame and then animate a 300ms crossfade into
+                      // Onboarding — the exact flash the holding frame is meant to prevent.
+                      if (!routed) {
+                          if (firstRun == true && screen == Screen.Home) screen = Screen.Onboarding
+                          routed = true
+                      }
+                      Crossfade(
                         targetState = screen,
                         animationSpec = tween(durationMillis = 300),
                         label = "screen",
-                    ) { s ->
+                      ) { s ->
                         when (s) {
                             Screen.Onboarding -> OnboardingScreen(
                                 themeStore = themeStore,
@@ -214,6 +218,7 @@ class MainActivity : ComponentActivity() {
                                 onCancel = { screen = Screen.Themes },
                             )
                         }
+                      }
                     }
                 }
               }
@@ -293,6 +298,8 @@ class MainActivity : ComponentActivity() {
         carService.unbind()
         nowPlaying.stop()
         carSettingsController.release() // v1.1
+        themeStore.release()
+        settingsStore.release()
     }
 
     /** Top-level screens — a simple switch, no nav library (LAUNCHER_DESIGN v0.5). */

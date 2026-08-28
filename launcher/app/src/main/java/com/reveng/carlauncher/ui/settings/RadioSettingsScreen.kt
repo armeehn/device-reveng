@@ -17,6 +17,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -32,7 +33,10 @@ import com.reveng.carlauncher.carlib.CarService
 import com.reveng.carlauncher.data.CarSettingsController
 import com.reveng.carlauncher.data.RadioPreset
 import com.reveng.carlauncher.data.RadioPresetsStore
+import com.reveng.carlauncher.ui.formatFreqLabel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * v1.7 — Radio. Reskinned tuner settings: a live band/frequency + RDS readout from the vendor
@@ -59,13 +63,17 @@ fun RadioSettingsScreen(
     var ta by remember { mutableStateOf(false) }
     var refreshTick by remember { mutableIntStateOf(0) }
 
-    if (connected) {
-        // Re-read whenever refreshTick changes (bumped by control actions).
-        refreshTick
-        band = carService.getRadioBand() ?: band
-        freq = carService.getRadioFreq() ?: freq
-        rds = carService.getRadioRds() ?: rds
-        ta = carService.getRadioTa() ?: ta
+    // Re-read the live tuner state off the main thread whenever we (re)connect or a control
+    // action bumps refreshTick. Doing these blocking AIDL calls in the composition body — and
+    // writing band/freq/rds/ta there — invalidated the composition and spun a main-thread IPC
+    // recomposition loop while seeking (jank up to ANR).
+    LaunchedEffect(connected, refreshTick) {
+        if (connected) withContext(Dispatchers.IO) {
+            band = carService.getRadioBand() ?: band
+            freq = carService.getRadioFreq() ?: freq
+            rds = carService.getRadioRds() ?: rds
+            ta = carService.getRadioTa() ?: ta
+        }
     }
 
     SettingsScaffold(
@@ -75,7 +83,7 @@ fun RadioSettingsScreen(
     ) {
         SettingsSection(title = "Tuner") {
             InfoRow(label = "Band", value = bandLabel(band, carService))
-            InfoRow(label = "Frequency", value = freqLabel(band, freq, carService))
+            InfoRow(label = "Frequency", value = formatFreqLabel(band, freq))
             InfoRow(label = "RDS", value = if (rds) "On" else "Off")
             InfoRow(label = "TA (traffic)", value = if (ta) "On" else "Off")
         }
@@ -102,7 +110,7 @@ fun RadioSettingsScreen(
             } else {
                 presets.forEach { preset ->
                     PresetRow(
-                        label = freqLabel(preset.band, preset.freq, carService) +
+                        label = formatFreqLabel(preset.band, preset.freq) +
                             "  ·  " + bandLabel(preset.band, carService),
                         onRecall = {
                             carService.sendUserFreq(preset.freq, direct = true)
@@ -127,11 +135,9 @@ fun RadioSettingsScreen(
 private fun bandLabel(band: Int, cs: CarService): String =
     if (CarService.isAmBand(band)) "AM" else "FM"
 
-private fun freqLabel(band: Int, freq: Int, cs: CarService): String {
-    if (freq <= 0) return "--"
-    // GUESSED units: FM in 10 kHz steps (e.g. 9990 = 99.9 MHz), AM in kHz.
-    return if (CarService.isAmBand(band)) "$freq kHz" else "%.1f MHz".format(freq / 100.0)
-}
+// Frequency formatting is shared with the home RadioCard ([formatFreqLabel]) so the same raw
+// tuner value never renders differently on the two screens (a preset saved on one showed a
+// 10x-off frequency on the other).
 
 @Composable
 private fun SmallActionChip(label: String, enabled: Boolean, onClick: () -> Unit) {

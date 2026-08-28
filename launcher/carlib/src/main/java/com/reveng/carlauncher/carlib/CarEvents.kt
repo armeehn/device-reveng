@@ -192,7 +192,10 @@ class CarEvents(private val appContext: Context) {
     private val _speedKmh = MutableStateFlow(-1)
     val speedKmh: StateFlow<Int> = _speedKmh.asStateFlow()
 
-    private val listeners = mutableSetOf<Listener>()
+    // Copy-on-write: a listener may add/remove itself from inside its own callback while we
+    // are iterating during dispatch, which would throw ConcurrentModificationException on a
+    // plain mutableSet; it also makes concurrent add/remove from other threads safe.
+    private val listeners = java.util.concurrent.CopyOnWriteArraySet<Listener>()
     private var registered = false
 
     fun addListener(l: Listener) { listeners.add(l) }

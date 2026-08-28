@@ -1,5 +1,6 @@
 package com.reveng.carlauncher.ui
 
+import android.os.SystemClock
 import com.reveng.carlauncher.ui.theme.carCard
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
@@ -192,6 +193,11 @@ private fun ReorderableAppGrid(
     var draggingIndex by remember { mutableStateOf(-1) }
     var dragOffset by remember { mutableStateOf(Offset.Zero) }
     var totalDrag by remember { mutableStateOf(Offset.Zero) }
+    // A long-press-release toggles the favorite via the grid drag detector; without this guard
+    // the tile's combinedClickable ALSO fires onClick on that same release and launches the app.
+    // draggingIndex is still >= 0 when the child click fires (child-first Main pass); the
+    // timestamp covers the release having already reset draggingIndex.
+    var suppressTapUntil by remember { mutableStateOf(0L) }
 
     // v0.8: publish the displayed grid (count, resolved columns, launch-by-index) to the focus
     // ring so the SWC key dispatcher navigates the exact tiles the drawer shows. The System
@@ -262,11 +268,13 @@ private fun ReorderableAppGrid(
                     draggingIndex = -1
                     dragOffset = Offset.Zero
                     totalDrag = Offset.Zero
+                    suppressTapUntil = SystemClock.uptimeMillis() + 250
                 },
                 onDragCancel = {
                     draggingIndex = -1
                     dragOffset = Offset.Zero
                     totalDrag = Offset.Zero
+                    suppressTapUntil = SystemClock.uptimeMillis() + 250
                 },
             )
         }
@@ -289,7 +297,11 @@ private fun ReorderableAppGrid(
             val dragging = index == draggingIndex
             AppTile(
                 app = app,
-                onClick = { onLaunch(app) },
+                onClick = {
+                    // Ignore the click that rides along with a long-press-release (favorite toggle)
+                    // or that lands just after a drag ends.
+                    if (draggingIndex < 0 && SystemClock.uptimeMillis() >= suppressTapUntil) onLaunch(app)
+                },
                 favorite = app.packageName in favorites,
                 focused = index == focusedIndex, // v0.8 focus ring
                 modifier = Modifier
