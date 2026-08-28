@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.Thermostat
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.SaveAlt
 import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.runtime.Composable
@@ -134,6 +135,12 @@ fun SettingsHub(
                 title = "All settings (advanced)",
                 subtitle = "Raw SysVar browser — every vendor key",
                 onClick = { onOpen(SettingsRoute.Advanced) },
+            )
+            SettingsCategoryCard(
+                icon = Icons.Filled.SaveAlt,
+                title = "SysVar export",
+                subtitle = "Dump the live vendor key table to JSON (diagnostic)",
+                onClick = { onOpen(SettingsRoute.SysVarExport) },
             )
         }
     }
