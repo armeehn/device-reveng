@@ -139,7 +139,7 @@ fun CanCaptureScreen(
 }
 
 @Composable
-private fun ExtraRow(key: String, value: String) {
+internal fun ExtraRow(key: String, value: String) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
         verticalAlignment = androidx.compose.ui.Alignment.Top,

@@ -116,6 +116,12 @@ fun SettingsHub(
                 onClick = { onOpen(SettingsRoute.CanCapture) },
             )
             SettingsCategoryCard(
+                icon = Icons.Filled.Radio,
+                title = "Radio info capture",
+                subtitle = "Raw radio broadcast -- the route to a station name (diagnostic)",
+                onClick = { onOpen(SettingsRoute.RadioInfoCapture) },
+            )
+            SettingsCategoryCard(
                 icon = Icons.Filled.Tune,
                 title = "All settings (advanced)",
                 subtitle = "Raw SysVar browser — every vendor key",

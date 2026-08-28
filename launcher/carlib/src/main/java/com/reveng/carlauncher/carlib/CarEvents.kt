@@ -107,6 +107,15 @@ class CarEvents(private val appContext: Context) {
         const val CAN_BASIC_EVT =
             "com.choiceway.eventcenter.EventUtils.CAN_BASIC_EVT"
 
+        // ---- v0.4.3: radio info sniffer (CAR_API line 113) — unprotected ----
+        // Both radio broadcasts, captured raw. Actions are CONFIRMED consts; only the
+        // action of ZXW_RADIO_INFO_EVT was recovered (payload never traced), so the sniffer
+        // exists to discover what extras it and the frequency broadcast actually carry -- the
+        // one route to a station name (README "Known TODOs").
+        const val ZXW_RADIO_INFO_EVT =
+            "com.choiceway.eventcenter.EventUtils.ZXW_RADIO_INFO_EVT"
+        const val RADIO_FREQUENCY_EVENT = "com.szchoiceway.radio.frequency"
+
         // ---- Climate (CAR_API §1.3) — unprotected ---------------------------
         const val CAR_AIR_STATE_ACTION = "com.szchoiceway.canbus.carairstruct"
         /** Parcelable com.szchoiceway.canbus.CarAirState (class not bundled — TODO). */
@@ -300,6 +309,15 @@ class CarEvents(private val appContext: Context) {
      */
     val canRaw: StateFlow<CanFrame?> = _canRaw.asStateFlow()
 
+    // v0.4.3 --- Undecoded radio info broadcast, for the capture view -----------
+    private val _radioInfoRaw = MutableStateFlow<CanFrame?>(null)
+    /**
+     * v0.4.3 - the last radio broadcast (ZXW_RADIO_INFO_EVT / com.szchoiceway.radio.frequency),
+     * every extra captured undecoded. The route to a station name RadioScreen cannot show today;
+     * null until a frame arrives (never off a car / tuner).
+     */
+    val radioInfoRaw: StateFlow<CanFrame?> = _radioInfoRaw.asStateFlow()
+
     /**
      * Numeric speed in km/h, or [GpsSpeedSource.SPEED_UNKNOWN] when it cannot be read.
      *
@@ -452,6 +470,11 @@ class CarEvents(private val appContext: Context) {
                     _canRaw.value = CanFrame.from(intent, System.currentTimeMillis())
                 }
 
+                // v0.4.3: radio info sniff - capture every extra of either radio broadcast.
+                ZXW_RADIO_INFO_EVT, RADIO_FREQUENCY_EVENT -> {
+                    _radioInfoRaw.value = CanFrame.from(intent, System.currentTimeMillis())
+                }
+
                 CAR_AIR_STATE_ACTION -> {
                     // The primary extra is a Parcelable CarAirState we can't deserialize
                     // (class not bundled). Best-effort: pick up a raw byte[] frame if the
@@ -559,6 +582,8 @@ class CarEvents(private val appContext: Context) {
             addAction(MCU_CAR_CAN_RADAR_INFO)
             addAction(MCU_CAR_CAN_INFO) // v0.4.3 CAN bulk-frame capture
             addAction(CAN_BASIC_EVT) // v0.4.3
+            addAction(ZXW_RADIO_INFO_EVT) // v0.4.3 radio sniffer
+            addAction(RADIO_FREQUENCY_EVENT) // v0.4.3
             addAction(CAR_AIR_STATE_ACTION)
             addAction(CAN_CAR_OUT_SIDE_TEMP_EVT) // v3.0
             addAction(ZXW_CAN_WHEEL_TRACK_EVT) // v3.0

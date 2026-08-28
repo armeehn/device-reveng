@@ -112,6 +112,12 @@ fun SettingsHost(
                 onBack = ::pop,
             )
 
+            // v0.4.3: radio broadcast sniffer -- the route to a station name.
+            SettingsRoute.RadioInfoCapture -> RadioInfoCaptureScreen(
+                carEvents = carEvents,
+                onBack = ::pop,
+            )
+
             SettingsRoute.Audio -> AudioSettingsScreen(
                 controller = controller,
                 carService = carService,
@@ -181,6 +187,7 @@ sealed interface SettingsRoute {
     data object Radar : SettingsRoute
     data object RadarCapture : SettingsRoute // v2.8
     data object CanCapture : SettingsRoute // v0.4.3
+    data object RadioInfoCapture : SettingsRoute // v0.4.3
     data object Audio : SettingsRoute
     data object Climate : SettingsRoute
     data object Radio : SettingsRoute
