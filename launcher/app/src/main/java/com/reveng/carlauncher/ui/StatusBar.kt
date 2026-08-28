@@ -72,12 +72,17 @@ fun StatusBar(
 
     // Effective night state: the forced day/night mode wins over the car illumination
     // signal — same resolution MainActivity uses to pick the theme, so the icon always
-    // matches what's on screen.
+    // matches what's on screen. v2.7 adds CLOCK + the AUTO clock-fallback; mirror both here.
     val carNight = dayNight == CarEvents.DayNight.NIGHT
+    val illuminationSeen by carEvents.illuminationSeen.collectAsStateSafe(initial = false)
+    val clockNight by rememberClockNight(settings.nightStartHour, settings.nightEndHour)
     val night = when (settings.dayNightMode) {
         DayNightMode.FORCE_DAY -> false
         DayNightMode.FORCE_NIGHT -> true
-        DayNightMode.AUTO -> carNight
+        DayNightMode.CLOCK -> clockNight
+        DayNightMode.AUTO ->
+            if (settings.clockFallback && !illuminationSeen) clockNight
+            else carNight
     }
 
     val time by produceState(initialValue = nowString()) {
