@@ -96,7 +96,14 @@ class MainActivity : ComponentActivity() {
     private val locationPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
-        if (granted) {
+        // The isInitialized guard is load-bearing. This launcher is registered during field
+        // initialisation, i.e. before super.onCreate(), and ActivityResultRegistry re-delivers a
+        // pending result from inside super.onCreate() — before [carEvents] is assigned below. So
+        // if the activity is killed while the permission dialog is up and the user then answers
+        // it, this fires with carEvents still unset and would crash on exactly the path where
+        // permission was just granted. Skipping is safe: register() starts the source itself, and
+        // by then the grant is in place.
+        if (granted && ::carEvents.isInitialized) {
             carEvents.startSpeedSource()
         }
     }
