@@ -118,15 +118,110 @@ writes), `data/SettingKeys` (curated key catalog), `ui/settings/*` (the reskinne
 firmware naming (the vendor settings APK that holds the value tables isn't in the decompile),
 so each guessed mapping is annotated in-code and the Advanced browser shows the true strings.
 
+## Motion awareness (v2.5)
+
+`CarEvents.speedKmh` is real. The gateway broadcasts no numeric speed
+(`SHOW_CAR_SPEED_EVENT` is a show/hide toggle, CAR_API §1.3), so `carlib/GpsSpeedSource`
+reads it from the GNSS receiver — the one source a normal app can use — smooths the jitter,
+and reverts to unknown after 5 s without a fix rather than reporting a stationary car.
+
+`CarEvents.motion` turns that into the `PARKED` / `MOVING` / `UNKNOWN` verdict behind the
+LAUNCHER_DESIGN §1.4 rules, with an 8 km/h ↑ / 3 km/h ↓ hysteresis band so a car creeping in
+traffic can't flap the gate.
+
+**Unknown fails open.** Blocking on `UNKNOWN` would lock the driver out of their own launcher
+in a garage, an underground car park, or on a unit where the location permission was never
+granted — permanently and with no signal as to why. We only ever fail open with *no* reading;
+any live fix above 3 km/h resolves to `MOVING`.
+
+Parked-only, via the `LocalParkedOnlyLock` composition local (`ui/ParkedOnly.kt`):
+
+- app search and its keyboard (open search closes itself if the car pulls away),
+- the theme editor,
+- the advanced SysVar browser,
+- destructive confirmations (reboot, factory reset).
+
+Settings ▸ Launcher ▸ **Motion gating** toggles enforcement and shows the live speed and
+verdict — needed to tell "gate open because parked" from "gate open because GPS never fixed",
+which look identical from the outside.
+
+Grant the permission with:
+
+```sh
+adb shell pm grant com.reveng.carlauncher android.permission.ACCESS_FINE_LOCATION
+```
+
+### Motion budget
+
+Nothing animates on a loop, and no transition exceeds **400 ms** (today's longest is the 320 ms
+onboarding slide). A moving car is when an animation is most distracting and least noticed, so
+new work stays inside that budget: no `rememberInfiniteTransition`, no `basicMarquee`, and no
+`tween` above 400 ms on a surface that can be on screen while driving.
+
+`ui/CarFeedback.kt` gives eyes-free confirmation on accepted input — haptics plus the car's own
+`beep()` — wired to steering-wheel presses, keyboard keys and dialog buttons. The beep follows
+the vendor's `Set_TouchBeep` preference instead of adding a competing one.
+
+## Media & Radio screens (v2.6)
+
+The Home cards were always glance surfaces in a 30 %-wide column. `ui/MediaScreen.kt` and
+`ui/RadioScreen.kt` are the full screens you land on to actually operate playback and the
+tuner (LAUNCHER_DESIGN §3.3 / §3.4). Reached three ways: tapping a card body, CENTER on a
+focused card, or the steering wheel's MEDIA / RADIO keys.
+
+**MediaScreen** — large art, 40 sp title, 96 dp transport targets, and a source picker over
+every live `MediaSession`. Scrubbing is parked-only (v2.5 gate): dragging to a target position
+is a sustained, eyes-on gesture, so while moving the same progress renders as a read-only bar.
+Transport stays available while moving — skip and play/pause are single forgiving presses that
+exist on the wheel anyway, and withholding them would push the driver to their phone.
+
+**RadioScreen** — 48 sp frequency, band toggle, seek, six preset slots with save / recall /
+delete, and the tuner's status flags.
+
+### What the firmware does not have
+
+Two things §3.3/§3.4 planned turned out not to exist, so they are not built:
+
+- **No RDS text.** The 144-method AIDL has no PS (station name) or RT (radio text) getter.
+  `getRadioPTYName` (ordinal 19) returns the programme *genre* — "Pop Music" — not a station.
+  So the screen shows the indicators that do exist (RDS / TA / AF / TP / stereo + PTY genre)
+  rather than an empty scroller. `ZXW_RADIO_INFO_EVT` may carry more, but only its action
+  string was recovered: no sender was traced and no payload extra is named.
+- **No scan.** `getRadioAMSState` / `getRadioAPSState` report whether an auto-store or
+  auto-preset-scan is *running*; nothing starts one. Seek is the whole control surface.
+
+Preset sync with the vendor's `Rdo_MyFavorite0..5` is **read-only** for the same reason: the
+encoding of those SysVar values is documented nowhere, and writing a guessed format would
+corrupt the vendor radio's presets irreversibly. RadioScreen displays the raw strings, which is
+exactly the capture needed to work the format out on-device — after which two-way sync is safe.
+
+Vendor *source* switching (Bluetooth / USB / built-in) is likewise read-only: `sendMode(int,
+boolean)` is ordinal 1 and confirmed, but its value table is not in the decompile, so
+MediaScreen names the current source via `getValidModeTitleInfor()` and does not offer to
+change it.
+
+Both screens poll rather than subscribe. `setRadioCallback` exists, but the `ICallbackfn`
+signature was never recovered, so registering it would be a guess. Blocking AIDL reads stay off
+the composition body — doing them inline once spun a main-thread IPC recomposition loop while
+seeking.
+
 ## Known TODOs
 
 - **`IEventService.aidl`** declares only a subset of methods and its transaction
   **ordinals almost certainly do not match** the real service — regenerate from the
   decompiled `IEventService.java` preserving method order before relying on any call.
 - **`ICallbackfn.aidl`** signature is a placeholder; verify against the device.
-- **Numeric speed** is not broadcast cleanly — `CarEvents.speedKmh` stays `-1` until wired
-  to the CAN frame / GPS / AIDL (CAR_API §1.3 note).
+- **Numeric speed** now comes from GPS (v2.5, above). The gateway still broadcasts none, so
+  decoding the CAN bulk frame (`CAN_BASIC_EVT` / `MCU_CAR_CAN_INFO`) remains the upgrade worth
+  making: it is available at power-on and indoors, where GPS is not.
 - **Reverse camera feed** — `ReverseOverlay` is a black placeholder; embed a `SurfaceView`
   bound to the reverse video input, or host `com.szchoiceway.view.BackCarActivity`.
-- **Climate / radio widgets** — placeholders only; wire `CarAirState` / `ZXW_RADIO_INFO_EVT`.
+- **Climate widget** — placeholder only; wire `CarAirState`.
+- **`ZXW_RADIO_INFO_EVT`** — the action string is known but its payload is not, and no sender
+  was traced. Capturing it on-device would replace RadioScreen's 3 s poll with a push, and may
+  be the only route to a station name (see v2.6 above).
+- **`Rdo_MyFavorite0..5` encoding** — capture the raw values (RadioScreen shows them) to make
+  two-way preset sync with the vendor radio safe.
+- **Vendor `sendMode` value table** — needed before MediaScreen can switch the car between
+  Bluetooth / USB / the built-in player.
 ```

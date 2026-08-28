@@ -47,4 +47,9 @@ dependencies {
     // If offline / the vendor blocks JitPack, RootShell also has a pure-ProcessBuilder
     // fallback path (see RootShell.kt) so this dependency is not strictly required.
     implementation("com.github.topjohnwu.libsu:core:6.0.0")
+
+    // JVM unit tests for the pure decode/threshold logic (RadarState, ClimateState,
+    // CarEvents.nextMotion). No Robolectric: everything under test is deliberately free of
+    // framework calls, so a plain local JVM run needs no emulator and stays fast in CI.
+    testImplementation("junit:junit:4.13.2")
 }

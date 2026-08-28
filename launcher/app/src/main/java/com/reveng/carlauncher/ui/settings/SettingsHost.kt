@@ -14,6 +14,7 @@ import com.reveng.carlauncher.carlib.CarService
 import com.reveng.carlauncher.data.CarSettingsController
 import com.reveng.carlauncher.data.RadioPresetsStore
 import com.reveng.carlauncher.data.SettingsStore
+import com.reveng.carlauncher.ui.ParkedOnly // v2.5
 
 /**
  * v1.1 — the Settings app's own navigation host.
@@ -35,8 +36,15 @@ fun SettingsHost(
     carEvents: CarEvents,
     radioPresetsStore: RadioPresetsStore,
     onExit: () -> Unit,
+    // Optional deep link: open with this route pushed above the hub, so Back still pops
+    // to the hub (status-bar power chip → Power & sleep).
+    initialRoute: SettingsRoute? = null,
 ) {
-    val backStack = remember { mutableStateListOf<SettingsRoute>(SettingsRoute.Hub) }
+    val backStack = remember {
+        mutableStateListOf<SettingsRoute>(SettingsRoute.Hub).also { stack ->
+            initialRoute?.let { stack.add(it) }
+        }
+    }
 
     fun push(route: SettingsRoute) { backStack.add(route) }
     fun pop() {
@@ -65,6 +73,7 @@ fun SettingsHost(
             SettingsRoute.LauncherPrefs -> LauncherPrefsScreen(
                 settingsStore = settingsStore,
                 onBack = ::pop,
+                carEvents = carEvents, // v2.5 live speed / motion readout
             )
 
             SettingsRoute.Display -> DisplaySettingsScreen(
@@ -121,10 +130,17 @@ fun SettingsHost(
                 onBack = ::pop,
             )
 
-            SettingsRoute.Advanced -> AdvancedSettingsScreen(
-                controller = controller,
+            // v2.5 §1.4: the raw SysVar browser is 455 keys of free-text editing over live
+            // vehicle config — the most attention-hungry screen in the app, and parked-only.
+            SettingsRoute.Advanced -> ParkedOnly(
+                feature = "The SysVar browser",
                 onBack = ::pop,
-            )
+            ) {
+                AdvancedSettingsScreen(
+                    controller = controller,
+                    onBack = ::pop,
+                )
+            }
         }
     }
 }

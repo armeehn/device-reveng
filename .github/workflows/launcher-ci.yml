@@ -1,8 +1,11 @@
 name: launcher-ci
 
-# Compile the head-unit launcher on every push/PR that touches it.
-# No test sources exist yet; the release assemble (with R8 + resource
-# shrinking) is the real signal — it's exactly what gets side-loaded.
+# Compile and test the head-unit launcher on every push/PR that touches it.
+# Three signals, in order of how fast they fail:
+#   1. JVM unit tests over the pure logic (no device, no emulator).
+#   2. The release assemble with R8 + resource shrinking — exactly what
+#      gets side-loaded, so a keep-rule regression shows up here.
+#   3. An APK size budget, because R8 failures are usually silent growth.
 
 on:
   push:
@@ -40,10 +43,41 @@ jobs:
       # Gradle + configuration caching keyed off the wrapper/lockstate.
       - uses: gradle/actions/setup-gradle@v4
 
+      # Runs before the assemble so a broken decoder fails in ~1 min rather
+      # than after a full R8 pass. `test` covers :app and :carlib, debug and
+      # release variants; a failing test fails the job.
+      - name: Unit tests
+        run: ./gradlew --no-daemon test
+
+      # Always upload, so a red run leaves the failure reports behind.
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: carlauncher-test-reports
+          path: launcher/*/build/reports/tests/
+          if-no-files-found: ignore
+
       # The runner image ships the Android SDK; AGP resolves it via
       # ANDROID_HOME and downloads any missing platform/build-tools itself.
       - name: Build release and debug APKs
         run: ./gradlew --no-daemon assembleRelease assembleDebug
+
+      # R8 and resource shrinking fail quietly: a lost keep rule or a newly
+      # unshrunk dependency shows up as a bigger APK, never as a build error.
+      # The head unit is side-loaded over a slow link, so growth is a real
+      # cost. Budget is the measured size plus ~20% headroom — raise it in
+      # the same commit that legitimately grows the app, and say why.
+      - name: Check APK size budget
+        run: |
+          budget=8388608   # 8 MiB
+          apk=app/build/outputs/apk/release/app-release.apk
+          size=$(stat -c%s "$apk")
+          echo "release APK: $size bytes (budget $budget)"
+          if [ "$size" -gt "$budget" ]; then
+            echo "::error::release APK is $size bytes, over the $budget byte budget"
+            exit 1
+          fi
 
       - name: Upload release APK
         uses: actions/upload-artifact@v4
