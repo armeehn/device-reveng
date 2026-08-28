@@ -69,6 +69,7 @@ fun SettingsHost(
 
             SettingsRoute.Display -> DisplaySettingsScreen(
                 controller = controller,
+                carService = carService,
                 onBack = ::pop,
             )
 
