@@ -25,6 +25,10 @@ data class ThemeColors(
     val onSurface: Long,
     val onSurfaceMuted: Long,
     val error: Long,
+    // Optional 2nd/3rd accents (Riposte's rotating mi-parti trio). 0 = unset → falls back
+    // to [primary], so pre-existing themes and serialized user themes are unaffected.
+    val accent2: Long = 0,
+    val accent3: Long = 0,
 ) {
     /**
      * Build a Material3 [ColorScheme] from these roles. The light/dark *base* is chosen
@@ -34,12 +38,22 @@ data class ThemeColors(
     fun toColorScheme(): ColorScheme {
         val bg = Color(background)
         val base = if (bg.luminance() < 0.5f) darkColorScheme() else lightColorScheme()
+        val second = Color(if (accent2 != 0L) accent2 else primary)
+        val third = Color(if (accent3 != 0L) accent3 else primary)
         // Pastel accents (Catppuccin, Rosé Pine…) are light — onSurface text would wash
         // out on them, so pick black/white by the accent's own luminance instead.
         val onPrimary =
             if (Color(primary).luminance() < 0.4f) Color(0xFFF2F4F8) else Color(0xFF14161A)
         return base.copy(
             primary = Color(primary),
+            secondary = second,
+            onSecondary = Color(surface),
+            secondaryContainer = second.copy(alpha = 0.30f).compositeOverOpaque(bg),
+            onSecondaryContainer = Color(onSurface),
+            tertiary = third,
+            onTertiary = Color(surface),
+            tertiaryContainer = third.copy(alpha = 0.30f).compositeOverOpaque(bg),
+            onTertiaryContainer = Color(onSurface),
             onPrimary = onPrimary,
             primaryContainer = Color(primary).copy(alpha = 0.30f).compositeOverOpaque(bg),
             onPrimaryContainer = Color(onSurface),
@@ -67,6 +81,20 @@ private fun Color.compositeOverOpaque(bg: Color): Color {
 }
 
 /**
+ * Non-color styling a theme can carry. Defaults reproduce the launcher's original look,
+ * so every pre-existing theme (built-in or serialized user theme) is byte-identical.
+ *
+ * @param cornerScale multiplier applied to every corner radius (0 = sharp corners).
+ * @param monoType    use the JetBrains Mono brand type scale instead of the system sans.
+ * @param hardEdge    cards get a 2dp structural border + hard 4dp offset shadow (no blur).
+ */
+data class ThemeStyle(
+    val cornerScale: Float = 1f,
+    val monoType: Boolean = false,
+    val hardEdge: Boolean = false,
+)
+
+/**
  * A named, switchable launcher color theme. Carries separate [day] and [night] variants
  * so a theme still honours the vendor illumination broadcast (CarEvents.dayNight); a
  * theme that wants no day/night distinction simply uses identical variants.
@@ -80,6 +108,7 @@ data class CarTheme(
     val isBuiltIn: Boolean,
     val day: ThemeColors,
     val night: ThemeColors,
+    val style: ThemeStyle = ThemeStyle(),
 ) {
     fun variant(night: Boolean): ThemeColors = if (night) this.night else this.day
 }
@@ -362,10 +391,52 @@ object BuiltInThemes {
         ),
     )
 
+    /**
+     * "Riposte" — the Riposte Laboratories brand system (ripostelabs.xyz/brand,
+     * DOC NO. RL-BRAND-001 REV. A): ink on bone, JetBrains Mono, radius 0, hard offset
+     * shadows, and the rotating Pink → Marigold → Teal accent trio.
+     *
+     * Day is the literal printed-document palette (Ink #1D1A17 on Bone #F6F1E7; Pink Deep
+     * as primary since bright pink fails WCAG for text). Night flips onto the brand's ink
+     * field (Ink / Ink Raised panels) with dimmed bone text and a desaturated low-blue
+     * (marigold-led) accent rotation, per the night-driving rules in LAUNCHER_DESIGN §1.3.
+     */
+    val RIPOSTE = CarTheme(
+        id = "builtin.riposte",
+        name = "Riposte",
+        isBuiltIn = true,
+        style = ThemeStyle(cornerScale = 0f, monoType = true, hardEdge = true),
+        day = ThemeColors(
+            background = 0xFFF6F1E7, // Bone
+            surface = 0xFFF6F1E7, // cards are bone too — the 2dp ink border separates
+            surfaceVariant = 0xFFEAE4D6, // Bone Dim (recessed panels)
+            primary = 0xFFD81150, // Pink Deep (AA 4.53:1 on bone)
+            onBackground = 0xFF1D1A17, // Ink
+            onSurface = 0xFF1D1A17,
+            onSurfaceMuted = 0xFF5C554C, // Ink Line
+            error = 0xFFB3261E,
+            accent2 = 0xFF12B795, // Riposte Teal (fills/bars)
+            accent3 = 0xFFFE9A0D, // Riposte Marigold (8.12:1 — ink-text safe)
+        ),
+        night = ThemeColors(
+            background = 0xFF14110E, // ink field, dimmed below brand Ink for night
+            surface = 0xFF1D1A17, // Ink
+            surfaceVariant = 0xFF241F1B, // Ink Raised
+            primary = 0xFFC9891F, // dimmed marigold — low-blue night accent
+            onBackground = 0xFFCFC7B8, // dimmed bone
+            onSurface = 0xFFCFC7B8,
+            onSurfaceMuted = 0xFF8A8172,
+            error = 0xFFCC4A44,
+            accent2 = 0xFF17806A, // dimmed teal
+            accent3 = 0xFF9C3555, // dimmed pink
+        ),
+    )
+
     val DEFAULT: CarTheme = MIDNIGHT
 
     val ALL: List<CarTheme> = listOf(
         MIDNIGHT, DAYLIGHT, AMBER,
         CATPPUCCIN, GRUVBOX, NORD, TOKYO_NIGHT, DRACULA, ROSE_PINE, PHOSPHOR,
+        RIPOSTE,
     )
 }

@@ -10,7 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
+import com.reveng.carlauncher.ui.theme.carShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -106,7 +106,7 @@ private fun SensorBar(proximity: Float, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .height(20.dp)
-            .clip(RoundedCornerShape(6.dp))
+            .clip(carShape(6.dp))
             .background(color),
     )
 }

@@ -10,7 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
+import com.reveng.carlauncher.ui.theme.carShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -110,7 +110,7 @@ private fun SensorRow(label: String, levels: List<Int>, rs: RadarState) {
                     modifier = Modifier
                         .weight(1f)
                         .height(28.dp)
-                        .clip(RoundedCornerShape(8.dp))
+                        .clip(carShape(8.dp))
                         .background(color),
                     contentAlignment = Alignment.Center,
                 ) {
