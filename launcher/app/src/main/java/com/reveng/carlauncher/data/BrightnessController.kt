@@ -27,6 +27,31 @@ object BrightnessController {
     /** Never let the head-unit backlight go fully black from a settings slider. */
     private const val MIN_APPLY = 6 // ~2%
 
+    /**
+     * Top of this panel's *usable* backlight band.
+     *
+     * Measured on the GT6 head unit: the panel's luminance saturates at a raw PWM value of only
+     * ~24/255 and is flat above it (setting 24 vs 255 looks identical), so mapping the slider
+     * across 0–255 — or even 0–34 — left the top of its travel doing nothing. We map the full
+     * 0–100 % slider into [MIN_APPLY, USABLE_MAX] so every part of the slider changes the screen.
+     * Determined empirically (raw plateau ≈20); nudge this if a unit's panel differs.
+     */
+    private const val USABLE_MAX = 20
+
+    /** slider 0–100 % → raw backlight value, linear across the usable band. */
+    private fun percentToRaw(percent: Int): Int {
+        val p = percent.coerceIn(0, 100) / 100.0
+        val raw = MIN_APPLY + (USABLE_MAX - MIN_APPLY) * p
+        return Math.round(raw).toInt().coerceIn(MIN_APPLY, USABLE_MAX)
+    }
+
+    /** raw backlight value → slider 0–100 % (inverse; values above the band read as 100 %). */
+    private fun rawToPercent(raw: Int): Int {
+        val span = (USABLE_MAX - MIN_APPLY).toDouble()
+        val frac = ((raw - MIN_APPLY) / span).coerceIn(0.0, 1.0)
+        return Math.round(100.0 * frac).toInt().coerceIn(0, 100)
+    }
+
     /** True once the user has granted WRITE_SETTINGS (special access). */
     fun canWrite(context: Context): Boolean = Settings.System.canWrite(context)
 
@@ -40,12 +65,12 @@ object BrightnessController {
             .onFailure { Log.w(TAG, "cannot open WRITE_SETTINGS screen", it) }
     }
 
-    /** Current system brightness as 0–100 %, or a sane default if unreadable. */
+    /** Current system brightness as a 0–100 % slider position (perceptual curve). */
     fun currentPercent(context: Context): Int {
         val raw = runCatching {
             Settings.System.getInt(context.contentResolver, Settings.System.SCREEN_BRIGHTNESS)
-        }.getOrDefault(153) // ~60%
-        return (raw * 100 / MAX).coerceIn(0, 100)
+        }.getOrDefault(128)
+        return rawToPercent(raw)
     }
 
     /**
@@ -54,7 +79,7 @@ object BrightnessController {
      * framework write went through (false = permission missing).
      */
     fun setPercent(context: Context, percent: Int, carService: CarService?): Boolean {
-        val value = (percent.coerceIn(0, 100) * MAX / 100).coerceAtLeast(MIN_APPLY)
+        val value = percentToRaw(percent)
         // Best-effort MCU path regardless of WRITE_SETTINGS (guarded, no-op if unbound).
         runCatching { carService?.sendBacklight(value) }
 
