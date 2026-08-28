@@ -11,12 +11,14 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -308,7 +310,7 @@ private fun ReorderableAppGrid(
     }
 }
 
-/** Pinned horizontal row of favorite apps above the grid. Long-press a tile to unfavorite. */
+/** Pinned horizontal row of favorite apps above the grid. Long-press a chip to unfavorite. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun FavoritesRow(
@@ -329,16 +331,55 @@ private fun FavoritesRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             items(apps, key = { "fav_" + it.packageName + "/" + it.activityName }) { app ->
-                Box(Modifier.width(112.dp)) {
-                    AppTile(
-                        app = app,
-                        onClick = { onLaunch(app) },
-                        favorite = true,
-                        onLongClick = { onToggleFavorite(app) },
-                    )
-                }
+                FavoriteChip(
+                    app = app,
+                    onClick = { onLaunch(app) },
+                    onLongClick = { onToggleFavorite(app) },
+                )
             }
         }
+    }
+}
+
+/**
+ * Compact icon + label chip for the Favorites row. The full [AppTile] (72dp icon, label
+ * underneath) is too tall for the center column — NavCard + search + favorites + grid must
+ * share ~400dp, so the tile's label ended up clipped off the bottom of the screen. The chip
+ * keeps the name beside the icon so it is always visible, and returns ~60dp to the grid.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun FavoriteChip(
+    app: AppInfo,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+) {
+    val bmp = remember(app.packageName + app.activityName) {
+        app.icon.toBitmap(width = 96, height = 96).asImageBitmap()
+    }
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Image(
+            bitmap = bmp,
+            contentDescription = app.label,
+            contentScale = ContentScale.Fit,
+            modifier = Modifier.size(36.dp),
+        )
+        Text(
+            text = app.label,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.widthIn(max = 140.dp),
+        )
     }
 }
 
