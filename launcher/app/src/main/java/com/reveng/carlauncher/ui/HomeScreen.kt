@@ -77,6 +77,9 @@ fun HomeScreen(
     settingsStore: SettingsStore? = null,
     onOpenSettings: () -> Unit = {},
     radioPresetsStore: com.reveng.carlauncher.data.RadioPresetsStore? = null, // v0.9 Radio 2.0
+    // v2.6: the glance cards deep-link into their full screens (§3.3, §3.4).
+    onOpenMedia: () -> Unit = {},
+    onOpenRadio: () -> Unit = {},
 ) {
     val reverse by carEvents.reverse.collectAsStateSafe(initial = false)
     val media by nowPlaying.state.collectAsStateSafe(initial = null)
@@ -105,10 +108,13 @@ fun HomeScreen(
         // CENTER activation for the focused region (grid tiles launch via GridFocus).
         focus.onActivate = { target ->
             when (target) {
-                is FocusTarget.Media -> nowPlaying.playPause()
+                // v2.6: CENTER on a card opens its full screen, matching the touch deep-link.
+                // Play/pause is still one press away there, and stays on the wheel's own keys.
+                is FocusTarget.Media -> onOpenMedia()
+                is FocusTarget.Radio -> onOpenRadio()
                 is FocusTarget.Grid -> focus.grid.launch(target.index)
                 is FocusTarget.Quick -> quickApps.getOrNull(target.index)?.let(appRepository::launch)
-                else -> {} // Climate / Nav / Radio are glanceable, no primary action
+                else -> {} // Climate / Nav are glanceable, no primary action
             }
         }
     }
@@ -146,7 +152,11 @@ fun HomeScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .weight(1f)
-                                .launcherFocusTarget(focus, FocusTarget.Media),
+                                .launcherFocusTarget(focus, FocusTarget.Media)
+                                // v2.6: tapping the card body opens the full player. The card's
+                                // own transport buttons consume their taps first, so this only
+                                // catches the art / title area.
+                                .clickable(onClick = onOpenMedia),
                         ) {
                             MediaCard(
                                 now = media,
@@ -241,7 +251,8 @@ fun HomeScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(180.dp)
-                                .launcherFocusTarget(focus, FocusTarget.Radio),
+                                .launcherFocusTarget(focus, FocusTarget.Radio)
+                                .clickable(onClick = onOpenRadio), // v2.6
                         ) {
                             RadioCard(
                                 carService = carService,
