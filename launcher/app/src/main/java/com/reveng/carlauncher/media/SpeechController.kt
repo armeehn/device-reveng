@@ -3,6 +3,7 @@ package com.reveng.carlauncher.media
 import android.content.Context
 import android.speech.tts.TextToSpeech
 import android.util.Log
+import com.reveng.carlauncher.notif.ShelfNotification
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -42,11 +43,16 @@ class SpeechController(context: Context) {
 
     val isReady: Boolean get() = ready.get()
 
-    /** Speak [text], interrupting anything currently speaking. No-op until the engine is ready. */
-    fun speak(text: String) {
+    /**
+     * Speak [text]. [flush] true interrupts anything currently speaking (right for a track change
+     * that makes the previous announcement stale); false queues after it (right for notifications,
+     * where cutting off the previous one loses information). No-op until the engine is ready.
+     */
+    fun speak(text: String, flush: Boolean = true) {
         val engine = tts ?: return
         if (!ready.get() || text.isBlank()) return
-        engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, UTTERANCE_ID)
+        val mode = if (flush) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
+        engine.speak(text, mode, null, UTTERANCE_ID)
     }
 
     /**
@@ -81,6 +87,41 @@ class SpeechController(context: Context) {
     private fun announce(np: NowPlaying): String =
         if (np.artist.isBlank()) "Now playing ${np.title}"
         else "Now playing ${np.title} by ${np.artist}"
+
+    /**
+     * Announce newly-arrived shelf notifications while [enabled] is on. On the first emission after
+     * enabling it snapshots the current keys WITHOUT speaking, so switching this on doesn't read out
+     * the whole existing backlog — only notifications that arrive afterwards are spoken. Queued
+     * (not flushed) so a burst is read in order rather than clipped to the last one.
+     */
+    fun observeNotifications(
+        scope: CoroutineScope,
+        notifications: Flow<List<ShelfNotification>>,
+        enabled: Flow<Boolean>,
+    ) {
+        scope.launch {
+            var seen: Set<String>? = null
+            combine(notifications, enabled) { list, on -> list to on }
+                .collect { (list, on) ->
+                    if (!on) {
+                        seen = null // reset: re-enabling re-snapshots rather than replaying the backlog
+                        return@collect
+                    }
+                    val keys = list.mapTo(HashSet()) { it.key }
+                    val prev = seen
+                    seen = keys
+                    if (prev == null) return@collect // first pass after enabling: snapshot only
+                    list.filter { it.key !in prev }
+                        .sortedBy { it.postedAtMs }
+                        .forEach { speak(announceNotification(it), flush = false) }
+                }
+        }
+    }
+
+    private fun announceNotification(n: ShelfNotification): String {
+        val head = if (n.title.isBlank()) n.appLabel else "${n.appLabel}: ${n.title}"
+        return if (n.text.isBlank()) head else "$head. ${n.text}"
+    }
 
     fun shutdown() {
         tts?.stop()

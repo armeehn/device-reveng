@@ -139,6 +139,11 @@ fun LauncherPrefsScreen(
                 settings.readNowPlaying,
                 settingsStore::setReadNowPlaying,
             )
+            ToggleSetting(
+                "Read notifications aloud",
+                settings.readNotifications,
+                settingsStore::setReadNotifications,
+            )
         }
 
         SettingsSection(title = "Top bar & shade") {

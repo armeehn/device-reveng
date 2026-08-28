@@ -178,6 +178,11 @@ class MainActivity : ComponentActivity() {
                 nowPlaying.state,
                 settingsStore.settings.map { s -> s.readNowPlaying },
             )
+            it.observeNotifications(
+                lifecycleScope,
+                com.reveng.carlauncher.notif.NotificationRepository.items,
+                settingsStore.settings.map { s -> s.readNotifications },
+            )
         }
         radioPresetsStore = RadioPresetsStore(applicationContext, lifecycleScope) // v0.9
         carSettingsController = CarSettingsController(applicationContext, lifecycleScope) // v1.1
