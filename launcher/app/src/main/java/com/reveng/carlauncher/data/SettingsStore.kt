@@ -49,6 +49,22 @@ data class LauncherSettings(
      * hide the theme editor and SysVar browser with no way to get them back.
      */
     val motionGateEnabled: Boolean = true,
+    /**
+     * v2.8 — reachability mirror (LAUNCHER_DESIGN §2.5). AUTO defers to [Reachability], which has
+     * no confirmed `Sys_CarType` mapping yet and therefore always answers LHD; LHD/RHD pin it.
+     */
+    val driverSideMode: DriverSideMode = DriverSideMode.AUTO,
+    /**
+     * v2.8 — the user has checked the radar byte layout against their car (Settings ▸ Parking
+     * radar ▸ Raw frame capture) and it decodes correctly.
+     *
+     * Off by default, and the default is the whole point: [com.reveng.carlauncher.carlib.RadarState]
+     * decodes a GUESSED layout, so anything that turns a decoded level into a *safety* claim — the
+     * maneuvering side-strip — stays hidden until a human has confirmed the guess on a real car.
+     * The bars that merely mirror the raw frame (the radar settings readout) are not gated: they
+     * report what arrived, not what it means.
+     */
+    val radarLayoutConfirmed: Boolean = false,
 ) {
     companion object {
         /** 0 = adaptive/auto sizing; otherwise a fixed column count. */
@@ -100,6 +116,10 @@ class SettingsStore(context: Context) {
                         DayNightMode.valueOf(prefs[DAY_NIGHT_MODE_KEY] ?: DayNightMode.AUTO.name)
                     }.getOrDefault(DayNightMode.AUTO),
                     motionGateEnabled = prefs[MOTION_GATE_KEY] ?: true, // v2.5
+                    driverSideMode = runCatching { // v2.8
+                        DriverSideMode.valueOf(prefs[DRIVER_SIDE_KEY] ?: DriverSideMode.AUTO.name)
+                    }.getOrDefault(DriverSideMode.AUTO),
+                    radarLayoutConfirmed = prefs[RADAR_CONFIRMED_KEY] ?: false, // v2.8
                 )
             }
             .stateIn(scope, SharingStarted.Eagerly, LauncherSettings())
@@ -126,6 +146,16 @@ class SettingsStore(context: Context) {
         ds.edit { it[MOTION_GATE_KEY] = enabled }
     }
 
+    /** v2.8 — pin the driver's side, or hand it back to [Reachability]. */
+    fun setDriverSideMode(mode: DriverSideMode) = scope.launch {
+        ds.edit { it[DRIVER_SIDE_KEY] = mode.name }
+    }
+
+    /** v2.8 — record that the radar byte layout was checked against a real car. */
+    fun setRadarLayoutConfirmed(confirmed: Boolean) = scope.launch {
+        ds.edit { it[RADAR_CONFIRMED_KEY] = confirmed }
+    }
+
     private companion object {
         val GRID_COLUMNS_KEY = intPreferencesKey("grid_columns")
         val SHOW_MEDIA_KEY = booleanPreferencesKey("show_media")
@@ -135,5 +165,7 @@ class SettingsStore(context: Context) {
         val DAY_NIGHT_MODE_KEY = stringPreferencesKey("day_night_mode")
         val FIRST_RUN_KEY = booleanPreferencesKey("first_run") // v1.0 onboarding gate
         val MOTION_GATE_KEY = booleanPreferencesKey("motion_gate") // v2.5 parked-only gate
+        val DRIVER_SIDE_KEY = stringPreferencesKey("driver_side") // v2.8 reachability mirror
+        val RADAR_CONFIRMED_KEY = booleanPreferencesKey("radar_layout_confirmed") // v2.8
     }
 }

@@ -201,6 +201,17 @@ class CarEvents(private val appContext: Context) {
      */
     val radar: StateFlow<RadarState?> = _radar.asStateFlow()
 
+    // v2.8 --- Undecoded radar payload, for the capture view -------------------
+    private val _radarRaw = MutableStateFlow<RadarFrame?>(null)
+    /**
+     * v2.8 — the raw `CAR_CAN_DATA` payload of the last radar broadcast, undecoded.
+     *
+     * Published even when [RadarState.fromRadarData] rejects the frame. The guessed layout is
+     * precisely what the capture screen exists to disprove, so gating the bytes on that guess being
+     * right would hide the evidence in exactly the case where it matters.
+     */
+    val radarRaw: StateFlow<RadarFrame?> = _radarRaw.asStateFlow()
+
     /**
      * Numeric speed in km/h, or [GpsSpeedSource.SPEED_UNKNOWN] when it cannot be read.
      *
@@ -271,6 +282,10 @@ class CarEvents(private val appContext: Context) {
                 // v0.7: raw parking-radar frame → best-effort decode (offsets GUESSED).
                 MCU_CAR_CAN_RADAR_INFO -> {
                     val bytes = intent.getByteArrayExtra(EXTRA_CAR_CAN_DATA)
+                    // v2.8: keep the payload before it is interpreted (see radarRaw).
+                    if (bytes != null) {
+                        _radarRaw.value = RadarFrame(bytes, System.currentTimeMillis())
+                    }
                     val rs = RadarState.fromRadarData(bytes)
                     if (rs.valid) _radar.value = rs
                 }

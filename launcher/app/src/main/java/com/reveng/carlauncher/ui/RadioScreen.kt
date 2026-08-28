@@ -2,6 +2,7 @@ package com.reveng.carlauncher.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import com.reveng.carlauncher.input.focusRing // v2.8
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -151,7 +152,8 @@ private fun RadioHeader(tuner: TunerState, onBack: () -> Unit) {
             modifier = Modifier
                 .size(48.dp)
                 .clip(carShape(12.dp))
-                .clickable(onClick = withTapFeedback(onBack))
+                .focusRing()
+                .clickable(onClick = withTapFeedback(onBack)) // v2.8 ring
                 .padding(8.dp),
         )
         Spacer(Modifier.width(16.dp))
@@ -308,6 +310,7 @@ private fun PresetSlot(
             .height(PRESET_HEIGHT_DP.dp)
             .clip(carShape(14.dp))
             .background(bg)
+            .focusRing()
             .clickable(onClick = withTapFeedback(onRecall))
             .padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -327,6 +330,7 @@ private fun PresetSlot(
             modifier = Modifier
                 .size(36.dp)
                 .clip(carShape(8.dp))
+                .focusRing(cornerRadiusDp = 10)
                 .clickable(onClick = withTapFeedback(onDelete))
                 .padding(6.dp),
         )
@@ -341,6 +345,7 @@ private fun EmptyPresetSlot(enabled: Boolean, onSave: () -> Unit, modifier: Modi
             .height(PRESET_HEIGHT_DP.dp)
             .clip(carShape(14.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = EMPTY_SLOT_ALPHA))
+            .focusRing()
             .clickable(enabled = enabled, onClick = withTapFeedback(onSave)),
     ) {
         Text(
@@ -379,6 +384,7 @@ private fun TunerButton(
             .size(TRANSPORT_TARGET_DP.dp)
             .clip(carShape(24.dp))
             .background(bg)
+            .focusRing()
             .clickable(onClick = withTapFeedback(onClick)),
     ) {
         Icon(

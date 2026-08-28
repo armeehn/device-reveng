@@ -3,6 +3,7 @@ package com.reveng.carlauncher.ui
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import com.reveng.carlauncher.input.focusRing // v2.8
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -159,7 +160,8 @@ private fun MediaHeader(vendorSource: String?, onBack: () -> Unit) {
             modifier = Modifier
                 .size(48.dp)
                 .clip(carShape(12.dp))
-                .clickable(onClick = withTapFeedback(onBack))
+                .focusRing()
+                .clickable(onClick = withTapFeedback(onBack)) // v2.8 ring
                 .padding(8.dp),
         )
         Spacer(Modifier.width(16.dp))
@@ -265,6 +267,7 @@ private fun SourcePicker(
                 modifier = Modifier
                     .clip(carShape(14.dp))
                     .background(bg)
+                    .focusRing()
                     .clickable(onClick = withTapFeedback { onSelect(source.packageName) })
                     .padding(horizontal = 20.dp, vertical = 12.dp),
             )
@@ -390,6 +393,7 @@ private fun TransportButton(
             .size(TRANSPORT_TARGET_DP.dp)
             .clip(carShape(24.dp))
             .background(bg.copy(alpha = alpha))
+            .focusRing()
             .clickable(enabled = enabled, onClick = withTapFeedback(onClick)),
     ) {
         Icon(
