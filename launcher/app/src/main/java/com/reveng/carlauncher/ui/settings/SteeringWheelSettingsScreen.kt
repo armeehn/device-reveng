@@ -14,11 +14,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -26,7 +23,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.reveng.carlauncher.carlib.CarEvents
 import com.reveng.carlauncher.data.CarSettingsController
-import com.reveng.carlauncher.data.SettingKeys
 
 /**
  * v1.8 — Steering wheel. A reskinned view of the vendor SWC-learn page:
@@ -35,11 +31,19 @@ import com.reveng.carlauncher.data.SettingKeys
  *    voltage, so the user can identify which physical button sends what (the same signal the
  *    vendor's learn page shows).
  *  * **Current mapping** — the launcher's built-in CAR_KEY_* → action table ([SwcNavigator]).
- *  * **Learn mode** — writes the vendor learn SysVar so the MCU associates the next press
- *    (best-effort; the full learn handshake is MCU-side, noted inline).
  *
  * Protected `STEER_WHEEL_INFOR` only reaches us as a privileged/system app; as a normal app the
  * monitor stays quiet (CAR_API §4, §7).
+ *
+ * v2.4.2: the old "Learn mode" toggle / "Save learned mapping" action were REMOVED. They wrote
+ * scalars (`wheel_key_learn_custom`=0/1, `Set_Mcu_Wheel_Custom_Key_Save`=1) into vendor SysVar
+ * keys, but the vendor gateway (`com.szchoiceway.eventcenter`) stores a **JSON object** under
+ * `wheel_key_learn_custom` — `EventService.initSysEventState → onReadMcuWheelCustomKey` does
+ * `Gson.fromJson(value, …)` on it at every startup. A scalar there makes that parse throw
+ * ("Expected BEGIN_OBJECT but was NUMBER"), and because it runs during init the whole gateway
+ * **crash-loops on boot** — taking the top-bar app-exit, SWC and HVAC down with it. We do not
+ * know the vendor JSON schema, so we no longer write these keys at all; key-learning must be
+ * done from the vendor settings app. The live monitor + mapping table below are read-only.
  */
 @Composable
 fun SteeringWheelSettingsScreen(
@@ -48,7 +52,6 @@ fun SteeringWheelSettingsScreen(
     onBack: () -> Unit,
 ) {
     val log = remember { mutableStateListOf<CarEvents.SwcKey>() }
-    var learnMode by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         carEvents.swcKeys.collect { key ->
@@ -92,24 +95,13 @@ fun SteeringWheelSettingsScreen(
         }
 
         SettingsSection(title = "Learn a key") {
-            ToggleSetting(
-                label = "Learn mode",
-                description = "Arm the MCU to associate the next wheel press",
-                checked = learnMode,
-                onChange = {
-                    learnMode = it
-                    controller.setInt(SettingKeys.WHEEL_KEY_LEARN_CUSTOM, if (it) 1 else 0)
-                },
-            )
-            ActionRow(
-                label = "Save learned mapping",
-                description = "Commit the current wheel-key learn to the MCU",
-                onClick = { controller.setInt(SettingKeys.WHEEL_CUSTOM_KEY_SAVE, 1) },
-            )
             Text(
-                text = "Full key learning is an MCU handshake; these controls arm/commit the " +
-                    "vendor learn state. Verify on-device.",
-                style = MaterialTheme.typography.bodySmall,
+                text = "Steering-wheel key learning is an MCU handshake handled by the factory " +
+                    "settings app, which stores the learned mapping in the vendor gateway's own " +
+                    "format. This launcher no longer writes those keys — an earlier build wrote " +
+                    "the wrong data type and crash-looped the gateway on boot. Use the vendor " +
+                    "settings app to learn a wheel key; it will appear in the monitor above.",
+                style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
