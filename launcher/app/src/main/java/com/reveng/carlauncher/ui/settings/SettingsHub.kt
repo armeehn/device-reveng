@@ -6,6 +6,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BrightnessMedium
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.Security // v2.9
@@ -47,6 +48,12 @@ fun SettingsHub(
                 title = "Launcher",
                 subtitle = "Home widgets, grid density, default home, day/night",
                 onClick = { onOpen(SettingsRoute.LauncherPrefs) },
+            )
+            SettingsCategoryCard(
+                icon = Icons.Filled.GridView,
+                title = "App directory",
+                subtitle = "Move apps to Home/System or hide them from the drawer",
+                onClick = { onOpen(SettingsRoute.AppDirectory) },
             )
             SettingsCategoryCard(
                 icon = Icons.Filled.BrightnessMedium,
