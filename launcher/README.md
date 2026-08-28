@@ -293,6 +293,56 @@ screen prints the live raw `Sys_CarType` next to the override so a user in an RH
 theirs. Any value added to that table is GUESSED until it is checked against a car that is actually
 right-hand drive.
 
+## The cockpit release (v3.0)
+
+**Vehicle dashboard** (`ui/DashboardScreen.kt`, status bar ▸ speedometer icon). The launcher had
+accumulated vehicle signals across five surfaces and nowhere to see them together. Speed, outside
+temperature, steering, ignition, parking radar and a session timer, on one screen.
+
+Every tile carries a provenance line, because these signals are *not* equally trustworthy and a
+dashboard that renders a guess identically to a confirmed reading is worse than no dashboard:
+
+| Tile | Source | Status |
+|---|---|---|
+| Speed | `CarEvents.speedKmh` (GPS, v2.5) | derived, not from the car |
+| Outside temp | `CAN_CAR_OUT_SIDE_TEMP_EVT` | action **confirmed**; extra key names GUESSED |
+| Steering | `ZXW_CAN_WHEEL_TRACK_EVT` | action **confirmed**; units and sign GUESSED |
+| Ignition | `ACTION_ACC_OPEN_CLOSE_EVT` | **confirmed** |
+| Radar | `MCU_CAR_CAN_RADAR_INFO` | byte layout GUESSED (v2.8) |
+| Session timer | measured here | not the car's trip computer |
+
+The steering tile shows **no number**. The extra's units and sign are undocumented, so printing
+"42°" would invent precision we do not have; a bar that leans the way the wheel leans is exactly
+as much as the signal supports. `CAN_CAR_TIRP_INFO` exists in the constant table but no extras
+were recovered for it, so the real trip computer is not readable — hence "this session".
+
+**Driver profiles** (`data/DriverProfilesStore.kt`, status bar ▸ account icon — two taps from
+Home, as §3.0 asks). A profile bundles theme, favourites, quick-launch order and reachability.
+Applying one writes *through* to the stores that already own each setting rather than becoming a
+second source of truth, so a profile can never disagree with the live value. Saving is
+parked-only (it needs the keyboard); applying is not — being unable to restore your own layout
+while moving would be worse than the single tap.
+
+**Gateway UIMODE handshake** (`carlib/GatewayHandshake.kt`). Announces our UI mode on
+`ACTION_LAUNCHER_TO_EVENTCENTER_UIMODE_EVENT` (CAR_API §6.2), which is what makes the vendor
+stack treat us as *the* launcher. It deliberately does **not** drive our theming:
+`CUSTOMERUI_NOTES.md` records that the vendor launcher themes from `setUiModeNight/Day` plus a
+local broadcast, *not* from this pair, so reading it as a day/night source would be reading a
+channel the vendor does not actually theme from.
+
+### HVAC write controls — not shipped
+
+The roadmap gated these on STATUS goal #3 proving RAV4 climate is CAN-writable. That test has not
+been run, and STATUS still reads *"Investigating whether RAV4 climate is CAN-controllable or
+display-only (likely display-only)."* So climate stays read-only. The Climate settings screen
+continues to write only vendor *configuration* SysVars (panel type, bus baud, seat heat, units) —
+never a live temperature or fan command.
+
+### Stability bar — not claimable
+
+§3.0 asks for a week of daily driving with zero crashes before the release is called done. None of
+this has run on the head unit at all. Treat v3.0 as feature-complete and **unvalidated**.
+
 ## Known TODOs
 
 - **`IEventService.aidl`** declares only a subset of methods and its transaction
@@ -318,4 +368,13 @@ right-hand drive.
   off a real RHD car.
 - **Vendor `sendMode` value table** — needed before MediaScreen can switch the car between
   Bluetooth / USB / the built-in player.
+- **`CAN_CAR_OUT_SIDE_TEMP_EVT` / `ZXW_CAN_WHEEL_TRACK_EVT` extra keys** — the actions are
+  confirmed but the extra *names* were never quoted in the decompile, so v3.0 tries a short list
+  of candidates. Dump the real extras on-device and pin them.
+- **Steering angle units** — turn lock to lock with the dashboard open and read the extremes off
+  the raw value; the indicator currently assumes ±540 and saturates.
+- **`CAN_CAR_TIRP_INFO` extras** — would replace the dashboard's own session timer with the car's
+  real trip computer.
+- **Profile renaming** — captured profiles get a generated name until v2.7's in-app keyboard
+  (`CarTextField`) is on this branch.
 ```
