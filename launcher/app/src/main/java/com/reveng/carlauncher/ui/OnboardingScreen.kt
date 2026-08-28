@@ -404,12 +404,10 @@ private fun PermissionsStep() {
                 label = "Grant location & Bluetooth",
                 primary = true,
                 onClick = {
-                    permissionLauncher.launch(
-                        arrayOf(
-                            android.Manifest.permission.ACCESS_FINE_LOCATION,
-                            android.Manifest.permission.BLUETOOTH_CONNECT,
-                        ),
-                    )
+                    // Derive the request set from the doctor's checks so the required runtime
+                    // permissions are defined once (in SetupDoctor), not re-hardcoded here.
+                    val perms = checks.mapNotNull { it.runtimePermission }.toTypedArray()
+                    if (perms.isNotEmpty()) permissionLauncher.launch(perms)
                 },
             )
             PillButton(

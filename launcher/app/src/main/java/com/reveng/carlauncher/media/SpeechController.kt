@@ -27,7 +27,13 @@ class SpeechController(context: Context) {
     private val ready = AtomicBoolean(false)
     private var tts: TextToSpeech? = null
 
-    init {
+    /**
+     * Bind the TTS engine on first actual use. Constructing it eagerly bound a system service and
+     * loaded a voice on every boot — for a feature that is off by default. Deferring it until a
+     * speech feature is first enabled means a boot with speech off pays nothing.
+     */
+    private fun ensureEngine() {
+        if (tts != null) return
         tts = TextToSpeech(appContext) { status ->
             if (status == TextToSpeech.SUCCESS) {
                 val locale = Locale.getDefault()
@@ -70,12 +76,13 @@ class SpeechController(context: Context) {
             combine(nowPlaying, enabled) { np, on -> np to on }
                 .distinctUntilChanged()
                 .collect { (np, on) ->
-                    if (!on || np == null || !np.isPlaying || np.title.isBlank()) {
-                        // Reset so re-enabling, or resuming the same track, announces again.
-                        if (!on) lastKey = null
+                    if (!on) {
+                        lastKey = null // reset so re-enabling / resuming the same track announces again
                         return@collect
                     }
-                    val key = np.title + "" + np.artist
+                    ensureEngine() // start binding as soon as the feature is on, before a track arrives
+                    if (np == null || !np.isPlaying || np.title.isBlank()) return@collect
+                    val key = np.title + "\u0000" + np.artist // explicit delimiter that can't occur in either field
                     if (key != lastKey) {
                         lastKey = key
                         speak(announce(np))
@@ -107,6 +114,7 @@ class SpeechController(context: Context) {
                         seen = null // reset: re-enabling re-snapshots rather than replaying the backlog
                         return@collect
                     }
+                    ensureEngine() // start binding as soon as the feature is on
                     val keys = list.mapTo(HashSet()) { it.key }
                     val prev = seen
                     seen = keys

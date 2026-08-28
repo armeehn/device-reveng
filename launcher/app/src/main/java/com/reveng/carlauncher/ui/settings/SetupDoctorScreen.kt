@@ -30,10 +30,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.reveng.carlauncher.data.CarSettingsController
 import com.reveng.carlauncher.data.DoctorCheck
 import com.reveng.carlauncher.data.SetupDoctor
+import com.reveng.carlauncher.ui.collectAsStateSafe
 import com.reveng.carlauncher.ui.theme.carShape
 
 /**
@@ -50,9 +50,9 @@ fun SetupDoctorScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val doctor = remember { SetupDoctor(context.applicationContext, scope) }
-    val checks by doctor.checks.collectAsStateWithLifecycle()
-    val repairing by doctor.repairing.collectAsStateWithLifecycle()
-    val root by controller.rootAvailable.collectAsStateWithLifecycle()
+    val checks by doctor.checks.collectAsStateSafe(initial = emptyList())
+    val repairing by doctor.repairing.collectAsStateSafe(initial = false)
+    val root by controller.rootAvailable.collectAsStateSafe(initial = null)
 
     val passing = checks.count { it.ok }
     val total = checks.size

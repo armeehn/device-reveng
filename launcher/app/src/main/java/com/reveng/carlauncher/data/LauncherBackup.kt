@@ -39,6 +39,10 @@ object LauncherBackup {
     private fun datastoreDir(context: Context): File =
         File(context.applicationContext.filesDir, DATASTORE_DIR)
 
+    /** The `*.preferences_pb` files directly inside [dir] (empty if none or unreadable). */
+    private fun prefFilesIn(dir: File): List<File> =
+        dir.listFiles { f -> f.isFile && f.name.endsWith(PREFS_SUFFIX) }?.toList().orEmpty()
+
     /** External `files/backups`, created on demand. Null if external storage is unavailable. */
     fun backupsRoot(context: Context): File? {
         val base = context.applicationContext.getExternalFilesDir(null) ?: return null
@@ -57,9 +61,7 @@ object LauncherBackup {
      */
     fun create(context: Context, nowMillis: Long): File? {
         val root = backupsRoot(context) ?: return null
-        val src = datastoreDir(context)
-        val prefFiles = src.listFiles { f -> f.isFile && f.name.endsWith(PREFS_SUFFIX) }
-            ?.toList().orEmpty()
+        val prefFiles = prefFilesIn(datastoreDir(context))
         if (prefFiles.isEmpty()) {
             Log.w(TAG, "no datastore files to back up")
             return null
@@ -98,8 +100,7 @@ object LauncherBackup {
      * false without touching anything if the backup has no preference files.
      */
     fun restore(context: Context, backup: File): Boolean {
-        val prefFiles = backup.listFiles { f -> f.isFile && f.name.endsWith(PREFS_SUFFIX) }
-            ?.toList().orEmpty()
+        val prefFiles = prefFilesIn(backup)
         if (prefFiles.isEmpty()) {
             Log.w(TAG, "backup ${backup.name} has no preference files")
             return false

@@ -25,6 +25,13 @@ data class DoctorCheck(
     val ok: Boolean,
     val adbCommand: String,
     val rootCommand: String?,
+    /**
+     * The Android runtime permission this check covers, when it has a normal request path (a system
+     * permission dialog). Null for checks with no such path (the notification-listener grants).
+     * First-run onboarding derives its permission-request set from this so the required grants are
+     * defined once, here, rather than re-hardcoded there.
+     */
+    val runtimePermission: String? = null,
 )
 
 /**
@@ -138,6 +145,7 @@ class SetupDoctor(
             ok = granted,
             adbCommand = "adb shell pm grant $pkg $permission",
             rootCommand = "pm grant $pkg $permission",
+            runtimePermission = permission,
         )
     }
 

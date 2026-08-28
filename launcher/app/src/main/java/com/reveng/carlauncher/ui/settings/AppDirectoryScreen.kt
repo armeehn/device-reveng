@@ -26,11 +26,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.reveng.carlauncher.AppInfo
 import com.reveng.carlauncher.AppRepository
 import com.reveng.carlauncher.data.AppDirectoryStore
 import com.reveng.carlauncher.data.Placement
+import com.reveng.carlauncher.data.effectivePlacement
+import com.reveng.carlauncher.ui.collectAsStateSafe
 import com.reveng.carlauncher.ui.rememberDrawablePainter
 import com.reveng.carlauncher.ui.theme.carShape
 import kotlinx.coroutines.Dispatchers
@@ -55,7 +56,7 @@ fun AppDirectoryScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val store = remember { AppDirectoryStore(context.applicationContext, scope) }
-    val placements by store.placements.collectAsStateWithLifecycle()
+    val placements by store.placements.collectAsStateSafe(initial = emptyMap())
 
     var apps by remember { mutableStateOf<List<AppInfo>>(emptyList()) }
     androidx.compose.runtime.LaunchedEffect(Unit) {
@@ -88,8 +89,7 @@ fun AppDirectoryScreen(
                 )
             }
             apps.forEach { app ->
-                val effective = placements[app.packageName]
-                    ?: if (app.isSystem) Placement.SYSTEM else Placement.HOME
+                val effective = app.effectivePlacement(placements)
                 AppDirectoryRow(
                     app = app,
                     selected = effective,

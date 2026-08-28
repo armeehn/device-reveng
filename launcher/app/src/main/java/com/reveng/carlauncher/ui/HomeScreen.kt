@@ -50,6 +50,7 @@ import com.reveng.carlauncher.data.AppDirectoryStore // v0.4.2 custom app direct
 import com.reveng.carlauncher.data.DriverSide // v2.8
 import com.reveng.carlauncher.data.LauncherSettings // v0.6
 import com.reveng.carlauncher.data.Placement // v0.4.2
+import com.reveng.carlauncher.data.effectivePlacement // v0.4.2
 import com.reveng.carlauncher.data.SettingsStore // v0.6
 import com.reveng.carlauncher.input.FocusTarget // v0.8 SWC navigation
 import com.reveng.carlauncher.input.LauncherFocus // v0.8
@@ -59,14 +60,6 @@ import com.reveng.carlauncher.media.JellyfinApp // v2.7
 import com.reveng.carlauncher.media.NowPlayingRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-
-/**
- * v0.4.2 — resolve where an app lands in the drawer: the user's [Placement] override if any,
- * otherwise the [AppInfo.isSystem] classification (System folder vs main grid). [Placement.HIDDEN]
- * apps are then filtered out of both lists by the caller.
- */
-private fun effectivePlacement(app: AppInfo, placements: Map<String, Placement>): Placement =
-    placements[app.packageName] ?: if (app.isSystem) Placement.SYSTEM else Placement.HOME
 
 /**
  * Home screen for the 1920x720 (~1280x480 dp) landscape head unit — the fixed
@@ -123,12 +116,11 @@ fun HomeScreen(
     val dirScope = rememberCoroutineScope()
     val appDirectoryStore = remember { AppDirectoryStore(appContext, dirScope) }
     val placements by appDirectoryStore.placements.collectAsStateSafe(initial = emptyMap())
-    val userApps = remember(apps, placements) {
-        apps.filter { effectivePlacement(it, placements) == Placement.HOME }
-    }
-    val systemApps = remember(apps, placements) {
-        apps.filter { effectivePlacement(it, placements) == Placement.SYSTEM }
-    }
+    // One pass: resolve each app's effective placement once and group. HIDDEN apps land in neither
+    // list, so they simply fall out.
+    val byPlacement = remember(apps, placements) { apps.groupBy { it.effectivePlacement(placements) } }
+    val userApps = byPlacement[Placement.HOME].orEmpty()
+    val systemApps = byPlacement[Placement.SYSTEM].orEmpty()
 
     // v0.8: the roving focus ring shared with the SWC / DPAD key dispatcher (MainActivity).
     val focus = LocalLauncherFocus.current

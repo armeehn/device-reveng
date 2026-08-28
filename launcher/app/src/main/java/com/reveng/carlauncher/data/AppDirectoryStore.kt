@@ -1,6 +1,7 @@
 package com.reveng.carlauncher.data
 
 import android.content.Context
+import com.reveng.carlauncher.AppInfo
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
@@ -20,6 +21,16 @@ private val Context.appDirectoryDataStore: DataStore<Preferences> by preferences
  * user/system classification. Absence of an entry = [DEFAULT] (honour the classification).
  */
 enum class Placement { HOME, SYSTEM, HIDDEN }
+
+/**
+ * Where [app] lands in the drawer: the user's [Placement] override if set, otherwise the built-in
+ * [AppInfo.isSystem] classification (System folder vs main grid). This override-vs-classification
+ * merge is the core semantic of the custom app directory, so it lives once here in the data layer
+ * — both the home drawer (which files apps) and the directory screen (which shows the current
+ * selection) resolve through it rather than each re-inlining the rule.
+ */
+fun AppInfo.effectivePlacement(placements: Map<String, Placement>): Placement =
+    placements[packageName] ?: if (isSystem) Placement.SYSTEM else Placement.HOME
 
 /**
  * Persists the user's custom app directory (v0.4.2): a per-package [Placement] that overrides the
