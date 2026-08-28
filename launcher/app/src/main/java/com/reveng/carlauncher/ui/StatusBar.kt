@@ -7,11 +7,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountCircle // v3.0
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Settings // v0.6
+import androidx.compose.material.icons.filled.Speed // v3.0
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -43,6 +45,9 @@ fun StatusBar(
     onOpenSettings: () -> Unit = {},
     carService: CarService? = null,
     settingsStore: SettingsStore? = null,
+    // v3.0: cockpit dashboard + driver-profile switcher.
+    onOpenDashboard: () -> Unit = {},
+    onOpenProfiles: () -> Unit = {},
 ) {
     val accOn by carEvents.accOn.collectAsStateSafe(initial = true)
     val dayNight by carEvents.dayNight.collectAsStateSafe(initial = CarEvents.DayNight.DAY)
@@ -96,6 +101,24 @@ fun StatusBar(
             if (carService != null && settingsStore != null) {
                 QuickControlsButton(carService = carService, settingsStore = settingsStore)
             }
+            // v3.0: the cockpit dashboard and the driver-profile switcher. Both live here so
+            // each is exactly two taps from Home, which is the §3.0 requirement for profiles.
+            Icon(
+                imageVector = Icons.Filled.Speed,
+                contentDescription = "Vehicle dashboard",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .size(28.dp)
+                    .clickable(onClick = withTapFeedback(onOpenDashboard)),
+            )
+            Icon(
+                imageVector = Icons.Filled.AccountCircle,
+                contentDescription = "Driver profiles",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .size(28.dp)
+                    .clickable(onClick = withTapFeedback(onOpenProfiles)),
+            )
             // v0.6: Settings gear -> SettingsScreen.
             Icon(
                 imageVector = Icons.Filled.Settings,

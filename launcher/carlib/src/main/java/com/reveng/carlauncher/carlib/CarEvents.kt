@@ -108,6 +108,41 @@ class CarEvents(private val appContext: Context) {
             "EventUtils.CAR_CAN_DATA",
         )
 
+        // ---- v3.0: cockpit signals (CAR_API §1.3) — unprotected --------------
+        /**
+         * Outside temperature. The *action* is confirmed (`EvtModel.java:512-517`); the exact
+         * extra key strings are not quoted in the decompile, only described as `..._EVT_EXTRA`
+         * (int) and `..._EVT_EXTRA_STR` (String), so the candidates below are GUESSED the same
+         * way [AIR_BYTE_EXTRA_KEYS] is. The String form is preferred when present because it
+         * arrives already formatted with the car's own unit, so we don't have to guess whether
+         * the int is °C, °F, or tenths.
+         */
+        const val CAN_CAR_OUT_SIDE_TEMP_EVT =
+            "com.choiceway.eventcenter.CanUtils.CAN_CAR_OUT_SIDE_TEMP_EVT"
+        private val OUT_TEMP_STR_EXTRA_KEYS = arrayOf(
+            "CAN_CAR_OUT_SIDE_TEMP_EVT_EXTRA_STR",
+            "CanUtils.CAN_CAR_OUT_SIDE_TEMP_EVT_EXTRA_STR",
+        )
+        private val OUT_TEMP_INT_EXTRA_KEYS = arrayOf(
+            "CAN_CAR_OUT_SIDE_TEMP_EVT_EXTRA",
+            "CanUtils.CAN_CAR_OUT_SIDE_TEMP_EVT_EXTRA",
+        )
+
+        /**
+         * Steering angle, the signal the vendor uses to bend its reverse trajectory lines
+         * (`EvtModel.java:534-538`, confirmed). Units and sign convention are NOT documented —
+         * see [steeringAngle].
+         */
+        const val ZXW_CAN_WHEEL_TRACK_EVT =
+            "com.choiceway.eventcenter.EventUtils.ZXW_CAN_WHEEL_TRACK_EVT"
+        private val WHEEL_TRACK_EXTRA_KEYS = arrayOf(
+            "ZXW_CAN_WHEEL_TRACK_EVT_EXTRA",
+            "EventUtils.ZXW_CAN_WHEEL_TRACK_EVT_EXTRA",
+        )
+
+        /** Sentinel for a cockpit signal the car has not sent us yet. */
+        const val VALUE_UNKNOWN = Int.MIN_VALUE
+
         // ---- SWC keycodes (CAR_API §4, CAR_KEY_*) ---------------------------
         const val CAR_KEY_POWER = 1
         const val CAR_KEY_HOME = 2
@@ -240,6 +275,30 @@ class CarEvents(private val appContext: Context) {
      */
     val motion: StateFlow<Motion> = _motion.asStateFlow()
 
+    // v3.0 --- cockpit signals ------------------------------------------------
+    private val _outsideTemp = MutableStateFlow<String?>(null)
+    /**
+     * Outside temperature as the car renders it (e.g. "12°C"), or null until a frame arrives.
+     *
+     * Deliberately a String rather than a number: the gateway sends a preformatted string
+     * alongside the raw int, and using it means we neither guess the unit nor re-render a value
+     * the car already rendered — the dashboard then always agrees with the cluster. If only the
+     * int arrives we fall back to labelling it °C, which is a GUESS and marked as such below.
+     */
+    val outsideTemp: StateFlow<String?> = _outsideTemp.asStateFlow()
+
+    private val _steeringAngle = MutableStateFlow(VALUE_UNKNOWN)
+    /**
+     * Raw steering angle from `ZXW_CAN_WHEEL_TRACK_EVT`, or [VALUE_UNKNOWN].
+     *
+     * ⚠ Units and sign are GUESSED: the decompile confirms the extra is an int the vendor feeds
+     * into its reverse trajectory, but never says whether it is degrees, tenths of a degree, or
+     * a raw CAN count, nor which way positive turns. The dashboard therefore draws it as a
+     * *relative* indicator centred on the value seen while travelling straight, and never claims
+     * a number of degrees. Confirm on-device by turning lock to lock and reading the extremes.
+     */
+    val steeringAngle: StateFlow<Int> = _steeringAngle.asStateFlow()
+
     /**
      * v2.5 — GPS speed. Owned here so [speedKmh] has one front door regardless of which
      * underlying source fills it, matching how [reverse] and [dayNight] hide their broadcasts.
@@ -265,6 +324,31 @@ class CarEvents(private val appContext: Context) {
                     val on = intent.getIntExtra(EXTRA_ACC_STATUS, 1) == 1
                     _accOn.value = on
                     listeners.forEach { it.onAcc(on) }
+                }
+
+                // v3.0: outside temperature. Prefer the car's own formatted string over the
+                // int, so the dashboard shows the same value and unit as the cluster.
+                CAN_CAR_OUT_SIDE_TEMP_EVT -> {
+                    val text = OUT_TEMP_STR_EXTRA_KEYS.firstNotNullOfOrNull { key ->
+                        runCatching { intent.getStringExtra(key) }.getOrNull()?.takeIf {
+                            it.isNotBlank()
+                        }
+                    }
+                    val fallback = OUT_TEMP_INT_EXTRA_KEYS
+                        .map { key -> intent.getIntExtra(key, VALUE_UNKNOWN) }
+                        .firstOrNull { it != VALUE_UNKNOWN }
+                        // ⚠ GUESSED unit — only used when the preformatted string is absent.
+                        ?.let { "$it°C" }
+                    val value = text ?: fallback
+                    if (value != null) _outsideTemp.value = value
+                }
+
+                // v3.0: steering angle (raw; see the KDoc on steeringAngle).
+                ZXW_CAN_WHEEL_TRACK_EVT -> {
+                    val angle = WHEEL_TRACK_EXTRA_KEYS
+                        .map { key -> intent.getIntExtra(key, VALUE_UNKNOWN) }
+                        .firstOrNull { it != VALUE_UNKNOWN }
+                    if (angle != null) _steeringAngle.value = angle
                 }
 
                 STEER_WHEEL_INFOR -> {
@@ -365,6 +449,8 @@ class CarEvents(private val appContext: Context) {
             addAction(ACTION_NIGHT_BACKLIGHT_CHANGED)
             addAction(MCU_CAR_CAN_RADAR_INFO)
             addAction(CAR_AIR_STATE_ACTION)
+            addAction(CAN_CAR_OUT_SIDE_TEMP_EVT) // v3.0
+            addAction(ZXW_CAN_WHEEL_TRACK_EVT) // v3.0
         }
         // Vendor gateway is a separate app -> this is not an app-internal broadcast,
         // so it must be exported on API 33+ (RECEIVER_EXPORTED).
