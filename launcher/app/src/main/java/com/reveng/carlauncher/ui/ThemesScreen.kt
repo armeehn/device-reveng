@@ -17,7 +17,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.shape.RoundedCornerShape
+import com.reveng.carlauncher.ui.theme.carShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -113,9 +113,9 @@ private fun ThemeCard(
         if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
     Column(
         modifier = Modifier
-            .clip(RoundedCornerShape(18.dp))
+            .clip(carShape(18.dp))
             .background(MaterialTheme.colorScheme.surface)
-            .border(if (isActive) 2.dp else 1.dp, borderColor, RoundedCornerShape(18.dp))
+            .border(if (isActive) 2.dp else 1.dp, borderColor, carShape(18.dp))
             .clickable(onClick = onSetActive)
             .padding(14.dp),
     ) {
@@ -168,14 +168,14 @@ private fun ThemeCard(
 fun ThemePreviewSwatch(colors: ThemeColors, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
+            .clip(carShape(12.dp))
             .background(Color(colors.background))
             .padding(10.dp),
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .clip(RoundedCornerShape(8.dp))
+                .clip(carShape(8.dp))
                 .background(Color(colors.surface))
                 .padding(8.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -184,7 +184,7 @@ fun ThemePreviewSwatch(colors: ThemeColors, modifier: Modifier = Modifier) {
                 Box(
                     modifier = Modifier
                         .size(16.dp)
-                        .clip(RoundedCornerShape(4.dp))
+                        .clip(carShape(4.dp))
                         .background(Color(colors.primary)),
                 )
                 Spacer(Modifier.width(8.dp))
@@ -192,7 +192,7 @@ fun ThemePreviewSwatch(colors: ThemeColors, modifier: Modifier = Modifier) {
                     modifier = Modifier
                         .height(8.dp)
                         .width(70.dp)
-                        .clip(RoundedCornerShape(4.dp))
+                        .clip(carShape(4.dp))
                         .background(Color(colors.onSurface)),
                 )
             }
@@ -200,14 +200,14 @@ fun ThemePreviewSwatch(colors: ThemeColors, modifier: Modifier = Modifier) {
                 modifier = Modifier
                     .height(6.dp)
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(3.dp))
+                    .clip(carShape(3.dp))
                     .background(Color(colors.onSurfaceMuted)),
             )
             Box(
                 modifier = Modifier
                     .height(6.dp)
                     .width(90.dp)
-                    .clip(RoundedCornerShape(3.dp))
+                    .clip(carShape(3.dp))
                     .background(Color(colors.surfaceVariant)),
             )
         }
@@ -225,7 +225,7 @@ fun IconTile(
     Box(
         modifier = Modifier
             .size(44.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(carShape(12.dp))
             .background(
                 if (filled) MaterialTheme.colorScheme.primary
                 else MaterialTheme.colorScheme.surfaceVariant

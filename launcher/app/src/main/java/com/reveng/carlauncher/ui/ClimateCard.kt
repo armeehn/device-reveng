@@ -1,5 +1,6 @@
 package com.reveng.carlauncher.ui
 
+import com.reveng.carlauncher.ui.theme.carCard
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -70,7 +71,7 @@ fun ClimateReadout(
     val state: ClimateState? = broadcast?.takeIf { it.valid } ?: polled.takeIf { it.valid }
 
     Card(
-        modifier = modifier,
+        modifier = modifier.carCard(accent = MaterialTheme.colorScheme.tertiary), // marigold in rotation
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
     ) {
         if (state == null) {
