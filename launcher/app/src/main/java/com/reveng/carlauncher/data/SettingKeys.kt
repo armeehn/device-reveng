@@ -55,6 +55,21 @@ object SettingKeys {
     const val DSP_LOUDNESS = "Set_Dsp_Loud_On_Off_Key"
     const val REVERSING_ATTENUATION = "Sys_Reversing_Attenuation"
 
+    // ---- OEM per-source volume gains (SysProviderOpt.java) ------------------
+    // Each trims the gain of one audio source relative to the main volume.
+    const val VOL_MUSIC = "Sys_Music_Volume_Gain"
+    const val VOL_BT_MUSIC = "Sys_BT_Music_Volume_Gain"
+    const val VOL_BT_CALL = "Sys_BT_Volume_Gain"
+    const val VOL_RADIO = "Sys_Radio_Volume_Gain"
+    const val VOL_USB = "Sys_Car_USB_Volume_Gain"
+    const val VOL_AUX = "Sys_Aux_Volume_Gain"
+    const val VOL_DVD = "Sys_Dvd_Volume_Gain"
+    const val VOL_MOVIE = "Sys_Movie_Volume_Gain"
+    const val VOL_TV = "Sys_TV_Volume_Gain"
+    const val VOL_OTHER = "Sys_Other_Volume_Gain"
+    const val VOL_NAV_MIX = "Sys_Igo_Mixing_Volume"
+    const val ADJUST_OEM_VOLUME = "Sys_ajust_the_original_car_volume"
+
     // ---- Climate / AC ------------------------------------------------------
     const val AIR_PANEL_TYPE = "Sys_Air_Pannel_type"
     const val AIR_CONDITIONING_BAUD = "Sys_Air_conditioning_baud_rate"

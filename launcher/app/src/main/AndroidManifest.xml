@@ -22,6 +22,17 @@
     -->
     <uses-permission android:name="com.szchoiceway.permission.broadcast" />
 
+    <!--
+      WRITE_SETTINGS: lets the Display screen drive the actual Android system backlight
+      (Settings.System.SCREEN_BRIGHTNESS) live, without root. It is a special-access
+      permission: the user grants it once via Settings.canWrite() / ACTION_MANAGE_WRITE_SETTINGS
+      (the Display screen offers a button); on this rooted unit it can also be pre-granted with
+      `appops set ... WRITE_SETTINGS allow`. The vendor MCU backlight is driven in parallel via
+      the AIDL as a best-effort second path.
+    -->
+    <uses-permission android:name="android.permission.WRITE_SETTINGS"
+        tools:ignore="ProtectedPermissions" />
+
     <!-- Narrow visibility fallback if QUERY_ALL_PACKAGES is ever stripped. -->
     <queries>
         <intent>
