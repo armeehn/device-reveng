@@ -13,8 +13,8 @@ android {
         applicationId = "com.reveng.carlauncher"
         minSdk = 33
         targetSdk = 33
-        versionCode = 46
-        versionName = "2.4.2"
+        versionCode = 48
+        versionName = "4.0.0"
 
         // Single head-unit target: arm64 landscape @240dpi, 1920x720.
         ndk { abiFilters += "arm64-v8a" }
@@ -97,4 +97,8 @@ dependencies {
     implementation("androidx.datastore:datastore-preferences:1.1.1")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
+
+    // JVM unit tests for the pure logic (preset codec, frequency formatting, theme table).
+    // See carlib/build.gradle.kts for why there is no Robolectric.
+    testImplementation("junit:junit:4.13.2")
 }

@@ -127,10 +127,50 @@ class CarEvents(private val appContext: Context) {
         /** WPARAM press-state values. */
         const val SWC_STATE_DOWN = 3
         const val SWC_STATE_UP = 4
+
+        // ---- v2.5 motion thresholds (LAUNCHER_DESIGN §1.4) -------------------
+        /**
+         * Hysteresis band for [motion]. We only become [Motion.MOVING] at or above
+         * [MOVING_ABOVE_KMH], and only fall back to [Motion.PARKED] at or below
+         * [PARKED_BELOW_KMH]; inside the band the previous verdict stands. Without that gap a
+         * car creeping at walking pace flaps the gate open and shut every second, which is
+         * worse for the driver than either state.
+         *
+         * 8 km/h ≈ 5 mph, the conventional automotive lockout threshold.
+         */
+        const val MOVING_ABOVE_KMH = 8
+        const val PARKED_BELOW_KMH = 3
+
+        /**
+         * Apply the hysteresis band. Note the band's *entry* case: with no previous verdict, a
+         * live fix between [PARKED_BELOW_KMH] and [MOVING_ABOVE_KMH] resolves to [Motion.MOVING],
+         * not PARKED — we can see the car is not stationary, so the gate closes.
+         *
+         * Pure and instance-free, so it sits on the companion where a unit test can reach it
+         * without standing up a Context. `internal`, not public: the verdict is published through
+         * [motion], and a second public entry point would let a consumer read a raw speed past
+         * the smoothing and staleness rules that feed it.
+         */
+        internal fun nextMotion(current: Motion, kmh: Int): Motion = when {
+            kmh < 0 -> Motion.UNKNOWN
+            kmh >= MOVING_ABOVE_KMH -> Motion.MOVING
+            kmh <= PARKED_BELOW_KMH -> Motion.PARKED
+            current == Motion.UNKNOWN -> Motion.MOVING
+            else -> current
+        }
     }
 
     /** A steering-wheel key event decoded from [STEER_WHEEL_INFOR]. */
     data class SwcKey(val keyIndex: Int, val down: Boolean, val voltage: Int)
+
+    /**
+     * v2.5 — stationary / in motion / unreadable, derived from [speedKmh].
+     *
+     * [UNKNOWN] is an ordinary state rather than an error: no location permission, a cold GPS,
+     * a tunnel, any underground car park. What it should *mean* is the consumer's decision —
+     * see the fail-open note on [motion].
+     */
+    enum class Motion { UNKNOWN, PARKED, MOVING }
 
     /** Day/night illumination source (from the backlight broadcasts). */
     enum class DayNight { DAY, NIGHT }
@@ -180,17 +220,38 @@ class CarEvents(private val appContext: Context) {
     val radar: StateFlow<RadarState?> = _radar.asStateFlow()
 
     /**
-     * Numeric speed in km/h.
+     * Numeric speed in km/h, or [GpsSpeedSource.SPEED_UNKNOWN] when it cannot be read.
      *
-     * TODO(CAR_API §1.3 note): the gateway does NOT broadcast a clean speed extra.
-     * [SHOW_CAR_SPEED_EVENT] is only a show/hide toggle. To populate this flow, one of:
-     *   (a) parse the CAN bulk frame (CAN_BASIC_EVT / MCU_CAR_CAN_INFO),
-     *   (b) read GPS speed via LocationManager,
-     *   (c) query the AIDL/socket channel.
-     * Until one of those is wired up, this stays at -1 (unknown).
+     * v2.5: populated from [GpsSpeedSource] — option (b) of the three the v0.x stub listed. The
+     * gateway still does NOT broadcast a clean speed extra ([SHOW_CAR_SPEED_EVENT] is a
+     * show/hide toggle, CAR_API §1.3), so GPS is the only source a normal app can read.
+     * Decoding the CAN bulk frame (CAN_BASIC_EVT / MCU_CAR_CAN_INFO) remains the preferred
+     * upgrade and should be *preferred over* GPS once its layout is confirmed on-device: it is
+     * available instantly at power-on and indoors, where GPS is not.
      */
-    private val _speedKmh = MutableStateFlow(-1)
+    private val _speedKmh = MutableStateFlow(GpsSpeedSource.SPEED_UNKNOWN)
     val speedKmh: StateFlow<Int> = _speedKmh.asStateFlow()
+
+    private val _motion = MutableStateFlow(Motion.UNKNOWN)
+    /**
+     * v2.5 — the safety gate's view of [speedKmh], with the [MOVING_ABOVE_KMH] /
+     * [PARKED_BELOW_KMH] hysteresis applied.
+     *
+     * **Unknown fails open.** A consumer gating a feature should block on [Motion.MOVING] only,
+     * and permit on [Motion.UNKNOWN]. Failing closed instead would lock the driver out of their
+     * own launcher in exactly the places speed is unreadable — a garage, a covered car park, or
+     * a unit where the location permission was never granted — and would do so permanently and
+     * silently. We never fail open once we *do* have a reading: any fix inside the hysteresis
+     * band resolves to [Motion.MOVING], because a car with a live speed fix above
+     * [PARKED_BELOW_KMH] is, in fact, moving.
+     */
+    val motion: StateFlow<Motion> = _motion.asStateFlow()
+
+    /**
+     * v2.5 — GPS speed. Owned here so [speedKmh] has one front door regardless of which
+     * underlying source fills it, matching how [reverse] and [dayNight] hide their broadcasts.
+     */
+    private val speedSource = GpsSpeedSource(appContext) { kmh -> updateSpeed(kmh) }
 
     // Copy-on-write: a listener may add/remove itself from inside its own callback while we
     // are iterating during dispatch, which would throw ConcurrentModificationException on a
@@ -263,6 +324,12 @@ class CarEvents(private val appContext: Context) {
         listeners.forEach { it.onDayNight(mode) }
     }
 
+    /** v2.5 — publish a new speed reading and re-derive [motion] from it. */
+    private fun updateSpeed(kmh: Int) {
+        _speedKmh.value = kmh
+        _motion.value = nextMotion(_motion.value, kmh)
+    }
+
     /**
      * Register the receiver. Safe to call once; a second call is a no-op.
      *
@@ -298,14 +365,25 @@ class CarEvents(private val appContext: Context) {
             appContext.registerReceiver(receiver, filter)
         }
         registered = true
+        // v2.5: GPS is a separate subsystem from the gateway broadcasts, but it feeds the same
+        // front door, so it shares this lifecycle instead of asking every caller to manage it.
+        speedSource.start()
         Log.i(TAG, "CarEvents registered")
     }
 
     fun unregister() {
         if (!registered) return
         runCatching { appContext.unregisterReceiver(receiver) }
+        speedSource.stop() // v2.5
         registered = false
     }
+
+    /**
+     * v2.5 — retry the GPS speed source. Idempotent, and needed because [register] runs before
+     * the user has answered the location prompt: the first attempt finds no permission and gives
+     * up, so the grant callback calls this to actually start listening.
+     */
+    fun startSpeedSource() = speedSource.start()
 
     /**
      * Cold [Flow] variant of [reverse] that manages its own receiver lifecycle: it
