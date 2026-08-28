@@ -67,6 +67,7 @@ fun SettingsHost(
                 settingsStore = settingsStore,
                 onBack = ::pop,
                 carEvents = carEvents, // v2.5 live speed / motion readout
+                controller = controller, // v2.8 raw Sys_CarType next to the mirror override
             )
 
             SettingsRoute.Display -> DisplaySettingsScreen(
@@ -83,6 +84,15 @@ fun SettingsHost(
             SettingsRoute.Radar -> RadarSettingsScreen(
                 controller = controller,
                 carEvents = carEvents,
+                settingsStore = settingsStore, // v2.8 layout-confirmed flag
+                onOpenCapture = { push(SettingsRoute.RadarCapture) }, // v2.8
+                onBack = ::pop,
+            )
+
+            // v2.8: the instrument that makes the guessed radar byte layout verifiable.
+            SettingsRoute.RadarCapture -> RadarCaptureScreen(
+                carEvents = carEvents,
+                settingsStore = settingsStore,
                 onBack = ::pop,
             )
 
@@ -145,6 +155,7 @@ sealed interface SettingsRoute {
     data object Display : SettingsRoute
     data object ReverseCamera : SettingsRoute
     data object Radar : SettingsRoute
+    data object RadarCapture : SettingsRoute // v2.8
     data object Audio : SettingsRoute
     data object Climate : SettingsRoute
     data object Radio : SettingsRoute
