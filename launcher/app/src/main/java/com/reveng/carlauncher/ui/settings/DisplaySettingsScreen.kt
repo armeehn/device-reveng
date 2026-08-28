@@ -1,54 +1,109 @@
 package com.reveng.carlauncher.ui.settings
 
-import androidx.compose.material3.Text
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.reveng.carlauncher.carlib.CarService
+import com.reveng.carlauncher.data.BrightnessController
 import com.reveng.carlauncher.data.CarSettingsController
 import com.reveng.carlauncher.data.SettingKeys
 
 /**
- * v1.2 — Display & Illumination. Mirrors the vendor "Display/Backlight" settings page,
- * reskinned. All values are backed by the vendor SysVar store through [CarSettingsController]
- * (CAR_API §2.3); writing them needs root / a privileged install, surfaced on the hub.
+ * v2.1 — Display & Illumination.
  *
- * ⚠ Value ranges/enums for several of these are inferred from the key naming (CAR_API notes
- * ranges as "[inferred]"). Sliders use a 0–100 model; verify against the device and adjust the
- * [SettingKeys] metadata if the MCU uses a different scale.
+ * The **Screen backlight** slider now actually changes the display: it drives the Android
+ * framework brightness (`Settings.System.SCREEN_BRIGHTNESS`) through [BrightnessController],
+ * which works without root once WRITE_SETTINGS is granted (a one-tap prompt is shown otherwise),
+ * and also pushes the level to the MCU over the vendor AIDL. The vendor illumination SysVars
+ * (day/night targets, panel & ambient lighting) are kept under their own section — those still
+ * need root/a privileged install to take effect, which the hub already warns about.
  */
 @Composable
 fun DisplaySettingsScreen(
     controller: CarSettingsController,
+    carService: CarService,
     onBack: () -> Unit,
 ) {
-    // Recompose whenever the SysVar snapshot changes (a write or an external change).
+    val context = LocalContext.current
     val snap by controller.snapshot.collectAsStateWithLifecycle()
-    // Reference snap so this composable is keyed to it (values read via controller getters).
     snap
 
+    // Live WRITE_SETTINGS status, re-checked on resume (e.g. after the grant screen).
+    var canWrite by remember { mutableStateOf(BrightnessController.canWrite(context)) }
+    var brightness by remember { mutableIntStateOf(BrightnessController.currentPercent(context)) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val obs = LifecycleEventObserver { _, e ->
+            if (e == Lifecycle.Event.ON_RESUME) {
+                canWrite = BrightnessController.canWrite(context)
+                brightness = BrightnessController.currentPercent(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(obs)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
+    }
+
     SettingsScaffold(title = "Display & Illumination", onBack = onBack) {
-        SettingsSection(title = "Brightness") {
+        SettingsSection(title = "Screen backlight") {
             SliderSetting(
-                label = "Backlight level",
-                description = "Current display brightness",
+                label = "Brightness",
+                description = if (canWrite) "Changes the display immediately"
+                else "Grant permission below to control the backlight live",
+                value = brightness,
+                range = 0..100,
+                onChange = {
+                    brightness = it
+                    BrightnessController.setPercent(context, it, carService)
+                },
+                enabled = canWrite,
+                format = { "$it%" },
+            )
+            if (!canWrite) {
+                ActionRow(
+                    label = "Enable live brightness control",
+                    description = "Opens Android's \"Modify system settings\" for Car Launcher",
+                    onClick = { BrightnessController.requestPermission(context) },
+                )
+            }
+        }
+
+        SettingsSection(title = "Day / night source") {
+            PickerSetting(
+                label = "Day/night mode source",
+                current = controller.getInt(SettingKeys.DAY_NIGHT_MODE, 0),
+                options = listOf(
+                    0 to "Auto (illumination)",
+                    1 to "Always day",
+                    2 to "Always night",
+                ),
+                onSelect = { controller.setInt(SettingKeys.DAY_NIGHT_MODE, it) },
+                description = "How the head unit decides day vs night",
+            )
+        }
+
+        SettingsSection(title = "Vendor illumination") {
+            Text(
+                text = "These write the vendor's illumination store and take effect only with " +
+                    "root / a privileged install.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            SliderSetting(
+                label = "Vendor backlight level",
                 value = controller.getInt(SettingKeys.LIGHT_LEVEL_SET, 60),
                 range = 0..100,
                 onChange = { controller.setInt(SettingKeys.LIGHT_LEVEL_SET, it) },
-                format = { "$it%" },
-            )
-            SliderSetting(
-                label = "Brightness",
-                value = controller.getInt(SettingKeys.BRIGHTNESS, 60),
-                range = 0..100,
-                onChange = { controller.setInt(SettingKeys.BRIGHTNESS, it) },
-                format = { "$it%" },
-            )
-            SliderSetting(
-                label = "Contrast",
-                value = controller.getInt(SettingKeys.CONTRAST, 50),
-                range = 0..100,
-                onChange = { controller.setInt(SettingKeys.CONTRAST, it) },
                 format = { "$it%" },
             )
             SliderSetting(
@@ -67,19 +122,12 @@ fun DisplaySettingsScreen(
                 onChange = { controller.setInt(SettingKeys.SET_NIGHT_LIGHT, it) },
                 format = { "$it%" },
             )
-        }
-
-        SettingsSection(title = "Day / night source") {
-            PickerSetting(
-                label = "Day/night mode source",
-                current = controller.getInt(SettingKeys.DAY_NIGHT_MODE, 0),
-                options = listOf(
-                    0 to "Auto (illumination)",
-                    1 to "Always day",
-                    2 to "Always night",
-                ),
-                onSelect = { controller.setInt(SettingKeys.DAY_NIGHT_MODE, it) },
-                description = "How the head unit decides day vs night",
+            SliderSetting(
+                label = "Contrast",
+                value = controller.getInt(SettingKeys.CONTRAST, 50),
+                range = 0..100,
+                onChange = { controller.setInt(SettingKeys.CONTRAST, it) },
+                format = { "$it%" },
             )
         }
 
@@ -108,12 +156,5 @@ fun DisplaySettingsScreen(
                 onChange = { controller.setInt(SettingKeys.MULTICOLOR_KEY_LIGHT, it) },
             )
         }
-
-        Text(
-            text = "Note: illumination scales are inferred from the vendor firmware; if the " +
-                "slider feels wrong on-device it maps to a different range.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
     }
 }

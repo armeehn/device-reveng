@@ -411,6 +411,101 @@ fun ActionRow(
     }
 }
 
+/**
+ * v2.1 — a redesigned volume slider tuned for the OEM per-source gains: a leading source icon,
+ * a value badge, and a track flanked by big −/+ stepper buttons so it's usable while driving.
+ * Optimistic local echo; commits [onChange] on release and on each step.
+ */
+@Composable
+fun VolumeSlider(
+    icon: ImageVector,
+    label: String,
+    value: Int,
+    range: IntRange,
+    onChange: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    step: Int = 1,
+    enabled: Boolean = true,
+    format: (Int) -> String = { it.toString() },
+) {
+    var live by remember(value) { mutableStateOf(value.toFloat()) }
+    val steps = if (step > 0 && range.last > range.first) {
+        ((range.last - range.first) / step - 1).coerceAtLeast(0)
+    } else 0
+
+    fun commit(v: Int) {
+        val c = v.coerceIn(range.first, range.last)
+        live = c.toFloat()
+        onChange(c)
+    }
+
+    Column(modifier = modifier.fillMaxWidth().padding(vertical = 10.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyLarge,
+                color = if (enabled) MaterialTheme.colorScheme.onSurface
+                else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
+            ValueBadge(format(live.roundToInt()))
+        }
+        Spacer(Modifier.size(6.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            StepButton("−", enabled) { commit(live.roundToInt() - step) }
+            Slider(
+                value = live,
+                onValueChange = { live = it },
+                onValueChangeFinished = { onChange(live.roundToInt()) },
+                valueRange = range.first.toFloat()..range.last.toFloat(),
+                steps = steps,
+                enabled = enabled,
+                modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+                colors = SliderDefaults.colors(
+                    thumbColor = MaterialTheme.colorScheme.primary,
+                    activeTrackColor = MaterialTheme.colorScheme.primary,
+                    inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant,
+                ),
+            )
+            StepButton("+", enabled) { commit(live.roundToInt() + step) }
+        }
+    }
+}
+
+@Composable
+private fun StepButton(glyph: String, enabled: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(44.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .clickable(enabled = enabled, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = glyph,
+            style = MaterialTheme.typography.titleLarge,
+            color = if (enabled) MaterialTheme.colorScheme.onSurface
+            else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
 /** A filled/outlined text button for dialogs, drawn from the theme palette. */
 @Composable
 fun DialogTextButton(

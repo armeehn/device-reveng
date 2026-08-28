@@ -186,6 +186,19 @@ class CarService(private val appContext: Context) {
     /** Test beep through the audio path (beep, ordinal 7). */
     fun beep() { call { beep() } }
 
+    // ---- Backlight / brightness (CAR_API §3.2) -----------------------------
+    /**
+     * Push a backlight level to the MCU (sendBacklight, ordinal 60). Param semantics are
+     * GUESSED as (level, mode) — many of these units take (0..255 level, 0=day/1=night). Sent
+     * as a best-effort second path alongside the Android system brightness; guarded, so a wrong
+     * shape is a no-op. Verify on-device.
+     */
+    fun sendBacklight(level: Int, mode: Int = 0) {
+        call { sendBacklight(level.coerceIn(0, 255).toByte(), mode.toByte()) }
+    }
+    /** Ask the gateway to (re)apply the system brightness it holds (setSystemBrightness, ord 68). */
+    fun applySystemBrightness() { call { setSystemBrightness() } }
+
     /** Typed SysVar passthrough (alternative to the ContentResolver in [SysVar]). */
     fun getSettingString(key: String, def: String): String? =
         call { getSettingString(key, def) }
