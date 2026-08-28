@@ -35,8 +35,15 @@ fun SettingsHost(
     carEvents: CarEvents,
     radioPresetsStore: RadioPresetsStore,
     onExit: () -> Unit,
+    // Optional deep link: open with this route pushed above the hub, so Back still pops
+    // to the hub (status-bar power chip → Power & sleep).
+    initialRoute: SettingsRoute? = null,
 ) {
-    val backStack = remember { mutableStateListOf<SettingsRoute>(SettingsRoute.Hub) }
+    val backStack = remember {
+        mutableStateListOf<SettingsRoute>(SettingsRoute.Hub).also { stack ->
+            initialRoute?.let { stack.add(it) }
+        }
+    }
 
     fun push(route: SettingsRoute) { backStack.add(route) }
     fun pop() {

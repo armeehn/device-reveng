@@ -40,6 +40,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.reveng.carlauncher.ui.OnboardingScreen // v1.0
 import com.reveng.carlauncher.ui.settings.SettingsHost // v1.1 settings suite
+import com.reveng.carlauncher.ui.settings.SettingsRoute
 import com.reveng.carlauncher.ui.ThemeEditorScreen
 import com.reveng.carlauncher.ui.ThemesScreen
 import com.reveng.carlauncher.ui.theme.CarLauncherTheme
@@ -173,18 +174,23 @@ class MainActivity : ComponentActivity() {
                                 onOpenThemes = { screen = Screen.Themes },
                                 // v0.6: wire settings + a Settings-screen entry point.
                                 settingsStore = settingsStore,
-                                onOpenSettings = { screen = Screen.Settings },
+                                onOpenSettings = { screen = Screen.Settings() },
                                 radioPresetsStore = radioPresetsStore, // v0.9 Radio 2.0
+                                // Status-bar power chip deep-links to Power & sleep.
+                                onOpenPowerSettings = {
+                                    screen = Screen.Settings(SettingsRoute.Power)
+                                },
                             )
 
                             // v1.1: full settings suite — categorized, reskinned vendor mirror.
-                            Screen.Settings -> SettingsHost(
+                            is Screen.Settings -> SettingsHost(
                                 settingsStore = settingsStore,
                                 controller = carSettingsController,
                                 carService = carService,
                                 carEvents = carEvents,
                                 radioPresetsStore = radioPresetsStore,
                                 onExit = { screen = Screen.Home },
+                                initialRoute = s.initialRoute,
                             )
 
                             Screen.Themes -> ThemesScreen(
@@ -258,7 +264,7 @@ class MainActivity : ComponentActivity() {
             // v1.1: Settings owns its own back-stack (SettingsHost). Route Back through the
             // OnBackPressedDispatcher so its BackHandler pops one level (and exits to Home only
             // from the hub) instead of jumping straight Home from a deep settings screen.
-            Screen.Settings -> { onBackPressedDispatcher.onBackPressed(); true }
+            is Screen.Settings -> { onBackPressedDispatcher.onBackPressed(); true }
             else -> { screenState.value = Screen.Home; true } // Themes / Editor -> Home
         }
         NavKey.CENTER, NavKey.UP, NavKey.DOWN, NavKey.LEFT, NavKey.RIGHT ->
@@ -307,7 +313,8 @@ class MainActivity : ComponentActivity() {
         data object Onboarding : Screen // v1.0 first-run flow
         data object Home : Screen
         data object Themes : Screen
-        data object Settings : Screen // v0.6
+        // v0.6; the optional route deep-links into a settings page (status-bar power chip).
+        data class Settings(val initialRoute: SettingsRoute? = null) : Screen
         data class Editor(val theme: CarTheme) : Screen
     }
 }
