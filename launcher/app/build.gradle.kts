@@ -13,8 +13,8 @@ android {
         applicationId = "com.reveng.carlauncher"
         minSdk = 33
         targetSdk = 33
-        versionCode = 61
-        versionName = "0.4.3.2"
+        versionCode = 62
+        versionName = "0.4.3.3"
 
         // Single head-unit target: arm64 landscape @240dpi, 1920x720.
         ndk { abiFilters += "arm64-v8a" }

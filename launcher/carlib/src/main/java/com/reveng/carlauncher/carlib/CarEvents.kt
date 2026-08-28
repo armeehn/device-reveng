@@ -102,8 +102,13 @@ class CarEvents(private val appContext: Context) {
         // CAN_BASIC_EVT receiver is confirmed in EvtModel.java). The fully-qualified action
         // strings follow the vendor's EventUtils.* convention but are GUESSED at that prefix;
         // the CanCaptureScreen exists precisely to confirm which action + extra actually arrive.
+        // CONFIRMED on GT6-CAR (dumpsys broadcasts, engine on): the bulk frame rides
+        // MCU_MSG_CAN_ALL_INFO (com.choiceway prefix) and MCU_CAR_CAN_INFO (com.SZchoiceway
+        // prefix - note the different vendor prefix). CAN_BASIC_EVT was not observed.
+        const val MCU_MSG_CAN_ALL_INFO =
+            "com.choiceway.eventcenter.EventUtils.MCU_MSG_CAN_ALL_INFO"
         const val MCU_CAR_CAN_INFO =
-            "com.choiceway.eventcenter.EventUtils.MCU_CAR_CAN_INFO"
+            "com.szchoiceway.eventcenter.EventUtils.MCU_CAR_CAN_INFO"
         const val CAN_BASIC_EVT =
             "com.choiceway.eventcenter.EventUtils.CAN_BASIC_EVT"
 
@@ -499,7 +504,7 @@ class CarEvents(private val appContext: Context) {
                 }
 
                 // v0.4.3: bulk CAN frame — capture every extra + any byte[] payload, undecoded.
-                MCU_CAR_CAN_INFO, CAN_BASIC_EVT -> {
+                MCU_CAR_CAN_INFO, MCU_MSG_CAN_ALL_INFO, CAN_BASIC_EVT -> {
                     _canRaw.value = CanFrame.from(intent, System.currentTimeMillis())
                 }
 
@@ -614,6 +619,7 @@ class CarEvents(private val appContext: Context) {
             addAction(ACTION_NIGHT_BACKLIGHT_CHANGED)
             addAction(MCU_CAR_CAN_RADAR_INFO)
             addAction(MCU_CAR_CAN_INFO) // v0.4.3 CAN bulk-frame capture
+            addAction(MCU_MSG_CAN_ALL_INFO) // v0.4.3 (confirmed bulk frame on GT6-CAR)
             addAction(CAN_BASIC_EVT) // v0.4.3
             addAction(ZXW_RADIO_INFO_EVT) // v0.4.3 radio sniffer
             addAction(RADIO_FREQUENCY_EVENT) // v0.4.3

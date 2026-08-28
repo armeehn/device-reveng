@@ -69,7 +69,7 @@ fun CanCaptureScreen(
 
     SettingsScaffold(
         title = "CAN frame capture",
-        subtitle = "CAN_BASIC_EVT / MCU_CAR_CAN_INFO — action & payload UNCONFIRMED",
+        subtitle = "MCU_MSG_CAN_ALL_INFO / MCU_CAR_CAN_INFO — action CONFIRMED on GT6-CAR, payload UNCONFIRMED",
         onBack = onBack,
     ) {
         SettingsSection(title = "Broadcast") {
