@@ -17,13 +17,17 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.reveng.carlauncher.carlib.CarEvents
 import com.reveng.carlauncher.carlib.CarService // v0.6
+import com.reveng.carlauncher.data.DayNightMode
+import com.reveng.carlauncher.data.LauncherSettings
 import com.reveng.carlauncher.data.SettingsStore // v0.6
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
@@ -33,6 +37,9 @@ import java.util.Locale
 /**
  * Top status bar: live clock + car status chips (ACC power, day/night).
  * Data comes from [CarEvents] state flows (CAR_API §1.3, §6.3).
+ *
+ * The sun/moon chip toggles the day/night theme ([SettingsStore.setDayNightMode]); the
+ * power chip stays an ACC status light but opens Settings → Power & sleep on tap.
  */
 @Composable
 fun StatusBar(
@@ -43,9 +50,22 @@ fun StatusBar(
     onOpenSettings: () -> Unit = {},
     carService: CarService? = null,
     settingsStore: SettingsStore? = null,
+    onOpenPowerSettings: () -> Unit = {},
 ) {
     val accOn by carEvents.accOn.collectAsStateSafe(initial = true)
     val dayNight by carEvents.dayNight.collectAsStateSafe(initial = CarEvents.DayNight.DAY)
+    val settings by (settingsStore?.settings?.collectAsStateSafe(initial = LauncherSettings())
+        ?: remember { mutableStateOf(LauncherSettings()) })
+
+    // Effective night state: the forced day/night mode wins over the car illumination
+    // signal — same resolution MainActivity uses to pick the theme, so the icon always
+    // matches what's on screen.
+    val carNight = dayNight == CarEvents.DayNight.NIGHT
+    val night = when (settings.dayNightMode) {
+        DayNightMode.FORCE_DAY -> false
+        DayNightMode.FORCE_NIGHT -> true
+        DayNightMode.AUTO -> carNight
+    }
 
     val time by produceState(initialValue = nowString()) {
         while (true) {
@@ -72,17 +92,32 @@ fun StatusBar(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
-                imageVector = if (dayNight == CarEvents.DayNight.NIGHT)
-                    Icons.Filled.DarkMode else Icons.Filled.LightMode,
-                contentDescription = "Illumination mode",
+                imageVector = if (night) Icons.Filled.DarkMode else Icons.Filled.LightMode,
+                contentDescription = "Toggle day/night theme",
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(28.dp),
+                modifier = Modifier
+                    .size(28.dp)
+                    .clickable(enabled = settingsStore != null) {
+                        // Flip the theme. A flip that lands back on what the car signal
+                        // already says becomes AUTO, so the launcher resumes following
+                        // the car instead of staying pinned to a forced mode.
+                        val target = !night
+                        settingsStore?.setDayNightMode(
+                            when {
+                                target == carNight -> DayNightMode.AUTO
+                                target -> DayNightMode.FORCE_NIGHT
+                                else -> DayNightMode.FORCE_DAY
+                            }
+                        )
+                    },
             )
             Icon(
                 imageVector = Icons.Filled.PowerSettingsNew,
-                contentDescription = "ACC power",
+                contentDescription = "Power & sleep",
                 tint = if (accOn) MaterialTheme.colorScheme.primary else Color.Gray,
-                modifier = Modifier.size(28.dp),
+                modifier = Modifier
+                    .size(28.dp)
+                    .clickable(onClick = onOpenPowerSettings),
             )
             Icon(
                 imageVector = Icons.Filled.Palette,

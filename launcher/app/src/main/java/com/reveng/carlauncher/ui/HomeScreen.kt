@@ -77,6 +77,7 @@ fun HomeScreen(
     settingsStore: SettingsStore? = null,
     onOpenSettings: () -> Unit = {},
     radioPresetsStore: com.reveng.carlauncher.data.RadioPresetsStore? = null, // v0.9 Radio 2.0
+    onOpenPowerSettings: () -> Unit = {},
 ) {
     val reverse by carEvents.reverse.collectAsStateSafe(initial = false)
     val media by nowPlaying.state.collectAsStateSafe(initial = null)
@@ -123,6 +124,7 @@ fun HomeScreen(
                 onOpenSettings = onOpenSettings,
                 carService = carService,
                 settingsStore = settingsStore,
+                onOpenPowerSettings = onOpenPowerSettings,
             )
 
             Row(
