@@ -1,4 +1,4 @@
-# CarLauncher roadmap — v2.4.1 → v3.0
+# CarLauncher roadmap — v2.4.1 → v4.0
 
 _Planned 2026-08-28. Current main: **v2.4.1 / versionCode 33** — the superset build (3-column
 home, drawer + rofi search, favorites, quick controls, full reskinned settings suite v2.0 with
@@ -100,6 +100,44 @@ Everything the design doc reserved for the unreachable signature tier that root 
   RAV4 climate is CAN-writable; otherwise the control stays greyed with its one-line reason.
 - **Stability bar for 3.0:** a week of daily driving with zero crashes, screenshot suite
   green, README + design docs updated to describe what shipped rather than what was planned.
+
+---
+
+## v3.1 — Status you can see (the v3.1 → v4.0 window opens here)
+
+Owner ask: **Wi-Fi status, Bluetooth status, volume and brightness, visible
+in the top menu bar** — for the releases from 3.1 to 4.0. Today all four exist only inside
+the QuickControls pull-down (v0.6), which shows *controls*, not status; the bar itself tells
+you the time, day/night, ACC and nothing else. And once the shade work replaces the vendor
+top bar (PR #19), our strip is the only status surface the driver has left, so it has to
+carry real status.
+
+- **Wi-Fi:** connection state + signal as a 0–4-bar glyph
+  (`ConnectivityManager.NetworkCallback` + `WifiManager.calculateSignalLevel`, push not
+  poll). Greyed when off; distinct state for connected-but-unvalidated.
+- **Bluetooth:** adapter on/off + connected-device count (`BluetoothAdapter` state and
+  `ACTION_CONNECTION_STATE_CHANGED` broadcasts). Must agree with the car's own BT audio
+  source state that carlib already reports.
+- **Volume:** the vendor EventService main volume — the same `getMainVolume()` the
+  QuickControls slider writes — as a compact numeric readout, with the mute glyph when
+  muted. Updates ride the existing volume event, not a 1 s poll.
+- **Brightness:** current `screen_brightness` as a percentage, via the existing root read
+  path (`BrightnessController`); refreshed after QuickControls writes and on the day/night
+  flip.
+- All four are **display-only**, per the design doc §2.1: the strip is glance data and the
+  SWC focus ring keeps skipping it. Tapping the indicator group opens the existing
+  QuickControls pull-down — status in the bar, control one tap below it.
+- **An indicator with no source disappears** rather than freezing: no root → no brightness
+  chip, EventService unbound → no volume chip. A chip that lies is worse than no chip.
+- Ships in v3.1 and is a **stability invariant for every release through v4.0**: the
+  screenshot suite pins the four indicators on every screen that shows the bar, so a later
+  redesign cannot silently drop them.
+
+## v3.2 → v4.0 — unallocated
+
+Deliberately unplanned. The window gets filled after v3.0's stability bar (a week of daily
+driving) reports back — candidates will come from what that week actually surfaces, not
+from this desk.
 
 ---
 
