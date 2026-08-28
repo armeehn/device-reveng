@@ -33,6 +33,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -114,7 +115,7 @@ fun OnboardingScreen(
     }
 
     var step by remember { mutableStateOf(0) }
-    val lastStep = 2
+    val lastStep = 3 // v0.4.2: theme, favourites, permissions, default-home
 
     Column(modifier = Modifier.fillMaxSize().padding(horizontal = 40.dp, vertical = 24.dp)) {
         // ---- Header: step dots + Skip ------------------------------------
@@ -163,6 +164,7 @@ fun OnboardingScreen(
                         favorites = favorites,
                         onToggle = { app -> scope.launch { favoritesStore.toggle(app.packageName) } },
                     )
+                    2 -> PermissionsStep() // v0.4.2
                     else -> DefaultHomeStep(
                         isDefaultHome = isDefaultHome,
                         onSetDefault = { HomeRole.requestSetDefaultHome(context) },
@@ -339,6 +341,89 @@ private fun AppPickTile(app: AppInfo, selected: Boolean, onClick: () -> Unit) {
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,
         )
+    }
+}
+
+/**
+ * v0.4.2 — first-run permissions step. Requests the runtime grants the normal way (the system
+ * dialog, not the root/adb path the Setup Doctor uses post-install), and links out to the
+ * notification-access screen for the listener grants that have no runtime-request API. Live status
+ * comes from [SetupDoctor], re-probed whenever we resume (returning from a dialog or Settings). All
+ * optional — the footer Next/Skip always proceeds; Settings ▸ Setup doctor repeats this later.
+ */
+@Composable
+private fun PermissionsStep() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val doctor = remember { com.reveng.carlauncher.data.SetupDoctor(context.applicationContext, scope) }
+    val checks by doctor.checks.collectAsStateSafe(initial = emptyList())
+
+    val permissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions(),
+    ) { doctor.refresh() }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) doctor.refresh()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        StepHeading(
+            "Grant permissions",
+            "So the launcher's features work. All optional — you can do this any time in " +
+                "Settings ▸ Setup doctor.",
+        )
+        Spacer(Modifier.height(16.dp))
+        checks.forEach { check ->
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = if (check.ok) Icons.Filled.CheckCircle else Icons.Filled.RadioButtonUnchecked,
+                    contentDescription = if (check.ok) "Granted" else "Not granted",
+                    tint = if (check.ok) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(22.dp),
+                )
+                Spacer(Modifier.width(12.dp))
+                Text(
+                    text = check.title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onBackground,
+                )
+            }
+        }
+        Spacer(Modifier.height(20.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            PillButton(
+                label = "Grant location & Bluetooth",
+                primary = true,
+                onClick = {
+                    permissionLauncher.launch(
+                        arrayOf(
+                            android.Manifest.permission.ACCESS_FINE_LOCATION,
+                            android.Manifest.permission.BLUETOOTH_CONNECT,
+                        ),
+                    )
+                },
+            )
+            PillButton(
+                label = "Notification access",
+                primary = false,
+                onClick = {
+                    runCatching {
+                        context.startActivity(
+                            android.content.Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS),
+                        )
+                    }
+                },
+            )
+        }
     }
 }
 
