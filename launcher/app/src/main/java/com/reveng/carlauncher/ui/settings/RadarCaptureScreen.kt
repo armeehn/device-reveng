@@ -151,9 +151,12 @@ fun RadarCaptureScreen(
 /**
  * The per-offset table. A byte that has never moved is drawn on the flat surface colour; one that
  * has is filled and labelled with its span, because the span is the answer being hunted.
+ *
+ * Internal so the v0.4.3 CAN capture screen reuses the same accumulator display over its own
+ * (payload-key-unknown) frames.
  */
 @Composable
-private fun ByteTable(capture: RadarCapture) {
+internal fun ByteTable(capture: RadarCapture) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         capture.bytes.chunked(BYTES_PER_ROW).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
