@@ -54,6 +54,7 @@ import com.reveng.carlauncher.input.NavEvent // v2.8
 import com.reveng.carlauncher.input.NavKey // v0.8
 import com.reveng.carlauncher.input.SwcNavigator // v0.8
 import com.reveng.carlauncher.media.ContinueWatchingRepository // v2.7
+import com.reveng.carlauncher.media.MiniScreenController // v4.1
 import com.reveng.carlauncher.media.NowPlayingRepository
 import com.reveng.carlauncher.notif.NotificationRepository // v2.7
 import com.reveng.carlauncher.ui.CarFeedback // v2.5
@@ -114,6 +115,7 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var watchHistoryStore: WatchHistoryStore // v2.7
     private lateinit var continueWatching: ContinueWatchingRepository // v2.7
+    private lateinit var miniScreen: MiniScreenController // v4.1 video mini screen
     private lateinit var notificationFilter: NotificationFilterStore // v2.7
 
     // v0.8: roving focus ring for steering-wheel / DPAD navigation. Held as a field so the
@@ -181,6 +183,9 @@ class MainActivity : ComponentActivity() {
         watchHistoryStore = WatchHistoryStore(applicationContext, lifecycleScope)
         continueWatching = ContinueWatchingRepository(applicationContext, watchHistoryStore)
             .also { it.observe(lifecycleScope, nowPlaying.state) }
+
+        // v4.1: the video mini screen (freeform window over the home media card).
+        miniScreen = MiniScreenController(applicationContext, lifecycleScope)
 
         // v2.7: the notification shelf's listener. Root-enable off the main thread — this shells
         // out, and a launcher that blocks its first frame on `su` is a launcher that looks broken.
@@ -399,6 +404,7 @@ class MainActivity : ComponentActivity() {
                                     // v2.7 shelves
                                     onOpenNotifications = { screen = Screen.Notifications },
                                     onOpenContinueWatching = { screen = Screen.ContinueWatching },
+                                    miniScreen = miniScreen, // v4.1 video mini screen
                                 )
                             }
 
@@ -710,6 +716,12 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        // v4.1: dismissing the video mini screen injects HOME (that is what minimizes a
+        // freeform task); that press echoes back here as a HOME intent. It is ours, not the
+        // driver's — keep whatever screen they were navigating to.
+        if (intent.hasCategory(Intent.CATEGORY_HOME) && miniScreen.consumeHomeInjection()) {
+            return
+        }
         if (intent.hasCategory(Intent.CATEGORY_HOME) && screenState.value != Screen.Onboarding) {
             screenState.value = Screen.Home
             launcherFocus.reset()

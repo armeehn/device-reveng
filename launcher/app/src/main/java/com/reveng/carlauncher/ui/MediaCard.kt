@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import com.reveng.carlauncher.ui.theme.carShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Movie // v4.1
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -120,7 +121,10 @@ fun MediaCard(
                             )
                         } else {
                             Icon(
-                                imageVector = Icons.Filled.MusicNote,
+                                // v4.1: video sessions get the film icon so the card says what
+                                // kind of thing is playing before the title is read.
+                                imageVector = if (now?.isVideo == true) Icons.Filled.Movie
+                                else Icons.Filled.MusicNote,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(56.dp),
