@@ -138,22 +138,32 @@ class SysVar(private val context: Context) {
     fun putInt(keyname: String, value: Int): Boolean = putString(keyname, value.toString())
 
     private fun putViaRoot(keyname: String, value: String): Boolean {
-        // Escape single quotes in the where-clause value.
-        val safeKey = keyname.replace("'", "'\\''")
+        // RootShell runs the command through exactly one shell (libsu Shell.cmd or `su -c`),
+        // so every interpolated value MUST be single-quoted for that one shell level — a bare
+        // value with a space breaks argument splitting, and shell metacharacters (`;`, `$()`,
+        // backticks) would otherwise execute as root. Inside the SQL --where clause the key
+        // additionally needs SQL escaping (single quote -> two single quotes).
         val update = "content update --uri $CONTENT_URI_STRING " +
-            "--bind $COL_KEYVALUE:s:$value --where \"$COL_KEYNAME='$safeKey'\""
+            "--bind ${sh("$COL_KEYVALUE:s:$value")} " +
+            "--where ${sh("$COL_KEYNAME='${sqlEscape(keyname)}'")}"
         val res = RootShell.exec(update)
         if (res.ok) {
             // `content update` reports success even if 0 rows matched, so also insert-if-missing.
             if (getString(keyname) == value) return true
         }
         val insert = "content insert --uri $CONTENT_URI_STRING " +
-            "--bind $COL_KEYNAME:s:$keyname --bind $COL_KEYVALUE:s:$value"
+            "--bind ${sh("$COL_KEYNAME:s:$keyname")} --bind ${sh("$COL_KEYVALUE:s:$value")}"
         val ins = RootShell.exec(insert)
         val done = getString(keyname) == value
         if (!done) Log.w(TAG, "putViaRoot($keyname) failed: update=$res insert=$ins")
         return done
     }
+
+    /** Wrap [s] in single quotes, safely escaping any embedded single quote, for one shell level. */
+    private fun sh(s: String): String = "'" + s.replace("'", "'\\''") + "'"
+
+    /** Escape a value for embedding inside a single-quoted SQL string literal. */
+    private fun sqlEscape(s: String): String = s.replace("'", "''")
 
     // ---- Change notifications (CAR_API §2) ----------------------------------
 

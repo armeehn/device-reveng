@@ -52,6 +52,7 @@ import com.reveng.carlauncher.data.DayNightMode
 import com.reveng.carlauncher.data.LauncherSettings
 import com.reveng.carlauncher.data.SettingsStore
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -213,9 +214,14 @@ private fun VolumeControl(carService: CarService) {
 
 @Composable
 private fun BrightnessControl() {
-    val scope = rememberCoroutineScope()
     var available by remember { mutableStateOf(true) }
     var brightness by remember { mutableStateOf(128f) }
+
+    // Conflated single-consumer pipe: a fast drag emits many values, but only the latest
+    // unconsumed one is kept and writes run strictly one at a time. This replaces the old
+    // "launch a root-shell write per onValueChange tick" which flooded the unit with concurrent
+    // `su` invocations that could complete out of order and leave a stale persisted brightness.
+    val brightnessWrites = remember { Channel<Int>(Channel.CONFLATED) }
 
     LaunchedEffect(Unit) {
         val cur = withContext(Dispatchers.IO) {
@@ -227,6 +233,14 @@ private fun BrightnessControl() {
         if (cur == null) available = false else brightness = cur.toFloat()
     }
 
+    LaunchedEffect(Unit) {
+        for (value in brightnessWrites) {
+            withContext(Dispatchers.IO) {
+                runCatching { RootShell.exec("settings put system screen_brightness $value") }
+            }
+        }
+    }
+
     ControlRow(
         icon = Icons.Filled.BrightnessMedium,
         title = if (available) "Brightness" else "Brightness (needs root)",
@@ -235,13 +249,7 @@ private fun BrightnessControl() {
             value = brightness,
             onValueChange = { b ->
                 brightness = b
-                if (available) scope.launch {
-                    withContext(Dispatchers.IO) {
-                        runCatching {
-                            RootShell.exec("settings put system screen_brightness ${b.toInt()}")
-                        }
-                    }
-                }
+                if (available) brightnessWrites.trySend(b.toInt())
             },
             valueRange = 0f..255f,
             enabled = available,

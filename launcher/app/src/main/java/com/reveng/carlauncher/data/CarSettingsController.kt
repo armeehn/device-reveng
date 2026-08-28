@@ -59,6 +59,13 @@ class CarSettingsController(
 
     private var observer: ContentObserver? = null
 
+    /**
+     * Keys with an in-flight optimistic write, mapped to the value we are trying to persist.
+     * A provider [refresh] must not clobber these (the control would visibly snap back), and a
+     * failed write must only roll back if our value is still the current one. Confined to [scope].
+     */
+    private val pending = mutableMapOf<String, String>()
+
     init {
         refresh()
         scope.launch {
@@ -78,9 +85,10 @@ class CarSettingsController(
             val map = withContext(Dispatchers.IO) {
                 runCatching { sysVar.readAll() }.getOrDefault(emptyMap())
             }
-            // Preserve any optimistic-but-not-yet-refreshed local edits: the fresh read wins
-            // only where it actually has the key, which after a successful write it will.
-            if (map.isNotEmpty()) _snapshot.value = map
+            // Preserve any optimistic-but-not-yet-persisted local edits: the fresh read wins
+            // everywhere EXCEPT keys with a still-pending write, whose intended value we keep
+            // overlaid so the control doesn't snap back and then jump forward again.
+            if (map.isNotEmpty()) _snapshot.value = if (pending.isEmpty()) map else map + pending
         }
     }
 
@@ -108,18 +116,27 @@ class CarSettingsController(
 
     fun setString(key: String, value: String) {
         val previous = _snapshot.value[key]
+        pending[key] = value
         // Optimistic: reflect immediately.
         _snapshot.value = _snapshot.value.toMutableMap().apply { put(key, value) }
         scope.launch {
             val ok = withContext(Dispatchers.IO) {
                 runCatching { sysVar.putString(key, value) }.getOrDefault(false)
             }
-            if (!ok) {
-                // Roll back the optimistic edit.
-                _snapshot.value = _snapshot.value.toMutableMap().apply {
-                    if (previous == null) remove(key) else put(key, previous)
+            // Clear the pending marker only if it's still ours; a newer write may have superseded it.
+            val superseded = pending[key] != value
+            if (!superseded) pending.remove(key)
+            if (!ok && !superseded) {
+                // Roll back only if our optimistic value is still the current one — never clobber
+                // a newer optimistic edit or fresher provider data written in the meantime.
+                if (_snapshot.value[key] == value) {
+                    _snapshot.value = _snapshot.value.toMutableMap().apply {
+                        if (previous == null) remove(key) else put(key, previous)
+                    }
                 }
                 Log.w(TAG, "SysVar write failed: $key=$value")
+            } else if (!ok) {
+                Log.w(TAG, "SysVar write failed (superseded, not rolled back): $key=$value")
             }
             _writeEvents.tryEmit(WriteEvent(key, value, ok))
         }

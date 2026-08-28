@@ -11,6 +11,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
@@ -74,6 +75,9 @@ class SettingsStore(context: Context) {
 
     /** Mark onboarding as done so it never shows again (called on Finish or Skip). */
     fun setFirstRunComplete() = scope.launch { ds.edit { it[FIRST_RUN_KEY] = false } }
+
+    /** Cancel the internal scope (its Eagerly StateFlow collectors). Call from Activity.onDestroy. */
+    fun release() = scope.cancel()
 
     /** The resolved launcher settings, observed by MainActivity / HomeScreen / QuickControls. */
     val settings: StateFlow<LauncherSettings> =
