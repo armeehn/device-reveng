@@ -66,6 +66,22 @@ data class NowPlaying(
 }
 
 /**
+ * v2.6 — one selectable playback source for MediaScreen's picker.
+ *
+ * Only real [MediaSession] owners appear here. The vendor's own sources (Bluetooth, USB, the
+ * built-in player) are switched through the AIDL `sendMode(int, boolean)` — ordinal 1, confirmed
+ * — but the *value table* for that int is nowhere in the decompile, so we do not guess it:
+ * writing an unverified mode opcode would put the head unit into an unknown source. MediaScreen
+ * shows the vendor's current source read-only via `getValidModeTitleInfor()` instead, and
+ * switching waits on an on-device capture of the value table.
+ */
+data class MediaSource(
+    val packageName: String,
+    val label: String,
+    val isPlaying: Boolean,
+)
+
+/**
  * Reads the active media session across all apps via [MediaSessionManager] and exposes it as
  * a [StateFlow]. Transport controls drive whatever app owns the session.
  *
@@ -87,6 +103,14 @@ class NowPlayingRepository(private val context: Context) {
 
     private val _state = MutableStateFlow<NowPlaying?>(null)
     val state: StateFlow<NowPlaying?> = _state.asStateFlow()
+
+    private val _sources = MutableStateFlow<List<MediaSource>>(emptyList())
+    /**
+     * v2.6 — every active session, for MediaScreen's source picker. [cycleSession] only rotates
+     * blindly, which is all a small card can offer; a full screen can show the choices and let
+     * the driver pick one directly.
+     */
+    val sources: StateFlow<List<MediaSource>> = _sources.asStateFlow()
 
     private var controller: MediaController? = null
 
@@ -183,9 +207,29 @@ class NowPlayingRepository(private val context: Context) {
         selectController(nextC)
     }
 
+    /**
+     * v2.6 — select a specific session by package (MediaScreen's source picker). Pins the
+     * choice like [cycleSession] does, so a re-scan doesn't hand the screen back to whichever
+     * app happens to be playing.
+     */
+    fun selectSession(packageName: String) {
+        val chosen = lastControllers.firstOrNull { it.packageName == packageName } ?: return
+        pinnedPackage = packageName
+        selectController(chosen)
+    }
+
     // ---- internals ----------------------------------------------------------
     private fun pickController(controllers: List<MediaController>?) {
         lastControllers = controllers ?: emptyList()
+        // v2.6: publish the pickable list before choosing, so the picker shows every session
+        // even when the one we end up selecting dies immediately after.
+        _sources.value = lastControllers.map { c ->
+            MediaSource(
+                packageName = c.packageName,
+                label = appLabel(c.packageName) ?: c.packageName,
+                isPlaying = c.playbackState?.state == PlaybackState.STATE_PLAYING,
+            )
+        }
         // If the user pinned a source and it's still active, keep it. Otherwise prefer a
         // session that is actually playing; else the first one.
         val pinned = pinnedPackage?.let { p -> lastControllers.firstOrNull { it.packageName == p } }
