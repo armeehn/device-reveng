@@ -11,9 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import com.reveng.carlauncher.ui.theme.carShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -26,6 +24,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.reveng.carlauncher.data.CarSettingsController
+import com.reveng.carlauncher.ui.keyboard.CarTextField // v2.7
+import com.reveng.carlauncher.ui.keyboard.CommitMode // v2.7
 
 /**
  * v2.0 — All settings (advanced): a raw browser over the *live* vendor SysVar table. Unlike the
@@ -57,18 +57,14 @@ fun AdvancedSettingsScreen(
         onBack = onBack,
         subtitle = "${snap.size} vendor keys",
     ) {
-        OutlinedTextField(
+        // v2.7: our own keyboard. This screen is the reason it grew shift and symbols — vendor
+        // key names are mixed-case with underscores, and their values are arbitrary strings.
+        CarTextField(
             value = query,
             onValueChange = { query = it },
-            placeholder = { Text("Search keys…") },
-            singleLine = true,
+            placeholder = "Search keys…",
+            commit = CommitMode.LIVE,
             modifier = Modifier.fillMaxWidth(),
-            colors = TextFieldDefaults.colors(
-                focusedContainerColor = MaterialTheme.colorScheme.surface,
-                unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-            ),
         )
 
         if (snap.isEmpty()) {
@@ -153,17 +149,15 @@ private fun RawEditDialog(
                 fontWeight = FontWeight.SemiBold,
             )
             Spacer(Modifier.size(16.dp))
-            OutlinedTextField(
+            // v2.7: ON_DONE, unlike the search box above. Every commit here is a write to live
+            // vehicle config through a root shell; emitting one per keystroke would put a
+            // half-typed value into the SysVar table on its way to the real one.
+            CarTextField(
                 value = text,
                 onValueChange = { text = it },
-                singleLine = true,
+                label = "Value",
+                commit = CommitMode.ON_DONE,
                 modifier = Modifier.fillMaxWidth(),
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                    unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                ),
             )
             Spacer(Modifier.size(20.dp))
             Row(

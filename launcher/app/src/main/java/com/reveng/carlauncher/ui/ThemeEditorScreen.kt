@@ -22,7 +22,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -35,9 +34,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.reveng.carlauncher.ui.keyboard.CarTextField // v2.7
+import com.reveng.carlauncher.ui.keyboard.CommitMode // v2.7
 import com.reveng.carlauncher.ui.theme.CarTheme
 import com.reveng.carlauncher.ui.theme.ThemeColors
 import java.util.Locale
@@ -116,12 +115,13 @@ fun ThemeEditorScreen(
         ) {
             IconTile(icon = Icons.AutoMirrored.Filled.ArrowBack, label = "Cancel", onClick = onCancel)
             Spacer(Modifier.width(16.dp))
-            OutlinedTextField(
+            // v2.7: our own keyboard, not the vendor IME — see ui/keyboard/CarTextField.kt.
+            CarTextField(
                 value = working.name,
                 onValueChange = { working = working.copy(name = it) },
-                label = { Text("Theme name") },
-                singleLine = true,
-                modifier = Modifier.width(320.dp),
+                label = "Theme name",
+                placeholder = "Untitled",
+                modifier = Modifier.width(THEME_NAME_FIELD_DP.dp),
             )
             Spacer(Modifier.weight(1f))
             TextButtonTile(label = "Save", onClick = { onSave(working) })
@@ -288,15 +288,16 @@ private fun ColorPicker(color: Long, onColor: (Long) -> Unit) {
         ChannelSlider("G", g, Color(0xFF3FB950)) { onColor(pack(r, it, b)) }
         ChannelSlider("B", b, Color(0xFF2F81F7)) { onColor(pack(r, g, it)) }
 
-        OutlinedTextField(
+        // v2.7: CommitMode.LIVE keeps the v0.5 behaviour — the swatch tracks the digits as they
+        // are typed, and a half-typed value simply doesn't parse yet.
+        CarTextField(
             value = hexText,
             onValueChange = { input ->
                 hexText = input
                 parseHex(input)?.let(onColor)
             },
-            label = { Text("Hex (RRGGBB)") },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
+            label = "Hex (RRGGBB)",
+            commit = CommitMode.LIVE,
             modifier = Modifier.fillMaxWidth(),
         )
     }
@@ -347,6 +348,9 @@ private fun TextButtonTile(label: String, onClick: () -> Unit) {
 }
 
 // ---- color helpers ---------------------------------------------------------------------
+
+/** Wide enough for a real theme name without crowding the Save tile out of the header row. */
+private const val THEME_NAME_FIELD_DP = 320
 
 private fun pack(r: Int, g: Int, b: Int): Long =
     0xFF000000L or (r.toLong() shl 16) or (g.toLong() shl 8) or b.toLong()
