@@ -48,6 +48,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.reveng.carlauncher.carlib.CarService
 import com.reveng.carlauncher.carlib.RootShell
+import com.reveng.carlauncher.data.BrightnessController
 import com.reveng.carlauncher.data.DayNightMode
 import com.reveng.carlauncher.data.LauncherSettings
 import com.reveng.carlauncher.data.SettingsStore
@@ -63,8 +64,8 @@ import kotlinx.coroutines.withContext
  *
  * Everything that touches the vendor AIDL ([CarService]) or root ([RootShell]) is wrapped in
  * try/catch and degrades gracefully (the affected control simply disables) so an unavailable
- * service never crashes the launcher. Volume uses the vendor EventService; brightness is
- * written with `settings put system screen_brightness` over root, because WRITE_SETTINGS is
+ * service never crashes the launcher. Volume uses the vendor EventService; brightness goes
+ * through BrightnessController (framework WRITE_SETTINGS, band-mapped into the panel's usable
  * likely denied to a side-loaded app.
  */
 
@@ -92,6 +93,27 @@ fun QuickControlsButton(
             carService = carService,
             settingsStore = settingsStore,
             onDismiss = { open = false },
+        )
+    }
+}
+
+/**
+ * v3.1 — the same dialog with its open state hoisted to the caller: lets the status chips
+ * (or any future affordance) open Quick Controls without duplicating the panel.
+ * [QuickControlsButton] above keeps its own private state and is unchanged.
+ */
+@Composable
+fun QuickControlsDialogHost(
+    open: Boolean,
+    onDismiss: () -> Unit,
+    carService: CarService,
+    settingsStore: SettingsStore,
+) {
+    if (open) {
+        QuickControlsDialog(
+            carService = carService,
+            settingsStore = settingsStore,
+            onDismiss = onDismiss,
         )
     }
 }
@@ -139,7 +161,7 @@ fun QuickControlsPanel(
         )
 
         VolumeControl(carService = carService)
-        BrightnessControl()
+        BrightnessControl(carService = carService)
         DayNightControl(
             mode = settings.dayNightMode,
             onSelect = settingsStore::setDayNightMode,
@@ -213,46 +235,45 @@ private fun VolumeControl(carService: CarService) {
 // ---- Brightness ------------------------------------------------------------
 
 @Composable
-private fun BrightnessControl() {
-    var available by remember { mutableStateOf(true) }
-    var brightness by remember { mutableStateOf(128f) }
-
-    // Conflated single-consumer pipe: a fast drag emits many values, but only the latest
-    // unconsumed one is kept and writes run strictly one at a time. This replaces the old
-    // "launch a root-shell write per onValueChange tick" which flooded the unit with concurrent
-    // `su` invocations that could complete out of order and leave a stale persisted brightness.
-    val brightnessWrites = remember { Channel<Int>(Channel.CONFLATED) }
-
-    LaunchedEffect(Unit) {
-        val cur = withContext(Dispatchers.IO) {
-            runCatching {
-                val res = RootShell.exec("settings get system screen_brightness")
-                if (res.ok) res.stdout.trim().toIntOrNull() else null
-            }.getOrNull()
-        }
-        if (cur == null) available = false else brightness = cur.toFloat()
+private fun BrightnessControl(carService: CarService) {
+    val context = LocalContext.current
+    var canWrite by remember { mutableStateOf(BrightnessController.canWrite(context)) }
+    var brightness by remember {
+        mutableStateOf(if (BrightnessController.canWrite(context)) BrightnessController.currentPercent(context).toFloat() else 50f)
     }
 
+    // Refresh permission + current level when the shade (re)opens.
     LaunchedEffect(Unit) {
-        for (value in brightnessWrites) {
+        canWrite = BrightnessController.canWrite(context)
+        if (canWrite) brightness = BrightnessController.currentPercent(context).toFloat()
+    }
+
+    // Conflated single-consumer pipe: a fast drag emits many values, keep only the latest and
+    // apply one at a time. Brightness goes through BrightnessController, which maps the 0-100 %
+    // slider into the panel's usable backlight band (raw ~6-20; it hardware-saturates at ~20/255)
+    // and nudges the MCU backlight. The old raw `settings put screen_brightness 0-255` path did
+    // nothing across most of the slider because the usable band is only the first ~8 % of 0-255.
+    val brightnessWrites = remember { Channel<Int>(Channel.CONFLATED) }
+    LaunchedEffect(Unit) {
+        for (percent in brightnessWrites) {
             withContext(Dispatchers.IO) {
-                runCatching { RootShell.exec("settings put system screen_brightness $value") }
+                runCatching { BrightnessController.setPercent(context, percent, carService) }
             }
         }
     }
 
     ControlRow(
         icon = Icons.Filled.BrightnessMedium,
-        title = if (available) "Brightness" else "Brightness (needs root)",
+        title = if (canWrite) "Brightness" else "Brightness (needs permission)",
     ) {
         Slider(
             value = brightness,
             onValueChange = { b ->
                 brightness = b
-                if (available) brightnessWrites.trySend(b.toInt())
+                if (canWrite) brightnessWrites.trySend(b.toInt())
             },
-            valueRange = 0f..255f,
-            enabled = available,
+            valueRange = 0f..100f,
+            enabled = canWrite,
             colors = accentSliderColors(),
         )
     }

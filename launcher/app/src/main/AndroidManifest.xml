@@ -33,6 +33,18 @@
     <uses-permission android:name="android.permission.WRITE_SETTINGS"
         tools:ignore="ProtectedPermissions" />
 
+    <!-- v3.1 status chips: read-only Wi-Fi / network state for the top-bar indicators. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+
+    <!--
+      v3.1 status chips: Bluetooth state. BLUETOOTH_CONNECT is a *runtime* permission on
+      API 31+; ungranted, the chip degrades to adapter on/off with no device count (all
+      reads are guarded). On this rooted unit pre-grant it once:
+        pm grant com.reveng.carlauncher android.permission.BLUETOOTH_CONNECT
+    -->
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+
     <!-- Narrow visibility fallback if QUERY_ALL_PACKAGES is ever stripped. -->
     <queries>
         <intent>
@@ -97,6 +109,24 @@
         -->
         <service
             android:name=".nav.NavListenerService"
+            android:exported="false"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
+        <!--
+          v2.7 ShelfListenerService: collects dismissible notifications for the parked-only
+          notification shelf. A third listener rather than more work for the media one (which is
+          deliberately empty, existing only to make getActiveSessions() legal) or the nav one
+          (which reads Maps and nothing else) — the OS enables each independently, so the split
+          costs nothing at runtime and keeps three unrelated features off one component.
+          Enabled the same way as the others: `cmd notification allow_listener`.
+        -->
+        <service
+            android:name=".notif.ShelfListenerService"
             android:exported="false"
             android:label="@string/app_name"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">

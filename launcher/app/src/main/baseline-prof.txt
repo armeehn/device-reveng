@@ -1,0 +1,68 @@
+# =====================================================================================
+# Car Launcher — baseline profile (v2.9)
+#
+# AGP compiles this into assets/dexopt/baseline.prof; androidx.profileinstaller writes it
+# into the app's ART profile on first run, so from the second launch the cold-start path is
+# AOT-compiled instead of interpreted. The head unit side-loads its APK, so the Play install
+# path that normally delivers a baseline profile never runs here — without this file and that
+# library the launcher gets no profile at all.
+#
+# WHY IT IS HAND-WRITTEN, AND WHAT THAT COSTS
+#
+# The generated kind of baseline profile comes out of a macrobenchmark module driving a real
+# device. We have one head unit, it is a car, and CI has no device — so a generated profile is
+# not available and a hand-written one is what is left. The trade-off is real: this file names
+# whole packages rather than the exact methods a measured startup touched, so it AOT-compiles
+# more than a device-generated profile would. Bigger profile, longer first-run install, and a
+# few methods compiled that startup never calls.
+#
+# That is the right side of the trade for this app: the whole launcher is ~10k lines, and
+# every class below is on the path from process start to the first Home frame anyway
+# (MainActivity -> CarLauncherTheme -> HomeScreen, with carlib registering receivers and
+# DataStore resolving the stored theme). Compose itself is the dominant startup cost and its
+# own libraries ship their own profiles, which is why none are listed here.
+#
+# Regenerate properly the day a macrobenchmark run against the unit becomes possible; until
+# then treat the cold-start job in .github/workflows/launcher-ci.yml as the regression signal.
+#
+# Syntax: HSPL = hot + startup + post-startup. See
+# https://developer.android.com/topic/performance/baselineprofiles/manually-create-measure
+# =====================================================================================
+
+# ---- The startup path proper --------------------------------------------------------
+HSPLcom/reveng/carlauncher/MainActivity;->**(**)**
+HSPLcom/reveng/carlauncher/MainActivity$**;->**(**)**
+HSPLcom/reveng/carlauncher/AppRepository;->**(**)**
+HSPLcom/reveng/carlauncher/HomeRole;->**(**)**
+
+# ---- Theme resolution: runs before the first frame can be drawn ----------------------
+HSPLcom/reveng/carlauncher/ui/theme/**;->**(**)**
+HSPLcom/reveng/carlauncher/data/ThemeStore;->**(**)**
+HSPLcom/reveng/carlauncher/data/ThemeStore$**;->**(**)**
+HSPLcom/reveng/carlauncher/data/SettingsStore;->**(**)**
+HSPLcom/reveng/carlauncher/data/SettingsStore$**;->**(**)**
+
+# ---- The first composition -----------------------------------------------------------
+HSPLcom/reveng/carlauncher/ui/HomeScreen**;->**(**)**
+HSPLcom/reveng/carlauncher/ui/StatusBar**;->**(**)**
+HSPLcom/reveng/carlauncher/ui/AppDrawer**;->**(**)**
+HSPLcom/reveng/carlauncher/ui/ComposeUtil**;->**(**)**
+HSPLcom/reveng/carlauncher/ui/ParkedOnly**;->**(**)**
+
+# ---- carlib: receivers and the bound service are wired in onCreate -------------------
+HSPLcom/reveng/carlauncher/carlib/CarEvents;->**(**)**
+HSPLcom/reveng/carlauncher/carlib/CarEvents$**;->**(**)**
+HSPLcom/reveng/carlauncher/carlib/CarService;->**(**)**
+HSPLcom/reveng/carlauncher/carlib/CarService$**;->**(**)**
+HSPLcom/reveng/carlauncher/carlib/SysVar;->**(**)**
+HSPLcom/reveng/carlauncher/carlib/RootShell;->**(**)**
+HSPLcom/reveng/carlauncher/carlib/GpsSpeedSource;->**(**)**
+
+# ---- Classes, not just methods -------------------------------------------------------
+Lcom/reveng/carlauncher/MainActivity;
+Lcom/reveng/carlauncher/AppRepository;
+Lcom/reveng/carlauncher/carlib/CarEvents;
+Lcom/reveng/carlauncher/carlib/CarService;
+Lcom/reveng/carlauncher/carlib/SysVar;
+Lcom/reveng/carlauncher/data/ThemeStore;
+Lcom/reveng/carlauncher/data/SettingsStore;

@@ -39,6 +39,35 @@ data class RadarState(
     fun proximity(level: Int): Float =
         (level.coerceIn(0, LEVEL_MAX).toFloat() / LEVEL_MAX)
 
+    /** v2.8 — which side of the car, for the maneuvering side-strips. */
+    enum class Edge { LEFT, RIGHT }
+
+    /** v2.8 — which sensor bank. */
+    enum class Bank { FRONT, REAR }
+
+    /**
+     * v2.8 — the *closest* reading among the sensors on one corner of the car, 0f…1f.
+     *
+     * The strip has one arc group per corner where the bank has two or four sensors, so it has to
+     * collapse them. It takes the maximum rather than a mean: a mean lets one clear sensor talk a
+     * neighbouring obstacle down, and the only useful summary of "how close is anything on my left
+     * front" is the nearest thing there.
+     *
+     * The left→right ordering this splits on is GUESSED along with the rest of the layout (see the
+     * class KDoc). An odd sensor count puts the middle sensor in both halves, which is right: a
+     * centre sensor genuinely covers both corners.
+     */
+    fun edgeProximity(edge: Edge, bank: Bank): Float {
+        val levels = if (bank == Bank.FRONT) front else rear
+        if (levels.isEmpty()) {
+            return 0f
+        }
+
+        val half = (levels.size + 1) / 2
+        val side = if (edge == Edge.LEFT) levels.take(half) else levels.takeLast(half)
+        return proximity(side.max())
+    }
+
     companion object {
         /** Guessed max bar-count per sensor. */
         const val LEVEL_MAX = 8

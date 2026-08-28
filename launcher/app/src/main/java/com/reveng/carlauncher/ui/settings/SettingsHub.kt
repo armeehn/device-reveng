@@ -8,6 +8,7 @@ import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Radio
+import androidx.compose.material.icons.filled.Security // v2.9
 import androidx.compose.material.icons.filled.SettingsRemote
 import androidx.compose.material.icons.filled.Thermostat
 import androidx.compose.material.icons.filled.Tune
@@ -94,6 +95,12 @@ fun SettingsHub(
                 title = "Power & sleep",
                 subtitle = "ACC delays, sleep, power-off timing",
                 onClick = { onOpen(SettingsRoute.Power) },
+            )
+            SettingsCategoryCard(
+                icon = Icons.Filled.Security,
+                title = "Root tier",
+                subtitle = "Protected broadcasts, vendor bars, sole-HOME mode",
+                onClick = { onOpen(SettingsRoute.RootTier) },
             )
             SettingsCategoryCard(
                 icon = Icons.Filled.Info,
