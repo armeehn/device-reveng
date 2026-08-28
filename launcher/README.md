@@ -99,6 +99,25 @@ adb reboot
 | Bind `EventService`, read-only AIDL | ✅ | exported service |
 | AIDL control side-effects | ⚠️ | best as system app |
 
+## Settings suite (v1.1 → v2.0)
+
+A full, reskinned mirror of the vendor GT6 settings — see
+[`SETTINGS_ROADMAP.md`](SETTINGS_ROADMAP.md). Every category the vendor exposes is
+rebuilt from our `CarTheme` palette and reachable from **Settings** on Home:
+
+- **Launcher, Display & Illumination, Reverse camera, Parking radar, Audio & EQ, Climate,
+  Radio, Steering wheel, Power & sleep, System & about** — curated screens with friendly
+  toggles / sliders / pickers over the vendor SysVar store and the `IEventService` AIDL.
+- **All settings (advanced)** — a raw browser over the *live* SysVar table, so all **455**
+  vendor keys are reachable even where we haven't catalogued a friendly control.
+
+Backing pieces: `data/CarSettingsController` (live snapshot + optimistic root-fallback
+writes), `data/SettingKeys` (curated key catalog), `ui/settings/*` (the reskinned kit,
+`SettingsHost` back-stack, and `SettingsHub` menu). Writes need root / a privileged install
+(CAR_API §2.2); the hub warns when root is absent. Enum option sets are inferred from
+firmware naming (the vendor settings APK that holds the value tables isn't in the decompile),
+so each guessed mapping is annotated in-code and the Advanced browser shows the true strings.
+
 ## Known TODOs
 
 - **`IEventService.aidl`** declares only a subset of methods and its transaction
