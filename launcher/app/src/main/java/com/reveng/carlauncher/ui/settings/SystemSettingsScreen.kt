@@ -3,12 +3,15 @@ package com.reveng.carlauncher.ui.settings
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.reveng.carlauncher.carlib.CarService
 import com.reveng.carlauncher.data.CarSettingsController
 import com.reveng.carlauncher.data.SettingKeys
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * v2.0 — System & About. The read-mostly bottom of the vendor settings tree, reskinned:
@@ -27,10 +30,17 @@ fun SystemSettingsScreen(
     snap
     val connected by carService.connected.collectAsStateWithLifecycle()
 
-    val mcuVer = (if (connected) carService.getMcuVersion() else null)
-        ?: controller.getString(SettingKeys.MCU_VERSION, "—").ifBlank { "—" }
-    val canVer = (if (connected) carService.getCanVersion() else null)
-        ?: controller.getString(SettingKeys.CANBOX_VERSION, "—").ifBlank { "—" }
+    // Read the firmware versions once (per connection state) off the main thread. Calling these
+    // blocking AIDL getters directly in the composition body ran main-thread IPC on every
+    // recomposition and stalled composition if the vendor service hung.
+    val mcuVerLive by produceState<String?>(null, connected) {
+        value = if (connected) withContext(Dispatchers.IO) { carService.getMcuVersion() } else null
+    }
+    val canVerLive by produceState<String?>(null, connected) {
+        value = if (connected) withContext(Dispatchers.IO) { carService.getCanVersion() } else null
+    }
+    val mcuVer = mcuVerLive ?: controller.getString(SettingKeys.MCU_VERSION, "—").ifBlank { "—" }
+    val canVer = canVerLive ?: controller.getString(SettingKeys.CANBOX_VERSION, "—").ifBlank { "—" }
 
     var confirmReset by remember { mutableStateOf(false) }
     var confirmReboot by remember { mutableStateOf(false) }

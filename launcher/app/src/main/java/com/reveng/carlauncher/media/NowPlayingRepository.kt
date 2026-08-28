@@ -8,6 +8,8 @@ import android.media.MediaMetadata
 import android.media.session.MediaController
 import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
@@ -18,6 +20,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Immutable snapshot of the currently-active media session, or null if nothing is playing.
@@ -106,22 +109,48 @@ class NowPlayingRepository(private val context: Context) {
     private val sessionsChanged =
         MediaSessionManager.OnActiveSessionsChangedListener { pickController(it) }
 
+    /** Main-thread handler so MediaController callbacks are delivered on a Looper thread. */
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    @Volatile
+    private var sessionsListenerRegistered = false
+
     /**
      * Start observing. If the notification listener isn't enabled yet, tries to enable it via
      * root (best-effort) — [MediaSessionManager.getActiveSessions] throws SecurityException
-     * without it, which we catch.
+     * without it. In that case we register the sessions listener AND do the initial scan on the
+     * main thread *after* root-enabling, so both the session-change callbacks and the per-session
+     * MediaController callbacks are actually installed (previously they never were).
      */
     fun start(scope: CoroutineScope) {
         val mgr = sessionManager ?: return
-        scope.launch(Dispatchers.IO) { ensureListenerEnabled() }
-        runCatching {
+        if (registerSessionsListener(mgr)) return
+        scope.launch(Dispatchers.IO) {
+            ensureListenerEnabled()
+            // registerCallback()/getActiveSessions() need a Looper + the permission — do them on main.
+            withContext(Dispatchers.Main) { registerSessionsListener(mgr) }
+        }
+    }
+
+    /**
+     * Register the active-sessions listener and run the initial scan. Idempotent. Returns true
+     * if the listener is now installed, false if it failed (permission not granted yet).
+     * MUST be called on the main thread.
+     */
+    private fun registerSessionsListener(mgr: MediaSessionManager): Boolean {
+        if (sessionsListenerRegistered) return true
+        return runCatching {
             mgr.addOnActiveSessionsChangedListener(sessionsChanged, listenerComponent)
+            sessionsListenerRegistered = true
             pickController(mgr.getActiveSessions(listenerComponent))
-        }.onFailure { Log.w(TAG, "getActiveSessions failed (listener not enabled yet?): ${it.message}") }
+        }.onFailure {
+            Log.w(TAG, "getActiveSessions failed (listener not enabled yet?): ${it.message}")
+        }.isSuccess
     }
 
     fun stop() {
         sessionManager?.let { runCatching { it.removeOnActiveSessionsChangedListener(sessionsChanged) } }
+        sessionsListenerRegistered = false
         controller?.unregisterCallback(controllerCallback)
         controller = null
     }
@@ -171,7 +200,9 @@ class NowPlayingRepository(private val context: Context) {
         if (chosen?.sessionToken == controller?.sessionToken) { publish(); return }
         controller?.unregisterCallback(controllerCallback)
         controller = chosen
-        controller?.registerCallback(controllerCallback)
+        // Explicit main-looper handler: registerCallback() without one uses the *calling*
+        // thread's Looper and throws if there is none.
+        controller?.registerCallback(controllerCallback, mainHandler)
         publish()
     }
 
@@ -222,15 +253,15 @@ class NowPlayingRepository(private val context: Context) {
         return flat.split(":").any { it.equals(me, ignoreCase = true) }
     }
 
-    /** Root-enable the notification listener so getActiveSessions() is permitted. */
+    /**
+     * Root-enable the notification listener so getActiveSessions() is permitted. The re-scan and
+     * listener registration happen in [registerSessionsListener] on the main thread after this
+     * returns — they must NOT run here (this executes on Dispatchers.IO, which has no Looper).
+     */
     private fun ensureListenerEnabled() {
         if (isListenerEnabled()) return
         val comp = listenerComponent.flattenToString()
         val r = RootShell.exec("cmd notification allow_listener '$comp'")
         Log.i(TAG, "allow_listener $comp -> code=${r.code} ${r.stdout}")
-        // Re-scan after enabling (best effort; a fresh getActiveSessions will now succeed).
-        if (r.ok) runCatching {
-            sessionManager?.let { pickController(it.getActiveSessions(listenerComponent)) }
-        }
     }
 }

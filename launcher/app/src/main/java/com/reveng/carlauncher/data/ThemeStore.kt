@@ -13,6 +13,7 @@ import com.reveng.carlauncher.ui.theme.ThemeStyle
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -64,21 +65,33 @@ class ThemeStore(context: Context) {
         ds.edit { it[ACTIVE_ID_KEY] = id }
     }
 
+    /** Cancel the internal scope (its Eagerly StateFlow collectors). Call from Activity.onDestroy. */
+    fun release() = scope.cancel()
+
     /** Insert or update a user theme (built-ins are ignored — they are immutable). */
     fun upsert(theme: CarTheme) = scope.launch {
         if (theme.isBuiltIn) return@launch
-        val next = userThemes.value.toMutableList()
-        val idx = next.indexOfFirst { it.id == theme.id }
-        if (idx >= 0) next[idx] = theme else next.add(theme)
-        writeUserThemes(next)
+        // Read-modify-write inside the transaction so concurrent edits (e.g. a rapid
+        // double duplicate, or a write racing the first disk read) can't clobber each
+        // other via a stale StateFlow snapshot.
+        ds.edit { prefs ->
+            val current = decodeThemes(prefs[USER_THEMES_KEY]).toMutableList()
+            val idx = current.indexOfFirst { it.id == theme.id }
+            if (idx >= 0) current[idx] = theme else current.add(theme)
+            prefs[USER_THEMES_KEY] = encodeThemes(current)
+        }
     }
 
     /** Delete a user theme; if it was active, fall back to the default preset. */
     fun delete(id: String) = scope.launch {
-        val next = userThemes.value.filterNot { it.id == id }
-        writeUserThemes(next)
-        if (activeId.value == id) {
-            ds.edit { it[ACTIVE_ID_KEY] = BuiltInThemes.DEFAULT.id }
+        // Delete and the active-id fallback happen in one transaction against the
+        // on-disk value, not the in-memory snapshot.
+        ds.edit { prefs ->
+            val current = decodeThemes(prefs[USER_THEMES_KEY])
+            prefs[USER_THEMES_KEY] = encodeThemes(current.filterNot { it.id == id })
+            if ((prefs[ACTIVE_ID_KEY] ?: BuiltInThemes.DEFAULT.id) == id) {
+                prefs[ACTIVE_ID_KEY] = BuiltInThemes.DEFAULT.id
+            }
         }
     }
 

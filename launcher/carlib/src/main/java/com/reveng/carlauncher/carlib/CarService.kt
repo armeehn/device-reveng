@@ -118,7 +118,7 @@ class CarService(private val appContext: Context) {
     fun getRadioBand(): Int? = call { getRadioBand() }
     fun getMainVolume(): Int? = call { getMainVolval().toInt() }
     fun isMuteOn(): Boolean = call { IsMuteOn() } ?: false
-    fun getMcuVer(): String? = call { getCanVer() }
+    fun getMcuVer(): String? = call { getMCUVer() }
 
     // ---- v2.0: System / About (CAR_API §3.2) -------------------------------
     /** MCU firmware version (getMCUVer, ordinal 32). */
@@ -146,7 +146,10 @@ class CarService(private val appContext: Context) {
      */
     fun setVolume(level: Int) {
         val clamped = level.coerceIn(0, MAX_VOLUME)
-        val muted = isMuteOn()
+        // sendVolState carries the mute flag too, so we must preserve the real mute state.
+        // A failed/errored IsMuteOn() read must NOT be coerced to `false` — that would silently
+        // unmute the car as a side effect of a volume change. Bail if the state is unknown.
+        val muted = call { IsMuteOn() } ?: return
         call { sendVolState(muted, clamped) }
     }
 
