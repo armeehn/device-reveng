@@ -14,6 +14,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -255,6 +258,10 @@ fun HomeScreen(
 /**
  * A compact quick-launch column of the driver's most-used apps (LAUNCHER_DESIGN §2.4).
  * Row-per-app icon + label with large tap targets; lives in the closest-reach column.
+ *
+ * The rows live in a [LazyColumn]: when the RadioCard below squeezes the column, rows that
+ * don't fit are scrollable instead of clipped. SWC focus moves keep the focused row visible
+ * by scrolling to it.
  */
 @Composable
 private fun QuickLaunchColumn(
@@ -273,13 +280,31 @@ private fun QuickLaunchColumn(
             color = MaterialTheme.colorScheme.onBackground,
             modifier = Modifier.padding(start = 8.dp, bottom = 4.dp),
         )
-        apps.forEachIndexed { index, app ->
-            val rowModifier = if (focus != null) {
-                Modifier.launcherFocusTarget(focus, FocusTarget.Quick(index), cornerRadiusDp = 15)
-            } else {
-                Modifier
+        val listState = rememberLazyListState()
+        val focusedQuick = (focus?.current as? FocusTarget.Quick)?.index
+        LaunchedEffect(focusedQuick) {
+            if (focusedQuick != null && focusedQuick in apps.indices) {
+                listState.animateScrollToItem(focusedQuick)
             }
-            QuickLaunchRow(app = app, onClick = { onLaunch(app) }, modifier = rowModifier)
+        }
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            itemsIndexed(
+                apps,
+                key = { _, app -> app.packageName + "/" + app.activityName },
+            ) { index, app ->
+                val rowModifier = if (focus != null) {
+                    Modifier.launcherFocusTarget(focus, FocusTarget.Quick(index), cornerRadiusDp = 15)
+                } else {
+                    Modifier
+                }
+                QuickLaunchRow(app = app, onClick = { onLaunch(app) }, modifier = rowModifier)
+            }
         }
     }
 }
