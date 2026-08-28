@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BrightnessMedium
+import androidx.compose.material.icons.filled.DataObject
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.PowerSettingsNew
@@ -107,6 +108,12 @@ fun SettingsHub(
                 title = "System & about",
                 subtitle = "Versions, car profile, screen, reset & reboot",
                 onClick = { onOpen(SettingsRoute.System) },
+            )
+            SettingsCategoryCard(
+                icon = Icons.Filled.DataObject,
+                title = "CAN frame capture",
+                subtitle = "Raw CAN bulk frame — the route to real speed (diagnostic)",
+                onClick = { onOpen(SettingsRoute.CanCapture) },
             )
             SettingsCategoryCard(
                 icon = Icons.Filled.Tune,

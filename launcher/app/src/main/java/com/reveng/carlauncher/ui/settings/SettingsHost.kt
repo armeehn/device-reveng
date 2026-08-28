@@ -105,6 +105,13 @@ fun SettingsHost(
                 onBack = ::pop,
             )
 
+            // v0.4.3: the instrument that confirms the CAN bulk-frame action + payload layout,
+            // the route to a real speed reading (README "Known TODOs").
+            SettingsRoute.CanCapture -> CanCaptureScreen(
+                carEvents = carEvents,
+                onBack = ::pop,
+            )
+
             SettingsRoute.Audio -> AudioSettingsScreen(
                 controller = controller,
                 carService = carService,
@@ -173,6 +180,7 @@ sealed interface SettingsRoute {
     data object ReverseCamera : SettingsRoute
     data object Radar : SettingsRoute
     data object RadarCapture : SettingsRoute // v2.8
+    data object CanCapture : SettingsRoute // v0.4.3
     data object Audio : SettingsRoute
     data object Climate : SettingsRoute
     data object Radio : SettingsRoute

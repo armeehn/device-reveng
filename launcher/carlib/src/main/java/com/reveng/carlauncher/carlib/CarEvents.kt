@@ -97,6 +97,16 @@ class CarEvents(private val appContext: Context) {
             "com.choiceway.eventcenter.EventUtils.MCU_CAR_CAN_RADAR_INFO"
         const val EXTRA_CAR_CAN_DATA = "EventUtils.CAR_CAN_DATA"
 
+        // ---- v0.4.3: CAN bulk-frame capture (CAR_API §1.3) — unprotected -----
+        // Bulk CAN state frame — the route to a real speed reading (CAR_API line 109; the
+        // CAN_BASIC_EVT receiver is confirmed in EvtModel.java). The fully-qualified action
+        // strings follow the vendor's EventUtils.* convention but are GUESSED at that prefix;
+        // the CanCaptureScreen exists precisely to confirm which action + extra actually arrive.
+        const val MCU_CAR_CAN_INFO =
+            "com.choiceway.eventcenter.EventUtils.MCU_CAR_CAN_INFO"
+        const val CAN_BASIC_EVT =
+            "com.choiceway.eventcenter.EventUtils.CAN_BASIC_EVT"
+
         // ---- Climate (CAR_API §1.3) — unprotected ---------------------------
         const val CAR_AIR_STATE_ACTION = "com.szchoiceway.canbus.carairstruct"
         /** Parcelable com.szchoiceway.canbus.CarAirState (class not bundled — TODO). */
@@ -280,6 +290,16 @@ class CarEvents(private val appContext: Context) {
      */
     val radarRaw: StateFlow<RadarFrame?> = _radarRaw.asStateFlow()
 
+    // v0.4.3 --- Undecoded CAN bulk frame, for the capture view ----------------
+    private val _canRaw = MutableStateFlow<CanFrame?>(null)
+    /**
+     * v0.4.3 — the last CAN bulk-frame broadcast (CAN_BASIC_EVT / MCU_CAR_CAN_INFO), with every
+     * extra captured and any byte[] payload kept undecoded. Null until a frame arrives (which, on a
+     * normal app or off a car, may be never — the action strings and payload key are unconfirmed;
+     * [com.reveng.carlauncher.ui.settings.CanCaptureScreen] is the instrument that confirms them).
+     */
+    val canRaw: StateFlow<CanFrame?> = _canRaw.asStateFlow()
+
     /**
      * Numeric speed in km/h, or [GpsSpeedSource.SPEED_UNKNOWN] when it cannot be read.
      *
@@ -427,6 +447,11 @@ class CarEvents(private val appContext: Context) {
                     if (rs.valid) _radar.value = rs
                 }
 
+                // v0.4.3: bulk CAN frame — capture every extra + any byte[] payload, undecoded.
+                MCU_CAR_CAN_INFO, CAN_BASIC_EVT -> {
+                    _canRaw.value = CanFrame.from(intent, System.currentTimeMillis())
+                }
+
                 CAR_AIR_STATE_ACTION -> {
                     // The primary extra is a Parcelable CarAirState we can't deserialize
                     // (class not bundled). Best-effort: pick up a raw byte[] frame if the
@@ -532,6 +557,8 @@ class CarEvents(private val appContext: Context) {
             addAction(ACTION_DAY_BACKLIGHT_CHANGED)
             addAction(ACTION_NIGHT_BACKLIGHT_CHANGED)
             addAction(MCU_CAR_CAN_RADAR_INFO)
+            addAction(MCU_CAR_CAN_INFO) // v0.4.3 CAN bulk-frame capture
+            addAction(CAN_BASIC_EVT) // v0.4.3
             addAction(CAR_AIR_STATE_ACTION)
             addAction(CAN_CAR_OUT_SIDE_TEMP_EVT) // v3.0
             addAction(ZXW_CAN_WHEEL_TRACK_EVT) // v3.0
