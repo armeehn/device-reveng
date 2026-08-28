@@ -205,6 +205,144 @@ signature was never recovered, so registering it would be a guess. Blocking AIDL
 the composition body — doing them inline once spun a main-thread IPC recomposition loop while
 seeking.
 
+## SWC completeness & radar truth (v2.8)
+
+### The whole app is drivable from the wheel
+
+v0.8 gave Home a roving focus ring, and `MainActivity.routeNav` handed directional keys to it only
+while Home was on screen — every other screen ignored the wheel. Two pieces close that:
+
+- **`input/KeyPump.kt`** — one press-timing model for both input sources. The vendor
+  `STEER_WHEEL_INFOR` broadcast sends a down and an up and nothing between, so a held key moved the
+  ring once; real `KeyEvent`s auto-repeat at the platform's keyboard rate, which machine-guns a
+  settings list. Both now feed the pump: directional keys fire, then repeat after 400 ms every
+  150 ms; CENTER and BACK defer their action to the release and fire a **secondary action at
+  600 ms** instead. A key cannot do both — a repeat has already fired by the time a long-press
+  would.
+- **`input/KeyBridge.kt`** — off Home, the ring is Compose's own focus system. Every `clickable` is
+  already a focus target with real geometry, so a hand-written focus model per screen would only
+  drift out of sync with the layout above it. The one thing missing was a way in: SWC keys arrive
+  as a *broadcast*, never as a `KeyEvent`, so they never reached the composition. The bridge
+  synthesises the KeyEvent through `Window.superDispatchKeyEvent` (which bypasses our own
+  dispatcher, so a synthetic key cannot loop). **Wrap-around** has no framework API, so it is
+  composed from the one that does: a refused move means an edge, and walking as far as possible in
+  the opposite direction lands on the far end.
+
+`input/FocusRing.kt` draws where focus landed — Material's focus ripple is invisible at arm's
+length in daylight. It is applied to the shared settings kit (`SettingRow`, `ActionRow`,
+`SettingsCategoryCard`, `SettingsIconTile`, `DialogTextButton`), which covers the whole settings
+suite, plus the Media, Radio and Themes screens.
+
+Long-press actions: **BACK** is Home from any depth, including four screens into settings.
+**CENTER** on a Home grid tile toggles the favourite — the same thing a touch long-press does, so
+the wheel gains no gesture the screen lacks. On the media card it is play/pause.
+
+**Reverse restores focus.** Reverse is an interruption, not navigation: the vendor takes the screen
+and gives it back. `LauncherFocus.saveForInterruption()` / `restoreAfterInterruption()` put the ring
+back where the driver left it.
+
+### Radar: the layout is still UNCONFIRMED
+
+**Nothing about the radar decode was verified on a car.** There is no head unit attached to the
+machine this was built on. `RadarState.fromRadarData` still uses the same guessed offsets it has
+used since v0.7, and this release does not claim otherwise — it ships the instrument that settles
+them.
+
+**Settings ▸ Parking radar ▸ Raw frame capture** (`ui/settings/RadarCaptureScreen.kt`) shows the
+`CAR_CAN_DATA` payload byte by byte in hex, with per-offset `min`/`max`/`change-count` accumulated
+since the last reset, next to what our decode currently makes of the same frame. `CarEvents.radarRaw`
+publishes the payload *before* interpretation, including frames our guess rejects — the guess is
+what the screen exists to disprove.
+
+**The capture to perform:**
+
+1. Park. Engage reverse so the MCU starts broadcasting, and open the capture screen.
+2. Press **Reset baseline** with nothing near the car.
+3. Walk an obstacle slowly toward **one** corner. Watch which offset sweeps: a distance byte climbs
+   or falls smoothly, a status flag jumps once and stops. The eye cannot follow eight hex values at
+   10 Hz, which is what `min`/`max`/`changes` are for — a byte that never moved stays dimmed.
+4. Repeat per corner. The offsets that moved, in the order they moved, *are* the layout.
+5. If the number **falls** as the obstacle nears, the MCU sends distance rather than a bar count and
+   `RadarState.proximity` needs inverting.
+6. **Write table to logcat** dumps the result under tag `RadarCapture` for `adb logcat -s RadarCapture`.
+
+Then set **Layout confirmed on this car**. Until that is set, the new low-speed maneuvering
+side-strips (`ui/RadarSideStrip.kt`) stay hidden: an arc reading "clear" off a guessed offset is a
+safety claim the code has not earned. The existing bars in Settings are *not* gated — they report
+what arrived, not what it means — and every screen that shows a decode says UNCONFIRMED in words.
+
+The strips themselves are two 44 dp rails hard against the screen edges, green → amber → red, three
+arcs per corner, and completely static (motion budget). They are **hidden whenever reverse is
+engaged**: `ReverseOverlay`'s v0.9 rule is that the vendor composites its own reverse window above
+all apps and we never contend for those pixels. The strips cover the case the vendor window does
+not — creeping forward in a car park, easing out of a garage — at or below 15 km/h. An unknown speed
+passes the gate on purpose, since that underground car park is where GPS has no fix.
+
+### Reachability mirror (LHD/RHD)
+
+Settings ▸ Launcher ▸ **Reachability mirror** swaps the glance column (media + climate) and the
+thumb column (quick launch + radio) so the interactive set stays under the driver's hand
+(LAUNCHER_DESIGN §2.5). The focus ring mirrors with it, so a LEFT press still walks toward whatever
+is now on the left. The centre column is symmetric and never moves.
+
+**Auto cannot actually infer this, and does not pretend to.** `Sys_CarType` is documented in
+CAR_API §2.3 as a "car model/type profile id" and nothing more; its value domain was never
+recovered, because the vendor settings APK holding the enum tables is not in the decompile. So
+`data/Reachability.kt` ships an **empty** RHD table, Auto always resolves to LHD, and the settings
+screen prints the live raw `Sys_CarType` next to the override so a user in an RHD car can report
+theirs. Any value added to that table is GUESSED until it is checked against a car that is actually
+right-hand drive.
+
+## The cockpit release (v3.0)
+
+**Vehicle dashboard** (`ui/DashboardScreen.kt`, status bar ▸ speedometer icon). The launcher had
+accumulated vehicle signals across five surfaces and nowhere to see them together. Speed, outside
+temperature, steering, ignition, parking radar and a session timer, on one screen.
+
+Every tile carries a provenance line, because these signals are *not* equally trustworthy and a
+dashboard that renders a guess identically to a confirmed reading is worse than no dashboard:
+
+| Tile | Source | Status |
+|---|---|---|
+| Speed | `CarEvents.speedKmh` (GPS, v2.5) | derived, not from the car |
+| Outside temp | `CAN_CAR_OUT_SIDE_TEMP_EVT` | action **confirmed**; extra key names GUESSED |
+| Steering | `ZXW_CAN_WHEEL_TRACK_EVT` | action **confirmed**; units and sign GUESSED |
+| Ignition | `ACTION_ACC_OPEN_CLOSE_EVT` | **confirmed** |
+| Radar | `MCU_CAR_CAN_RADAR_INFO` | byte layout GUESSED (v2.8) |
+| Session timer | measured here | not the car's trip computer |
+
+The steering tile shows **no number**. The extra's units and sign are undocumented, so printing
+"42°" would invent precision we do not have; a bar that leans the way the wheel leans is exactly
+as much as the signal supports. `CAN_CAR_TIRP_INFO` exists in the constant table but no extras
+were recovered for it, so the real trip computer is not readable — hence "this session".
+
+**Driver profiles** (`data/DriverProfilesStore.kt`, status bar ▸ account icon — two taps from
+Home, as §3.0 asks). A profile bundles theme, favourites, quick-launch order and reachability.
+Applying one writes *through* to the stores that already own each setting rather than becoming a
+second source of truth, so a profile can never disagree with the live value. Saving is
+parked-only (it needs the keyboard); applying is not — being unable to restore your own layout
+while moving would be worse than the single tap.
+
+**Gateway UIMODE handshake** (`carlib/GatewayHandshake.kt`). Announces our UI mode on
+`ACTION_LAUNCHER_TO_EVENTCENTER_UIMODE_EVENT` (CAR_API §6.2), which is what makes the vendor
+stack treat us as *the* launcher. It deliberately does **not** drive our theming:
+`CUSTOMERUI_NOTES.md` records that the vendor launcher themes from `setUiModeNight/Day` plus a
+local broadcast, *not* from this pair, so reading it as a day/night source would be reading a
+channel the vendor does not actually theme from.
+
+### HVAC write controls — not shipped
+
+The roadmap gated these on STATUS goal #3 proving RAV4 climate is CAN-writable. That test has not
+been run, and STATUS still reads *"Investigating whether RAV4 climate is CAN-controllable or
+display-only (likely display-only)."* So climate stays read-only. The Climate settings screen
+continues to write only vendor *configuration* SysVars (panel type, bus baud, seat heat, units) —
+never a live temperature or fan command.
+
+### Stability bar — not claimable
+
+§3.0 asks for a week of daily driving with zero crashes before the release is called done. None of
+this has run on the head unit at all. Treat v3.0 as feature-complete and **unvalidated**.
+
 ## Known TODOs
 
 - **`IEventService.aidl`** declares only a subset of methods and its transaction
@@ -222,6 +360,21 @@ seeking.
   be the only route to a station name (see v2.6 above).
 - **`Rdo_MyFavorite0..5` encoding** — capture the raw values (RadioScreen shows them) to make
   two-way preset sync with the vendor radio safe.
+- **Radar byte layout** — still **UNCONFIRMED** (v2.8 above). Run the capture, then either fix the
+  offsets in `RadarState` or set the layout-confirmed flag. Until then the maneuvering side-strips
+  never draw.
+- **`Sys_CarType` value domain** — needed before the reachability mirror's Auto mode can mean
+  anything. `Reachability.KNOWN_RHD_CAR_TYPES` is empty and must stay empty until a value is read
+  off a real RHD car.
 - **Vendor `sendMode` value table** — needed before MediaScreen can switch the car between
   Bluetooth / USB / the built-in player.
+- **`CAN_CAR_OUT_SIDE_TEMP_EVT` / `ZXW_CAN_WHEEL_TRACK_EVT` extra keys** — the actions are
+  confirmed but the extra *names* were never quoted in the decompile, so v3.0 tries a short list
+  of candidates. Dump the real extras on-device and pin them.
+- **Steering angle units** — turn lock to lock with the dashboard open and read the extremes off
+  the raw value; the indicator currently assumes ±540 and saturates.
+- **`CAN_CAR_TIRP_INFO` extras** — would replace the dashboard's own session timer with the car's
+  real trip computer.
+- **Profile renaming** — captured profiles get a generated name until v2.7's in-app keyboard
+  (`CarTextField`) is on this branch.
 ```

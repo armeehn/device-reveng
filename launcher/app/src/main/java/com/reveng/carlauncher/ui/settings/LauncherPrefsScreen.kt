@@ -29,12 +29,16 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle // v2.8
 import com.reveng.carlauncher.HomeRole
 import com.reveng.carlauncher.carlib.CarEvents // v2.5
 import com.reveng.carlauncher.carlib.GpsSpeedSource // v2.5
 import com.reveng.carlauncher.carlib.RootShell // v2.5 shade
+import com.reveng.carlauncher.data.CarSettingsController // v2.8
 import com.reveng.carlauncher.data.DayNightMode
+import com.reveng.carlauncher.data.DriverSideMode // v2.8
 import com.reveng.carlauncher.data.LauncherSettings
+import com.reveng.carlauncher.data.SettingKeys // v2.8
 import com.reveng.carlauncher.data.SettingsStore
 import com.reveng.carlauncher.ui.collectAsStateSafe
 import kotlinx.coroutines.Dispatchers
@@ -51,6 +55,7 @@ fun LauncherPrefsScreen(
     settingsStore: SettingsStore,
     onBack: () -> Unit,
     carEvents: CarEvents? = null, // v2.5 motion gating (null keeps previews working)
+    controller: CarSettingsController? = null, // v2.8 raw Sys_CarType readout
 ) {
     val context = LocalContext.current
     val settings by settingsStore.settings.collectAsStateSafe(initial = LauncherSettings())
@@ -153,6 +158,28 @@ fun LauncherPrefsScreen(
             )
         }
 
+        // v2.8 — the reachability mirror (LAUNCHER_DESIGN §2.5).
+        SettingsSection(title = "Reachability mirror") {
+            Text(
+                text = "Puts the quick-launch and radio column under the driver's hand. In a " +
+                    "right-hand-drive car it swaps to the left of the screen.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.size(12.dp))
+            PickerSetting(
+                label = "Driver's side",
+                current = settings.driverSideMode,
+                options = listOf(
+                    DriverSideMode.AUTO to "Auto (from the car)",
+                    DriverSideMode.LHD to "Left-hand drive",
+                    DriverSideMode.RHD to "Right-hand drive",
+                ),
+                onSelect = settingsStore::setDriverSideMode,
+            )
+            CarTypeRow(controller = controller)
+        }
+
         SettingsSection(title = "Day / night mode") {
             Text(
                 text = "Auto follows the car's illumination signal. Force day or night to " +
@@ -218,6 +245,35 @@ private fun MotionStatusRow(carEvents: CarEvents?) {
     Text(
         text = "Speed: $speedText · $verdict",
         style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+/**
+ * v2.8 — the live raw `Sys_CarType`, next to the override that ignores it.
+ *
+ * Auto has nothing to go on. CAR_API §2.3 calls the key a "car model/type profile id" and the
+ * value domain was never recovered, so [com.reveng.carlauncher.data.Reachability] ships an empty
+ * mapping table and Auto always answers LHD. Showing the raw value is the only honest thing this
+ * row can do: it turns "Auto is wrong for me" into a value a user can report, which is what would
+ * let the table stop being empty.
+ */
+@Composable
+private fun CarTypeRow(controller: CarSettingsController?) {
+    if (controller == null) {
+        return
+    }
+    val snapshot by controller.snapshot.collectAsStateWithLifecycle()
+    val carType = snapshot[SettingKeys.CAR_TYPE]
+
+    InfoRow(
+        label = "Car profile (Sys_CarType)",
+        value = if (carType.isNullOrBlank()) "not set" else carType,
+    )
+    Text(
+        text = "Auto cannot read a driver's side out of this value — no mapping was ever " +
+            "recovered — so it stays left-hand drive. Set the override if that is wrong.",
+        style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
 }
