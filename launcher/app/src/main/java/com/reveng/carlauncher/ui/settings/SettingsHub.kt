@@ -3,6 +3,7 @@ package com.reveng.carlauncher.ui.settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.BrightnessMedium
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.GraphicEq
@@ -115,6 +116,12 @@ fun SettingsHub(
                 title = "Setup doctor",
                 subtitle = "Check & repair the grants a reinstall drops",
                 onClick = { onOpen(SettingsRoute.SetupDoctor) },
+            )
+            SettingsCategoryCard(
+                icon = Icons.Filled.Backup,
+                title = "Backup & restore",
+                subtitle = "Save & restore themes, layout, profiles",
+                onClick = { onOpen(SettingsRoute.Backup) },
             )
             SettingsCategoryCard(
                 icon = Icons.Filled.Info,

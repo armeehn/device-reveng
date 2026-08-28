@@ -90,6 +90,11 @@ fun SettingsHost(
                 onBack = ::pop,
             )
 
+            // v0.4.2: back up / restore the whole launcher state (DataStore file snapshot).
+            SettingsRoute.Backup -> BackupSettingsScreen(
+                onBack = ::pop,
+            )
+
             SettingsRoute.Display -> DisplaySettingsScreen(
                 controller = controller,
                 carService = carService,
@@ -182,6 +187,7 @@ sealed interface SettingsRoute {
     data object LauncherPrefs : SettingsRoute
     data object AppDirectory : SettingsRoute // v0.4.2
     data object SetupDoctor : SettingsRoute // v0.4.2
+    data object Backup : SettingsRoute // v0.4.2
     data object Display : SettingsRoute
     data object ReverseCamera : SettingsRoute
     data object Radar : SettingsRoute
