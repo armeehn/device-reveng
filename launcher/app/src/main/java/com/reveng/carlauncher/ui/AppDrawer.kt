@@ -214,6 +214,13 @@ private fun ReorderableAppGrid(
                     hasSystem -> onOpenSystem()
                 }
             }
+            // v2.8: long CENTER from the wheel does what a touch long-press-release does — toggle
+            // the favourite. The System folder tile has no favourite, so it is left alone.
+            gridFocus.longPress = { i ->
+                if (i < items.size) {
+                    onToggleFavorite(items[i])
+                }
+            }
         }
     }
     val focusedIndex = gridFocus?.focusedIndex
