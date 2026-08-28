@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -29,6 +28,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.reveng.carlauncher.AppInfo
+import com.reveng.carlauncher.ui.keyboard.CarKeyboard // v2.7
 
 /**
  * v2.3 rofi-style full-screen app search. The vendor system IME ignores night mode and covered
@@ -56,6 +57,17 @@ fun SearchOverlay(
     onLaunch: (AppInfo) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    // v2.5 §1.4: text entry is parked-only. If the car pulls away with search open we close it
+    // rather than swapping a notice in behind the modal — a full-screen keyboard is the worst
+    // thing to leave in front of a driver who has just started moving, and Home is a safe place
+    // to land. The drawer's trigger below refuses to reopen it while the lock holds.
+    val locked = LocalParkedOnlyLock.current
+    LaunchedEffect(locked) {
+        if (locked) {
+            onDismiss()
+        }
+    }
+
     var query by remember { mutableStateOf("") }
     val results = remember(apps, query) {
         val q = query.trim()
@@ -105,7 +117,10 @@ fun SearchOverlay(
                     }
                 }
 
-                SearchKeyboard(
+                // v2.7: the keyboard moved to ui/keyboard/CarKeyboard.kt so the settings suite,
+                // theme editor and SysVar browser get the same keys. Search is unchanged bar the
+                // new shift/symbol keys.
+                CarKeyboard(
                     onChar = { query += it },
                     onBackspace = { query = query.dropLast(1) },
                     onEnter = { results.firstOrNull()?.let(onLaunch) },
@@ -198,61 +213,19 @@ private fun SearchResultTile(app: AppInfo, highlighted: Boolean, onClick: () -> 
 }
 
 /**
- * In-Compose QWERTY sized for a moving vehicle: 4 rows of ~72dp keys across the full 1920px
- * width. Letters append lowercase (matching is case-insensitive anyway); ⏎ launches the first
- * result. No shift/symbols — app labels only ever need letters, digits and space.
+ * The tappable search-bar lookalike at the top of the drawer; opens [SearchOverlay].
+ *
+ * v2.5: while the parked-only lock holds it stays visible but inert, and says why. Hiding it
+ * outright would reflow the drawer every time the car stops at a light.
  */
 @Composable
-private fun SearchKeyboard(
-    onChar: (Char) -> Unit,
-    onBackspace: () -> Unit,
-    onEnter: () -> Unit,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 8.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            "1234567890".forEach { c -> SearchKey(c.toString()) { onChar(c) } }
-        }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            "QWERTYUIOP".forEach { c -> SearchKey(c.toString()) { onChar(c.lowercaseChar()) } }
-        }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            "ASDFGHJKL".forEach { c -> SearchKey(c.toString()) { onChar(c.lowercaseChar()) } }
-            SearchKey("⌫", weight = 1.5f, onPress = onBackspace)
-        }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            "ZXCVBNM".forEach { c -> SearchKey(c.toString()) { onChar(c.lowercaseChar()) } }
-            SearchKey("␣", weight = 3f) { onChar(' ') }
-            SearchKey("⏎", weight = 1.5f, onPress = onEnter)
-        }
-    }
-}
-
-@Composable
-private fun RowScope.SearchKey(
-    label: String,
-    weight: Float = 1f,
-    onPress: () -> Unit,
-) {
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = Modifier
-            .weight(weight)
-            .height(72.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .clickable(onClick = onPress),
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.titleLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}
-
-/** The tappable search-bar lookalike at the top of the drawer; opens [SearchOverlay]. */
-@Composable
 fun DrawerSearchTrigger(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val locked = LocalParkedOnlyLock.current
+    val tint = if (locked) {
+        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = DISABLED_ALPHA)
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
@@ -261,19 +234,22 @@ fun DrawerSearchTrigger(onClick: () -> Unit, modifier: Modifier = Modifier) {
             .height(56.dp)
             .clip(RoundedCornerShape(16.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant)
-            .clickable(onClick = onClick)
+            .clickable(enabled = !locked, onClick = onClick)
             .padding(horizontal = 16.dp),
     ) {
         Icon(
             imageVector = Icons.Filled.Search,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            tint = tint,
         )
         Spacer(Modifier.width(12.dp))
         Text(
-            text = "Search apps",
+            text = if (locked) "Search — available when parked" else "Search apps",
             style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = tint,
         )
     }
 }
+
+/** Material's standard disabled-content opacity. */
+private const val DISABLED_ALPHA = 0.38f

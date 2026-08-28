@@ -38,6 +38,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.reveng.carlauncher.input.focusRing // v2.8
 import kotlin.math.roundToInt
 
 /**
@@ -107,6 +108,7 @@ fun SettingsIconTile(icon: ImageVector, label: String, onClick: () -> Unit) {
             .size(48.dp)
             .clip(carShape(14.dp))
             .background(MaterialTheme.colorScheme.surface)
+            .focusRing(cornerRadiusDp = 14) // v2.8
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
@@ -158,6 +160,7 @@ fun SettingsCategoryCard(
             .carCard()
             .clip(carShape(18.dp))
             .background(MaterialTheme.colorScheme.surface)
+            .focusRing(cornerRadiusDp = 18) // v2.8
             .clickable(onClick = onClick)
             .padding(horizontal = 20.dp, vertical = 18.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -211,7 +214,13 @@ fun SettingRow(
     val base = Modifier
         .fillMaxWidth()
         .heightIn(min = 56.dp)
-    val clickable = if (onClick != null && enabled) base.clickable(onClick = onClick) else base
+    // v2.8: the roving ring needs somewhere to land on every settings screen; adding it to the
+    // shared row is what makes the whole suite wheel-drivable without twelve per-screen models.
+    val clickable = if (onClick != null && enabled) {
+        base.focusRing().clickable(onClick = onClick)
+    } else {
+        base
+    }
     Row(
         modifier = clickable.padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -392,6 +401,7 @@ fun ActionRow(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 56.dp)
+            .focusRing() // v2.8
             .clickable(enabled = enabled, onClick = onClick)
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -528,6 +538,7 @@ fun DialogTextButton(
         modifier = modifier
             .clip(carShape(14.dp))
             .background(bg)
+            .focusRing() // v2.8
             .clickable(onClick = onClick)
             .padding(vertical = 14.dp),
         horizontalArrangement = Arrangement.Center,

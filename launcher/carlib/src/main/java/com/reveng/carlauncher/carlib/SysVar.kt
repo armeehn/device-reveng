@@ -160,7 +160,7 @@ class SysVar(private val context: Context) {
     }
 
     /** Wrap [s] in single quotes, safely escaping any embedded single quote, for one shell level. */
-    private fun sh(s: String): String = "'" + s.replace("'", "'\\''") + "'"
+    private fun sh(s: String): String = RootShell.quote(s) // v2.9: one shared implementation
 
     /** Escape a value for embedding inside a single-quoted SQL string literal. */
     private fun sqlEscape(s: String): String = s.replace("'", "''")

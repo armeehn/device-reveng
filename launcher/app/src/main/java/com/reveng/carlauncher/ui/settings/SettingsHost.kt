@@ -13,7 +13,9 @@ import com.reveng.carlauncher.carlib.CarEvents
 import com.reveng.carlauncher.carlib.CarService
 import com.reveng.carlauncher.data.CarSettingsController
 import com.reveng.carlauncher.data.RadioPresetsStore
+import com.reveng.carlauncher.data.RootTierController // v2.9
 import com.reveng.carlauncher.data.SettingsStore
+import com.reveng.carlauncher.ui.ParkedOnly // v2.5
 
 /**
  * v1.1 — the Settings app's own navigation host.
@@ -34,9 +36,17 @@ fun SettingsHost(
     carService: CarService,
     carEvents: CarEvents,
     radioPresetsStore: RadioPresetsStore,
+    rootTier: RootTierController, // v2.9
     onExit: () -> Unit,
+    // Optional deep link: open with this route pushed above the hub, so Back still pops
+    // to the hub (status-bar power chip → Power & sleep).
+    initialRoute: SettingsRoute? = null,
 ) {
-    val backStack = remember { mutableStateListOf<SettingsRoute>(SettingsRoute.Hub) }
+    val backStack = remember {
+        mutableStateListOf<SettingsRoute>(SettingsRoute.Hub).also { stack ->
+            initialRoute?.let { stack.add(it) }
+        }
+    }
 
     fun push(route: SettingsRoute) { backStack.add(route) }
     fun pop() {
@@ -65,6 +75,8 @@ fun SettingsHost(
             SettingsRoute.LauncherPrefs -> LauncherPrefsScreen(
                 settingsStore = settingsStore,
                 onBack = ::pop,
+                carEvents = carEvents, // v2.5 live speed / motion readout
+                controller = controller, // v2.8 raw Sys_CarType next to the mirror override
             )
 
             SettingsRoute.Display -> DisplaySettingsScreen(
@@ -81,6 +93,15 @@ fun SettingsHost(
             SettingsRoute.Radar -> RadarSettingsScreen(
                 controller = controller,
                 carEvents = carEvents,
+                settingsStore = settingsStore, // v2.8 layout-confirmed flag
+                onOpenCapture = { push(SettingsRoute.RadarCapture) }, // v2.8
+                onBack = ::pop,
+            )
+
+            // v2.8: the instrument that makes the guessed radar byte layout verifiable.
+            SettingsRoute.RadarCapture -> RadarCaptureScreen(
+                carEvents = carEvents,
+                settingsStore = settingsStore,
                 onBack = ::pop,
             )
 
@@ -115,16 +136,31 @@ fun SettingsHost(
                 onBack = ::pop,
             )
 
+            // v2.9: root-only capabilities, including the one destructive action in the app.
+            SettingsRoute.RootTier -> RootTierSettingsScreen(
+                controller = controller,
+                rootTier = rootTier,
+                carEvents = carEvents,
+                onBack = ::pop,
+            )
+
             SettingsRoute.System -> SystemSettingsScreen(
                 controller = controller,
                 carService = carService,
                 onBack = ::pop,
             )
 
-            SettingsRoute.Advanced -> AdvancedSettingsScreen(
-                controller = controller,
+            // v2.5 §1.4: the raw SysVar browser is 455 keys of free-text editing over live
+            // vehicle config — the most attention-hungry screen in the app, and parked-only.
+            SettingsRoute.Advanced -> ParkedOnly(
+                feature = "The SysVar browser",
                 onBack = ::pop,
-            )
+            ) {
+                AdvancedSettingsScreen(
+                    controller = controller,
+                    onBack = ::pop,
+                )
+            }
         }
     }
 }
@@ -136,11 +172,13 @@ sealed interface SettingsRoute {
     data object Display : SettingsRoute
     data object ReverseCamera : SettingsRoute
     data object Radar : SettingsRoute
+    data object RadarCapture : SettingsRoute // v2.8
     data object Audio : SettingsRoute
     data object Climate : SettingsRoute
     data object Radio : SettingsRoute
     data object SteeringWheel : SettingsRoute
     data object Power : SettingsRoute
+    data object RootTier : SettingsRoute // v2.9
     data object System : SettingsRoute
     data object Advanced : SettingsRoute
 }

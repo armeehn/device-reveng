@@ -42,4 +42,15 @@ class FavoritesStore(
             prefs[key] = current
         }
     }
+
+    /**
+     * v3.0 — replace the whole set in one write, for [DriverProfilesStore] switching profiles.
+     *
+     * A profile must land atomically: applying it as a run of [toggle] calls would publish a
+     * sequence of half-merged states to every collector, and a failure part-way through would
+     * leave a set belonging to neither driver.
+     */
+    suspend fun setAll(pkgs: Set<String>) {
+        context.favoritesDataStore.edit { prefs -> prefs[key] = pkgs }
+    }
 }
