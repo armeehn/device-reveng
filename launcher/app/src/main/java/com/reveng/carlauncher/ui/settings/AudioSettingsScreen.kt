@@ -1,5 +1,16 @@
 package com.reveng.carlauncher.ui.settings
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.material.icons.filled.Cable
+import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Navigation
+import androidx.compose.material.icons.filled.Radio
+import androidx.compose.material.icons.filled.Tv
+import androidx.compose.material.icons.filled.Usb
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -96,7 +107,8 @@ fun AudioSettingsScreen(
         }
 
         SettingsSection(title = "Enhancements") {
-            SliderSetting(
+            VolumeSlider(
+                icon = Icons.AutoMirrored.Filled.VolumeUp,
                 label = "Subwoofer level",
                 value = subVol,
                 range = 0..20,
@@ -124,6 +136,42 @@ fun AudioSettingsScreen(
                 description = "Play a short tone through the audio path",
                 onClick = { carService.beep() },
                 enabled = connected,
+            )
+        }
+
+        SettingsSection(title = "OEM source volume") {
+            Text(
+                text = "Per-source volume trim relative to the main volume. Vendor gains — persist " +
+                    "with root / a privileged install.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            val sources = listOf(
+                Triple(Icons.Filled.MusicNote, "Music", SettingKeys.VOL_MUSIC),
+                Triple(Icons.Filled.Bluetooth, "Bluetooth music", SettingKeys.VOL_BT_MUSIC),
+                Triple(Icons.Filled.Call, "Bluetooth call", SettingKeys.VOL_BT_CALL),
+                Triple(Icons.Filled.Radio, "Radio", SettingKeys.VOL_RADIO),
+                Triple(Icons.Filled.Usb, "USB", SettingKeys.VOL_USB),
+                Triple(Icons.Filled.Cable, "AUX", SettingKeys.VOL_AUX),
+                Triple(Icons.Filled.Movie, "DVD / video", SettingKeys.VOL_DVD),
+                Triple(Icons.Filled.Tv, "TV", SettingKeys.VOL_TV),
+                Triple(Icons.Filled.Navigation, "Navigation mix", SettingKeys.VOL_NAV_MIX),
+                Triple(Icons.AutoMirrored.Filled.VolumeUp, "Other", SettingKeys.VOL_OTHER),
+            )
+            sources.forEach { (icon, label, key) ->
+                VolumeSlider(
+                    icon = icon,
+                    label = label,
+                    value = controller.getInt(key, 20),
+                    range = 0..40,
+                    onChange = { controller.setInt(key, it) },
+                )
+            }
+            ToggleSetting(
+                label = "Match OEM head-unit volume",
+                description = "Track the factory radio's volume level",
+                checked = controller.getBoolean(SettingKeys.ADJUST_OEM_VOLUME, false),
+                onChange = { controller.setBoolean(SettingKeys.ADJUST_OEM_VOLUME, it) },
             )
         }
 
