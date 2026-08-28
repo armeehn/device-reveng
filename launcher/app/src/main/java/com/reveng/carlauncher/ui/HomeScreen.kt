@@ -28,6 +28,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -35,6 +36,7 @@ import androidx.compose.foundation.focusGroup
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -45,8 +47,11 @@ import com.reveng.carlauncher.AppRepository
 import com.reveng.carlauncher.R
 import com.reveng.carlauncher.carlib.CarEvents
 import com.reveng.carlauncher.carlib.CarService
+import com.reveng.carlauncher.data.AppDirectoryStore // v0.4.2 custom app directory
 import com.reveng.carlauncher.data.DriverSide // v2.8
 import com.reveng.carlauncher.data.LauncherSettings // v0.6
+import com.reveng.carlauncher.data.Placement // v0.4.2
+import com.reveng.carlauncher.data.effectivePlacement // v0.4.2
 import com.reveng.carlauncher.data.SettingsStore // v0.6
 import com.reveng.carlauncher.input.FocusTarget // v0.8 SWC navigation
 import com.reveng.carlauncher.input.LauncherFocus // v0.8
@@ -107,8 +112,19 @@ fun HomeScreen(
     LaunchedEffect(Unit) {
         apps = withContext(Dispatchers.IO) { appRepository.loadApps() }
     }
-    val userApps = apps.filter { !it.isSystem }
-    val systemApps = apps.filter { it.isSystem }
+
+    // v0.4.2 custom app directory: the user's per-app placement overrides the built-in
+    // user/system classification — pull a misclassified app to Home, tuck one into System, or
+    // hide it entirely. Absent override falls back to AppInfo.isSystem.
+    val appContext = LocalContext.current.applicationContext
+    val dirScope = rememberCoroutineScope()
+    val appDirectoryStore = remember { AppDirectoryStore(appContext, dirScope) }
+    val placements by appDirectoryStore.placements.collectAsStateSafe(initial = emptyMap())
+    // One pass: resolve each app's effective placement once and group. HIDDEN apps land in neither
+    // list, so they simply fall out.
+    val byPlacement = remember(apps, placements) { apps.groupBy { it.effectivePlacement(placements) } }
+    val userApps = byPlacement[Placement.HOME].orEmpty()
+    val systemApps = byPlacement[Placement.SYSTEM].orEmpty()
 
     // v0.8: the roving focus ring shared with the SWC / DPAD key dispatcher (MainActivity).
     val focus = LocalLauncherFocus.current

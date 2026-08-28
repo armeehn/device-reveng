@@ -19,11 +19,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -32,6 +36,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.reveng.carlauncher.data.DriverProfile
 import com.reveng.carlauncher.data.DriverProfilesStore
+import com.reveng.carlauncher.ui.keyboard.CarKeyboardEditor // v0.4.2 profile renaming
 import com.reveng.carlauncher.ui.theme.carShape
 
 /**
@@ -54,6 +59,7 @@ fun ProfilesScreen(
     onCapture: () -> Unit,
     onDelete: (DriverProfile) -> Unit,
     onBack: () -> Unit,
+    onRename: (DriverProfile, String) -> Unit = { _, _ -> }, // v0.4.2
 ) {
     val profiles by store.profiles.collectAsStateSafe(initial = emptyList())
     val active by store.activeProfile.collectAsStateSafe(initial = null)
@@ -102,6 +108,7 @@ fun ProfilesScreen(
                     active = profile.id == active?.id,
                     onApply = { onApply(profile) },
                     onDelete = { onDelete(profile) },
+                    onRename = { newName -> onRename(profile, newName) },
                 )
             }
         }
@@ -135,7 +142,23 @@ private fun ProfileRow(
     active: Boolean,
     onApply: () -> Unit,
     onDelete: () -> Unit,
+    onRename: (String) -> Unit,
 ) {
+    // v0.4.2: renaming needs the keyboard, so it rides the same parked-only editor as capture.
+    // CarKeyboardEditor abandons the edit if the car pulls away, so no extra gating is needed here.
+    var renaming by remember { mutableStateOf(false) }
+    if (renaming) {
+        CarKeyboardEditor(
+            title = "Rename profile",
+            initial = profile.name,
+            onDone = { newName ->
+                renaming = false
+                val trimmed = newName.trim()
+                if (trimmed.isNotEmpty() && trimmed != profile.name) onRename(trimmed)
+            },
+            onCancel = { renaming = false },
+        )
+    }
     val bg = if (active) {
         MaterialTheme.colorScheme.primaryContainer
     } else {
@@ -180,6 +203,17 @@ private fun ProfileRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+        Icon(
+            imageVector = Icons.Filled.Edit,
+            contentDescription = "Rename ${profile.name}",
+            tint = fg,
+            modifier = Modifier
+                .size(44.dp)
+                .clip(carShape(10.dp))
+                .clickable(onClick = withTapFeedback { renaming = true })
+                .padding(8.dp),
+        )
+        Spacer(Modifier.width(4.dp))
         Icon(
             imageVector = Icons.Filled.Delete,
             contentDescription = "Delete ${profile.name}",
