@@ -84,6 +84,7 @@ class LauncherFocus {
     var showMedia = true
     var showClimate = true
     var showRadio = true
+    var showNav = true
     var quickCount = 0
 
     /** Performs the CENTER/ENTER action for the given target. Wired by HomeScreen. */
@@ -101,8 +102,18 @@ class LauncherFocus {
     /** Clear focus (e.g. when leaving Home). The next directional key re-reveals it. */
     fun reset() = set(FocusTarget.None)
 
-    private fun firstTarget(): FocusTarget =
-        if (grid.count > 0) FocusTarget.Grid(0) else FocusTarget.Nav
+    private fun firstTarget(): FocusTarget = centerTarget()
+
+    /** Best central focus target, skipping the Nav card when the home-widget toggle hides it. */
+    private fun centerTarget(): FocusTarget = when {
+        grid.count > 0 -> FocusTarget.Grid(0)
+        showNav -> FocusTarget.Nav
+        showMedia -> FocusTarget.Media
+        showClimate -> FocusTarget.Climate
+        quickCount > 0 -> FocusTarget.Quick(0)
+        showRadio -> FocusTarget.Radio
+        else -> FocusTarget.Nav // everything hidden: the home screen is empty, so target is moot
+    }
 
     private fun leftTop(): FocusTarget = when {
         showMedia -> FocusTarget.Media
@@ -122,8 +133,10 @@ class LauncherFocus {
      */
     fun onKey(nav: NavKey): Boolean {
         if (current == FocusTarget.None) {
+            // First press on a cleared ring only REVEALS focus — including CENTER. Activating
+            // here would launch the first grid app with no visual indication of what was
+            // targeted (a blind launch from the wheel). The next press acts on the revealed item.
             set(firstTarget())
-            if (nav == NavKey.CENTER) onActivate(current)
             return true
         }
         when (nav) {
@@ -147,13 +160,13 @@ class LauncherFocus {
     private fun next(c: FocusTarget, nav: NavKey): FocusTarget = when (c) {
         is FocusTarget.Media -> when (nav) {
             NavKey.DOWN -> if (showClimate) FocusTarget.Climate else c
-            NavKey.RIGHT -> FocusTarget.Nav
+            NavKey.RIGHT -> if (showNav) FocusTarget.Nav else centerTarget()
             else -> c
         }
 
         is FocusTarget.Climate -> when (nav) {
             NavKey.UP -> if (showMedia) FocusTarget.Media else c
-            NavKey.RIGHT -> FocusTarget.Nav
+            NavKey.RIGHT -> if (showNav) FocusTarget.Nav else centerTarget()
             else -> c
         }
 
@@ -173,8 +186,10 @@ class LauncherFocus {
             when (nav) {
                 NavKey.LEFT -> if (col > 0) FocusTarget.Grid(i - 1) else leftTop()
                 NavKey.RIGHT -> if (col < cols - 1 && i + 1 < n) FocusTarget.Grid(i + 1) else rightTop()
-                NavKey.UP -> if (row > 0) FocusTarget.Grid(i - cols) else FocusTarget.Nav
-                NavKey.DOWN -> if (i + cols < n) FocusTarget.Grid(i + cols) else c
+                NavKey.UP -> if (row > 0) FocusTarget.Grid(i - cols) else if (showNav) FocusTarget.Nav else c
+                // If a row exists below but the cell directly beneath us is past the end (a
+                // shorter last row), clamp to the last tile so the final row is still reachable.
+                NavKey.DOWN -> if (row < (n - 1) / cols) FocusTarget.Grid((i + cols).coerceAtMost(n - 1)) else c
                 else -> c
             }
         }
@@ -186,13 +201,13 @@ class LauncherFocus {
                 showRadio -> FocusTarget.Radio
                 else -> c
             }
-            NavKey.LEFT -> FocusTarget.Nav
+            NavKey.LEFT -> if (showNav) FocusTarget.Nav else centerTarget()
             else -> c
         }
 
         is FocusTarget.Radio -> when (nav) {
             NavKey.UP -> if (quickCount > 0) FocusTarget.Quick(quickCount - 1) else c
-            NavKey.LEFT -> FocusTarget.Nav
+            NavKey.LEFT -> if (showNav) FocusTarget.Nav else centerTarget()
             else -> c
         }
 

@@ -100,6 +100,7 @@ fun HomeScreen(
         focus.showMedia = settings.showMedia
         focus.showClimate = settings.showClimate
         focus.showRadio = settings.showRadio
+        focus.showNav = settings.showNav
         focus.quickCount = quickApps.size
         // CENTER activation for the focused region (grid tiles launch via GridFocus).
         focus.onActivate = { target ->
@@ -183,19 +184,23 @@ fun HomeScreen(
                         .focusGroup(),
                 ) {
                     // v0.7: navigation tile (turn-by-turn/ETA + parking sensors) at top of center.
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(150.dp)
-                            .launcherFocusTarget(focus, FocusTarget.Nav),
-                    ) {
-                        NavCard(
-                            carEvents = carEvents,
-                            radar = radar,
-                            modifier = Modifier.fillMaxSize(),
-                        )
+                    // Honors the Settings > Launcher > Home-widgets "Navigation" toggle, like the
+                    // media/climate/radio widgets do.
+                    if (settings.showNav) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(150.dp)
+                                .launcherFocusTarget(focus, FocusTarget.Nav),
+                        ) {
+                            NavCard(
+                                carEvents = carEvents,
+                                radar = radar,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        }
+                        Spacer(Modifier.height(16.dp))
                     }
-                    Spacer(Modifier.height(16.dp))
                     Text(
                         text = stringResource(R.string.app_drawer_title),
                         style = MaterialTheme.typography.titleLarge,
