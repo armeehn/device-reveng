@@ -42,6 +42,8 @@ enum class NavKey {
     BACK,         // leave a sub-screen / return Home
     HOME,         // jump to Home
     MEDIA_NEXT, MEDIA_PREV, MEDIA_PLAY_PAUSE,
+    // v2.6: the wheel's source keys open the full Media / Radio screens (§3.3, §3.4).
+    OPEN_MEDIA, OPEN_RADIO,
 }
 
 /** A focusable region of the Home screen (the app grid is addressed by tile index). */
@@ -233,11 +235,19 @@ object SwcNavigator {
         return fromCarKey(key.keyIndex)
     }
 
-    /** CAR_KEY_* index → NavKey. */
+    /**
+     * CAR_KEY_* index → NavKey.
+     *
+     * v2.6: MEDIA and RADIO are *source* keys — the wheel already has dedicated PREV/NEXT, so a
+     * separate MEDIA key is the vendor's mode selector, not a transport button. They now open
+     * the full screens (§3.3, §3.4). Pressing MEDIA again while the media screen is already open
+     * toggles play/pause, so the transport it used to provide is still one press away.
+     */
     fun fromCarKey(carKey: Int): NavKey? = when (carKey) {
         CarEvents.CAR_KEY_PREV -> NavKey.MEDIA_PREV
         CarEvents.CAR_KEY_NEXT -> NavKey.MEDIA_NEXT
-        CarEvents.CAR_KEY_MEDIA -> NavKey.MEDIA_PLAY_PAUSE
+        CarEvents.CAR_KEY_MEDIA -> NavKey.OPEN_MEDIA
+        CarEvents.CAR_KEY_RADIO -> NavKey.OPEN_RADIO
         CarEvents.CAR_KEY_HOME -> NavKey.HOME
         CarEvents.CAR_KEY_BACK -> NavKey.BACK
         CarEvents.CAR_KEY_MENU, CarEvents.CAR_KEY_FAV -> NavKey.CENTER
@@ -245,7 +255,7 @@ object SwcNavigator {
         CarEvents.CAR_KEY_L_TUNE_R -> NavKey.RIGHT
         CarEvents.CAR_KEY_R_TUNE_L -> NavKey.UP
         CarEvents.CAR_KEY_R_TUNE_R -> NavKey.DOWN
-        else -> null // POWER / PHONE / RADIO — left to their own handlers
+        else -> null // POWER / PHONE — left to their own handlers
     }
 
     /** Real Android [KeyEvent] keycode → NavKey. */
