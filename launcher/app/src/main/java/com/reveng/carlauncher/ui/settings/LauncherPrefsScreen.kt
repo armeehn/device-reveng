@@ -16,6 +16,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,10 +32,13 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.reveng.carlauncher.HomeRole
 import com.reveng.carlauncher.carlib.CarEvents // v2.5
 import com.reveng.carlauncher.carlib.GpsSpeedSource // v2.5
+import com.reveng.carlauncher.carlib.RootShell // v2.5 shade
 import com.reveng.carlauncher.data.DayNightMode
 import com.reveng.carlauncher.data.LauncherSettings
 import com.reveng.carlauncher.data.SettingsStore
 import com.reveng.carlauncher.ui.collectAsStateSafe
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * v1.1 — the launcher's own preferences, migrated from the original flat SettingsScreen into
@@ -50,6 +54,14 @@ fun LauncherPrefsScreen(
 ) {
     val context = LocalContext.current
     val settings by settingsStore.settings.collectAsStateSafe(initial = LauncherSettings())
+
+    // v2.5: gate the "replace system bars" toggle on root — the suppression is a root shell op.
+    // Probed once off the main thread; defaults to enabled so the toggle isn't wrongly greyed
+    // before the probe resolves on a rooted unit.
+    var rootAvailable by remember { mutableStateOf(true) }
+    LaunchedEffect(Unit) {
+        rootAvailable = withContext(Dispatchers.IO) { RootShell.isRootAvailable() }
+    }
 
     var isDefaultHome by remember { mutableStateOf(HomeRole.isDefaultHome(context)) }
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -112,6 +124,33 @@ fun LauncherPrefsScreen(
             ToggleSetting("Radio card", settings.showRadio, settingsStore::setShowRadio)
             ToggleSetting("Climate readout", settings.showClimate, settingsStore::setShowClimate)
             ToggleSetting("Navigation", settings.showNav, settingsStore::setShowNav)
+        }
+
+        SettingsSection(title = "Top bar & shade") {
+            Text(
+                text = "The launcher can show its own swipe-from-top Quick Controls shade " +
+                    "(volume, brightness, day/night, Wi-Fi, Bluetooth) that matches your theme.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.size(12.dp))
+            ToggleSetting(
+                label = "Swipe-down Quick Controls",
+                description = "Swipe from the top edge of Home to open the launcher shade.",
+                checked = settings.shadeEnabled,
+                onChange = settingsStore::setShadeEnabled,
+            )
+            ToggleSetting(
+                label = "Replace the system top bar",
+                description = if (rootAvailable)
+                    "Hide the vendor status bar and Android pull-down so only the " +
+                        "launcher shade shows. Reversible; the vendor status bar returns " +
+                        "fully after a reboot when turned off."
+                else "Needs root — the vendor bars can't be suppressed on this build without it.",
+                checked = settings.replaceSystemBars,
+                onChange = settingsStore::setReplaceSystemBars,
+                enabled = rootAvailable,
+            )
         }
 
         SettingsSection(title = "Day / night mode") {
