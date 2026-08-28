@@ -120,6 +120,16 @@ class CarService(private val appContext: Context) {
     fun isMuteOn(): Boolean = call { IsMuteOn() } ?: false
     fun getMcuVer(): String? = call { getCanVer() }
 
+    // ---- v2.0: System / About (CAR_API §3.2) -------------------------------
+    /** MCU firmware version (getMCUVer, ordinal 32). */
+    fun getMcuVersion(): String? = call { getMCUVer() }
+    /** CANBOX firmware version (getCanVer, ordinal 105). */
+    fun getCanVersion(): String? = call { getCanVer() }
+    /** Soft reboot the head unit (sendSoftWareReboot, ordinal 135). */
+    fun reboot() { call { sendSoftWareReboot() } }
+    /** Vendor factory reset (sendFactorySet, ordinal 76). ⚠ Destructive — confirm before calling. */
+    fun factoryReset() { call { sendFactorySet() } }
+
     /** Read the raw HVAC frame (CAR_API §5). ⚠ Param semantics GUESSED (0 = query). */
     fun getAirData(): ByteArray? = call { getAirData(0, ByteArray(64)) }
 
@@ -147,6 +157,34 @@ class CarService(private val appContext: Context) {
     fun radioBandToggle() = sendRadioKey(RADIO_KEY_BAND)
     fun radioSeekDown() = sendRadioKey(RADIO_KEY_SEEK_DOWN)
     fun radioSeekUp() = sendRadioKey(RADIO_KEY_SEEK_UP)
+
+    // v1.7 — RDS/TA status getters (AIDL ordinals 16 / 21). Read-only: no AIDL setter exists.
+    fun getRadioRds(): Boolean? = call { getRadioRDSState() }
+    fun getRadioTa(): Boolean? = call { getRadioTAState() }
+
+    // ---- v1.5: Audio / EQ (CAR_API §3.2; ordinals confirmed in AIDL_ORDINALS.md) --------
+    /** Current EQ preset index (getEQMode, ordinal 55). */
+    fun getEqMode(): Int? = call { getEQMode() }
+    /** Select an EQ preset (sendEQMode, ordinal 5). Preset indices are vendor-defined. */
+    fun setEqMode(mode: Int) { call { sendEQMode(mode) } }
+
+    /**
+     * Balance/fader as [balance, fader] (getBALFADValue, ordinal 54). Vendor centre is
+     * typically the middle of each axis; ranges are GUESSED as -group..+group — verify on-device.
+     */
+    fun getBalanceFader(): IntArray? = call { getBALFADValue() }
+    /** Set balance (L↔R) and fader (front↔rear) (sendBalFadValue, ordinal 51). */
+    fun setBalanceFader(balance: Int, fader: Int) { call { sendBalFadValue(balance, fader) } }
+
+    /** Loudness on/off (getLoudness, ordinal 53). There is no AIDL setter — read-only here. */
+    fun getLoudness(): Boolean? = call { getLoudness() }
+
+    /** Subwoofer / software volume (getSndSWVol / sendSndSWVol, ordinals 58 / 57). */
+    fun getSubVolume(): Int? = call { getSndSWVol() }
+    fun setSubVolume(level: Int) { call { sendSndSWVol(level) } }
+
+    /** Test beep through the audio path (beep, ordinal 7). */
+    fun beep() { call { beep() } }
 
     /** Typed SysVar passthrough (alternative to the ContentResolver in [SysVar]). */
     fun getSettingString(key: String, def: String): String? =
