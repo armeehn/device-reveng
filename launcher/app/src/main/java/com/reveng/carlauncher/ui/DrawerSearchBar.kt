@@ -16,6 +16,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 
@@ -30,6 +32,10 @@ fun DrawerSearchBar(
     onQueryChange: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // The head unit has no reliable nav-bar Back to close the IME, so the keyboard's own
+    // Search action must dismiss it (results stay live-filtered by the query).
+    val keyboard = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
     OutlinedTextField(
         value = query,
         onValueChange = onQueryChange,
@@ -55,6 +61,11 @@ fun DrawerSearchBar(
             }
         },
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-        keyboardActions = KeyboardActions(),
+        keyboardActions = KeyboardActions(
+            onSearch = {
+                keyboard?.hide()
+                focusManager.clearFocus()
+            },
+        ),
     )
 }

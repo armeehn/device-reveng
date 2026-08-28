@@ -23,6 +23,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import com.reveng.carlauncher.carlib.CarEvents
 import com.reveng.carlauncher.carlib.CarService
+import com.reveng.carlauncher.carlib.RootShell
 import com.reveng.carlauncher.data.CarSettingsController // v1.1 settings suite
 import com.reveng.carlauncher.data.DayNightMode // v0.6
 import com.reveng.carlauncher.data.RadioPresetsStore // v0.9
@@ -34,7 +35,9 @@ import com.reveng.carlauncher.input.NavKey // v0.8
 import com.reveng.carlauncher.input.SwcNavigator // v0.8
 import com.reveng.carlauncher.media.NowPlayingRepository
 import com.reveng.carlauncher.ui.HomeScreen
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import com.reveng.carlauncher.ui.OnboardingScreen // v1.0
 import com.reveng.carlauncher.ui.settings.SettingsHost // v1.1 settings suite
 import com.reveng.carlauncher.ui.ThemeEditorScreen
@@ -103,6 +106,15 @@ class MainActivity : ComponentActivity() {
                 DayNightMode.FORCE_DAY -> false
                 DayNightMode.FORCE_NIGHT -> true
                 DayNightMode.AUTO -> dayNight == CarEvents.DayNight.NIGHT
+            }
+
+            // Mirror our day/night into the SYSTEM night mode. The soft keyboard is a separate
+            // system app that themes off system uiMode, not our Compose theme — without this it
+            // renders light over a dark drawer. uiMode is in configChanges, so no recreate.
+            LaunchedEffect(night) {
+                withContext(Dispatchers.IO) {
+                    RootShell.exec("cmd uimode night " + if (night) "yes" else "no")
+                }
             }
 
             val activeTheme by themeStore.activeTheme.collectAsStateWithLifecycle()
