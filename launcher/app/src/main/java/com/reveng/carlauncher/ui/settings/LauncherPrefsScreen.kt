@@ -195,8 +195,40 @@ fun LauncherPrefsScreen(
                     DayNightMode.AUTO to "Auto (follow car)",
                     DayNightMode.FORCE_DAY to "Force day",
                     DayNightMode.FORCE_NIGHT to "Force night",
+                    DayNightMode.CLOCK to "Clock", // v2.7
                 ),
                 onSelect = settingsStore::setDayNightMode,
+            )
+        }
+
+        // v2.7 — the clock stand-in for a missing illumination signal.
+        SettingsSection(title = "Clock day / night") {
+            Text(
+                text = illuminationHint(carEvents),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.size(12.dp))
+            ToggleSetting(
+                label = "Use the clock when the car says nothing",
+                checked = settings.clockFallback,
+                onChange = settingsStore::setClockFallback,
+                description = "Only applies in Auto, and only until an illumination broadcast " +
+                    "arrives. \"Clock\" mode above always uses these hours.",
+            )
+            SliderSetting(
+                label = "Night starts",
+                value = settings.nightStartHour,
+                range = LauncherSettings.MIN_HOUR..LauncherSettings.MAX_HOUR,
+                onChange = settingsStore::setNightStartHour,
+                format = ::hourLabel,
+            )
+            SliderSetting(
+                label = "Night ends",
+                value = settings.nightEndHour,
+                range = LauncherSettings.MIN_HOUR..LauncherSettings.MAX_HOUR,
+                onChange = settingsStore::setNightEndHour,
+                format = ::hourLabel,
             )
         }
 
@@ -277,6 +309,29 @@ private fun CarTypeRow(controller: CarSettingsController?) {
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
 }
+
+/**
+ * v2.7 — say whether the car has ever actually reported illumination.
+ *
+ * This is the whole reason the fallback exists, and the one fact the driver cannot get anywhere
+ * else: a launcher sitting in day colours looks the same whether the car said "day" or said
+ * nothing at all. The same diagnosis-over-guesswork argument as the v2.5 motion status row.
+ */
+@Composable
+private fun illuminationHint(carEvents: CarEvents?): String {
+    if (carEvents == null) {
+        return "Uses the hours below when the car's illumination signal is absent."
+    }
+    val seen by carEvents.illuminationSeen.collectAsStateSafe(initial = false)
+    if (seen) {
+        return "The car is reporting illumination, so Auto follows it and these hours are unused."
+    }
+    return "No illumination broadcast has arrived this session — the signal is permission-gated " +
+        "and usually silent on a normal install, which is what these hours are for."
+}
+
+/** Whole hours only; a 24-position slider is already as fine as this control should get. */
+private fun hourLabel(hour: Int): String = "%02d:00".format(hour)
 
 @Composable
 private fun ColumnChip(count: Int, selected: Boolean, onClick: () -> Unit) {

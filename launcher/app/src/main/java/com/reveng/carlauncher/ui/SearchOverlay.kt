@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -43,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.reveng.carlauncher.AppInfo
+import com.reveng.carlauncher.ui.keyboard.CarKeyboard // v2.7
 
 /**
  * v2.3 rofi-style full-screen app search. The vendor system IME ignores night mode and covered
@@ -117,7 +117,10 @@ fun SearchOverlay(
                     }
                 }
 
-                SearchKeyboard(
+                // v2.7: the keyboard moved to ui/keyboard/CarKeyboard.kt so the settings suite,
+                // theme editor and SysVar browser get the same keys. Search is unchanged bar the
+                // new shift/symbol keys.
+                CarKeyboard(
                     onChar = { query += it },
                     onBackspace = { query = query.dropLast(1) },
                     onEnter = { results.firstOrNull()?.let(onLaunch) },
@@ -205,62 +208,6 @@ private fun SearchResultTile(app: AppInfo, highlighted: Boolean, onClick: () -> 
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth(),
-        )
-    }
-}
-
-/**
- * In-Compose QWERTY sized for a moving vehicle: 4 rows of ~72dp keys across the full 1920px
- * width. Letters append lowercase (matching is case-insensitive anyway); ⏎ launches the first
- * result. No shift/symbols — app labels only ever need letters, digits and space.
- */
-@Composable
-private fun SearchKeyboard(
-    onChar: (Char) -> Unit,
-    onBackspace: () -> Unit,
-    onEnter: () -> Unit,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 8.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            "1234567890".forEach { c -> SearchKey(c.toString()) { onChar(c) } }
-        }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            "QWERTYUIOP".forEach { c -> SearchKey(c.toString()) { onChar(c.lowercaseChar()) } }
-        }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            "ASDFGHJKL".forEach { c -> SearchKey(c.toString()) { onChar(c.lowercaseChar()) } }
-            SearchKey("⌫", weight = 1.5f, onPress = onBackspace)
-        }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            "ZXCVBNM".forEach { c -> SearchKey(c.toString()) { onChar(c.lowercaseChar()) } }
-            SearchKey("␣", weight = 3f) { onChar(' ') }
-            SearchKey("⏎", weight = 1.5f, onPress = onEnter)
-        }
-    }
-}
-
-@Composable
-private fun RowScope.SearchKey(
-    label: String,
-    weight: Float = 1f,
-    onPress: () -> Unit,
-) {
-    // v2.5 §1.4: keys are small and struck in quick succession, so each accepted press gets an
-    // eyes-free confirmation.
-    val press = withTapFeedback(onPress)
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = Modifier
-            .weight(weight)
-            .height(72.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .clickable(onClick = press),
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.titleLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
