@@ -5,5 +5,6 @@
     <string name="media_placeholder_title">Media</string>
     <string name="media_placeholder_subtitle">No source connected</string>
     <string name="media_playing">Now playing</string>
+    <string name="video_mini_opening">Opening video window…</string>
     <string name="reverse_overlay_hint">Reverse camera</string>
 </resources>
