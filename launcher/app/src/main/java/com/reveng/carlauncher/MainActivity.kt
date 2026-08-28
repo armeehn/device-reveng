@@ -236,11 +236,14 @@ class MainActivity : ComponentActivity() {
             launcherFocus.reset()
             true
         }
-        NavKey.BACK ->
-            if (screenState.value != Screen.Home) {
-                screenState.value = Screen.Home
-                true
-            } else false // let the system / a dialog handle Back on Home
+        NavKey.BACK -> when (screenState.value) {
+            Screen.Home -> false // let the system / a dialog handle Back on Home
+            // v1.1: Settings owns its own back-stack (SettingsHost). Route Back through the
+            // OnBackPressedDispatcher so its BackHandler pops one level (and exits to Home only
+            // from the hub) instead of jumping straight Home from a deep settings screen.
+            Screen.Settings -> { onBackPressedDispatcher.onBackPressed(); true }
+            else -> { screenState.value = Screen.Home; true } // Themes / Editor -> Home
+        }
         NavKey.CENTER, NavKey.UP, NavKey.DOWN, NavKey.LEFT, NavKey.RIGHT ->
             if (screenState.value == Screen.Home) launcherFocus.onKey(nav) else false
     }

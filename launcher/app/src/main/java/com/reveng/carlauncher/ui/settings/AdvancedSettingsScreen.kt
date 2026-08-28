@@ -46,6 +46,7 @@ fun AdvancedSettingsScreen(
     var editing by remember { mutableStateOf<Pair<String, String>?>(null) }
 
     val rows = remember(snap, query) {
+        // SysVar.readAll() drops null keynames, so keys are safe to sort/search here.
         snap.entries
             .filter { query.isBlank() || it.key.contains(query, ignoreCase = true) }
             .sortedBy { it.key.lowercase() }
