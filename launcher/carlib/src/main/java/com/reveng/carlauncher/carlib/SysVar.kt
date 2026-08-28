@@ -93,7 +93,10 @@ class SysVar(private val context: Context) {
                 val vIdx = c.getColumnIndex(COL_KEYVALUE)
                 if (kIdx >= 0 && vIdx >= 0) {
                     while (c.moveToNext()) {
-                        map[c.getString(kIdx)] = c.getString(vIdx) ?: ""
+                        // Skip rows with a null keyname: the vendor table can contain them, and
+                        // a null key later NPEs any consumer that sorts/searches by key.
+                        val key = c.getString(kIdx) ?: continue
+                        map[key] = c.getString(vIdx) ?: ""
                     }
                 }
             }
