@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.sp
 import com.reveng.carlauncher.media.MediaSource
 import com.reveng.carlauncher.media.NowPlaying
 import com.reveng.carlauncher.ui.theme.carShape
+import com.reveng.carlauncher.ui.theme.DISABLED_ALPHA
 import kotlinx.coroutines.delay
 
 /**
@@ -429,7 +430,6 @@ private const val TITLE_SP = 40f
 private const val TRANSPORT_TARGET_DP = 96
 
 private const val ART_SCRIM_ALPHA = 0.82f
-private const val DISABLED_ALPHA = 0.38f
 
 /** Twice a second is enough for a seek bar and costs nothing; matches MediaCard. */
 private const val POSITION_TICK_MS = 500L

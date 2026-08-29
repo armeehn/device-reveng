@@ -79,7 +79,7 @@ private fun SensorRow(
             text = label,
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.width(48.dp),
+            modifier = Modifier.width(LABEL_COL_DP.dp),
         )
         Spacer(Modifier.width(8.dp))
         Row(
@@ -123,3 +123,6 @@ fun RadarSummaryLine(state: RadarState?, modifier: Modifier = Modifier) {
         modifier = modifier,
     )
 }
+
+/** Wide enough for "Front"/"Rear" at the 16 sp label floor, mono themes included. */
+private const val LABEL_COL_DP = 64

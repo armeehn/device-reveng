@@ -110,6 +110,7 @@ fun SettingsIconTile(icon: ImageVector, label: String, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .size(48.dp)
+            .carCard()
             .clip(carShape(14.dp))
             .background(MaterialTheme.colorScheme.surface)
             .focusRing(cornerRadiusDp = 14) // v2.8

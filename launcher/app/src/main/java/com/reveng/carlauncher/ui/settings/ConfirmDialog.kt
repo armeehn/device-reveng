@@ -1,6 +1,7 @@
 package com.reveng.carlauncher.ui.settings
 
 import com.reveng.carlauncher.ui.theme.carCard
+import com.reveng.carlauncher.ui.theme.DISABLED_ALPHA
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -132,4 +133,3 @@ private fun DialogButton(
 }
 
 /** Material's standard disabled-content opacity. */
-private const val DISABLED_ALPHA = 0.38f
