@@ -5,12 +5,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.reveng.carlauncher.carlib.CarService
 import com.reveng.carlauncher.data.CarSettingsController
 import com.reveng.carlauncher.data.SettingKeys
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
@@ -44,6 +46,13 @@ fun SystemSettingsScreen(
 
     var confirmReset by remember { mutableStateOf(false) }
     var confirmReboot by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    // Both power actions are blocking AIDL calls, and factoryReset() can sit in the gateway for
+    // an arbitrarily long time before returning — on the main thread that is an ANR in HOME.
+    fun power(action: () -> Unit) {
+        scope.launch(Dispatchers.IO) { runCatching(action) }
+    }
 
     SettingsScaffold(title = "System & about", onBack = onBack) {
         SettingsSection(title = "Firmware") {
@@ -114,7 +123,10 @@ fun SystemSettingsScreen(
             title = "Reboot head unit?",
             message = "The unit will restart now.",
             confirmLabel = "Reboot",
-            onConfirm = { confirmReboot = false; carService.reboot() },
+            // v0.4.3.8: destructive, so ConfirmDialog's parked-only lock withholds the confirm
+            // while moving. A mis-tap at speed takes reverse camera, SWC, radio and launcher down.
+            destructive = true,
+            onConfirm = { confirmReboot = false; power { carService.reboot() } },
             onDismiss = { confirmReboot = false },
         )
     }
@@ -125,7 +137,7 @@ fun SystemSettingsScreen(
                 "settings. This cannot be undone.",
             confirmLabel = "Reset",
             destructive = true,
-            onConfirm = { confirmReset = false; carService.factoryReset() },
+            onConfirm = { confirmReset = false; power { carService.factoryReset() } },
             onDismiss = { confirmReset = false },
         )
     }

@@ -32,6 +32,7 @@ import com.reveng.carlauncher.carlib.CarService
 import com.reveng.carlauncher.carlib.GatewayHandshake // v3.0
 import com.reveng.carlauncher.carlib.RootShell
 import com.reveng.carlauncher.data.CarSettingsController // v1.1 settings suite
+import com.reveng.carlauncher.data.CrashLog // v0.4.3.7
 import com.reveng.carlauncher.data.AppOrderStore // v3.0
 import com.reveng.carlauncher.data.DriverProfilesStore // v3.0
 import com.reveng.carlauncher.data.FavoritesStore // v3.0
@@ -159,6 +160,10 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // v0.4.3.7: arm the crash log before anything else runs, so a failure during the rest of
+        // this method is recorded too. Cheap and synchronous — it only reads the current default
+        // handler and installs a wrapper around it.
+        CrashLog.install(applicationContext)
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         // Keep the head-unit display awake while the launcher is foreground.

@@ -4,8 +4,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -18,6 +18,9 @@ import com.reveng.carlauncher.carlib.CarService
 import com.reveng.carlauncher.data.BrightnessController
 import com.reveng.carlauncher.data.CarSettingsController
 import com.reveng.carlauncher.data.SettingKeys
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.withContext
 
 /**
  * v2.1 — Display & Illumination.
@@ -41,7 +44,9 @@ fun DisplaySettingsScreen(
 
     // Live WRITE_SETTINGS status, re-checked on resume (e.g. after the grant screen).
     var canWrite by remember { mutableStateOf(BrightnessController.canWrite(context)) }
-    var brightness by remember { mutableIntStateOf(BrightnessController.currentPercent(context)) }
+    // null = the backlight level is unreadable; the slider has no position to show, so it stays
+    // disabled rather than inventing one.
+    var brightness by remember { mutableStateOf(BrightnessController.currentPercent(context)) }
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val obs = LifecycleEventObserver { _, e ->
@@ -54,19 +59,35 @@ fun DisplaySettingsScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
     }
 
+    // The shade's brightness slider already applies levels through a conflated pipe on
+    // Dispatchers.IO; this is the second entry point to the same control, so it does the same.
+    // BrightnessController.setPercent is a blocking sendBacklight() AIDL plus two
+    // ContentResolver writes, none of which belongs on the main thread.
+    val brightnessWrites = remember { Channel<Int>(Channel.CONFLATED) }
+    LaunchedEffect(Unit) {
+        for (percent in brightnessWrites) {
+            withContext(Dispatchers.IO) {
+                runCatching { BrightnessController.setPercent(context, percent, carService) }
+            }
+        }
+    }
+
     SettingsScaffold(title = "Display & Illumination", onBack = onBack) {
         SettingsSection(title = "Screen backlight") {
             SliderSetting(
                 label = "Brightness",
-                description = if (canWrite) "Changes the display immediately"
-                else "Grant permission below to control the backlight live",
-                value = brightness,
+                description = when {
+                    !canWrite -> "Grant permission below to control the backlight live"
+                    brightness == null -> "The current backlight level cannot be read"
+                    else -> "Changes the display immediately"
+                },
+                value = brightness ?: 0,
                 range = 0..100,
                 onChange = {
                     brightness = it
-                    BrightnessController.setPercent(context, it, carService)
+                    brightnessWrites.trySend(it)
                 },
-                enabled = canWrite,
+                enabled = canWrite && brightness != null,
                 format = { "$it%" },
             )
             if (!canWrite) {

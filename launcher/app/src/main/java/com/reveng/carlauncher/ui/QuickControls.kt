@@ -80,13 +80,14 @@ fun QuickControlsButton(
     modifier: Modifier = Modifier,
 ) {
     var open by remember { mutableStateOf(false) }
+    val press = withTapFeedback { open = true } // v2.5
     Icon(
         imageVector = Icons.Filled.Tune,
         contentDescription = "Quick controls",
         tint = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = modifier
             .size(28.dp)
-            .clickable { open = true },
+            .clickable(onClick = press),
     )
     if (open) {
         QuickControlsDialog(
@@ -209,21 +210,32 @@ private fun VolumeControl(carService: CarService) {
         }
     }
 
+    // Conflated single-consumer pipe, the same shape BrightnessControl uses below. The slider
+    // fires on every pointer move, and CarService.setVolume is *two* blocking AIDL round-trips
+    // (IsMuteOn then sendVolState) — inline that was tens of main-thread binder calls a second
+    // during a drag. Conflated, not queued: after the finger lifts only the final level matters.
+    val volumeWrites = remember { Channel<Int>(Channel.CONFLATED) }
+    LaunchedEffect(Unit) {
+        for (level in volumeWrites) {
+            withContext(Dispatchers.IO) { runCatching { carService.setVolume(level) } }
+        }
+    }
+
+    val toggleMute = withTapFeedback { // v2.5
+        muted = !muted
+        runCatching { carService.setMute(muted) }
+    }
+
     ControlRow(
         icon = if (muted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
         title = if (available) "Volume" else "Volume (unavailable)",
-        onIconClick = if (available) {
-            {
-                muted = !muted
-                runCatching { carService.setMute(muted) }
-            }
-        } else null,
+        onIconClick = if (available) toggleMute else null,
     ) {
         Slider(
             value = volume,
             onValueChange = { v ->
                 volume = v
-                if (available) runCatching { carService.setVolume(v.toInt()) }
+                if (available) volumeWrites.trySend(v.toInt())
             },
             valueRange = 0f..CarService.MAX_VOLUME.toFloat(),
             enabled = available && !muted,
@@ -238,14 +250,16 @@ private fun VolumeControl(carService: CarService) {
 private fun BrightnessControl(carService: CarService) {
     val context = LocalContext.current
     var canWrite by remember { mutableStateOf(BrightnessController.canWrite(context)) }
+    // null = the current level is unreadable. The slider then has no honest position, so it is
+    // disabled instead of parked at a made-up mid-travel value.
     var brightness by remember {
-        mutableStateOf(if (BrightnessController.canWrite(context)) BrightnessController.currentPercent(context).toFloat() else 50f)
+        mutableStateOf(BrightnessController.currentPercent(context)?.toFloat())
     }
 
     // Refresh permission + current level when the shade (re)opens.
     LaunchedEffect(Unit) {
         canWrite = BrightnessController.canWrite(context)
-        if (canWrite) brightness = BrightnessController.currentPercent(context).toFloat()
+        brightness = BrightnessController.currentPercent(context)?.toFloat()
     }
 
     // Conflated single-consumer pipe: a fast drag emits many values, keep only the latest and
@@ -262,18 +276,25 @@ private fun BrightnessControl(carService: CarService) {
         }
     }
 
+    val level = brightness
+    val adjustable = canWrite && level != null
+
     ControlRow(
         icon = Icons.Filled.BrightnessMedium,
-        title = if (canWrite) "Brightness" else "Brightness (needs permission)",
+        title = when {
+            !canWrite -> "Brightness (needs permission)"
+            level == null -> "Brightness (unavailable)"
+            else -> "Brightness"
+        },
     ) {
         Slider(
-            value = brightness,
+            value = level ?: 0f,
             onValueChange = { b ->
                 brightness = b
-                if (canWrite) brightnessWrites.trySend(b.toInt())
+                brightnessWrites.trySend(b.toInt())
             },
             valueRange = 0f..100f,
-            enabled = canWrite,
+            enabled = adjustable,
             colors = accentSliderColors(),
         )
     }
@@ -354,11 +375,12 @@ private fun ShortcutChip(
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
+    val press = withTapFeedback(onClick) // v2.5
     Row(
         modifier = modifier
             .clip(carShape(14.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant)
-            .clickable(onClick = onClick)
+            .clickable(onClick = press)
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
@@ -388,11 +410,12 @@ private fun SegmentChip(
 ) {
     val bg = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
     val fg = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+    val press = withTapFeedback(onClick) // v2.5
     Row(
         modifier = modifier
             .clip(carShape(12.dp))
             .background(bg)
-            .clickable(onClick = onClick)
+            .clickable(onClick = press)
             .padding(vertical = 12.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,

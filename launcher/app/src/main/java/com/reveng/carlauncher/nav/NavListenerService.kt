@@ -26,9 +26,16 @@ class NavListenerService : NotificationListenerService() {
         }.onFailure { Log.w(TAG, "onListenerConnected scan failed: ${it.message}") }
     }
 
+    /**
+     * v0.4.3.8: guarded like the [onListenerConnected] scan is. Reading a notification's extras
+     * unparcels a Bundle another app built, which throws if it carries a Parcelable class this APK
+     * does not hold. An exception out of this callback kills the launcher process, which for the
+     * HOME app is a black screen in a moving car.
+     */
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         sbn ?: return
-        handle(sbn)
+        runCatching { handle(sbn) }
+            .onFailure { Log.w(TAG, "dropped notification from ${sbn.packageName}: ${it.message}") }
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification?) {
