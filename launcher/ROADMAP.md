@@ -3,25 +3,30 @@
 _Last verified against `main` on 2026-08-28 at versionCode 61. Every "shipped" claim below was
 checked by reading the code, not by the presence of a file with the right name._
 
-Workflow: **one feature = one branch off `main` = one PR**, versionCode claimed at PR time
-(check open PRs and sibling worktrees first — several sessions work this repo at once). Only
-tagged `main` builds are meant to go on-device as the home launcher. CI builds every PR.
+Workflow: **one feature = one branch off `main` = one PR**. Versions are derived from git
+(see below) — do not claim, bump, or mention a versionCode in a PR. Only tagged `main`
+builds are meant to go on-device as the home launcher. CI builds every PR.
 
-## Versioning — read this before bumping anything
+## Versioning — nothing to bump
 
-`1.0.0` is reserved for the polished public release, so the display version is deliberately
-`0.4.x` and **`versionCode` is the real identity**: it climbs monotonically and is the only
-field that distinguishes two builds.
+Both fields are derived from git in `app/build.gradle.kts` at build time: `versionCode` is
+the commit count at the merge-base with `origin/main` (each squash-merge raises it by one,
+so it is monotonic by construction), `versionName` is `0.4.<versionCode>`. `1.0.0` is
+reserved for the polished public release; only a deliberate milestone commit changes the
+base. **No PR touches a version line** — hand-claimed versionCodes made every squash-merge
+conflict every open sibling PR, and duplicates got claimed anyway.
 
-Two known inconsistencies in the record, kept here rather than quietly corrected, because a
-reader comparing PR titles to the build file will otherwise assume one of them is lying:
+Two known inconsistencies in the pre-derivation record (versionCode ≤ 71), kept here rather
+than quietly corrected, because a reader comparing PR titles to old tags will otherwise
+assume one of them is lying:
 
-- **PR titles do not track `versionName`.** The most recent merge is titled `v0.4.7.0` but
-  ships `versionName = "0.4.3.2"`. Earlier titles used the pre-down-shift `4.x` names. Derive
-  a release identity from `app/build.gradle.kts` only, never from a PR title or commit subject.
-- **The last two merges share a version.** Both carry versionCode 61 / `0.4.3.2`, so they are
-  not separable by version alone. Any release-tagging automation has to treat "version
-  unchanged since the last tag" as a clean skip, not an error.
+- **PR titles do not track `versionName`.** One merge is titled `v0.4.7.0` but shipped
+  `versionName = "0.4.3.2"`. Earlier titles used the pre-down-shift `4.x` names. Derive a
+  release identity from a build's tag or APK metadata, never from a PR title or commit
+  subject.
+- **Two merges share versionCode 61 / `0.4.3.2`**, so they are not separable by version
+  alone — only by the short SHA in the tag. Derivation makes a repeat impossible going
+  forward.
 
 ## Ground rules that shape this plan
 

@@ -87,12 +87,16 @@ is **confirmed unobtainable** — `../CUSTOM_ANDROID.md` §2b, `../LAUNCHER_DESI
 ### Which APK is in the car
 
 Every green build of `main` is tagged `v<versionName>+<versionCode>.g<short-sha>` (e.g.
-`v0.4.3.3+66.g1a2b3c4`) and the release APK from that same CI run is published as a
+`v0.4.106+106.g1a2b3c4`) and the release APK from that same CI run is published as a
 GitHub Release against the tag, with the APK's SHA-256 in the release body.
 
-Neither version field identifies a build on its own: `versionName` repeats, and so does
-`versionCode` — the two merges before this one both shipped `61`. The commit SHA is what
-makes the tag name one build and only one.
+Both version fields are derived from git at build time (`app/build.gradle.kts`):
+`versionCode` is the commit count at the merge-base with `origin/main`, so every merge
+to `main` raises it by exactly one, and `versionName` is `0.4.<versionCode>`. Nobody
+bumps a version by hand, and no PR touches a version line. The commit SHA stays in the
+tag as the belt-and-braces identity. Historical note: before versionCode 71 the fields
+were hand-claimed per PR; they repeat in that range (two merges both shipped `61`), so
+only the SHA separates those builds.
 
 Side-load only that asset. To identify what is already installed, pull the APK off the
 head unit and match its `sha256sum` against the release body.
