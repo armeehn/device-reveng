@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -38,8 +37,6 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
 import com.reveng.carlauncher.AppInfo
@@ -57,7 +54,6 @@ import com.reveng.carlauncher.input.FocusTarget // v0.8 SWC navigation
 import com.reveng.carlauncher.input.LauncherFocus // v0.8
 import com.reveng.carlauncher.input.LocalLauncherFocus // v0.8
 import com.reveng.carlauncher.input.launcherFocusTarget // v0.8
-import com.reveng.carlauncher.media.JellyfinApp // v2.7
 import com.reveng.carlauncher.media.MiniScreenController // v4.1
 import com.reveng.carlauncher.media.MiniScreenState // v4.1
 import com.reveng.carlauncher.media.NowPlayingRepository
@@ -133,9 +129,12 @@ fun HomeScreen(
 
     // v0.8: the roving focus ring shared with the SWC / DPAD key dispatcher (MainActivity).
     val focus = LocalLauncherFocus.current
-    // v2.7: the Jellyfin quick-launch preset. Ordering only — the tile was already in the drawer,
-    // this just puts it in the driver's thumb column instead of alphabetically wherever it fell.
-    val quickApps = JellyfinApp.pinFirst(userApps) { it.packageName }.take(QUICK_LAUNCH_SLOTS)
+    // v0.4.6: the quick-launch column is a fixed preset — CarPlay, Claude Car, Linphone — in
+    // that order, resolved against the full app list (placement overrides can't drop them).
+    // Anything not installed simply leaves its slot empty.
+    val quickApps = remember(apps) {
+        QUICK_LAUNCH_PACKAGES.mapNotNull { pkg -> apps.firstOrNull { it.packageName == pkg } }
+    }
     SideEffect {
         // Keep the focus model's view of the layout in sync so navigation skips hidden regions.
         focus.showMedia = settings.showMedia
@@ -328,6 +327,7 @@ fun HomeScreen(
                             .fillMaxWidth()
                             .weight(1f), // v0.7: take remaining height below NavCard
                         columns = settings.gridColumns, // v0.6: grid density from Settings
+                        spacing = settings.appSpacing, // v0.4.6: tile gap from Settings
                         gridFocus = focus.grid, // v0.8: drive/highlight tile focus
                         favoritesStore = favoritesStore,
                         appOrderStore = appOrderStore,
@@ -397,15 +397,22 @@ fun HomeScreen(
     }
 }
 
-/** How many tiles the right-hand thumb column holds before the RadioCard claims the rest. */
-private const val QUICK_LAUNCH_SLOTS = 4
+/**
+ * The quick-launch preset, in display order. Resolved against installed apps at load time —
+ * CarPlay is the single enabled Zlink projection alias (see AppRepository.alwaysShow).
+ */
+private val QUICK_LAUNCH_PACKAGES = listOf(
+    "com.zjinnova.zlink", // CarPlay
+    "com.reveng.claudecar", // Claude Car
+    "org.linphone", // Linphone (VoIP)
+)
 
 /**
  * A compact quick-launch column of the driver's most-used apps (LAUNCHER_DESIGN §2.4).
- * Row-per-app icon + label with large tap targets; lives in the closest-reach column.
+ * Icon-only tiles (v0.4.6) with full-width tap targets; lives in the closest-reach column.
  *
- * The rows live in a [LazyColumn]: when the RadioCard below squeezes the column, rows that
- * don't fit are scrollable instead of clipped. SWC focus moves keep the focused row visible
+ * The tiles live in a [LazyColumn]: when the RadioCard below squeezes the column, tiles that
+ * don't fit are scrollable instead of clipped. SWC focus moves keep the focused tile visible
  * by scrolling to it.
  */
 @Composable
@@ -448,40 +455,35 @@ private fun QuickLaunchColumn(
                 } else {
                     Modifier
                 }
-                QuickLaunchRow(app = app, onClick = { onLaunch(app) }, modifier = rowModifier)
+                QuickLaunchTile(app = app, onClick = { onLaunch(app) }, modifier = rowModifier)
             }
         }
     }
 }
 
+/**
+ * v0.4.6 — icon only, no label. The label survives as the contentDescription, and the tap
+ * target stays the full column width so the tile is no harder to hit than the old row.
+ */
 @Composable
-private fun QuickLaunchRow(app: AppInfo, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun QuickLaunchTile(app: AppInfo, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val bmp = remember(app.packageName + app.activityName) {
-        app.icon.toBitmap(width = 108, height = 108).asImageBitmap()
+        app.icon.toBitmap(width = 144, height = 144).asImageBitmap()
     }
     val press = withTapFeedback(onClick) // v2.5
-    Row(
+    Box(
         modifier = modifier
             .fillMaxWidth()
             .clip(carShape(15.dp))
             .clickable(onClick = press)
-            .padding(horizontal = 8.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .padding(vertical = 10.dp),
+        contentAlignment = Alignment.Center,
     ) {
         Image(
             bitmap = bmp,
             contentDescription = app.label,
             contentScale = ContentScale.Fit,
-            modifier = Modifier.size(48.dp),
-        )
-        Spacer(Modifier.width(16.dp))
-        Text(
-            text = app.label,
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onBackground,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Start,
+            modifier = Modifier.size(64.dp),
         )
     }
 }

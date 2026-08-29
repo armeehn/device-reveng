@@ -41,6 +41,8 @@ enum class DayNightMode { AUTO, FORCE_DAY, FORCE_NIGHT, CLOCK }
 /** Immutable snapshot of all launcher settings. */
 data class LauncherSettings(
     val gridColumns: Int = DEFAULT_GRID_COLUMNS,
+    /** v0.4.6 — gap in dp between app tiles in the drawer grid. */
+    val appSpacing: Int = DEFAULT_APP_SPACING,
     val showMedia: Boolean = true,
     val showRadio: Boolean = true,
     val showClimate: Boolean = true,
@@ -102,6 +104,11 @@ data class LauncherSettings(
         const val MIN_GRID_COLUMNS = 2
         const val MAX_GRID_COLUMNS = 6
 
+        /** v0.4.6 — tile gap (dp) for the drawer grid. */
+        const val DEFAULT_APP_SPACING = 4
+        const val MIN_APP_SPACING = 0
+        const val MAX_APP_SPACING = 24
+
         /**
          * v2.7 — a fixed evening/morning window rather than computed civil twilight. Real sunset
          * needs a date, a latitude and a longitude; the launcher has GPS only intermittently (and
@@ -150,6 +157,7 @@ class SettingsStore(context: Context) {
             .map { prefs ->
                 LauncherSettings(
                     gridColumns = prefs[GRID_COLUMNS_KEY] ?: LauncherSettings.DEFAULT_GRID_COLUMNS,
+                    appSpacing = prefs[APP_SPACING_KEY] ?: LauncherSettings.DEFAULT_APP_SPACING,
                     showMedia = prefs[SHOW_MEDIA_KEY] ?: true,
                     showRadio = prefs[SHOW_RADIO_KEY] ?: true,
                     showClimate = prefs[SHOW_CLIMATE_KEY] ?: true,
@@ -183,6 +191,15 @@ class SettingsStore(context: Context) {
             LauncherSettings.MAX_GRID_COLUMNS,
         )
         ds.edit { it[GRID_COLUMNS_KEY] = clamped }
+    }
+
+    /** v0.4.6 — gap between app tiles in the drawer grid. */
+    fun setAppSpacing(spacing: Int) = scope.launch {
+        val clamped = spacing.coerceIn(
+            LauncherSettings.MIN_APP_SPACING,
+            LauncherSettings.MAX_APP_SPACING,
+        )
+        ds.edit { it[APP_SPACING_KEY] = clamped }
     }
 
     fun setShowMedia(show: Boolean) = scope.launch { ds.edit { it[SHOW_MEDIA_KEY] = show } }
@@ -249,6 +266,7 @@ class SettingsStore(context: Context) {
 
     private companion object {
         val GRID_COLUMNS_KEY = intPreferencesKey("grid_columns")
+        val APP_SPACING_KEY = intPreferencesKey("app_spacing") // v0.4.6 tile gap
         val SHOW_MEDIA_KEY = booleanPreferencesKey("show_media")
         val SHOW_RADIO_KEY = booleanPreferencesKey("show_radio")
         val SHOW_CLIMATE_KEY = booleanPreferencesKey("show_climate")

@@ -93,6 +93,7 @@ fun AppDrawer(
     onLaunch: (AppInfo) -> Unit,
     modifier: Modifier = Modifier,
     columns: Int = 0, // v0.6: 0 = adaptive sizing; >0 = fixed column count (SettingsStore)
+    spacing: Int = 4, // v0.4.6: gap in dp between tiles (SettingsStore appSpacing)
     gridFocus: GridFocus? = null, // v0.8: roving focus over grid tiles (null = touch-only)
     // The launcher-owned stores. Constructing them here instead opened a second eager collector
     // on each DataStore file, so the drawer re-read them on every Home <-> Settings round trip.
@@ -145,6 +146,7 @@ fun AppDrawer(
             onReorder = { newOrder -> scope.launch { ordStore.setOrder(newOrder.map { it.packageName }) } },
             onOpenSystem = { showSystem = true },
             columns = columns, // v0.6 density
+            spacing = spacing, // v0.4.6 tile gap
             gridFocus = gridFocus, // v0.8
             modifier = Modifier
                 .fillMaxWidth()
@@ -188,6 +190,7 @@ private fun ReorderableAppGrid(
     onReorder: (List<AppInfo>) -> Unit,
     onOpenSystem: () -> Unit,
     columns: Int = 0, // v0.6: 0=adaptive, >0=fixed
+    spacing: Int = 4, // v0.4.6: tile gap in dp
     gridFocus: GridFocus? = null, // v0.8
     modifier: Modifier = Modifier,
 ) {
@@ -297,10 +300,13 @@ private fun ReorderableAppGrid(
     LazyVerticalGrid(
         state = gridState,
         columns = if (columns > 0) GridCells.Fixed(columns) else GridCells.Adaptive(minSize = 140.dp),
-        modifier = modifier.then(dragModifier),
-        contentPadding = PaddingValues(16.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        // v0.4.6: the gutter is OUTSIDE the scroll viewport (plain padding, not contentPadding),
+        // so scrolled tiles clip at the grid edge instead of gliding up under the favorites row.
+        modifier = modifier
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .then(dragModifier),
+        horizontalArrangement = Arrangement.spacedBy(spacing.dp),
+        verticalArrangement = Arrangement.spacedBy(spacing.dp),
     ) {
         itemsIndexed(
             items,

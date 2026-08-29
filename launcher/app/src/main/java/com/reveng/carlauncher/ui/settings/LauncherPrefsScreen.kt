@@ -129,6 +129,15 @@ fun LauncherPrefsScreen(
                     )
                 }
             }
+            // v0.4.6 — the gap between tiles, separate from density: more columns at the same
+            // spacing still reads as one grid instead of six ribbons.
+            SliderSetting(
+                label = "App spacing",
+                value = settings.appSpacing,
+                range = LauncherSettings.MIN_APP_SPACING..LauncherSettings.MAX_APP_SPACING,
+                onChange = settingsStore::setAppSpacing,
+                format = { "$it dp" },
+            )
         }
 
         SettingsSection(title = "Home widgets") {

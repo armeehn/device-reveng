@@ -91,13 +91,26 @@ class AppRepository(private val context: Context) {
                     label = ri.loadLabel(pm).toString(),
                     packageName = ai.packageName,
                     activityName = ai.name,
-                    icon = ri.loadIcon(pm),
+                    icon = rewrittenIcon(ai.packageName) ?: ri.loadIcon(pm),
                     isSystem = classifySystem(ai.applicationInfo),
                 )
             }
             .distinctBy { it.packageName + "/" + it.activityName }
             .sortedBy { it.label.lowercase() }
             .toList()
+    }
+
+    /**
+     * v0.4.6 — the clean-room OEM-app rewrites (rav4-apps, all under `com.reveng.`) share one
+     * bugdroid drawer icon so they read as a family. The launcher itself and Claude Car keep
+     * their own branding. Fresh drawable per app: toBitmap mutates drawable bounds at render.
+     */
+    private fun rewrittenIcon(pkg: String): Drawable? {
+        if (!pkg.startsWith("com.reveng.")) return null
+        if (pkg.startsWith("com.reveng.carlauncher") || pkg.startsWith("com.reveng.claudecar")) {
+            return null
+        }
+        return context.getDrawable(R.drawable.ic_rewritten_app)
     }
 
     /** Launch an app. Falls back to the package's default launch intent. */
