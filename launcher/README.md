@@ -588,6 +588,10 @@ approximation; a sunset calculation would be wrong exactly when it matters.
   **ordinals almost certainly do not match** the real service — regenerate from the
   decompiled `IEventService.java` preserving method order before relying on any call.
 - **`ICallbackfn.aidl`** signature is a placeholder; verify against the device.
+- **No volume event.** The status-bar volume chip polls because nothing pushes: none of the seven
+  `ICallbackfn` registrars is audio-scoped, the `EventUtils` broadcast table has no volume action,
+  and `SYSTEM_VOLUME` is a LocalSocket text-protocol marker. Capturing that socket, or the real
+  `ICallbackfn` signature, is what would replace the poll. See `ui/StatusIndicators.kt`.
 - **Numeric speed** now comes from GPS (v2.5, above). The gateway still broadcasts none, so
   decoding the CAN bulk frame (`CAN_BASIC_EVT` / `MCU_CAR_CAN_INFO`) remains the upgrade worth
   making: it is available at power-on and indoors, where GPS is not.
