@@ -5,6 +5,41 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+// Versions are derived from git, never bumped by hand. Hand-claimed versionCodes
+// made every squash-merge conflict every sibling PR on exactly those lines.
+//
+//   anchor      = merge-base with origin/main (HEAD if that ref is missing), so a
+//                 feature-branch build never out-numbers the squash-merge that
+//                 follows it — Android refuses to install a lower versionCode.
+//   versionCode = commit count at the anchor. Each squash-merge adds exactly one
+//                 commit to main, so it is monotonic by construction.
+//   versionName = "<base>.<versionCode>".
+//
+// CI reads the result from the APK's output-metadata.json (launcher-ci.yml release
+// job); nothing parses this file for a version any more.
+
+// 1.0.0 is reserved for the polished public release; change the base only at a
+// deliberate milestone, in its own commit.
+val displayVersionBase = "0.4"
+
+fun git(vararg args: String): String = providers.exec {
+    workingDir = projectDir
+    isIgnoreExitValue = true
+    commandLine("git", *args)
+}.standardOutput.asText.get().trim()
+
+// A shallow clone would miscount silently (rev-list only sees fetched commits).
+if (git("rev-parse", "--is-shallow-repository") == "true") {
+    throw GradleException(
+        "Shallow git clone: the derived versionCode would be wrong. " +
+            "Fetch full history (actions/checkout with fetch-depth: 0)."
+    )
+}
+
+val versionAnchor = git("merge-base", "HEAD", "origin/main").ifEmpty { "HEAD" }
+val gitVersionCode = git("rev-list", "--count", versionAnchor).toIntOrNull()
+    ?: throw GradleException("Not a git checkout — the launcher version is derived from git history.")
+
 android {
     namespace = "com.reveng.carlauncher"
     compileSdk = 34
@@ -13,9 +48,8 @@ android {
         applicationId = "com.reveng.carlauncher"
         minSdk = 33
         targetSdk = 33
-        versionCode = 74
-        // 1.0.0 is reserved for the polished public release. versionCode keeps climbing normally.
-        versionName = "0.4.7.0"
+        versionCode = gitVersionCode
+        versionName = "$displayVersionBase.$gitVersionCode"
 
         // Single head-unit target: arm64 landscape @240dpi, 1920x720.
         ndk { abiFilters += "arm64-v8a" }
