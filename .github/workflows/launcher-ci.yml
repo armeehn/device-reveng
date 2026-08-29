@@ -38,6 +38,13 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      # gradle.properties asks for a 2 GB heap. GitHub's runners have room; the
+      # self-hosted one shares a box sitting at ~55/62 GB with NO SWAP, so the
+      # daemon fork dies there -- and reports it as "Unable to start the daemon
+      # process" followed by an EMPTY process output, never as out-of-memory,
+      # because the kill happens outside the JVM. Halve the heap only there.
+      GRADLE_OPTS: ${{ contains(github.server_url, 'github.com') && ' ' || '-Dorg.gradle.jvmargs=-Xmx1024m' }}
     timeout-minutes: 30
     defaults:
       run:
