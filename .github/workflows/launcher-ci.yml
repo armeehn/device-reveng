@@ -57,7 +57,17 @@ jobs:
           java-version: "17"
 
       # Gradle + configuration caching keyed off the wrapper/lockstate.
-      - uses: gradle/actions/setup-gradle@v4
+      # Pinned to the commit v4 points at, NOT the tag. `v4` on gradle/actions is an
+      # ANNOTATED tag, and act_runner cannot dereference one: it clones the repo and
+      # dies with "Unable to resolve v4: unsupported object type", killing the job
+      # before any Gradle task. (`git ls-remote` shows it: gradle/actions returns two
+      # lines for v4, a lightweight tag like actions/checkout returns one. v5 is
+      # annotated too, so bumping does not help.)
+      #
+      # A step-level `if:` does NOT avoid this -- actions are resolved before step
+      # conditions are evaluated, so the clone happens even when the step is skipped.
+      # Pinning is what actually fixes it, and it keeps build caching on both hosts.
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
 
       # Runs before the assemble so a broken decoder fails in ~1 min rather
       # than after a full R8 pass. `test` covers :app and :carlib, debug and
@@ -125,6 +135,8 @@ jobs:
   # (app/build.gradle.kts) — debug adds x86_64 for exactly this kind of run.
   cold-start:
     runs-on: ubuntu-latest
+    # GitHub only: needs /dev/kvm, which the self-hosted runner has no access to.
+    if: contains(github.server_url, 'github.com')
     needs: build
     timeout-minutes: 45
     steps:
@@ -204,6 +216,8 @@ jobs:
   # and the suite asserts that absence instead of demanding a lie.
   instrumentation:
     runs-on: ubuntu-latest
+    # GitHub only: needs /dev/kvm, which the self-hosted runner has no access to.
+    if: contains(github.server_url, 'github.com')
     needs: build
     timeout-minutes: 45
     steps:
@@ -218,7 +232,17 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - uses: gradle/actions/setup-gradle@v4
+      # Pinned to the commit v4 points at, NOT the tag. `v4` on gradle/actions is an
+      # ANNOTATED tag, and act_runner cannot dereference one: it clones the repo and
+      # dies with "Unable to resolve v4: unsupported object type", killing the job
+      # before any Gradle task. (`git ls-remote` shows it: gradle/actions returns two
+      # lines for v4, a lightweight tag like actions/checkout returns one. v5 is
+      # annotated too, so bumping does not help.)
+      #
+      # A step-level `if:` does NOT avoid this -- actions are resolved before step
+      # conditions are evaluated, so the clone happens even when the step is skipped.
+      # Pinning is what actually fixes it, and it keeps build caching on both hosts.
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
 
       # Same KVM enablement as the cold-start job: the image has KVM but does
       # not expose it to the runner user by default.
@@ -284,7 +308,9 @@ jobs:
   release:
     runs-on: ubuntu-latest
     needs: [build, cold-start, instrumentation]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # GitHub only: tags and releases stay on the authoritative remote, or
+    # "which APK is in the car" gets two different answers.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.server_url, 'github.com')
     timeout-minutes: 10
     permissions:
       # Job-scoped on purpose: only this job may write refs and releases, every
