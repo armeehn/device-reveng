@@ -23,7 +23,7 @@
 # own libraries ship their own profiles, which is why none are listed here.
 #
 # Regenerate properly the day a macrobenchmark run against the unit becomes possible; until
-# then treat the cold-start job in .github/workflows/launcher-ci.yml as the regression signal.
+# then treat the cold-start job in .gitea/workflows/launcher-ci.yml as the regression signal.
 #
 # Syntax: HSPL = hot + startup + post-startup. See
 # https://developer.android.com/topic/performance/baselineprofiles/manually-create-measure

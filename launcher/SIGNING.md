@@ -31,7 +31,7 @@ With any of the four missing, everything behaves exactly as before (debug-key
 fallback, honest warning in the release notes). With all four present,
 `assembleRelease` signs with the real key — see the `signingConfigs` block in
 `app/build.gradle.kts` and the `Build release and debug APKs` step in
-`.github/workflows/launcher-ci.yml`.
+`.gitea/workflows/launcher-ci.yml`.
 
 ## Switching an installed unit to the new key
 

@@ -469,7 +469,7 @@ hand-written rather than generated from a macrobenchmark run, because we have on
 and it is a car; the header of that file records the trade-off and what to do instead once a
 device run is possible.
 
-`.github/workflows/launcher-ci.yml` gains a `cold-start` job that installs the debug APK on
+`.gitea/workflows/launcher-ci.yml` gains a `cold-start` job that installs the debug APK on
 an API 33 emulator, applies the profile with `pm compile -m speed-profile`, and fails if the
 median of five `am start -W` runs exceeds a budget. **That number is an emulator figure and
 must never be quoted as a head-unit one** — it is a regression tripwire, set loose until real
