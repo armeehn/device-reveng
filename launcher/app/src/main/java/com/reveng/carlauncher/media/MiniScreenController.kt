@@ -118,9 +118,15 @@ class MiniScreenController(
         _state.value = MiniScreenState.Hidden
         if (cur !is MiniScreenState.Active) return
         scope.launch(Dispatchers.IO) {
-            suppressHomeUntil = SystemClock.elapsedRealtime() + HOME_INJECTION_WINDOW_MS
+            // Arm the window only once the HOME really went in. Arming first meant that when the
+            // injection failed — no root, Magisk denied — the window was still open and ate the
+            // driver's next real HOME press, so Close then the wheel HOME key did nothing.
             val r = RootShell.exec("input keyevent 3")
-            if (r.code != 0) Log.w(TAG, "dismiss keyevent failed: ${r.err.joinToString()}")
+            if (r.code != 0) {
+                Log.w(TAG, "dismiss keyevent failed: ${r.err.joinToString()}")
+                return@launch
+            }
+            suppressHomeUntil = SystemClock.elapsedRealtime() + HOME_INJECTION_WINDOW_MS
         }
     }
 

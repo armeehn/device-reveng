@@ -130,7 +130,7 @@ object NotificationRepository {
             return
         }
         val comp = ComponentName(context, ShelfListenerService::class.java).flattenToString()
-        val r = RootShell.exec("cmd notification allow_listener '$comp'")
+        val r = RootShell.exec("cmd notification allow_listener ${RootShell.quote(comp)}")
         Log.i(TAG, "allow_listener $comp -> code=${r.code} ${r.stdout}")
     }
 }
