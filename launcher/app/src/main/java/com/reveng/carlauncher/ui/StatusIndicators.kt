@@ -43,7 +43,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -53,6 +52,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.reveng.carlauncher.carlib.CarService
 import com.reveng.carlauncher.data.BrightnessController
@@ -69,7 +69,8 @@ import kotlinx.coroutines.withContext
  * Controls panel, so status lives in the bar and control sits one tap below it.
  *
  * Every chip degrades by disappearing (or greying) rather than freezing: no Bluetooth adapter
- * -> no chip, EventService unbound -> no volume chip. A chip that lies is worse than no chip.
+ * -> no chip, EventService unbound -> no volume chip, unreadable backlight -> no brightness chip.
+ * A chip that lies is worse than no chip.
  *
  * Update paths, cheapest first:
  *   Wi-Fi       push  — ConnectivityManager.NetworkCallback (signal via onCapabilitiesChanged)
@@ -95,6 +96,20 @@ private const val WIFI_BARS = 4
 // WifiInfo.INVALID_RSSI is @hide; the framework uses -127 as the sentinel.
 private const val INVALID_RSSI = -127
 
+/**
+ * Stable identities for the four chips, pinned by the instrumentation suite
+ * (app/src/androidTest). ROADMAP holds the strip as a stability invariant from v3.1 to v4.0:
+ * a redesign may restyle a chip freely, but must not silently drop one. Tags are asserted on,
+ * so renaming one is the same breaking change as deleting the chip — do both in one commit.
+ */
+internal object StatusIndicatorTags {
+    const val GROUP = "statusIndicators"
+    const val WIFI = "statusIndicator.wifi"
+    const val BLUETOOTH = "statusIndicator.bluetooth"
+    const val VOLUME = "statusIndicator.volume"
+    const val BRIGHTNESS = "statusIndicator.brightness"
+}
+
 @Composable
 fun StatusIndicators(
     carService: CarService?,
@@ -104,19 +119,43 @@ fun StatusIndicators(
 ) {
     val context = LocalContext.current.applicationContext
 
-    val wifi = rememberWifiStatus(context)
-    val bt = rememberBluetoothStatus(context)
-    val volume = rememberVolumeStatus(carService, refreshKey)
-    val brightnessPercent = rememberBrightnessPercent(context, refreshKey)
+    StatusIndicatorsRow(
+        wifi = rememberWifiStatus(context),
+        bt = rememberBluetoothStatus(context),
+        volume = rememberVolumeStatus(carService, refreshKey),
+        brightnessPercent = rememberBrightnessPercent(context, refreshKey),
+        modifier = modifier,
+        onOpen = onOpen,
+    )
+}
 
+/**
+ * The strip's rendering, with every source already resolved. Split out from [StatusIndicators]
+ * so a test can drive all four sources — including the ones an emulator has no hardware for
+ * (no vendor EventService, so no volume; no car, so no MCU backlight) — without pretending a
+ * source is there. Each parameter carries its own "absent" value, and absent means *no chip*:
+ * that is the ROADMAP rule the tests exist to hold. A chip that lies is worse than no chip.
+ */
+@Composable
+internal fun StatusIndicatorsRow(
+    wifi: WifiStatus,
+    bt: BtStatus,
+    volume: VolumeStatus,
+    brightnessPercent: Int?,
+    modifier: Modifier = Modifier,
+    onOpen: (() -> Unit)? = null,
+) {
     Row(
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
+            .testTag(StatusIndicatorTags.GROUP)
             .clip(carShape(8.dp))
             .then(if (onOpen != null) Modifier.clickable(onClick = onOpen) else Modifier)
             .padding(horizontal = 8.dp, vertical = 4.dp),
     ) {
+        // Wi-Fi is the one source the framework always answers for, radio off included, so this
+        // chip is unconditional — "off" is a state, not a missing source.
         WifiChip(wifi)
         if (bt.present) {
             BluetoothChip(bt)
@@ -124,18 +163,23 @@ fun StatusIndicators(
         if (volume.available) {
             VolumeChip(volume)
         }
-        StatusChip(
-            icon = Icons.Filled.BrightnessMedium,
-            description = "Brightness $brightnessPercent%",
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            text = "$brightnessPercent%",
-        )
+        // null = brightness unreadable (no WRITE_SETTINGS, no MCU backlight): the chip goes,
+        // rather than parking on a stale percentage.
+        if (brightnessPercent != null) {
+            StatusChip(
+                icon = Icons.Filled.BrightnessMedium,
+                description = "Brightness $brightnessPercent%",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                text = "$brightnessPercent%",
+                tag = StatusIndicatorTags.BRIGHTNESS,
+            )
+        }
     }
 }
 
 // ---- Wi-Fi -----------------------------------------------------------------
 
-private data class WifiStatus(
+internal data class WifiStatus(
     val enabled: Boolean,
     val connected: Boolean,
     val validated: Boolean,
@@ -156,7 +200,7 @@ private fun WifiChip(wifi: WifiStatus) {
         !wifi.validated -> MaterialTheme.colorScheme.error
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
-    StatusChip(icon = icon, description = description, tint = tint)
+    StatusChip(icon = icon, description = description, tint = tint, tag = StatusIndicatorTags.WIFI)
 }
 
 private fun wifiBarsIcon(bars: Int): ImageVector = when (bars) {
@@ -252,7 +296,7 @@ private fun wifiBars(wm: WifiManager?, rssi: Int?): Int {
 
 // ---- Bluetooth -------------------------------------------------------------
 
-private data class BtStatus(
+internal data class BtStatus(
     val present: Boolean,
     val on: Boolean,
     val connectedCount: Int,
@@ -278,6 +322,7 @@ private fun BluetoothChip(bt: BtStatus) {
         description = description,
         tint = tint,
         text = if (bt.connectedCount > 1) "${bt.connectedCount}" else null,
+        tag = StatusIndicatorTags.BLUETOOTH,
     )
 }
 
@@ -353,7 +398,7 @@ private fun rememberBluetoothStatus(context: Context): BtStatus {
 
 // ---- Volume ----------------------------------------------------------------
 
-private data class VolumeStatus(
+internal data class VolumeStatus(
     val available: Boolean,
     val level: Int,
     val muted: Boolean,
@@ -377,6 +422,7 @@ private fun VolumeChip(volume: VolumeStatus) {
             icon = Icons.AutoMirrored.Filled.VolumeOff,
             description = "Muted",
             tint = Color.Gray,
+            tag = StatusIndicatorTags.VOLUME,
         )
     } else {
         StatusChip(
@@ -384,6 +430,7 @@ private fun VolumeChip(volume: VolumeStatus) {
             description = "Volume ${volume.level}",
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
             text = "${volume.level}",
+            tag = StatusIndicatorTags.VOLUME,
         )
     }
 }
@@ -461,8 +508,9 @@ private fun rememberVolumeStatus(carService: CarService?, refreshKey: Int): Volu
 // ---- Brightness ------------------------------------------------------------
 
 @Composable
-private fun rememberBrightnessPercent(context: Context, refreshKey: Int): Int {
-    var percent by remember { mutableIntStateOf(BrightnessController.currentPercent(context)) }
+private fun rememberBrightnessPercent(context: Context, refreshKey: Int): Int? {
+    // null = nothing readable behind the chip, so the chip disappears rather than freezing.
+    var percent by remember { mutableStateOf(BrightnessController.currentPercent(context)) }
 
     LaunchedEffect(refreshKey) {
         percent = BrightnessController.currentPercent(context)
@@ -494,10 +542,14 @@ private fun StatusChip(
     description: String,
     tint: Color,
     text: String? = null,
+    // Identity, not styling: the tag says *which* indicator this is, so a test can pin the
+    // chip's presence while a redesign is free to change its icon, colour and wording.
+    tag: String,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(3.dp),
+        modifier = Modifier.testTag(tag),
     ) {
         Icon(
             imageVector = icon,

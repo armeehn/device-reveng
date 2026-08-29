@@ -19,6 +19,10 @@ android {
 
         // Single head-unit target: arm64 landscape @240dpi, 1920x720.
         ndk { abiFilters += "arm64-v8a" }
+
+        // Compose UI tests under app/src/androidTest run on an emulator in CI
+        // (`connectedDebugAndroidTest`); they never run on the head unit.
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
@@ -105,7 +109,28 @@ dependencies {
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 
-    // JVM unit tests for the pure logic (preset codec, frequency formatting, theme table).
-    // See carlib/build.gradle.kts for why there is no Robolectric.
+    // JVM unit tests for the pure logic (preset codec, frequency formatting, theme table,
+    // the store codecs). See carlib/build.gradle.kts for why there is no Robolectric.
     testImplementation("junit:junit:4.13.2")
+
+    // The real org.json, for the theme and driver-profile codecs. `org.json` ships in the
+    // platform, so the app declares no JSON dependency — but a local unit test compiles against
+    // the stub android.jar, where every JSONObject call throws "not mocked". This is the
+    // reference implementation of the same API, test-scope only: nothing reaches the APK. It is
+    // not byte-identical to Android's copy (Android's getString coerces a number to its text,
+    // this one throws), so the codec tests stay off type coercion.
+    testImplementation("org.json:json:20240303")
+
+    // Compose UI tests (app/src/androidTest): they pin the four status indicators by test tag.
+    // Semantics, not pixels — a colour or icon change must not turn this suite red, only an
+    // indicator going missing. Versions come from the same Compose BOM as the app.
+    androidTestImplementation(composeBom)
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test:core:1.6.1")
+
+    // createComposeRule() hosts the composable in a stub activity that only exists in this
+    // manifest; without it the test APK has no activity to launch and every test errors out.
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
