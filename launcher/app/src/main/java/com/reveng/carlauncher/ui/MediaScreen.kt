@@ -287,10 +287,14 @@ private fun Progress(now: NowPlaying, onSeek: (Long) -> Unit) {
     var scrubbing by remember { mutableStateOf(false) }
     var scrubValue by remember { mutableFloatStateOf(0f) }
     var livePos by remember { mutableLongStateOf(now.livePositionMs()) }
+    // v0.4.7 — a committed seek holds the bar at its target until the controller pushes a fresh
+    // snapshot, instead of snapping back to the stale pre-drag position.
+    var seekHold by remember { mutableStateOf(false) }
 
     LaunchedEffect(now.positionMs, now.positionTimestamp, now.isPlaying) {
+        seekHold = false
         while (true) {
-            if (!scrubbing) livePos = now.livePositionMs()
+            if (!scrubbing && !seekHold) livePos = now.livePositionMs()
             if (!now.isPlaying) break
             delay(POSITION_TICK_MS)
         }
@@ -317,7 +321,12 @@ private fun Progress(now: NowPlaying, onSeek: (Long) -> Unit) {
             Slider(
                 value = displayMs.coerceIn(0L, duration).toFloat(),
                 onValueChange = { scrubbing = true; scrubValue = it },
-                onValueChangeFinished = { onSeek(scrubValue.toLong()); scrubbing = false },
+                onValueChangeFinished = {
+                    livePos = scrubValue.toLong()
+                    seekHold = true
+                    onSeek(scrubValue.toLong())
+                    scrubbing = false
+                },
                 valueRange = 0f..duration.toFloat(),
                 enabled = now.canSeek,
                 modifier = Modifier.fillMaxWidth(),

@@ -52,6 +52,13 @@ internal class RootBroadcastBridge(
     @Volatile
     private var process: Process? = null
 
+    /**
+     * v0.4.7 — guards the [process] handoff. The su process runs before `process = proc` lands;
+     * a stop() in that window destroyed nothing and left the reader blocked in readLine() on a
+     * live root process forever. Both sides now hand off under this lock.
+     */
+    private val processLock = Any()
+
     /** True once any helper announced READY, so we only log the "unavailable" verdict once. */
     @Volatile
     private var reachedReadyEver = false
@@ -72,8 +79,10 @@ internal class RootBroadcastBridge(
 
     fun stop() {
         running = false
-        runCatching { process?.destroy() }
-        process = null
+        synchronized(processLock) {
+            runCatching { process?.destroy() }
+            process = null
+        }
         thread?.interrupt()
         thread = null
     }
@@ -117,7 +126,15 @@ internal class RootBroadcastBridge(
             return false
         }
 
-        process = proc
+        // Publish under the lock, re-checking [running]: a stop() that raced the ProcessBuilder
+        // start finds either a published process to destroy or this destroy-and-bail.
+        synchronized(processLock) {
+            if (!running) {
+                runCatching { proc.destroy() }
+                return false
+            }
+            process = proc
+        }
         var ready = false
 
         runCatching {
@@ -138,7 +155,11 @@ internal class RootBroadcastBridge(
         }
 
         runCatching { proc.destroy() }
-        process = null
+        synchronized(processLock) {
+            if (process === proc) {
+                process = null
+            }
+        }
         return ready
     }
 

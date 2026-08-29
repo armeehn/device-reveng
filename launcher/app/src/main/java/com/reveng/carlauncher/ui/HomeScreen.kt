@@ -113,6 +113,10 @@ fun HomeScreen(
     val settings by (settingsStore?.settings?.collectAsStateSafe(initial = LauncherSettings())
         ?: remember { mutableStateOf(LauncherSettings()) })
 
+    // v0.4.7 — the radar byte decode is GUESSED; same gate as MainActivity's maneuvering strips:
+    // until the layout is confirmed, no Home or reverse surface renders a radar claim.
+    val shownRadar = if (settings.radarLayoutConfirmed) radar else null
+
     var apps by remember { mutableStateOf<List<AppInfo>>(emptyList()) }
     LaunchedEffect(Unit) {
         apps = withContext(Dispatchers.IO) { appRepository.loadApps() }
@@ -308,7 +312,7 @@ fun HomeScreen(
                         ) {
                             NavCard(
                                 carEvents = carEvents,
-                                radar = radar,
+                                radar = shownRadar,
                                 modifier = Modifier.fillMaxSize(),
                             )
                         }
@@ -393,7 +397,7 @@ fun HomeScreen(
 
         // v0.9: minimal, transparent reverse overlay that COEXISTS with the vendor reverse
         // window (radar bars + optional static guide lines are now owned by ReverseOverlay).
-        ReverseOverlay(visible = reverse, radar = radar, modifier = Modifier.fillMaxSize())
+        ReverseOverlay(visible = reverse, radar = shownRadar, modifier = Modifier.fillMaxSize())
     }
 }
 

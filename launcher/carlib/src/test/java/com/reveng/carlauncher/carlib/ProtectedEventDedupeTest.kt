@@ -27,6 +27,18 @@ class ProtectedEventDedupeTest {
         dedupe.accept(action, down, 1_000L)
         // The two paths land within single-digit milliseconds of each other.
         assertFalse(dedupe.accept(action, down, 1_003L))
+
+        // The maps production actually builds are asymmetric: the in-process receiver fills an
+        // absent extra with 0, the root helper skips it. Same event, so it must still dedupe.
+        val inProcess = mapOf(
+            CarEvents.EXTRA_SWC_LPARAM to 4,
+            CarEvents.EXTRA_SWC_WPARAM to 3,
+            CarEvents.EXTRA_SWC_VOLTAGE to 0,
+        )
+        val rootPath = mapOf(CarEvents.EXTRA_SWC_LPARAM to 4, CarEvents.EXTRA_SWC_WPARAM to 3)
+        val real = ProtectedEventDedupe()
+        real.accept(action, inProcess, 1_000L)
+        assertFalse(real.accept(action, rootPath, 1_003L))
     }
 
     @Test

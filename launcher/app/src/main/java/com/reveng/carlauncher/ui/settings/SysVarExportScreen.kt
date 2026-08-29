@@ -50,6 +50,7 @@ fun SysVarExportScreen(
     val snapshot by controller.snapshot.collectAsStateSafe(initial = emptyMap())
     var exports by remember { mutableStateOf<List<File>>(emptyList()) }
     var busy by remember { mutableStateOf(false) }
+    var deleteTarget by remember { mutableStateOf<File?>(null) }
 
     fun reload() {
         scope.launch { exports = withContext(Dispatchers.IO) { SysVarExport.list(context) } }
@@ -99,15 +100,29 @@ fun SysVarExportScreen(
             exports.forEach { file ->
                 ExportRow(
                     file = file,
-                    onDelete = {
-                        scope.launch {
-                            withContext(Dispatchers.IO) { SysVarExport.delete(file) }
-                            reload()
-                        }
-                    },
+                    // v0.4.7 — confirmed below: a one-tap permanent delete was a mis-tap away.
+                    onDelete = { deleteTarget = file },
                 )
             }
         }
+    }
+
+    val doomed = deleteTarget
+    if (doomed != null) {
+        ConfirmDialog(
+            title = "Delete this export?",
+            message = "The export file is removed. This cannot be undone.",
+            confirmLabel = "Delete",
+            destructive = true,
+            onDismiss = { deleteTarget = null },
+            onConfirm = {
+                deleteTarget = null
+                scope.launch {
+                    withContext(Dispatchers.IO) { SysVarExport.delete(doomed) }
+                    reload()
+                }
+            },
+        )
     }
 }
 

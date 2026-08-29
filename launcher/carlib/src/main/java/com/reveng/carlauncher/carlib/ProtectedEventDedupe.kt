@@ -52,9 +52,10 @@ internal class ProtectedEventDedupe(private val windowMs: Long = WINDOW_MS) {
      */
     @Synchronized
     fun accept(action: String, ints: Map<String, Int>, atMs: Long): Boolean {
+        val canonicalInts = canonical(ints)
         val elapsed = atMs - lastAtMs
         val duplicate = action == lastAction &&
-            ints == lastInts &&
+            canonicalInts == lastInts &&
             elapsed >= 0 &&
             elapsed < windowMs
 
@@ -63,8 +64,18 @@ internal class ProtectedEventDedupe(private val windowMs: Long = WINDOW_MS) {
         }
 
         lastAction = action
-        lastInts = ints
+        lastInts = canonicalInts
         lastAtMs = atMs
         return true
     }
+
+    /**
+     * v0.4.7 — the two delivery paths build unequal maps for the same event: the in-process
+     * receiver fills an absent extra with 0 while the root helper skips it, so plain map equality
+     * let the same press through twice. An absent extra and one delivered as 0 decode identically
+     * downstream (handleProtected defaults missing to 0), so dropping zero entries compares the
+     * event, not the carrier.
+     */
+    private fun canonical(ints: Map<String, Int>): Map<String, Int> =
+        ints.filterValues { it != 0 }
 }

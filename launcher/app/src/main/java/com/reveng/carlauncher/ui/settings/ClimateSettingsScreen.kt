@@ -77,16 +77,12 @@ fun ClimateSettingsScreen(
                 onSelect = { controller.setInt(SettingKeys.AIR_PANEL_TYPE, it) },
                 description = "Serial protocol for the A/C control board",
             )
-            PickerSetting(
-                label = "A/C board baud rate",
-                current = controller.getInt(SettingKeys.AIR_CONDITIONING_BAUD, 0),
-                options = listOf(
-                    0 to "9600",
-                    1 to "19200",
-                    2 to "38400",
-                    3 to "115200",
-                ),
-                onSelect = { controller.setInt(SettingKeys.AIR_CONDITIONING_BAUD, it) },
+            // v0.4.7 — refuse-listed link speed (ProtectedSettingKeys): a wrong write silences
+            // climate control. Read-only raw value — the old picker wrote an invented enum
+            // mapping and fabricated "9600" when the key was absent.
+            InfoRow(
+                "A/C board baud rate",
+                controller.getString(SettingKeys.AIR_CONDITIONING_BAUD, "—").ifBlank { "—" },
             )
         }
 

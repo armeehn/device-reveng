@@ -17,8 +17,8 @@ import kotlinx.coroutines.withContext
 
 /**
  * v2.0 — System & About. The read-mostly bottom of the vendor settings tree, reskinned:
- * firmware versions, car/customer profile, panel geometry (read-only), a couple of writable
- * bus baud rates, and the power actions (reboot / factory reset) behind a confirm dialog.
+ * firmware versions, car/customer profile, panel geometry and bus link speeds (read-only),
+ * and the power actions (reboot / factory reset) behind a confirm dialog.
  *
  * Versions come live from the AIDL where available (getMCUVer/getCanVer); the rest is SysVar.
  */
@@ -88,18 +88,11 @@ fun SystemSettingsScreen(
         }
 
         SettingsSection(title = "Bus") {
-            PickerSetting(
-                label = "CAN baud rate",
-                current = controller.getInt(SettingKeys.CAN_BAUD_RATE, 0),
-                options = listOf(0 to "125k", 1 to "250k", 2 to "500k", 3 to "1M"),
-                onSelect = { controller.setInt(SettingKeys.CAN_BAUD_RATE, it) },
-            )
-            PickerSetting(
-                label = "MCU UART baud",
-                current = controller.getInt(SettingKeys.MCU_COM_BAUDRATE, 0),
-                options = listOf(0 to "9600", 1 to "19200", 2 to "38400", 3 to "115200"),
-                onSelect = { controller.setInt(SettingKeys.MCU_COM_BAUDRATE, it) },
-            )
+            // v0.4.7 — refuse-listed link speeds (ProtectedSettingKeys): a wrong write silences
+            // reverse, SWC and climate. Read-only raw value — the old pickers wrote invented enum
+            // mappings and fabricated "125k" when the key was absent.
+            InfoRow("CAN baud rate", controller.getString(SettingKeys.CAN_BAUD_RATE, "—").ifBlank { "—" })
+            InfoRow("MCU UART baud", controller.getString(SettingKeys.MCU_COM_BAUDRATE, "—").ifBlank { "—" })
         }
 
         SettingsSection(title = "Power") {

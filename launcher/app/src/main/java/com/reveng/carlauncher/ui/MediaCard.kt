@@ -29,6 +29,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
@@ -208,6 +209,9 @@ fun MediaCard(
  * Live seek bar. Ticks the interpolated position while playing; dragging scrubs locally and
  * commits on release via [onSeek] (MediaController.transportControls.seekTo). Disabled when
  * the session doesn't advertise ACTION_SEEK_TO (bar still reflects progress).
+ *
+ * v0.4.7 — scrubbing is parked-only, mirroring MediaScreen's Progress: while moving the same
+ * progress renders as a read-only bar under [LocalParkedOnlyLock].
  */
 @Composable
 private fun SeekBar(now: NowPlaying, onSeek: (Long) -> Unit) {
@@ -215,26 +219,51 @@ private fun SeekBar(now: NowPlaying, onSeek: (Long) -> Unit) {
     var scrubbing by remember { mutableStateOf(false) }
     var scrubValue by remember { mutableFloatStateOf(0f) }
     var livePos by remember { mutableLongStateOf(now.livePositionMs()) }
+    // v0.4.7 — a committed seek holds the bar at its target until the controller pushes a fresh
+    // snapshot, instead of snapping back to the stale pre-drag position.
+    var seekHold by remember { mutableStateOf(false) }
 
     // Re-tick whenever the source snapshot changes (new position base / play state).
     LaunchedEffect(now.positionMs, now.positionTimestamp, now.isPlaying) {
+        seekHold = false
         while (true) {
-            if (!scrubbing) livePos = now.livePositionMs()
+            if (!scrubbing && !seekHold) livePos = now.livePositionMs()
             if (!now.isPlaying) break
             delay(500)
         }
     }
 
+    // While moving, drop any in-progress drag: the gate can close mid-gesture.
+    val locked = LocalParkedOnlyLock.current
+    LaunchedEffect(locked) {
+        if (locked) scrubbing = false
+    }
+
     val displayMs = if (scrubbing) scrubValue.toLong() else livePos
     Column(modifier = Modifier.fillMaxWidth()) {
-        Slider(
-            value = displayMs.coerceIn(0L, duration).toFloat(),
-            onValueChange = { scrubbing = true; scrubValue = it },
-            onValueChangeFinished = { onSeek(scrubValue.toLong()); scrubbing = false },
-            valueRange = 0f..duration.toFloat(),
-            enabled = now.canSeek,
-            modifier = Modifier.fillMaxWidth().height(24.dp),
-        )
+        if (locked) {
+            LinearProgressIndicator(
+                progress = { displayMs.coerceIn(0L, duration).toFloat() / duration.toFloat() },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(10.dp)
+                    .clip(carShape(5.dp)),
+            )
+        } else {
+            Slider(
+                value = displayMs.coerceIn(0L, duration).toFloat(),
+                onValueChange = { scrubbing = true; scrubValue = it },
+                onValueChangeFinished = {
+                    livePos = scrubValue.toLong()
+                    seekHold = true
+                    onSeek(scrubValue.toLong())
+                    scrubbing = false
+                },
+                valueRange = 0f..duration.toFloat(),
+                enabled = now.canSeek,
+                modifier = Modifier.fillMaxWidth().height(24.dp),
+            )
+        }
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,

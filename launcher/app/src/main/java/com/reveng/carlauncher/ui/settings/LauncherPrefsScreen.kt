@@ -68,6 +68,10 @@ fun LauncherPrefsScreen(
         rootAvailable = withContext(Dispatchers.IO) { RootShell.isRootAvailable() }
     }
 
+    // v0.4.7 — turning motion gating OFF unlocks every gated surface, so it takes the
+    // parked-gated destructive confirm rather than one tap at speed. ON stays one tap.
+    var confirmGateOff by remember { mutableStateOf(false) }
+
     // HomeRole.isDefaultHome is a PackageManager.resolveActivity binder round-trip, so it is
     // resolved off the main thread and seeded false rather than run in the composable body on
     // every entry to this screen. `homeProbe` re-runs it on resume (return from the picker).
@@ -276,11 +280,23 @@ fun LauncherPrefsScreen(
             ToggleSetting(
                 "Enforce parked-only features",
                 settings.motionGateEnabled,
-                settingsStore::setMotionGateEnabled,
+                { on -> if (on) settingsStore.setMotionGateEnabled(true) else confirmGateOff = true },
             )
             Spacer(Modifier.size(12.dp))
             MotionStatusRow(carEvents = carEvents)
         }
+    }
+
+    if (confirmGateOff) {
+        ConfirmDialog(
+            title = "Disable parked-only gating?",
+            message = "Search, the theme editor, the SysVar browser and destructive actions " +
+                "will stay available while the car is moving.",
+            confirmLabel = "Disable",
+            destructive = true,
+            onConfirm = { confirmGateOff = false; settingsStore.setMotionGateEnabled(false) },
+            onDismiss = { confirmGateOff = false },
+        )
     }
 }
 
