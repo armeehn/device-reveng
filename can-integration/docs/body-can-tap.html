@@ -1,0 +1,327 @@
+<title>Body-CAN + LIN Taps · 2019 RAV4 Hybrid → USB</title>
+<style>
+  :root {
+    --bone: #EDEAE2;
+    --bone-2: #E4E0D6;
+    --card: #F6F4EE;
+    --ink: #1B1915;
+    --ink-2: #4A463D;
+    --ink-3: #6E695C;
+    --line: #CFC9BB;
+    --line-2: #DED9CC;
+    --teal: #12897A;      /* CAN-L / data */
+    --marigold: #C8871A;  /* CAN-H */
+    --lin: #6A4CC0;       /* LIN */
+    --pink: #C24568;      /* caution */
+    --accent: var(--teal);
+    --mono: ui-monospace, "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+    --sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --maxw: 760px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bone: #121110; --bone-2: #171613; --card: #1B1A16;
+      --ink: #ECE7DB; --ink-2: #B4AD9C; --ink-3: #857F70;
+      --line: #322F28; --line-2: #29261F;
+      --teal: #37B7A4; --marigold: #E0A536; --lin: #A688F0; --pink: #E0708F;
+    }
+  }
+  :root[data-theme="light"] {
+    --bone: #EDEAE2; --bone-2: #E4E0D6; --card: #F6F4EE;
+    --ink: #1B1915; --ink-2: #4A463D; --ink-3: #6E695C;
+    --line: #CFC9BB; --line-2: #DED9CC;
+    --teal: #12897A; --marigold: #C8871A; --lin: #6A4CC0; --pink: #C24568;
+  }
+  :root[data-theme="dark"] {
+    --bone: #121110; --bone-2: #171613; --card: #1B1A16;
+    --ink: #ECE7DB; --ink-2: #B4AD9C; --ink-3: #857F70;
+    --line: #322F28; --line-2: #29261F;
+    --teal: #37B7A4; --marigold: #E0A536; --lin: #A688F0; --pink: #E0708F;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bone); color: var(--ink);
+    font-family: var(--sans); line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: var(--maxw); margin: 0 auto; padding: clamp(28px, 5vw, 64px) clamp(18px, 4vw, 32px) 96px; }
+
+  .eyebrow {
+    font-family: var(--mono); font-size: 12px; letter-spacing: .18em; text-transform: uppercase;
+    color: var(--ink-3); display: flex; gap: 10px; align-items: center; margin: 0 0 18px;
+  }
+  .eyebrow::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+  h1 {
+    font-family: var(--mono); font-weight: 700; font-size: clamp(26px, 5vw, 38px);
+    line-height: 1.12; letter-spacing: -0.01em; margin: 0 0 14px; text-wrap: balance;
+  }
+  h1 .hl { color: var(--teal); }
+  .lede { font-size: 17px; color: var(--ink-2); max-width: 60ch; margin: 0 0 22px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px; font-family: var(--mono); font-size: 12px; }
+  .tag {
+    border: 1px solid var(--line); padding: 5px 9px; color: var(--ink-2);
+    display: inline-flex; gap: 7px; align-items: center;
+  }
+  .tag b { color: var(--ink); font-weight: 600; }
+  .dot { width: 8px; height: 8px; display: inline-block; }
+  .dot.h { background: var(--marigold); }
+  .dot.l { background: var(--teal); }
+  .dot.n { background: var(--lin); }
+
+  figure { margin: 34px 0 10px; }
+  .diagram {
+    background: var(--card); border: 1px solid var(--line);
+    padding: 20px 16px 12px; overflow-x: auto;
+  }
+  .diagram svg { display: block; width: 100%; height: auto; min-width: 560px; }
+  figcaption {
+    font-family: var(--mono); font-size: 11.5px; color: var(--ink-3);
+    text-transform: uppercase; letter-spacing: .12em; margin-top: 12px; text-align: center;
+  }
+  .legend { display: flex; gap: 20px; justify-content: center; flex-wrap: wrap; margin-top: 6px; }
+  .legend span { font-family: var(--mono); font-size: 12px; color: var(--ink-2); display: inline-flex; gap: 8px; align-items: center; }
+  .swatch { width: 22px; height: 3px; display: inline-block; }
+  .swatch.h { background: var(--marigold); }
+  .swatch.l { background: var(--teal); }
+  .swatch.n { background: var(--lin); }
+
+  svg text { font-family: var(--mono); }
+  .flow { stroke-dasharray: 5 5; animation: dash 1.1s linear infinite; }
+  .flow.slow { animation-duration: 1.7s; }
+  @keyframes dash { to { stroke-dashoffset: -20; } }
+  @media (prefers-reduced-motion: reduce) { .flow { animation: none; } }
+
+  h2 {
+    font-family: var(--mono); font-size: 13px; letter-spacing: .16em; text-transform: uppercase;
+    color: var(--ink-3); margin: 52px 0 20px; padding-bottom: 10px; border-bottom: 1px solid var(--line);
+    font-weight: 600;
+  }
+  h2 .bus { color: var(--ink); }
+  h2 .bus.can { color: var(--marigold); }
+  h2 .bus.lin { color: var(--lin); }
+
+  ol.steps { list-style: none; counter-reset: s; margin: 0; padding: 0; }
+  ol.steps > li { counter-increment: s; position: relative; padding: 0 0 22px 52px; margin: 0; }
+  ol.steps > li::before {
+    content: counter(s, decimal-leading-zero); position: absolute; left: 0; top: -1px;
+    font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--teal);
+    border: 1px solid var(--line); width: 34px; height: 34px; display: grid; place-items: center;
+    background: var(--card);
+  }
+  ol.steps.linclr > li::before { color: var(--lin); }
+  ol.steps > li::after { content: ""; position: absolute; left: 17px; top: 34px; bottom: 4px; width: 1px; background: var(--line-2); }
+  ol.steps > li:last-child::after { display: none; }
+  .steps h3 { margin: 4px 0 5px; font-size: 16.5px; font-family: var(--sans); font-weight: 600; }
+  .steps p { margin: 0; color: var(--ink-2); font-size: 15px; }
+  .steps code, .val {
+    font-family: var(--mono); font-size: 13.5px; background: var(--bone-2);
+    border: 1px solid var(--line-2); padding: 1px 6px; color: var(--ink); white-space: nowrap;
+  }
+
+  .tblwrap { overflow-x: auto; border: 1px solid var(--line); }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; min-width: 460px; }
+  th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--line-2); }
+  th { font-family: var(--mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; background: var(--card); }
+  tr:last-child td { border-bottom: none; }
+  td.mono, td .id { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .wire { display: inline-flex; align-items: center; gap: 9px; font-family: var(--mono); font-weight: 600; }
+  .wire .dot { width: 10px; height: 10px; }
+
+  .note {
+    border: 1px solid var(--line); border-left: 3px solid var(--accent);
+    background: var(--card); padding: 15px 18px; margin: 20px 0; font-size: 14.5px; color: var(--ink-2);
+  }
+  .note.warn { border-left-color: var(--pink); }
+  .note.warn strong { color: var(--pink); }
+  .note.lin { border-left-color: var(--lin); }
+  .note strong { color: var(--ink); font-family: var(--mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; display: block; margin-bottom: 5px; }
+  .note code { font-family: var(--mono); font-size: 13px; background: var(--bone-2); padding: 1px 5px; border: 1px solid var(--line-2); }
+
+  .ids { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+  .idchip { font-family: var(--mono); font-size: 12.5px; border: 1px solid var(--line); padding: 7px 10px; color: var(--ink-2); background: var(--card); }
+  .idchip b { color: var(--teal); font-weight: 700; }
+  .idchip.lin b { color: var(--lin); }
+
+  footer { margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--line); font-family: var(--mono); font-size: 12px; color: var(--ink-3); line-height: 1.7; }
+  a { color: var(--teal); text-underline-offset: 3px; }
+</style>
+
+<div class="wrap">
+  <p class="eyebrow">Field wiring guide · body CAN + LIN</p>
+  <h1>Tap the RAV4 body signals <span class="hl">→ USB</span></h1>
+  <p class="lede">Two buses, two taps. Door / lock / light / HVAC-request state rides the <b>body CAN</b> at the Smart-Key ECU. Full climate-panel detail — fan, mode, both temps — rides a separate <b>LIN</b> line at the A/C amplifier. Each needs its own adapter. All listen-only, no cut wires.</p>
+  <div class="meta">
+    <span class="tag"><span class="dot h"></span><span class="dot l"></span><b>CAN</b> 500 kbps · CANable</span>
+    <span class="tag"><span class="dot n"></span><b>LIN</b> 19200 · transceiver → UART</span>
+    <span class="tag"><b>Car</b> 2019 RAV4 Hybrid · XA50</span>
+  </div>
+
+  <figure>
+    <div class="diagram">
+      <svg viewBox="0 0 720 330" role="img" aria-label="Two taps: body CAN pair from the Smart-Key ECU into a CANable, and a single LIN wire from the A/C amplifier into a LIN transceiver, both reaching USB on the head unit or laptop.">
+        <!-- ===== CAN row ===== -->
+        <rect x="14" y="34" width="140" height="86" fill="none" stroke="var(--ink-3)" stroke-width="1.5"/>
+        <text x="84" y="22" text-anchor="middle" font-size="11.5" fill="var(--ink-2)">SMART-KEY ECU</text>
+        <text x="84" y="82" text-anchor="middle" font-size="10" fill="var(--ink-3)">glove box</text>
+        <rect x="154" y="48" width="9" height="9" fill="var(--marigold)"/>
+        <rect x="154" y="90" width="9" height="9" fill="var(--teal)"/>
+
+        <line x1="163" y1="52" x2="452" y2="52" stroke="var(--marigold)" stroke-width="2.5" class="flow"/>
+        <rect x="296" y="46" width="11" height="11" fill="none" stroke="var(--marigold)" stroke-width="1.5"/>
+        <text x="301" y="40" text-anchor="middle" font-size="8.5" fill="var(--ink-3)">T-tap</text>
+        <line x1="163" y1="94" x2="452" y2="94" stroke="var(--teal)" stroke-width="2.5" class="flow"/>
+        <rect x="296" y="88" width="11" height="11" fill="none" stroke="var(--teal)" stroke-width="1.5"/>
+
+        <rect x="452" y="38" width="118" height="78" fill="none" stroke="var(--ink-3)" stroke-width="1.5"/>
+        <text x="511" y="26" text-anchor="middle" font-size="11.5" fill="var(--ink-2)">CANable 2.0</text>
+        <rect x="446" y="48" width="9" height="9" fill="var(--marigold)"/>
+        <rect x="446" y="90" width="9" height="9" fill="var(--teal)"/>
+        <text x="511" y="76" text-anchor="middle" font-size="9.5" fill="var(--ink-3)">120Ω term</text>
+        <text x="511" y="90" text-anchor="middle" font-size="10" fill="var(--pink)">OFF</text>
+        <line x1="570" y1="77" x2="628" y2="77" stroke="var(--ink-3)" stroke-width="2.5"/>
+
+        <!-- ===== LIN row ===== -->
+        <rect x="14" y="196" width="140" height="86" fill="none" stroke="var(--ink-3)" stroke-width="1.5"/>
+        <text x="84" y="184" text-anchor="middle" font-size="11.5" fill="var(--ink-2)">A/C AMPLIFIER</text>
+        <text x="84" y="244" text-anchor="middle" font-size="10" fill="var(--ink-3)">climate panel</text>
+        <rect x="154" y="234" width="9" height="9" fill="var(--lin)"/>
+        <text x="150" y="228" text-anchor="end" font-size="9.5" fill="var(--ink-3)">LIN (1 wire)</text>
+
+        <line x1="163" y1="238" x2="452" y2="238" stroke="var(--lin)" stroke-width="2.5" class="flow slow"/>
+        <rect x="296" y="232" width="11" height="11" fill="none" stroke="var(--lin)" stroke-width="1.5"/>
+        <text x="301" y="226" text-anchor="middle" font-size="8.5" fill="var(--ink-3)">tap</text>
+
+        <rect x="452" y="212" width="118" height="78" fill="none" stroke="var(--ink-3)" stroke-width="1.5"/>
+        <text x="511" y="200" text-anchor="middle" font-size="11" fill="var(--ink-2)">LIN transceiver</text>
+        <rect x="446" y="234" width="9" height="9" fill="var(--lin)"/>
+        <text x="511" y="248" text-anchor="middle" font-size="9.5" fill="var(--ink-3)">TJA1020</text>
+        <text x="511" y="262" text-anchor="middle" font-size="9.5" fill="var(--ink-3)">→ USB-UART</text>
+        <line x1="570" y1="251" x2="628" y2="251" stroke="var(--ink-3)" stroke-width="2.5"/>
+
+        <!-- shared host -->
+        <rect x="628" y="38" width="44" height="252" fill="none" stroke="var(--ink-3)" stroke-width="1.5"/>
+        <text x="650" y="168" text-anchor="middle" font-size="10.5" fill="var(--ink-2)" transform="rotate(90 650 168)">laptop / head unit</text>
+        <text x="612" y="70" text-anchor="middle" font-size="8.5" fill="var(--ink-3)">USB</text>
+        <text x="612" y="244" text-anchor="middle" font-size="8.5" fill="var(--ink-3)">USB</text>
+      </svg>
+    </div>
+    <figcaption>Two independent buses — a CAN pair and a single LIN wire</figcaption>
+    <div class="legend">
+      <span><i class="swatch h"></i> CAN-H</span>
+      <span><i class="swatch l"></i> CAN-L</span>
+      <span><i class="swatch n"></i> LIN (single-wire)</span>
+    </div>
+  </figure>
+
+  <div class="note warn">
+    <strong>Both taps are read-only</strong>
+    On CAN, open slcan in listen-only mode (<code>L\r</code>) and disable the CANable's onboard terminator — the bus already has its two. On LIN, passively listen only; never let the transceiver drive the single-wire bus. Wire everything with the ignition off.
+  </div>
+
+  <h2>Tap 1 · <span class="bus can">body CAN</span> — Smart-Key ECU</h2>
+  <p style="color:var(--ink-2); margin:0 0 16px; font-size:15px;">The Smart-Key / Certification ECU behind the passenger glove box carries the body CAN pair. Toyota withholds the exact pin numbers, so confirm CAN-H / CAN-L from the RAV4 EWD and a meter — don't trust wire color.</p>
+  <div class="tblwrap">
+    <table>
+      <thead><tr><th>Line</th><th>Role</th><th>To CANable</th><th>DB9 (CiA-303)</th></tr></thead>
+      <tbody>
+        <tr><td><span class="wire"><span class="dot h"></span>CAN-H</span></td><td>bus high, ~2.5 V idle</td><td class="mono">CANH</td><td class="mono">pin 7</td></tr>
+        <tr><td><span class="wire"><span class="dot l"></span>CAN-L</span></td><td>bus low, ~2.5 V idle</td><td class="mono">CANL</td><td class="mono">pin 2</td></tr>
+        <tr><td class="mono">GND</td><td>optional signal ref</td><td class="mono">GND</td><td class="mono">pin 3</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <ol class="steps">
+    <li>
+      <h3>Drop the glove box &amp; find the CAN pair</h3>
+      <p>Squeeze the sides past the stops or remove the liner. Identify CAN-H / CAN-L from the 2019 EWD — <span class="val">verify, don't assume</span>.</p>
+    </li>
+    <li>
+      <h3>Confirm the bus with a meter</h3>
+      <p>Ignition off: <span class="val">≈60 Ω</span> across H↔L. Ignition on: <span class="val">≈2.5 V</span> each line to ground.</p>
+    </li>
+    <li>
+      <h3>Terminator off, then T-tap</h3>
+      <p>Set the CANable's 120 Ω jumper to <span class="val">off</span>, then quick-splice CAN-H → <code>CANH</code>, CAN-L → <code>CANL</code>. No cutting.</p>
+    </li>
+    <li>
+      <h3>Bench it, then confirm IDs</h3>
+      <p>Laptop first — slcan init at <span class="val">500 kbps</span> (<code>C\r · S6\r · L\r</code>), run <code>canable-probe.sh</code>, watch for:</p>
+      <div class="ids">
+        <span class="idchip"><b>0x620</b> doors / seatbelt</span>
+        <span class="idchip"><b>0x638</b> locks</span>
+        <span class="idchip"><b>0x614</b> blinkers</span>
+        <span class="idchip"><b>0x622</b> lights</span>
+        <span class="idchip"><b>0x590</b> HVAC request</span>
+      </div>
+    </li>
+  </ol>
+
+  <h2>Tap 2 · <span class="bus lin">LIN</span> — A/C amplifier (HVAC)</h2>
+  <p style="color:var(--ink-2); margin:0 0 16px; font-size:15px;">The body CAN only carries a coarse HVAC <em>request</em> (0x590). The full climate-panel state — fan speed, mode, both zone temps, A/C — lives on a <b>LIN</b> bus between the A/C amplifier (master) and the climate panel (slave). This is the well-decoded one (bitzero / ufnalski), and it's a <b>different tap point and different hardware</b>.</p>
+
+  <div class="note lin">
+    <strong>LIN ≠ CAN — you need a second adapter</strong>
+    LIN is a single-wire bus, so the CANable can't read it. Tap the one LIN wire into a <code>TJA1020</code> (or MCP2003) LIN transceiver feeding a USB-UART, and read it as plain serial at the bus baud. A ground reference to the transceiver is required here (unlike the CAN tap).
+  </div>
+
+  <div class="tblwrap">
+    <table>
+      <thead><tr><th>Where</th><th>Baud</th><th>Content</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">A/C amplifier ↔ panel</td><td class="mono">19200</td><td>full climate state — <b>decoded, tap here</b></td></tr>
+        <tr><td class="mono">Smart-Key ECU LIN</td><td class="mono">9600</td><td>present but undocumented — skip</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p style="color:var(--ink-2); margin:18px 0 12px; font-size:15px;">Frame format: sync <span class="val">0x55</span> + protected ID + 8 data bytes + checksum (inverted sum). The two frames that matter:</p>
+  <div class="tblwrap">
+    <table>
+      <thead><tr><th>Frame</th><th>Dir</th><th>Byte map</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><span class="wire"><span class="dot n"></span>0xB1</span></td>
+          <td class="mono">amp → panel</td>
+          <td>b1 = fan 0–7 · b2 = mode (1 face · 2 face/feet · 3 feet · 4 feet/defrost · 9 defrost) · b4 = driver temp · b5 = passenger temp · b7 = A/C + illum bits</td>
+        </tr>
+        <tr>
+          <td><span class="wire"><span class="dot n"></span>0x39</span></td>
+          <td class="mono">amp polls panel</td>
+          <td>button presses — off / auto (b0), A/C / eco / fan± (b1), mode (b2), sync / defrost (b3), temp ± (b4/b5), recirc (b6)</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <ol class="steps linclr">
+    <li>
+      <h3>Reach the A/C amplifier</h3>
+      <p>It sits behind the center-stack / climate-panel assembly. Pull the panel trim to reach the amplifier connector carrying the LIN line to the HMI.</p>
+    </li>
+    <li>
+      <h3>Tap the single LIN wire + ground</h3>
+      <p>Backprobe the LIN signal into the TJA1020's LIN pin, and tie the transceiver ground to chassis. One signal wire — there's no pair.</p>
+    </li>
+    <li>
+      <h3>Read as serial at 19200</h3>
+      <p>Open the USB-UART at <span class="val">19200 8N1</span> and log bytes. Frame on the <code>0x55</code> sync; slice out <code>0xB1</code> (status) and <code>0x39</code> (buttons).</p>
+    </li>
+    <li>
+      <h3>Toggle-and-diff to confirm</h3>
+      <p>Change fan / temp / mode on the physical panel and watch the matching byte move. That validates the byte map on <em>your</em> car before wiring it to the head unit.</p>
+    </li>
+  </ol>
+
+  <div class="note warn">
+    <strong>Before you wire anything live</strong>
+    Ignition off while splicing. Read-only on both buses — never inject on CAN, never drive the LIN line. Keep the CAN pinout discreet: those frames gate central locking.
+  </div>
+
+  <footer>
+    2019 RAV4 Hybrid · XA50<br>
+    Tap 1 — body CAN 500 kbps at the Smart-Key ECU (glove box) → CANable → USB.<br>
+    Tap 2 — climate LIN 19200 at the A/C amplifier → TJA1020 → USB-UART. Skip the 9600 LIN at the ECU (undocumented).<br>
+    CAN pins: derive from the RAV4 EWD &amp; meter-confirm. CAN IDs after Fisk (2023 MY); LIN map after bitzero/ufnalski — re-verify on your car.
+  </footer>
+</div>
