@@ -11,6 +11,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import com.reveng.carlauncher.carlib.CarEvents
 import com.reveng.carlauncher.carlib.CarService
+import com.reveng.carlauncher.data.AppDirectoryStore
 import com.reveng.carlauncher.data.CarSettingsController
 import com.reveng.carlauncher.data.RadioPresetsStore
 import com.reveng.carlauncher.data.RootTierController // v2.9
@@ -38,6 +39,8 @@ fun SettingsHost(
     radioPresetsStore: RadioPresetsStore,
     rootTier: RootTierController, // v2.9
     onExit: () -> Unit,
+    // The launcher-owned instance, so the app-directory screen and the drawer read one store.
+    appDirectoryStore: AppDirectoryStore? = null,
     // Optional deep link: open with this route pushed above the hub, so Back still pops
     // to the hub (status-bar power chip → Power & sleep).
     initialRoute: SettingsRoute? = null,
@@ -82,6 +85,7 @@ fun SettingsHost(
             // v0.4.2: custom app directory — per-app Home/System/Hidden placement over the drawer.
             SettingsRoute.AppDirectory -> AppDirectoryScreen(
                 onBack = ::pop,
+                directoryStore = appDirectoryStore,
             )
 
             // v0.4.2: setup doctor — probes the grants a reinstall drops and repairs them (root).

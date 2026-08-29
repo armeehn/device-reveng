@@ -221,9 +221,21 @@ private fun VolumeControl(carService: CarService) {
         }
     }
 
+    // setMute is a non-oneway sendMuteState round-trip into the vendor gateway. One call per
+    // tap rather than a storm, but it was the last main-thread vendor call here — so it goes
+    // through the same conflated pipe. The value is captured before the hop: reading `muted`
+    // inside the coroutine would send whatever the state held by then, not what the tap chose.
+    val muteWrites = remember { Channel<Boolean>(Channel.CONFLATED) }
+    LaunchedEffect(Unit) {
+        for (state in muteWrites) {
+            withContext(Dispatchers.IO) { runCatching { carService.setMute(state) } }
+        }
+    }
+
     val toggleMute = withTapFeedback { // v2.5
-        muted = !muted
-        runCatching { carService.setMute(muted) }
+        val next = !muted
+        muted = next
+        muteWrites.trySend(next)
     }
 
     ControlRow(
@@ -249,17 +261,20 @@ private fun VolumeControl(carService: CarService) {
 @Composable
 private fun BrightnessControl(carService: CarService) {
     val context = LocalContext.current
-    var canWrite by remember { mutableStateOf(BrightnessController.canWrite(context)) }
+    // null = not resolved yet. canWrite is an AppOps binder call and currentPercent a
+    // Settings.System query, so neither runs in the composable body; until the effect below
+    // lands the row reads plainly as "Brightness" rather than claiming a missing permission.
+    var canWrite by remember { mutableStateOf<Boolean?>(null) }
     // null = the current level is unreadable. The slider then has no honest position, so it is
     // disabled instead of parked at a made-up mid-travel value.
-    var brightness by remember {
-        mutableStateOf(BrightnessController.currentPercent(context)?.toFloat())
-    }
+    var brightness by remember { mutableStateOf<Float?>(null) }
 
     // Refresh permission + current level when the shade (re)opens.
     LaunchedEffect(Unit) {
-        canWrite = BrightnessController.canWrite(context)
-        brightness = BrightnessController.currentPercent(context)?.toFloat()
+        val granted = withContext(Dispatchers.IO) { BrightnessController.canWrite(context) }
+        val percent = withContext(Dispatchers.IO) { BrightnessController.currentPercent(context) }
+        canWrite = granted
+        brightness = percent?.toFloat()
     }
 
     // Conflated single-consumer pipe: a fast drag emits many values, keep only the latest and
@@ -277,13 +292,13 @@ private fun BrightnessControl(carService: CarService) {
     }
 
     val level = brightness
-    val adjustable = canWrite && level != null
+    val adjustable = canWrite == true && level != null
 
     ControlRow(
         icon = Icons.Filled.BrightnessMedium,
         title = when {
-            !canWrite -> "Brightness (needs permission)"
-            level == null -> "Brightness (unavailable)"
+            canWrite == false -> "Brightness (needs permission)"
+            canWrite == true && level == null -> "Brightness (unavailable)"
             else -> "Brightness"
         },
     ) {

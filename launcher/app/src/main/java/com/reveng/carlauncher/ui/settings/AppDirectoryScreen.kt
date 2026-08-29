@@ -52,10 +52,12 @@ import kotlinx.coroutines.withContext
 @Composable
 fun AppDirectoryScreen(
     onBack: () -> Unit,
+    // The launcher-owned instance. Null falls back to a local one, which keeps previews working.
+    directoryStore: AppDirectoryStore? = null,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val store = remember { AppDirectoryStore(context.applicationContext, scope) }
+    val store = directoryStore ?: remember { AppDirectoryStore(context.applicationContext, scope) }
     val placements by store.placements.collectAsStateSafe(initial = emptyMap())
 
     var apps by remember { mutableStateOf<List<AppInfo>>(emptyList()) }

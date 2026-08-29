@@ -28,6 +28,8 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -302,7 +304,7 @@ fun SliderSetting(
     format: (Int) -> String = { it.toString() },
 ) {
     // Local echo so the thumb tracks the finger smoothly; committed on release.
-    var live by remember(value) { mutableStateOf(value.toFloat()) }
+    val echo = rememberSliderEcho(value.toFloat())
     val steps = if (step > 0 && range.last > range.first) {
         ((range.last - range.first) / step - 1).coerceAtLeast(0)
     } else 0
@@ -323,12 +325,12 @@ fun SliderSetting(
                     )
                 }
             }
-            ValueBadge(format(live.roundToInt()))
+            ValueBadge(format(echo.position.roundToInt()))
         }
         Slider(
-            value = live,
-            onValueChange = { live = it },
-            onValueChangeFinished = { onChange(live.roundToInt()) },
+            value = echo.position,
+            onValueChange = echo::drag,
+            onValueChangeFinished = { onChange(echo.release().roundToInt()) },
             valueRange = range.first.toFloat()..range.last.toFloat(),
             steps = steps,
             enabled = enabled,
@@ -456,14 +458,14 @@ fun VolumeSlider(
     enabled: Boolean = true,
     format: (Int) -> String = { it.toString() },
 ) {
-    var live by remember(value) { mutableStateOf(value.toFloat()) }
+    val echo = rememberSliderEcho(value.toFloat())
     val steps = if (step > 0 && range.last > range.first) {
         ((range.last - range.first) / step - 1).coerceAtLeast(0)
     } else 0
 
     fun commit(v: Int) {
         val c = v.coerceIn(range.first, range.last)
-        live = c.toFloat()
+        echo.set(c.toFloat())
         onChange(c)
     }
 
@@ -491,15 +493,15 @@ fun VolumeSlider(
                 else MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.weight(1f),
             )
-            ValueBadge(format(live.roundToInt()))
+            ValueBadge(format(echo.position.roundToInt()))
         }
         Spacer(Modifier.size(6.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            StepButton("−", enabled) { commit(live.roundToInt() - step) }
+            StepButton("−", enabled) { commit(echo.position.roundToInt() - step) }
             Slider(
-                value = live,
-                onValueChange = { live = it },
-                onValueChangeFinished = { onChange(live.roundToInt()) },
+                value = echo.position,
+                onValueChange = echo::drag,
+                onValueChangeFinished = { onChange(echo.release().roundToInt()) },
                 valueRange = range.first.toFloat()..range.last.toFloat(),
                 steps = steps,
                 enabled = enabled,
@@ -510,7 +512,7 @@ fun VolumeSlider(
                     inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant,
                 ),
             )
-            StepButton("+", enabled) { commit(live.roundToInt() + step) }
+            StepButton("+", enabled) { commit(echo.position.roundToInt() + step) }
         }
     }
 }
@@ -580,4 +582,60 @@ fun ValueBadge(text: String) {
             color = MaterialTheme.colorScheme.onSurface,
         )
     }
+}
+
+/**
+ * Local echo for a slider whose external value is republished underneath it.
+ *
+ * [com.reveng.carlauncher.data.CarSettingsController] refreshes its SysVar snapshot from a
+ * ContentObserver, which fires on ANY provider change — a write from the vendor UI or a CAN
+ * event, not only ours. Keying the echo on the published value (`remember(value)`) therefore
+ * reset the thumb while the driver's finger was still on it. Here an external value is adopted
+ * only between drags; during one the finger owns the thumb, and the update is simply dropped
+ * because the commit that follows supersedes it.
+ */
+@Stable
+internal class SliderEcho(initial: Float) {
+
+    private var dragging = false
+
+    /** Where the thumb sits right now. */
+    var position by mutableStateOf(initial)
+        private set
+
+    /** An external republish of the underlying value. Ignored mid-drag. */
+    fun sync(value: Float) {
+        if (dragging) {
+            return
+        }
+        position = value
+    }
+
+    /** The finger moved the thumb. */
+    fun drag(value: Float) {
+        dragging = true
+        position = value
+    }
+
+    /** The finger lifted: external updates resume, and the value to commit is returned. */
+    fun release(): Float {
+        dragging = false
+        return position
+    }
+
+    /** A discrete jump the UI made itself (a stepper button), not a drag. */
+    fun set(value: Float) {
+        position = value
+    }
+}
+
+/**
+ * [SliderEcho] wired to a republished [value]. The effect is keyed on the value alone, so the
+ * end of a drag never re-adopts the pre-drag value that is still published at that moment.
+ */
+@Composable
+internal fun rememberSliderEcho(value: Float): SliderEcho {
+    val echo = remember { SliderEcho(value) }
+    LaunchedEffect(value) { echo.sync(value) }
+    return echo
 }
