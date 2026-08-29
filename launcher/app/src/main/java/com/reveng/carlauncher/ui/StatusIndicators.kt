@@ -58,6 +58,7 @@ import com.reveng.carlauncher.carlib.CarService
 import com.reveng.carlauncher.data.BrightnessController
 import com.reveng.carlauncher.ui.theme.carShape
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -510,16 +511,28 @@ private fun rememberVolumeStatus(carService: CarService?, refreshKey: Int): Volu
 @Composable
 private fun rememberBrightnessPercent(context: Context, refreshKey: Int): Int? {
     // null = nothing readable behind the chip, so the chip disappears rather than freezing.
-    var percent by remember { mutableStateOf(BrightnessController.currentPercent(context)) }
+    // It covers the first frames too, before the read below has landed.
+    var percent by remember { mutableStateOf<Int?>(null) }
+
+    // currentPercent is a Settings.System query. It used to run in the composable body — on the
+    // strip the 1 Hz clock recomposes — and again on the observer's main-looper callback. Both
+    // now only *ask* for a read; the query itself runs on Dispatchers.IO. Conflated because a
+    // brightness drag fires the observer in bursts and only the last reading matters.
+    val reads = remember { Channel<Unit>(Channel.CONFLATED) }
+    LaunchedEffect(Unit) {
+        for (request in reads) {
+            percent = withContext(Dispatchers.IO) { BrightnessController.currentPercent(context) }
+        }
+    }
 
     LaunchedEffect(refreshKey) {
-        percent = BrightnessController.currentPercent(context)
+        reads.trySend(Unit)
     }
 
     DisposableEffect(Unit) {
         val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
             override fun onChange(selfChange: Boolean) {
-                percent = BrightnessController.currentPercent(context)
+                reads.trySend(Unit)
             }
         }
         runCatching {

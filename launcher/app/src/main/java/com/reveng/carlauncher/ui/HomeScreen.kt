@@ -100,6 +100,11 @@ fun HomeScreen(
     onOpenNotifications: (() -> Unit)? = null, // v2.7
     onOpenContinueWatching: (() -> Unit)? = null, // v2.7
     miniScreen: MiniScreenController? = null, // v4.1 video mini screen (null keeps previews)
+    // The launcher-owned DataStore-backed stores, passed straight through to the drawer. Null
+    // falls back to local instances (previews); see AppDrawer for why duplicates cost reads.
+    favoritesStore: com.reveng.carlauncher.data.FavoritesStore? = null,
+    appOrderStore: com.reveng.carlauncher.data.AppOrderStore? = null,
+    appDirectoryStore: AppDirectoryStore? = null,
 ) {
     val reverse by carEvents.reverse.collectAsStateSafe(initial = false)
     val media by nowPlaying.state.collectAsStateSafe(initial = null)
@@ -118,8 +123,8 @@ fun HomeScreen(
     // hide it entirely. Absent override falls back to AppInfo.isSystem.
     val appContext = LocalContext.current.applicationContext
     val dirScope = rememberCoroutineScope()
-    val appDirectoryStore = remember { AppDirectoryStore(appContext, dirScope) }
-    val placements by appDirectoryStore.placements.collectAsStateSafe(initial = emptyMap())
+    val directoryStore = appDirectoryStore ?: remember { AppDirectoryStore(appContext, dirScope) }
+    val placements by directoryStore.placements.collectAsStateSafe(initial = emptyMap())
     // One pass: resolve each app's effective placement once and group. HIDDEN apps land in neither
     // list, so they simply fall out.
     val byPlacement = remember(apps, placements) { apps.groupBy { it.effectivePlacement(placements) } }
@@ -324,6 +329,8 @@ fun HomeScreen(
                             .weight(1f), // v0.7: take remaining height below NavCard
                         columns = settings.gridColumns, // v0.6: grid density from Settings
                         gridFocus = focus.grid, // v0.8: drive/highlight tile focus
+                        favoritesStore = favoritesStore,
+                        appOrderStore = appOrderStore,
                     )
                 }
             }

@@ -79,8 +79,8 @@ import kotlinx.coroutines.withContext
  *      ([HomeRole.requestSetDefaultHome]); shows a live "you're all set" state once we're default.
  *
  * Gated by SettingsStore.firstRun and shown exactly once; [onFinish] marks it complete (called
- * from both Finish and Skip). Self-contained: it loads apps and owns its own FavoritesStore so
- * MainActivity only has to hand it the [ThemeStore] + [AppRepository].
+ * from both Finish and Skip). It loads apps itself; the [FavoritesStore] is handed in so the
+ * screen writes through the launcher's instance rather than opening a second one.
  */
 @Composable
 fun OnboardingScreen(
@@ -88,6 +88,8 @@ fun OnboardingScreen(
     appRepository: AppRepository,
     night: Boolean,
     onFinish: () -> Unit,
+    // Null falls back to a local instance, which keeps previews working.
+    favoritesStore: FavoritesStore? = null,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -95,8 +97,8 @@ fun OnboardingScreen(
     val themes by themeStore.allThemes.collectAsStateSafe(initial = emptyList())
     val activeTheme by themeStore.activeTheme.collectAsStateSafe(initial = com.reveng.carlauncher.ui.theme.BuiltInThemes.DEFAULT)
 
-    val favoritesStore = remember { FavoritesStore(context.applicationContext, scope) }
-    val favorites by favoritesStore.favorites.collectAsStateSafe(initial = emptySet())
+    val favStore = favoritesStore ?: remember { FavoritesStore(context.applicationContext, scope) }
+    val favorites by favStore.favorites.collectAsStateSafe(initial = emptySet())
 
     var apps by remember { mutableStateOf<List<AppInfo>>(emptyList()) }
     LaunchedEffect(Unit) {
@@ -168,7 +170,7 @@ fun OnboardingScreen(
                     1 -> FavoritesStep(
                         apps = apps,
                         favorites = favorites,
-                        onToggle = { app -> scope.launch { favoritesStore.toggle(app.packageName) } },
+                        onToggle = { app -> scope.launch { favStore.toggle(app.packageName) } },
                     )
                     2 -> PermissionsStep() // v0.4.2
                     else -> DefaultHomeStep(
