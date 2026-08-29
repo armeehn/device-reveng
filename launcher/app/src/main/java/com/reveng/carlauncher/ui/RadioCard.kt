@@ -125,7 +125,7 @@ fun RadioCard(
             // over-filled it — header row + 40sp freq + presets + a row of borderless
             // IconButtons summed past the slot, so the transport row rendered squeezed and
             // near-invisible. This layout budgets the height explicitly: one compact
-            // band+freq+star row, the preset strip, and a full-width 44dp transport row of
+            // band+freq+star row, the preset strip, and a full-width transport row of
             // *contained* tonal buttons that can't be crowded out.
             Column(
                 modifier = Modifier.fillMaxSize().padding(16.dp),
@@ -154,7 +154,7 @@ fun RadioCard(
                                     presetsStore.add(RadioPreset(band = info.band, freq = info.freq))
                                 }
                             },
-                            modifier = Modifier.size(40.dp),
+                            modifier = Modifier.size(PRESET_STAR_DP.dp),
                         ) {
                             Icon(
                                 Icons.Filled.StarBorder,
@@ -258,7 +258,7 @@ private fun TransportButton(
         contentColor = if (emphasized) MaterialTheme.colorScheme.onPrimary
         else MaterialTheme.colorScheme.onSecondaryContainer,
         shape = carShape(12.dp),
-        modifier = modifier.height(44.dp).clickable(onClick = onClick),
+        modifier = modifier.height(TRANSPORT_HEIGHT_DP.dp).clickable(onClick = onClick),
     ) {
         Box(contentAlignment = Alignment.Center) {
             Icon(
@@ -364,3 +364,11 @@ private data class RadioInfo(
         val UNKNOWN = RadioInfo(available = false)
     }
 }
+
+/**
+ * Deviation from §1.2's 76 dp: the card lives in a fixed 180 dp home slot, so the
+ * transports get the tallest row that still fits under the freq row and preset strip,
+ * and the star gets the 48 dp Material minimum inside the freq row.
+ */
+private const val TRANSPORT_HEIGHT_DP = 56
+private const val PRESET_STAR_DP = 48

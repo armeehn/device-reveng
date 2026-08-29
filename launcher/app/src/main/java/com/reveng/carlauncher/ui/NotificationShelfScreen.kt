@@ -34,6 +34,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.reveng.carlauncher.notif.ShelfNotification
 import com.reveng.carlauncher.ui.theme.carShape
+import com.reveng.carlauncher.ui.theme.carCard
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -154,6 +155,7 @@ private fun NotificationRow(item: ShelfNotification, onOpen: () -> Unit, onDismi
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .carCard()
             .clip(carShape(CARD_CORNER_DP.dp))
             .background(MaterialTheme.colorScheme.surface)
             .clickable(onClick = open)
@@ -219,6 +221,7 @@ private fun AppFilterRow(label: String, shown: Boolean, onChange: (Boolean) -> U
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .carCard()
             .clip(carShape(12.dp))
             .background(MaterialTheme.colorScheme.surface)
             .clickable { onChange(!shown) }

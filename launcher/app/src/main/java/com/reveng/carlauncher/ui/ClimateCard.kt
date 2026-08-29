@@ -1,6 +1,7 @@
 package com.reveng.carlauncher.ui
 
 import com.reveng.carlauncher.ui.theme.carCard
+import com.reveng.carlauncher.ui.theme.DISABLED_ALPHA
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -93,7 +94,7 @@ fun ClimateReadout(
                     if (state.dualOn) {
                         Text(
                             text = "Dual ${state.rightTempLabel()}",
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
@@ -132,10 +133,14 @@ private fun ClimateGlyph(
     label: String,
     on: Boolean,
 ) {
-    val tint = if (on) MaterialTheme.colorScheme.primary else Color.Gray
+    val tint = if (on) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = DISABLED_ALPHA)
+    }
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Icon(imageVector = icon, contentDescription = label, tint = tint, modifier = Modifier.size(28.dp))
-        Text(text = label, fontSize = 12.sp, color = tint)
+        Text(text = label, style = MaterialTheme.typography.labelMedium, color = tint)
     }
 }
 
