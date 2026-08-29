@@ -420,12 +420,21 @@ class CarEvents(private val appContext: Context) {
     private val speedSource = GpsSpeedSource(appContext) { kmh -> updateSpeed(kmh) }
 
     /**
+     * v0.4.3.8 — one arrival slot both protected-event paths pass through, so a frame that really
+     * is delivered twice is applied once. See [ProtectedEventDedupe] for why the source flag it
+     * replaces could not do this.
+     */
+    private val protectedDedupe = ProtectedEventDedupe()
+
+    /**
      * v2.9 — root capture of the `signature`-guarded broadcasts. Owned here for the same reason
      * [speedSource] is: consumers keep one front door and never learn which source filled a flow.
      */
     private val rootBridge = RootBroadcastBridge(appContext) { action, ints ->
         _rootCapture.value = true
-        handleProtected(action, ints)
+        if (protectedDedupe.accept(action, ints, System.currentTimeMillis())) {
+            handleProtected(action, ints)
+        }
     }
 
     // Copy-on-write: a listener may add/remove itself from inside its own callback while we
@@ -438,7 +447,32 @@ class CarEvents(private val appContext: Context) {
     fun removeListener(l: Listener) { listeners.remove(l) }
 
     private val receiver = object : BroadcastReceiver() {
+        /**
+         * v0.4.3.8 — the one place an exception here must not escape.
+         *
+         * An exception out of `onReceive` is fatal: ActivityManager kills the process, and for the
+         * HOME app that is a black screen in a moving car. The gateway attaches vendor Parcelables
+         * (e.g. `com.szchoiceway.canbus.CarAirState`) to `CAN_CAR_TIRP_INFO` / `MCU_CAR_CAN_INFO`,
+         * and those classes are deliberately not bundled into this APK, so the lazy
+         * `Bundle.unparcel()` that reading the extras forces throws `BadParcelableException`
+         * (ClassNotFoundException underneath). Those frames arrive continuously with the engine
+         * running, so an unguarded throw is a crash loop, not a one-off.
+         *
+         * [Intent.setExtrasClassLoader] first, so any Parcelable we *do* ship still resolves; the
+         * guard covers the ones we do not. Every drop is logged with the action that caused it —
+         * this must narrow a bug down, not hide one.
+         */
         override fun onReceive(context: Context?, intent: Intent?) {
+            runCatching {
+                intent?.setExtrasClassLoader(javaClass.classLoader)
+                dispatch(intent)
+            }.onFailure {
+                Log.w(TAG, "dropped ${intent?.action}: ${it.javaClass.simpleName}: ${it.message}")
+            }
+        }
+
+        /** The real handler; anything it throws is caught and logged by [onReceive]. */
+        private fun dispatch(intent: Intent?) {
             // v0.4.3: capture any sniffed vehicle-data action raw, before the typed handlers.
             intent?.action?.let { a ->
                 if (a in VEHICLE_SNIFF_ACTIONS) {
@@ -482,14 +516,19 @@ class CarEvents(private val appContext: Context) {
                 }
 
                 // v2.9: the protected set. Still filtered for here, because a privileged/system
-                // install DOES receive them directly and must not need the root helper. When root
-                // capture is live we drop these instead: on such an install both paths deliver the
-                // same event, and a duplicate SwcKey is a second key press as far as the focus ring
-                // is concerned. handleProtected parses STEER_WHEEL_INFOR into the same SwcKey the
-                // v3.0 inline handler did, so SWC input is unchanged; root-capture dedup is added.
+                // install DOES receive them directly and must not need the root helper. On an
+                // install where both paths deliver, the same event arrives twice and a duplicate
+                // SwcKey is a second key press as far as the focus ring is concerned.
+                // v0.4.3.8: that duplicate is now rejected on the *event*, not on the source flag —
+                // reading _rootCapture here was a check-then-act across two threads (the flag is
+                // published from the root reader thread while this test runs on the main thread),
+                // so a frame arriving in that window was handled twice anyway.
                 ACTION_BACKCAR_START, ACTION_BACKCAR_END, STEER_WHEEL_INFOR,
                 ACTION_DAY_BACKLIGHT_CHANGED, ACTION_NIGHT_BACKLIGHT_CHANGED -> {
-                    if (!_rootCapture.value) handleProtected(action, swcIntExtras(intent))
+                    val ints = swcIntExtras(intent)
+                    if (protectedDedupe.accept(action, ints, System.currentTimeMillis())) {
+                        handleProtected(action, ints)
+                    }
                 }
 
                 // v0.7: raw parking-radar frame → best-effort decode (offsets GUESSED).

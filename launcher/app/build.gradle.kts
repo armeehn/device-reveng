@@ -13,9 +13,9 @@ android {
         applicationId = "com.reveng.carlauncher"
         minSdk = 33
         targetSdk = 33
-        versionCode = 67
+        versionCode = 68
         // 1.0.0 is reserved for the polished public release. versionCode keeps climbing normally.
-        versionName = "0.4.3.7"
+        versionName = "0.4.3.8"
 
         // Single head-unit target: arm64 landscape @240dpi, 1920x720.
         ndk { abiFilters += "arm64-v8a" }

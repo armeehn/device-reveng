@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.reveng.carlauncher.data.CarSettingsController
+import com.reveng.carlauncher.data.ProtectedSettingKeys // v0.4.3.8
 import com.reveng.carlauncher.ui.keyboard.CarTextField // v2.7
 import com.reveng.carlauncher.ui.keyboard.CommitMode // v2.7
 
@@ -83,7 +84,16 @@ fun AdvancedSettingsScreen(
                     )
                 } else {
                     rows.forEach { (k, v) ->
-                        RawRow(key = k, value = v, onClick = { editing = k to v })
+                        // v0.4.3.8: a handful of keys can leave the unit unusable — see
+                        // ProtectedSettingKeys. Those rows still show their live value, but they
+                        // are read-only and say why.
+                        val lockedReason = ProtectedSettingKeys.reasonFor(k)
+                        RawRow(
+                            key = k,
+                            value = v,
+                            lockedReason = lockedReason,
+                            onClick = { if (lockedReason == null) editing = k to v },
+                        )
                     }
                 }
             }
@@ -94,18 +104,23 @@ fun AdvancedSettingsScreen(
         RawEditDialog(
             key = key,
             initial = value,
-            onSave = { controller.setString(key, it); editing = null },
+            // v0.4.3.8: the row is not clickable when protected, but the *write* is the thing that
+            // must never happen, so it is refused here too rather than only in the UI above.
+            onSave = {
+                if (!ProtectedSettingKeys.isProtected(key)) controller.setString(key, it)
+                editing = null
+            },
             onDismiss = { editing = null },
         )
     }
 }
 
 @Composable
-private fun RawRow(key: String, value: String, onClick: () -> Unit) {
+private fun RawRow(key: String, value: String, lockedReason: String?, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .clickable(enabled = lockedReason == null, onClick = onClick)
             .padding(vertical = 10.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
@@ -116,6 +131,13 @@ private fun RawRow(key: String, value: String, onClick: () -> Unit) {
                 color = MaterialTheme.colorScheme.onSurface,
                 fontWeight = FontWeight.Medium,
             )
+            if (lockedReason != null) {
+                Text(
+                    text = "Read-only — $lockedReason",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
         }
         Spacer(Modifier.size(12.dp))
         Text(

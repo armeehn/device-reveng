@@ -36,9 +36,17 @@ class ShelfListenerService : NotificationListenerService() {
         NotificationRepository.detach()
     }
 
+    /**
+     * v0.4.3.8: guarded like the [onListenerConnected] scan is. This reads the extras Bundle of
+     * *every* notification on the device, and a Bundle carrying a Parcelable whose class this APK
+     * does not hold throws on unparcel. An exception out of this callback kills the launcher
+     * process, which for the HOME app is a black screen in a moving car — so one malformed
+     * notification from any app must cost us that notification, not the launcher.
+     */
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         sbn ?: return
-        handle(sbn)
+        runCatching { handle(sbn) }
+            .onFailure { Log.w(TAG, "dropped notification from ${sbn.packageName}: ${it.message}") }
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification?) {
