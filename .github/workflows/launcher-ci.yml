@@ -157,6 +157,12 @@ jobs:
           arch: x86_64
           avd-name: ${{ env.AVD_NAME }}
           force-avd-creation: true
+          # The default userdata partition is 7.2 GB, which does not fit on a
+          # runner that is also holding the Gradle caches — the emulator dies
+          # with "Not enough space to create userdata partition". Nothing here
+          # stores anything; 4 GB is already generous. Kept identical in both
+          # jobs so the two are measuring and testing the same machine.
+          disk-size: 4096M
           # Same as the action's defaults; spelled out because overriding this
           # input replaces them wholesale rather than adding to them.
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
