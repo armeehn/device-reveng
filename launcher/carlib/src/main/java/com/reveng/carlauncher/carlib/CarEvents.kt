@@ -80,6 +80,31 @@ class CarEvents(private val appContext: Context) {
         const val MCU_KEY_INFOR_ACTION = "com.choiceway.eventcenter.EventUtils.MCU_KEY_INFOR"
         const val EXTRA_MCU_KEY_VALUE = "EventUtils.MCU_KEY_VALUE"
 
+        // ---- v0.4.9: vendor "open the app drawer" broadcast (CUSTOMERUI_NOTES §6) ----
+        // The gateway broadcasts this (unprotected) to make the launcher open its in-process
+        // drawer; customerui registers exactly this action. Only the const NAME and the extra
+        // are quoted in the decompile, so the fully-qualified action string follows the
+        // EventUtils.* convention and is GUESSED at that prefix (same status as CAN_BASIC_EVT).
+        const val ZXW_ACTION_LAUNCHER_ALLAPPS_START_EVT =
+            "com.choiceway.eventcenter.EventUtils.ZXW_ACTION_LAUNCHER_ALLAPPS_START_EVT"
+        const val EXTRA_LAUNCHER = "LAUNCHER_EXTRA"
+        const val LAUNCHER_EXTRA_APPLIST = "AppList"
+
+        // ---- v0.4.9: vendor BT module status (CUSTOMERUI_NOTES §3e/§4) ------
+        // The vendor launcher's BT chip rides `com.szchoiceway.btsuite.HBCP_EVT_*` broadcasts
+        // (power / connected-device / HSHF status — unprotected). The decompile names only the
+        // prefix and those three categories, so the concrete action names below are GUESSED
+        // candidates; dispatch matches on the prefix, so a name confirmed on-device later is a
+        // one-line addition. A wrong guess is inert: no delivery, no state change.
+        const val HBCP_ACTION_PREFIX = "com.szchoiceway.btsuite.HBCP_EVT_"
+        val HBCP_CANDIDATE_ACTIONS = arrayOf(
+            HBCP_ACTION_PREFIX + "POWER_STATUS",
+            HBCP_ACTION_PREFIX + "POWER_ON_OFF",
+            HBCP_ACTION_PREFIX + "CONNECT_STATUS",
+            HBCP_ACTION_PREFIX + "CONNECTED_DEVICE",
+            HBCP_ACTION_PREFIX + "HSHF_STATUS",
+        )
+
         // ---- Speed (CAR_API §1.3 note) --------------------------------------
         /**
          * NOTE: this is a *show/hide UI toggle only* — it carries NO speed value.
@@ -234,10 +259,41 @@ class CarEvents(private val appContext: Context) {
             current == Motion.UNKNOWN -> Motion.MOVING
             else -> current
         }
+
+        /**
+         * v0.4.9 — the int-map a SWC event is DEDUPED on, as opposed to dispatched with.
+         *
+         * [ProtectedEventDedupe.accept] compares the whole map, and the same physical press can
+         * now arrive on up to three carriers: protected `STEER_WHEEL_INFOR` (direct or via the
+         * root helper, both carrying VOLTAGE) and the unprotected fallbacks (which carry no
+         * voltage at all). Deduping on the full map would therefore never match across carriers,
+         * so the dedupe key is the stable subset every carrier can produce: key index + press
+         * state. Voltage still reaches [handleProtected] untouched.
+         */
+        internal fun swcDedupeInts(action: String, ints: Map<String, Int>): Map<String, Int> {
+            if (action != STEER_WHEEL_INFOR) {
+                return ints
+            }
+            return ints.filterKeys { it == EXTRA_SWC_LPARAM || it == EXTRA_SWC_WPARAM }
+        }
     }
 
     /** A steering-wheel key event decoded from [STEER_WHEEL_INFOR]. */
     data class SwcKey(val keyIndex: Int, val down: Boolean, val voltage: Int)
+
+    /**
+     * v0.4.9 — one `ACTION_ACC_SLEEP_STATUS_EVT` arrival (CAR_API §1.3).
+     *
+     * ⚠ Decode UNCONFIRMED: the extra key (`ACC_Status`) is documented, but which value means
+     * sleep vs wake is not — the spec says only "int (sleep/wake)". So this exposes presence
+     * plus the raw value and deliberately does NOT claim a boolean; a consumer that needs the
+     * direction must confirm the encoding on-device first.
+     */
+    data class AccSleep(
+        /** Raw `ACC_Status` int, or null when the extra was absent. */
+        val rawStatus: Int?,
+        val atMs: Long,
+    )
 
     /**
      * v2.5 — stationary / in motion / unreadable, derived from [speedKmh].
@@ -287,9 +343,33 @@ class CarEvents(private val appContext: Context) {
      */
     val illuminationSeen: StateFlow<Boolean> = _illuminationSeen.asStateFlow()
 
+    private val _accSleep = MutableStateFlow<AccSleep?>(null)
+    /**
+     * v0.4.9 — latest `ACTION_ACC_SLEEP_STATUS_EVT`, or null until one arrives. The action was
+     * registered since v2.5 but silently dropped by dispatch. See [AccSleep] for why this stays
+     * a raw presence signal rather than a decoded sleep/wake boolean.
+     */
+    val accSleep: StateFlow<AccSleep?> = _accSleep.asStateFlow()
+
     private val _swcKeys = MutableSharedFlow<SwcKey>(extraBufferCapacity = 16)
     /** Discrete steering-wheel key presses/releases. */
     val swcKeys: SharedFlow<SwcKey> = _swcKeys.asSharedFlow()
+
+    private val _openAppList = MutableSharedFlow<Unit>(extraBufferCapacity = 4)
+    /**
+     * v0.4.9 — fires when the vendor gateway asks the launcher to open its app drawer
+     * ([ZXW_ACTION_LAUNCHER_ALLAPPS_START_EVT], CUSTOMERUI_NOTES §6). The UI decides what
+     * "the drawer" is; this only reports the request.
+     */
+    val openAppList: SharedFlow<Unit> = _openAppList.asSharedFlow()
+
+    private val _vendorBt = MutableStateFlow(VendorBtState())
+    /**
+     * v0.4.9 — Bluetooth status per the vendor bt module's `HBCP_EVT_*` broadcasts
+     * (CUSTOMERUI_NOTES §3e). Starts as the all-null [VendorBtState]; consumers must gate on
+     * [VendorBtState.lastEventMs] so absence of events changes nothing.
+     */
+    val vendorBt: StateFlow<VendorBtState> = _vendorBt.asStateFlow()
 
     private val _climate = MutableStateFlow<ClimateState?>(null)
     /**
@@ -432,7 +512,9 @@ class CarEvents(private val appContext: Context) {
      */
     private val rootBridge = RootBroadcastBridge(appContext) { action, ints ->
         _rootCapture.value = true
-        if (protectedDedupe.accept(action, ints, System.currentTimeMillis())) {
+        // v0.4.9: dedupe on the stable key subset (see swcDedupeInts) so a copy arriving on an
+        // unprotected fallback carrier — which has no voltage extra — still matches this one.
+        if (protectedDedupe.accept(action, swcDedupeInts(action, ints), System.currentTimeMillis())) {
             handleProtected(action, ints)
         }
     }
@@ -479,6 +561,13 @@ class CarEvents(private val appContext: Context) {
                     _vehicleSniff.value = _vehicleSniff.value +
                         (a to CanFrame.from(intent, System.currentTimeMillis()))
                 }
+                // v0.4.9: vendor BT module status. Prefix match, because the concrete
+                // HBCP_EVT_* names are guessed candidates (see HBCP_CANDIDATE_ACTIONS).
+                if (a.startsWith(HBCP_ACTION_PREFIX)) {
+                    _vendorBt.value = VendorBtDecode.apply(
+                        _vendorBt.value, a, rawExtras(intent), System.currentTimeMillis(),
+                    )
+                }
             }
             when (val action = intent?.action) {
                 MCU_MSG_BACKCAR_START -> updateReverse(true)
@@ -488,6 +577,27 @@ class CarEvents(private val appContext: Context) {
                     val on = intent.getIntExtra(EXTRA_ACC_STATUS, 1) == 1
                     _accOn.value = on
                     listeners.forEach { it.onAcc(on) }
+                }
+
+                // v0.4.9: registered since v2.5 but silently dropped by the else branch.
+                // Exposed as raw presence only — the value encoding is UNCONFIRMED (AccSleep).
+                ACTION_ACC_SLEEP_STATUS_EVT -> {
+                    val raw = intent.getIntExtra(EXTRA_ACC_STATUS, VALUE_UNKNOWN)
+                    _accSleep.value = AccSleep(
+                        rawStatus = raw.takeIf { it != VALUE_UNKNOWN },
+                        atMs = System.currentTimeMillis(),
+                    )
+                }
+
+                // v0.4.9: the gateway's "open the app drawer" request (CUSTOMERUI_NOTES §6).
+                // The documented payload is LAUNCHER_EXTRA="AppList"; a missing extra still
+                // opens (the action itself is the request), but an extra naming something
+                // OTHER than the app list is a request we don't understand — ignore it.
+                ZXW_ACTION_LAUNCHER_ALLAPPS_START_EVT -> {
+                    val what = intent.getStringExtra(EXTRA_LAUNCHER)
+                    if (what == null || what == LAUNCHER_EXTRA_APPLIST) {
+                        _openAppList.tryEmit(Unit)
+                    }
                 }
 
                 // v3.0: outside temperature. Prefer the car's own formatted string over the
@@ -526,8 +636,38 @@ class CarEvents(private val appContext: Context) {
                 ACTION_BACKCAR_START, ACTION_BACKCAR_END, STEER_WHEEL_INFOR,
                 ACTION_DAY_BACKLIGHT_CHANGED, ACTION_NIGHT_BACKLIGHT_CHANGED -> {
                     val ints = swcIntExtras(intent)
-                    if (protectedDedupe.accept(action, ints, System.currentTimeMillis())) {
+                    // v0.4.9: deduped on the stable subset so the unprotected fallback
+                    // carriers (no voltage extra) match too — see swcDedupeInts.
+                    val key = swcDedupeInts(action, ints)
+                    if (protectedDedupe.accept(action, key, System.currentTimeMillis())) {
                         handleProtected(action, ints)
+                    }
+                }
+
+                // v0.4.9: the UNPROTECTED steering-wheel fallbacks (CAR_API §4 paths 2+3) —
+                // registered since v0.8 but dropped by the else branch, so a non-root install
+                // had zero wheel control. Decoded conservatively by SwcFallback, normalised to
+                // the canonical STEER_WHEEL_INFOR form, and pushed through the SAME dedupe:
+                // on a rooted unit the protected capture delivers the same press, and exactly
+                // one of the co-arriving copies may reach handleProtected.
+                ACTION_HOST_MCU_BUTTON_KEY -> {
+                    val edge = SwcFallback.hostKey(
+                        intExtra(intent, EXTRA_HOST_KEY),
+                        intExtra(intent, EXTRA_HOST_STATUS_KEY),
+                    )
+                    if (edge != null) {
+                        applyFallbackEdge(edge)
+                    }
+                }
+
+                MCU_KEY_INFOR_ACTION -> {
+                    // This path carries NO press state (CAR_API §1.3), so one broadcast is one
+                    // complete tap: synthesise the down and up edges back to back. KeyPump
+                    // treats that as a normal short press on every key class.
+                    val index = SwcFallback.mcuKey(intExtra(intent, EXTRA_MCU_KEY_VALUE))
+                    if (index != null) {
+                        applyFallbackEdge(SwcFallback.Edge(index, down = true))
+                        applyFallbackEdge(SwcFallback.Edge(index, down = false))
                     }
                 }
 
@@ -595,6 +735,40 @@ class CarEvents(private val appContext: Context) {
                 listeners.forEach { it.onSwcKey(key) }
             }
         }
+    }
+
+    /**
+     * v0.4.9 — deliver one unprotected-fallback key edge through the protected pipeline: same
+     * canonical action, same dedupe, same [handleProtected], so the two sources cannot drift
+     * apart in how a press is applied (and a rooted unit's duplicate copy is dropped).
+     */
+    private fun applyFallbackEdge(edge: SwcFallback.Edge) {
+        val ints = SwcFallback.canonicalInts(edge)
+        if (protectedDedupe.accept(STEER_WHEEL_INFOR, ints, System.currentTimeMillis())) {
+            handleProtected(STEER_WHEEL_INFOR, ints)
+        }
+    }
+
+    /**
+     * v0.4.9 — an int extra whatever its carrier type. `HostKeyStatus` is documented as a BYTE
+     * (CAR_API §1.3), and `Intent.getIntExtra` returns the default for a Byte value, which
+     * would silently drop every event. Null when absent or non-numeric.
+     */
+    private fun intExtra(intent: Intent, key: String): Int? {
+        @Suppress("DEPRECATION")
+        val value = runCatching { intent.extras?.get(key) }.getOrNull()
+        return (value as? Number)?.toInt()
+    }
+
+    /** v0.4.9 — snapshot every extra untyped, for decoders that must not assume key names. */
+    private fun rawExtras(intent: Intent): Map<String, Any?> {
+        val bundle = intent.extras ?: return emptyMap()
+        val map = LinkedHashMap<String, Any?>()
+        for (key in bundle.keySet()) {
+            @Suppress("DEPRECATION")
+            map[key] = runCatching { bundle.get(key) }.getOrNull()
+        }
+        return map
     }
 
     /** v2.9 — the int extras [handleProtected] may want, read off a directly-received Intent. */
@@ -671,6 +845,8 @@ class CarEvents(private val appContext: Context) {
             addAction(CAR_AIR_STATE_ACTION)
             addAction(CAN_CAR_OUT_SIDE_TEMP_EVT) // v3.0
             addAction(ZXW_CAN_WHEEL_TRACK_EVT) // v3.0
+            addAction(ZXW_ACTION_LAUNCHER_ALLAPPS_START_EVT) // v0.4.9 drawer request
+            HBCP_CANDIDATE_ACTIONS.forEach { addAction(it) } // v0.4.9 vendor BT status
         }
         // Vendor gateway is a separate app -> this is not an app-internal broadcast,
         // so it must be exported on API 33+ (RECEIVER_EXPORTED).

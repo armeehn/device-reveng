@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.SignalWifi4Bar
 import androidx.compose.material.icons.filled.SignalWifiOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import com.reveng.carlauncher.ui.theme.DISABLED_ALPHA
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -54,7 +55,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import com.reveng.carlauncher.carlib.CarEvents // v0.4.9 vendor BT status
 import com.reveng.carlauncher.carlib.CarService
+import com.reveng.carlauncher.carlib.VendorBtState // v0.4.9
 import com.reveng.carlauncher.data.BrightnessController
 import com.reveng.carlauncher.ui.theme.carShape
 import kotlinx.coroutines.Dispatchers
@@ -117,12 +120,14 @@ fun StatusIndicators(
     modifier: Modifier = Modifier,
     refreshKey: Int = 0,
     onOpen: (() -> Unit)? = null,
+    // v0.4.9: vendor HBCP_EVT_* BT status (null keeps previews / older callers unchanged).
+    carEvents: CarEvents? = null,
 ) {
     val context = LocalContext.current.applicationContext
 
     StatusIndicatorsRow(
         wifi = rememberWifiStatus(context),
-        bt = rememberBluetoothStatus(context),
+        bt = rememberBluetoothStatus(context, carEvents),
         volume = rememberVolumeStatus(carService, refreshKey),
         brightnessPercent = rememberBrightnessPercent(context, refreshKey),
         modifier = modifier,
@@ -196,7 +201,8 @@ private fun WifiChip(wifi: WifiStatus) {
             if (wifi.validated) "" else " (no internet)"
     }
     val tint = when {
-        !wifi.enabled || !wifi.connected -> Color.Gray
+        !wifi.enabled || !wifi.connected ->
+            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = DISABLED_ALPHA)
         // Connected but unvalidated (captive portal / no internet): distinct, not alarming.
         !wifi.validated -> MaterialTheme.colorScheme.error
         else -> MaterialTheme.colorScheme.onSurfaceVariant
@@ -308,7 +314,11 @@ internal data class BtStatus(
 @Composable
 private fun BluetoothChip(bt: BtStatus) {
     val (icon, description, tint) = when {
-        !bt.on -> Triple(Icons.Filled.BluetoothDisabled, "Bluetooth off", Color.Gray)
+        !bt.on -> Triple(
+            Icons.Filled.BluetoothDisabled,
+            "Bluetooth off",
+            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = DISABLED_ALPHA),
+        )
         bt.connectedCount > 0 -> Triple(
             Icons.Filled.BluetoothConnected,
             "Bluetooth: ${bt.connectedCount} connected",
@@ -329,8 +339,36 @@ private fun BluetoothChip(bt: BtStatus) {
     )
 }
 
+/**
+ * v0.4.9 — how long after the last HBCP_EVT_* broadcast the vendor verdict is still trusted.
+ * The events are edge-triggered, so "arriving" can only mean "arrived recently"; past this,
+ * the chip falls back to the Android source, which is exactly the pre-v0.4.9 behaviour.
+ */
+private const val VENDOR_BT_FRESH_MS = 10 * 60_000L
+
+/**
+ * v0.4.9 — fold the vendor bt module's verdict into the Android-sourced [BtStatus].
+ *
+ * Only ever ADDITIVE, and only for the presence/connected booleans: the head unit's phone
+ * Bluetooth runs through the vendor `btsuite` module, which the Android `BluetoothManager` can
+ * be blind to — so a vendor "connected" with a silent Android stack is the case this exists
+ * for. The payload decode is UNCONFIRMED (see [VendorBtDecode]), so a vendor "disconnected"
+ * never overrides an Android-confirmed connection, and an absent/stale vendor state (the
+ * caller's freshness guard) changes nothing at all.
+ */
+internal fun applyVendorBt(android: BtStatus, vendor: VendorBtState): BtStatus {
+    var merged = android
+    if (vendor.powered == true && !merged.on) {
+        merged = merged.copy(present = true, on = true)
+    }
+    if (vendor.connected == true && merged.connectedCount == 0) {
+        merged = merged.copy(present = true, on = true, connectedCount = 1)
+    }
+    return merged
+}
+
 @Composable
-private fun rememberBluetoothStatus(context: Context): BtStatus {
+private fun rememberBluetoothStatus(context: Context, carEvents: CarEvents? = null): BtStatus {
     val adapter = remember { context.getSystemService(BluetoothManager::class.java)?.adapter }
 
     // getState/isEnabled need no permission on API 33; the *count* paths (profile probe,
@@ -397,7 +435,25 @@ private fun rememberBluetoothStatus(context: Context): BtStatus {
             onDispose { runCatching { context.unregisterReceiver(receiver) } }
         }
     }
-    return BtStatus(present = adapter != null, on = on, connectedCount = connected.size)
+
+    // v0.4.9: vendor HBCP_EVT_* verdict, used only while its events are actually arriving.
+    // The freshness latch opens on each event and times itself back shut, so a unit that
+    // never broadcasts (emulator, non-vendor build) never leaves the Android source.
+    val vendor by (carEvents?.vendorBt?.collectAsStateSafe(initial = VendorBtState())
+        ?: remember { mutableStateOf(VendorBtState()) })
+    var vendorFresh by remember { mutableStateOf(false) }
+    LaunchedEffect(vendor) {
+        if (vendor.lastEventMs == 0L) {
+            vendorFresh = false
+            return@LaunchedEffect
+        }
+        vendorFresh = true
+        delay(VENDOR_BT_FRESH_MS)
+        vendorFresh = false
+    }
+
+    val android = BtStatus(present = adapter != null, on = on, connectedCount = connected.size)
+    return if (vendorFresh) applyVendorBt(android, vendor) else android
 }
 
 // ---- Volume ----------------------------------------------------------------
@@ -425,7 +481,7 @@ private fun VolumeChip(volume: VolumeStatus) {
         StatusChip(
             icon = Icons.AutoMirrored.Filled.VolumeOff,
             description = "Muted",
-            tint = Color.Gray,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = DISABLED_ALPHA),
             tag = StatusIndicatorTags.VOLUME,
         )
     } else {

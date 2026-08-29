@@ -91,6 +91,12 @@ data class LauncherSettings(
     val nightStartHour: Int = DEFAULT_NIGHT_START_HOUR,
     /** Hour (0-23) the clock fallback calls day again. */
     val nightEndHour: Int = DEFAULT_NIGHT_END_HOUR,
+    /**
+     * v0.4.7.1 — the reverse overlay's parking-guide lines. Persisted: the toggle used to be
+     * composition-local state inside the overlay, so it forgot the driver's choice on every
+     * reversal. On by default, matching the overlay's previous default.
+     */
+    val reverseGuideLines: Boolean = true,
     /** v0.4.2 — speak the now-playing track aloud (TTS). Off by default. */
     val readNowPlaying: Boolean = false,
     /** v0.4.2 — speak newly-arrived shelf notifications aloud (TTS). Off by default. */
@@ -171,6 +177,7 @@ class SettingsStore(context: Context) {
                         ?: LauncherSettings.DEFAULT_NIGHT_START_HOUR,
                     nightEndHour = prefs[NIGHT_END_KEY]
                         ?: LauncherSettings.DEFAULT_NIGHT_END_HOUR,
+                    reverseGuideLines = prefs[REVERSE_GUIDE_LINES_KEY] ?: true, // v0.4.7.1
                     readNowPlaying = prefs[READ_NOW_PLAYING_KEY] ?: false, // v0.4.2
                     readNotifications = prefs[READ_NOTIFICATIONS_KEY] ?: false, // v0.4.2
                 )
@@ -236,6 +243,11 @@ class SettingsStore(context: Context) {
     private fun clampHour(hour: Int): Int =
         hour.coerceIn(LauncherSettings.MIN_HOUR, LauncherSettings.MAX_HOUR)
 
+    /** v0.4.7.1 — remember the reverse overlay's guide-lines choice across reversals. */
+    fun setReverseGuideLines(enabled: Boolean) = scope.launch {
+        ds.edit { it[REVERSE_GUIDE_LINES_KEY] = enabled }
+    }
+
     /** v0.4.2 — speak the now-playing track aloud on change. */
     fun setReadNowPlaying(enabled: Boolean) = scope.launch {
         ds.edit { it[READ_NOW_PLAYING_KEY] = enabled }
@@ -264,6 +276,7 @@ class SettingsStore(context: Context) {
         val CLOCK_FALLBACK_KEY = booleanPreferencesKey("clock_fallback") // v2.7
         val NIGHT_START_KEY = intPreferencesKey("night_start_hour") // v2.7
         val NIGHT_END_KEY = intPreferencesKey("night_end_hour") // v2.7
+        val REVERSE_GUIDE_LINES_KEY = booleanPreferencesKey("reverse_guide_lines") // v0.4.7.1
         val READ_NOW_PLAYING_KEY = booleanPreferencesKey("read_now_playing") // v0.4.2 TTS
         val READ_NOTIFICATIONS_KEY = booleanPreferencesKey("read_notifications") // v0.4.2 TTS
     }

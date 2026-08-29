@@ -30,11 +30,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.reveng.carlauncher.carlib.CarEvents
 import com.reveng.carlauncher.carlib.CarService // v0.6
 import com.reveng.carlauncher.data.DayNightMode
 import com.reveng.carlauncher.data.LauncherSettings
 import com.reveng.carlauncher.data.SettingsStore // v0.6
+import com.reveng.carlauncher.ui.theme.DISABLED_ALPHA
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -95,13 +97,17 @@ fun StatusBar(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 24.dp, vertical = 12.dp),
+            // Vertical padding drops 12 → 8 so the 48 dp icon targets and the 36 sp clock
+            // keep the strip at roughly its old height.
+            .padding(horizontal = 24.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
             text = time,
-            style = MaterialTheme.typography.headlineMedium,
+            // §2.1 asks for a 40 sp clock; 36 sp is the most the strip fits without growing
+            // into the content band below (documented deviation).
+            style = MaterialTheme.typography.headlineMedium.copy(fontSize = CLOCK_SP.sp),
             color = MaterialTheme.colorScheme.onBackground,
         )
 
@@ -116,6 +122,7 @@ fun StatusBar(
             var quickClosed by remember { mutableIntStateOf(0) }
             StatusIndicators(
                 carService = carService,
+                carEvents = carEvents, // v0.4.9 vendor BT status
                 refreshKey = quickClosed,
                 onOpen = if (carService != null && settingsStore != null) {
                     { quickOpen = true }
@@ -140,7 +147,7 @@ fun StatusBar(
                 contentDescription = "Toggle day/night theme",
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier
-                    .size(28.dp)
+                    .size(STRIP_TARGET_DP.dp)
                     .clickable(enabled = settingsStore != null) {
                         // Flip the theme. A flip that lands back on what the car signal
                         // already says becomes AUTO, so the launcher resumes following
@@ -153,15 +160,18 @@ fun StatusBar(
                                 else -> DayNightMode.FORCE_DAY
                             }
                         )
-                    },
+                    }
+                    .padding(STRIP_ICON_PAD_DP.dp),
             )
             Icon(
                 imageVector = Icons.Filled.PowerSettingsNew,
                 contentDescription = "Power & sleep",
-                tint = if (accOn) MaterialTheme.colorScheme.primary else Color.Gray,
+                tint = if (accOn) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = DISABLED_ALPHA),
                 modifier = Modifier
-                    .size(28.dp)
-                    .clickable(onClick = onOpenPowerSettings),
+                    .size(STRIP_TARGET_DP.dp)
+                    .clickable(onClick = onOpenPowerSettings)
+                    .padding(STRIP_ICON_PAD_DP.dp),
             )
             // v2.7 shelves. Both screens are parked-only, so the icons are dimmed and inert while
             // the car is moving instead of vanishing — a status bar that reflows at every red
@@ -185,8 +195,9 @@ fun StatusBar(
                 contentDescription = "Themes",
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier
-                    .size(28.dp)
-                    .clickable(onClick = onOpenThemes),
+                    .size(STRIP_TARGET_DP.dp)
+                    .clickable(onClick = onOpenThemes)
+                    .padding(STRIP_ICON_PAD_DP.dp),
             )
             // v0.6: Quick Controls (volume/brightness/day-night/wifi-bt) pull-down button.
             if (carService != null && settingsStore != null) {
@@ -199,16 +210,18 @@ fun StatusBar(
                 contentDescription = "Vehicle dashboard",
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier
-                    .size(28.dp)
-                    .clickable(onClick = withTapFeedback(onOpenDashboard)),
+                    .size(STRIP_TARGET_DP.dp)
+                    .clickable(onClick = withTapFeedback(onOpenDashboard))
+                    .padding(STRIP_ICON_PAD_DP.dp),
             )
             Icon(
                 imageVector = Icons.Filled.AccountCircle,
                 contentDescription = "Driver profiles",
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier
-                    .size(28.dp)
-                    .clickable(onClick = withTapFeedback(onOpenProfiles)),
+                    .size(STRIP_TARGET_DP.dp)
+                    .clickable(onClick = withTapFeedback(onOpenProfiles))
+                    .padding(STRIP_ICON_PAD_DP.dp),
             )
             // v0.6: Settings gear -> SettingsScreen.
             Icon(
@@ -216,8 +229,9 @@ fun StatusBar(
                 contentDescription = "Settings",
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier
-                    .size(28.dp)
-                    .clickable(onClick = onOpenSettings),
+                    .size(STRIP_TARGET_DP.dp)
+                    .clickable(onClick = onOpenSettings)
+                    .padding(STRIP_ICON_PAD_DP.dp),
             )
         }
     }
@@ -232,7 +246,7 @@ private fun ShelfIcon(
 ) {
     val locked = LocalParkedOnlyLock.current
     val tint = if (locked) {
-        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = LOCKED_ICON_ALPHA)
+        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = DISABLED_ALPHA)
     } else {
         MaterialTheme.colorScheme.onSurfaceVariant
     }
@@ -241,13 +255,21 @@ private fun ShelfIcon(
         contentDescription = if (locked) "$label — available when parked" else label,
         tint = tint,
         modifier = Modifier
-            .size(28.dp)
-            .clickable(enabled = !locked, onClick = onClick),
+            .size(STRIP_TARGET_DP.dp)
+            .clickable(enabled = !locked, onClick = onClick)
+            .padding(STRIP_ICON_PAD_DP.dp),
     )
 }
 
-/** Material's standard disabled-content opacity. */
-private const val LOCKED_ICON_ALPHA = 0.38f
+
+/**
+ * Status-strip geometry. §1.2's 76 dp target cannot fit a 40 dp strip; every icon instead
+ * gets the 48 dp Material minimum as its clickable node, drawn at 28 dp inside it.
+ * Clock: §2.1 asks 40 sp; 36 sp is the ceiling before the strip eats the content band.
+ */
+private const val CLOCK_SP = 36
+private const val STRIP_TARGET_DP = 48
+private const val STRIP_ICON_PAD_DP = 10
 
 private fun nowString(): String =
     SimpleDateFormat("EEE  HH:mm", Locale.getDefault()).format(Date())

@@ -88,9 +88,9 @@ fun RadioScreen(
      * from a click handler puts IPC on the main thread, which is the same shape as the jank that
      * reached ANR on the settings radio screen — only there it was the reads.
      */
-    fun control(action: () -> Unit) {
+    fun control(action: suspend () -> Unit) {
         scope.launch {
-            withContext(Dispatchers.IO) { runCatching(action) }
+            withContext(Dispatchers.IO) { runCatching { action() } }
             refresh++
         }
     }
@@ -125,8 +125,20 @@ fun RadioScreen(
 
             PresetRow(
                 presets = presets.take(PRESET_SLOTS),
+                activeBand = tuner.band,
                 activeFreq = tuner.freq,
-                onRecall = { preset -> control { carService.sendUserFreq(preset.freq) } },
+                // v0.4.7.1: switch to the preset's band (bounded toggle + re-poll) before
+                // tuning — an AM preset recalled while on FM mistuned (RadioTuning).
+                onRecall = { preset ->
+                    control {
+                        RadioTuning.recallPreset(
+                            readBand = { carService.getRadioBand() },
+                            toggleBand = { carService.radioBandToggle() },
+                            tune = { carService.sendUserFreq(it) },
+                            preset = preset,
+                        )
+                    }
+                },
                 onDelete = { preset ->
                     scope.launch { presetsStore?.remove(preset) }
                 },
@@ -269,6 +281,7 @@ private fun Indicator(label: String, on: Boolean?) {
 @Composable
 private fun PresetRow(
     presets: List<RadioPreset>,
+    activeBand: Int,
     activeFreq: Int,
     onRecall: (RadioPreset) -> Unit,
     onDelete: (RadioPreset) -> Unit,
@@ -282,7 +295,8 @@ private fun PresetRow(
         presets.forEach { preset ->
             PresetSlot(
                 preset = preset,
-                active = preset.freq == activeFreq,
+                // Band is part of the identity: AM 8750 must not light while tuned FM 87.5.
+                active = RadioTuning.presetMatches(preset, activeBand, activeFreq),
                 onRecall = { onRecall(preset) },
                 onDelete = { onDelete(preset) },
                 modifier = Modifier.weight(1f),

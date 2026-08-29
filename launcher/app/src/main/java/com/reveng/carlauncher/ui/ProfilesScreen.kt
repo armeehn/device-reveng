@@ -38,6 +38,8 @@ import com.reveng.carlauncher.data.DriverProfile
 import com.reveng.carlauncher.data.DriverProfilesStore
 import com.reveng.carlauncher.ui.keyboard.CarKeyboardEditor // v0.4.2 profile renaming
 import com.reveng.carlauncher.ui.theme.carShape
+import com.reveng.carlauncher.ui.theme.carCard
+import com.reveng.carlauncher.ui.theme.DISABLED_ALPHA
 
 /**
  * v3.0 — driver profiles: named bundles of theme, favourites, quick-launch order and
@@ -173,6 +175,7 @@ private fun ProfileRow(
         modifier = Modifier
             .fillMaxWidth()
             .height(ROW_HEIGHT_DP.dp)
+            .carCard()
             .clip(carShape(16.dp))
             .background(bg)
             .clickable(onClick = withTapFeedback(onApply))
@@ -244,4 +247,3 @@ private fun EmptyProfiles() {
 }
 
 private const val ROW_HEIGHT_DP = 88
-private const val DISABLED_ALPHA = 0.38f

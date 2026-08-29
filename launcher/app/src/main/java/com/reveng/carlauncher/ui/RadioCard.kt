@@ -90,9 +90,9 @@ fun RadioCard(
      * binder round-trip to the vendor gateway. This card sits on Home, one tap away while
      * driving, and a held seek button ran that IPC on the main thread.
      */
-    fun control(action: () -> Unit) {
+    fun control(action: suspend () -> Unit) {
         scope.launch {
-            withContext(Dispatchers.IO) { runCatching(action) }
+            withContext(Dispatchers.IO) { runCatching { action() } }
             refresh++
         }
     }
@@ -125,7 +125,7 @@ fun RadioCard(
             // over-filled it — header row + 40sp freq + presets + a row of borderless
             // IconButtons summed past the slot, so the transport row rendered squeezed and
             // near-invisible. This layout budgets the height explicitly: one compact
-            // band+freq+star row, the preset strip, and a full-width 44dp transport row of
+            // band+freq+star row, the preset strip, and a full-width transport row of
             // *contained* tonal buttons that can't be crowded out.
             Column(
                 modifier = Modifier.fillMaxSize().padding(16.dp),
@@ -154,7 +154,7 @@ fun RadioCard(
                                     presetsStore.add(RadioPreset(band = info.band, freq = info.freq))
                                 }
                             },
-                            modifier = Modifier.size(40.dp),
+                            modifier = Modifier.size(PRESET_STAR_DP.dp),
                         ) {
                             Icon(
                                 Icons.Filled.StarBorder,
@@ -170,8 +170,20 @@ fun RadioCard(
                 if (presets.isNotEmpty()) {
                     StationStrip(
                         presets = presets,
+                        activeBand = info.band,
                         activeFreq = info.freq,
-                        onRecall = { p -> control { carService.sendUserFreq(p.freq) } },
+                        // v0.4.7.1: land on the preset's band before tuning (RadioTuning) —
+                        // an AM preset recalled while on FM mistuned.
+                        onRecall = { p ->
+                            control {
+                                RadioTuning.recallPreset(
+                                    readBand = { carService.getRadioBand() },
+                                    toggleBand = { carService.radioBandToggle() },
+                                    tune = { carService.sendUserFreq(it) },
+                                    preset = p,
+                                )
+                            }
+                        },
                         onDelete = { p -> scope.launch { presetsStore?.remove(p) } },
                     )
                 }
@@ -246,7 +258,7 @@ private fun TransportButton(
         contentColor = if (emphasized) MaterialTheme.colorScheme.onPrimary
         else MaterialTheme.colorScheme.onSecondaryContainer,
         shape = carShape(12.dp),
-        modifier = modifier.height(44.dp).clickable(onClick = onClick),
+        modifier = modifier.height(TRANSPORT_HEIGHT_DP.dp).clickable(onClick = onClick),
     ) {
         Box(contentAlignment = Alignment.Center) {
             Icon(
@@ -262,6 +274,7 @@ private fun TransportButton(
 @Composable
 private fun StationStrip(
     presets: List<RadioPreset>,
+    activeBand: Int,
     activeFreq: Int,
     onRecall: (RadioPreset) -> Unit,
     onDelete: (RadioPreset) -> Unit,
@@ -274,7 +287,8 @@ private fun StationStrip(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         presets.forEach { p ->
-            val active = p.freq == activeFreq
+            // Band is part of the identity: AM 8750 must not light while tuned FM 87.5.
+            val active = RadioTuning.presetMatches(p, activeBand, activeFreq)
             Surface(
                 color = if (active) MaterialTheme.colorScheme.primaryContainer
                 else MaterialTheme.colorScheme.secondaryContainer,
@@ -350,3 +364,11 @@ private data class RadioInfo(
         val UNKNOWN = RadioInfo(available = false)
     }
 }
+
+/**
+ * Deviation from §1.2's 76 dp: the card lives in a fixed 180 dp home slot, so the
+ * transports get the tallest row that still fits under the freq row and preset strip,
+ * and the star gets the 48 dp Material minimum inside the freq row.
+ */
+private const val TRANSPORT_HEIGHT_DP = 56
+private const val PRESET_STAR_DP = 48

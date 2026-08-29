@@ -95,25 +95,61 @@ object LauncherBackup {
     fun delete(backup: File): Boolean = backup.deleteRecursively()
 
     /**
-     * Copy a backup's preference files back over the live ones. The process MUST be restarted
-     * immediately afterwards (see class docs) — the caller does that via [restartApp]. Returns
-     * false without touching anything if the backup has no preference files.
+     * Bring a backup's preference files back over the live ones. Returns true when ANY live
+     * file was replaced — the caller must then restart via [restartApp] unconditionally, even
+     * if a later step failed, because the on-disk state no longer matches the in-memory caches.
+     * False means the live files are untouched (empty backup, or the staging phase failed).
      */
-    fun restore(context: Context, backup: File): Boolean {
+    fun restore(context: Context, backup: File): Boolean =
+        restoreInto(datastoreDir(context), backup)
+
+    /**
+     * Two-phase restore into [dst]: stage every file first (`*.restore-tmp` copies), and only
+     * once ALL copies succeeded rename each into place. The old one-pass copy could fail
+     * half-way and leave a silent mix of two snapshots — with the restore reported as failed,
+     * so no restart followed and the running stores kept writing over the hybrid.
+     *
+     * [log] is a seam: android.util.Log is unmocked in local unit tests, and this function is
+     * the file-level logic those tests exercise.
+     */
+    internal fun restoreInto(
+        dst: File,
+        backup: File,
+        log: (String) -> Unit = { Log.w(TAG, it) },
+    ): Boolean {
         val prefFiles = prefFilesIn(backup)
         if (prefFiles.isEmpty()) {
-            Log.w(TAG, "backup ${backup.name} has no preference files")
+            log("backup ${backup.name} has no preference files")
             return false
         }
-        val dst = datastoreDir(context)
         if (!dst.exists() && !dst.mkdirs()) return false
-        return runCatching {
-            prefFiles.forEach { it.copyTo(File(dst, it.name), overwrite = true) }
-            true
-        }.getOrElse {
-            Log.e(TAG, "restore copy failed", it)
-            false
+
+        // Phase 1 — stage. A failure here deletes the stages and leaves the live files alone.
+        val staged = mutableListOf<Pair<File, File>>() // tmp -> live destination
+        val stagedAll = runCatching {
+            prefFiles.forEach { src ->
+                val tmp = File(dst, src.name + RESTORE_TMP_SUFFIX)
+                src.copyTo(tmp, overwrite = true)
+                staged.add(tmp to File(dst, src.name))
+            }
+        }.onFailure { log("restore staging failed: $it") }.isSuccess
+        if (!stagedAll) {
+            staged.forEach { (tmp, _) -> tmp.delete() }
+            return false
         }
+
+        // Phase 2 — swap in. Each rename is atomic; count what actually landed so the caller
+        // restarts whenever the live state changed at all.
+        var replaced = 0
+        staged.forEach { (tmp, live) ->
+            if (tmp.renameTo(live)) {
+                replaced++
+            } else {
+                log("restore could not swap in ${live.name}")
+                tmp.delete()
+            }
+        }
+        return replaced > 0
     }
 
     /**
@@ -137,4 +173,5 @@ object LauncherBackup {
 
     private const val RESTART_REQUEST = 0xB4C
     private const val RESTART_DELAY_MS = 400L
+    private const val RESTORE_TMP_SUFFIX = ".restore-tmp"
 }

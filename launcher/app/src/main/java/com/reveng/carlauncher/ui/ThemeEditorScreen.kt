@@ -17,12 +17,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import com.reveng.carlauncher.ui.theme.carShape
+import com.reveng.carlauncher.ui.theme.carCard
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -39,9 +41,13 @@ import com.reveng.carlauncher.ui.keyboard.CarTextField // v2.7
 import com.reveng.carlauncher.ui.keyboard.CommitMode // v2.7
 import com.reveng.carlauncher.ui.theme.CarTheme
 import com.reveng.carlauncher.ui.theme.ThemeColors
+import com.reveng.carlauncher.ui.theme.ThemeStyle
 import java.util.Locale
 
-/** The eight editable color roles, in display order. */
+/**
+ * The editable color roles, in display order. The two extra accents are optional:
+ * 0 = unset, rendered as a fallback to [ThemeColors.primary] (see toColorScheme).
+ */
 private enum class Role(val label: String) {
     Background("Background"),
     Surface("Surface"),
@@ -51,7 +57,12 @@ private enum class Role(val label: String) {
     OnSurface("Text on surface"),
     OnSurfaceMuted("Muted text"),
     Error("Error"),
+    Accent2("Accent 2"),
+    Accent3("Accent 3"),
 }
+
+private val Role.isAccent: Boolean
+    get() = this == Role.Accent2 || this == Role.Accent3
 
 private fun ThemeColors.get(role: Role): Long = when (role) {
     Role.Background -> background
@@ -62,6 +73,8 @@ private fun ThemeColors.get(role: Role): Long = when (role) {
     Role.OnSurface -> onSurface
     Role.OnSurfaceMuted -> onSurfaceMuted
     Role.Error -> error
+    Role.Accent2 -> accent2
+    Role.Accent3 -> accent3
 }
 
 private fun ThemeColors.set(role: Role, value: Long): ThemeColors = when (role) {
@@ -73,6 +86,8 @@ private fun ThemeColors.set(role: Role, value: Long): ThemeColors = when (role) 
     Role.OnSurface -> copy(onSurface = value)
     Role.OnSurfaceMuted -> copy(onSurfaceMuted = value)
     Role.Error -> copy(error = value)
+    Role.Accent2 -> copy(accent2 = value)
+    Role.Accent3 -> copy(accent3 = value)
 }
 
 /**
@@ -95,7 +110,10 @@ fun ThemeEditorScreen(
     var selectedRole by remember(source.id) { mutableStateOf(Role.Background) }
 
     val variant = working.variant(editingNight)
-    val selectedColor = variant.get(selectedRole)
+    // An unset accent (0) edits from the primary it currently falls back to.
+    val selectedRaw = variant.get(selectedRole)
+    val selectedColor =
+        if (selectedRole.isAccent && selectedRaw == 0L) variant.primary else selectedRaw
 
     fun updateSelected(value: Long) {
         working = if (editingNight) {
@@ -144,13 +162,30 @@ fun ThemeEditorScreen(
                 VariantToggle(editingNight = editingNight, onChange = { editingNight = it })
                 Spacer(Modifier.height(4.dp))
                 Role.entries.forEach { role ->
+                    val raw = variant.get(role)
+                    val unset = role.isAccent && raw == 0L
                     RoleRow(
                         label = role.label,
-                        color = Color(variant.get(role)),
+                        color = Color(if (unset) variant.primary else raw),
+                        hint = if (unset) "primary" else hexOf(raw),
                         selected = role == selectedRole,
                         onClick = { selectedRole = role },
                     )
                 }
+
+                // Non-color style. Persisted with the theme all along (ThemeStore /
+                // ThemeTransfer carry ThemeStyle) but uneditable until now.
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = "Style",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                StyleEditor(
+                    style = working.style,
+                    onChange = { working = working.copy(style = it) },
+                )
             }
 
             // ---- CENTER: color picker for the selected role ------------------------
@@ -167,6 +202,10 @@ fun ThemeEditorScreen(
                     modifier = Modifier.padding(bottom = 12.dp),
                 )
                 ColorPicker(color = selectedColor, onColor = ::updateSelected)
+                if (selectedRole.isAccent) {
+                    Spacer(Modifier.height(12.dp))
+                    ResetAccentRow(onReset = { updateSelected(0L) })
+                }
             }
 
             // ---- RIGHT: live preview -----------------------------------------------
@@ -184,6 +223,7 @@ fun ThemeEditorScreen(
                 )
                 ThemePreviewSwatch(
                     colors = variant,
+                    style = working.style,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(220.dp),
@@ -197,6 +237,7 @@ fun ThemeEditorScreen(
 private fun VariantToggle(editingNight: Boolean, onChange: (Boolean) -> Unit) {
     Row(
         modifier = Modifier
+            .carCard()
             .clip(carShape(12.dp))
             .background(MaterialTheme.colorScheme.surface)
             .padding(4.dp),
@@ -225,10 +266,17 @@ private fun SegItem(label: String, selected: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun RoleRow(label: String, color: Color, selected: Boolean, onClick: () -> Unit) {
+private fun RoleRow(
+    label: String,
+    color: Color,
+    hint: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .carCard()
             .clip(carShape(12.dp))
             .background(
                 if (selected) MaterialTheme.colorScheme.surfaceVariant
@@ -253,10 +301,77 @@ private fun RoleRow(label: String, color: Color, selected: Boolean, onClick: () 
         )
         Spacer(Modifier.weight(1f))
         Text(
-            text = hexOf(colorToArgbLong(color)),
+            text = hint,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+    }
+}
+
+/** Clears an accent back to 0 — "follow primary" — the state a fresh theme starts in. */
+@Composable
+private fun ResetAccentRow(onReset: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .carCard()
+            .clip(carShape(10.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .clickable(onClick = onReset)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+    ) {
+        Text(
+            text = "Use primary (unset)",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/** Corner-scale slider plus the two brand switches ([ThemeStyle]). */
+@Composable
+private fun StyleEditor(style: ThemeStyle, onChange: (ThemeStyle) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = "Corners",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.width(CORNER_LABEL_DP.dp),
+            )
+            Slider(
+                value = style.cornerScale,
+                onValueChange = { onChange(style.copy(cornerScale = it)) },
+                valueRange = 0f..1f,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 8.dp),
+            )
+            Text(
+                text = if (style.cornerScale == 0f) "sharp"
+                else "${(style.cornerScale * 100).toInt()}%",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.width(CORNER_VALUE_DP.dp),
+            )
+        }
+        StyleSwitch("Mono type", style.monoType) { onChange(style.copy(monoType = it)) }
+        StyleSwitch("Hard edges", style.hardEdge) { onChange(style.copy(hardEdge = it)) }
+    }
+}
+
+@Composable
+private fun StyleSwitch(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
+        )
+        Switch(checked = checked, onCheckedChange = onChange)
     }
 }
 
@@ -352,6 +467,10 @@ private fun TextButtonTile(label: String, onClick: () -> Unit) {
 /** Wide enough for a real theme name without crowding the Save tile out of the header row. */
 private const val THEME_NAME_FIELD_DP = 320
 
+/** Fixed columns in the corner-scale row so the slider gets the leftover width. */
+private const val CORNER_LABEL_DP = 84
+private const val CORNER_VALUE_DP = 48
+
 private fun pack(r: Int, g: Int, b: Int): Long =
     0xFF000000L or (r.toLong() shl 16) or (g.toLong() shl 8) or b.toLong()
 
@@ -362,13 +481,4 @@ private fun parseHex(input: String): Long? {
     val cleaned = input.trim().removePrefix("#")
     if (cleaned.length != 6 || cleaned.any { it.digitToIntOrNull(16) == null }) return null
     return 0xFF000000L or cleaned.toLong(16)
-}
-
-private fun colorToArgbLong(color: Color): Long {
-    // Round, don't truncate: (channel * 255).toInt() floors, so the hex readout shown next to
-    // the swatch could differ by one per channel from the actual stored color.
-    val r = Math.round(color.red * 255f)
-    val g = Math.round(color.green * 255f)
-    val b = Math.round(color.blue * 255f)
-    return pack(r, g, b)
 }
