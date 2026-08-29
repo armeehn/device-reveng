@@ -77,7 +77,7 @@ jobs:
       # Always upload, so a red run leaves the failure reports behind.
       - name: Upload test reports
         if: always()
-        uses: https://github.com/christopherHX/gitea-upload-artifact@v4
+        uses: christopherHX/gitea-upload-artifact@v4
         with:
           name: carlauncher-test-reports
           path: launcher/*/build/reports/tests/
@@ -91,7 +91,7 @@ jobs:
 
       - name: Upload lint report
         if: always()
-        uses: https://github.com/christopherHX/gitea-upload-artifact@v4
+        uses: christopherHX/gitea-upload-artifact@v4
         with:
           name: carlauncher-lint-report
           path: launcher/app/build/reports/lint-results-release.html
@@ -133,7 +133,7 @@ jobs:
       # versionCode actually baked into the APK, and the release job reads the
       # version from it (there is no version line in the build file to parse).
       - name: Upload release APK
-        uses: https://github.com/christopherHX/gitea-upload-artifact@v4
+        uses: christopherHX/gitea-upload-artifact@v4
         with:
           name: carlauncher-release-apk
           path: |
@@ -142,7 +142,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload debug APK
-        uses: https://github.com/christopherHX/gitea-upload-artifact@v4
+        uses: christopherHX/gitea-upload-artifact@v4
         with:
           name: carlauncher-debug-apk
           path: launcher/app/build/outputs/apk/debug/*.apk
@@ -174,7 +174,7 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - uses: https://github.com/christopherHX/gitea-download-artifact@v4
+      - uses: christopherHX/gitea-download-artifact@v4
         with:
           name: carlauncher-debug-apk
           path: apk
@@ -293,7 +293,7 @@ jobs:
       # Always upload: a red emulator run is exactly when the HTML report matters.
       - name: Upload instrumentation reports
         if: always()
-        uses: https://github.com/christopherHX/gitea-upload-artifact@v4
+        uses: christopherHX/gitea-upload-artifact@v4
         with:
           name: carlauncher-androidtest-reports
           path: launcher/app/build/reports/androidTests/
@@ -321,7 +321,7 @@ jobs:
       # commit. Nothing is rebuilt here; a rebuild would not be the artifact the
       # tag is meant to identify.
       - name: Fetch the release APK from this run
-        uses: https://github.com/christopherHX/gitea-download-artifact@v4
+        uses: christopherHX/gitea-download-artifact@v4
         with:
           name: carlauncher-release-apk
           path: artifact
