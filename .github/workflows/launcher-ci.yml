@@ -46,7 +46,11 @@ jobs:
       run:
         working-directory: launcher
     steps:
+      # Full history: versionCode is the git commit count (derived in
+      # app/build.gradle.kts, which refuses a shallow clone at configure time).
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       # Kotlin/AGP toolchain requires JDK 17 (system JDKs newer than 21
       # break the Kotlin compile — see launcher/README).
@@ -118,11 +122,16 @@ jobs:
             exit 1
           fi
 
+      # output-metadata.json rides along: it is AGP's record of the versionName/
+      # versionCode actually baked into the APK, and the release job reads the
+      # version from it (there is no version line in the build file to parse).
       - name: Upload release APK
         uses: actions/upload-artifact@v4
         with:
           name: carlauncher-release-apk
-          path: launcher/app/build/outputs/apk/release/*.apk
+          path: |
+            launcher/app/build/outputs/apk/release/*.apk
+            launcher/app/build/outputs/apk/release/output-metadata.json
           if-no-files-found: error
 
       - name: Upload debug APK
@@ -225,7 +234,11 @@ jobs:
     needs: build
     timeout-minutes: 45
     steps:
+      # Full history for the same reason as the build job: this job runs Gradle
+      # (connectedDebugAndroidTest), which derives the version from git.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-java@v4
         with:
@@ -307,51 +320,48 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Parse, don't guess. Each field must match exactly one line and then still
-      # look like a version. A regex that silently yields an empty string would
-      # tag the commit `v` and the tag would be worthless.
-      - name: Read version from build.gradle.kts
+      # The artifact from the `build` job above — the APK compiled from this exact
+      # commit. Nothing is rebuilt here; a rebuild would not be the artifact the
+      # tag is meant to identify.
+      - name: Fetch the release APK from this run
+        uses: actions/download-artifact@v4
+        with:
+          name: carlauncher-release-apk
+          path: artifact
+
+      # The version comes from output-metadata.json, AGP's record of what is
+      # actually baked into the APK sitting next to it — so the tag can never
+      # disagree with the artifact it names. The build file carries no version
+      # line to parse any more: both fields are derived from git at build time
+      # (see app/build.gradle.kts).
+      - name: Read version from the built APK metadata
         id: version
         run: |
           set -euo pipefail
-          gradle_file="launcher/app/build.gradle.kts"
+          meta="artifact/output-metadata.json"
+          if [ ! -f "${meta}" ]; then
+            echo "::error::${meta} missing from the carlauncher-release-apk artifact"
+            exit 1
+          fi
 
-          # Assigns through a nameref rather than returning on stdout, so an
-          # ::error:: from in here reaches the log instead of being swallowed by a
-          # command substitution.
-          read_field() {   # read_field <destination-var> <gradle-key>
-            local -n dest="$1"
-            local key="$2" lines count
-            lines="$(grep -E "^[[:space:]]*${key}[[:space:]]*=" "$gradle_file" || true)"
-            count="$(printf '%s' "$lines" | grep -c . || true)"
-            if [ "$count" != "1" ]; then
-              echo "::error file=${gradle_file}::expected exactly one '${key} =' line, found ${count}"
-              exit 1
-            fi
-            dest="$(printf '%s' "$lines" \
-              | sed -E "s/^[[:space:]]*${key}[[:space:]]*=[[:space:]]*//; s/^\"//; s/\".*\$//; s/[[:space:]]*\$//")"
-          }
+          name="$(jq -r '.elements[0].versionName' "${meta}")"
+          code="$(jq -r '.elements[0].versionCode' "${meta}")"
 
-          read_field name versionName
-          read_field code versionCode
-
-          # Shape check, so a trailing comment or a moved quote fails here rather
-          # than after a meaningless tag has already been pushed.
+          # Shape check, so a metadata format change fails here rather than
+          # after a meaningless tag has already been pushed.
           if ! printf '%s' "$name" | grep -qE '^[0-9]+(\.[0-9]+){1,3}$'; then
-            echo "::error file=${gradle_file}::versionName '${name}' is not a dotted numeric version"
+            echo "::error::versionName '${name}' is not a dotted numeric version"
             exit 1
           fi
           if ! printf '%s' "$code" | grep -qE '^[0-9]+$'; then
-            echo "::error file=${gradle_file}::versionCode '${code}' is not an integer"
+            echo "::error::versionCode '${code}' is not an integer"
             exit 1
           fi
 
-          # Tag identity. versionName repeats across builds, and so does versionCode
-          # — the last two merges to main both shipped versionCode 61 — so neither
-          # field, nor both together, identifies a build. The short commit SHA does.
-          # All three ride along as SemVer build metadata: the tag still reads as
-          # `vX.Y.Z...`, and it is unique by construction, so two merges can never
-          # collide on a tag name however sloppy the version bumps get.
+          # Tag identity. versionCode is the commit count now, so it is unique
+          # per merge to main — but the short SHA stays in the tag: it is what
+          # keeps a tag unique by construction, independent of how the version
+          # happens to be derived.
           short="$(git rev-parse --short=7 HEAD)"
           {
             echo "name=${name}"
@@ -368,16 +378,6 @@ jobs:
         run: |
           set -euo pipefail
 
-          # A merge that bumped neither version field is not an error — the SHA in
-          # the tag keeps this build distinguishable — but say so, because two
-          # shipped builds then differ only by commit. This is not hypothetical:
-          # the last two merges to main both carry versionCode 61.
-          prior="$(git ls-remote --tags origin "refs/tags/v${VERSION_NAME}+${VERSION_CODE}.g*" \
-            | sed -E 's|.*refs/tags/||; s|\^\{\}$||' | sort -u | grep -vFx "${TAG}" || true)"
-          if [ -n "${prior}" ]; then
-            echo "::warning::versionCode ${VERSION_CODE} already shipped as ${prior//$'\n'/, } — bump it on the next merge"
-          fi
-
           # Idempotent: a re-run of this job finds its own tag already on the remote
           # and stops cleanly. The push below is never forced, so even a lost race
           # can only fail — it can never move a tag that points at another build.
@@ -391,15 +391,6 @@ jobs:
           git tag -a "${TAG}" -m "carlauncher ${VERSION_NAME} (versionCode ${VERSION_CODE})"
           git push origin "refs/tags/${TAG}"
           echo "Tagged ${GITHUB_SHA} as ${TAG}."
-
-      # The artifact from the `build` job above — the APK compiled from this exact
-      # commit. Nothing is rebuilt here; a rebuild would not be the artifact the
-      # tag is meant to identify.
-      - name: Fetch the release APK from this run
-        uses: actions/download-artifact@v4
-        with:
-          name: carlauncher-release-apk
-          path: artifact
 
       - name: Publish release
         env:
