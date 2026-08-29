@@ -50,6 +50,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.reveng.carlauncher.R
 import com.reveng.carlauncher.media.NowPlaying
 import kotlinx.coroutines.delay
@@ -101,7 +102,9 @@ fun MediaCard(
             }
 
             Column(
-                modifier = Modifier.fillMaxSize().padding(20.dp),
+                // 16dp (not 20) so art row + chip + seek bar + the 88dp transport row all
+                // fit the card's home slot.
+                modifier = Modifier.fillMaxSize().padding(16.dp),
                 verticalArrangement = Arrangement.SpaceBetween,
             ) {
                 // ---- top: art thumb + title/artist + source chip ----
@@ -136,7 +139,8 @@ fun MediaCard(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = now?.title ?: stringResource(R.string.media_placeholder_title),
-                            style = MaterialTheme.typography.titleLarge,
+                            // §2.2: now-playing title ≥28sp.
+                            style = MaterialTheme.typography.titleLarge.copy(fontSize = TITLE_SP.sp),
                             color = MaterialTheme.colorScheme.onSurface,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -175,27 +179,40 @@ fun MediaCard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    IconButton(onClick = onPrev, enabled = now?.hasPrev ?: false) {
+                    // §2.2: each transport control is an 88 dp target — the one interactive
+                    // row of an otherwise glance card, kept full-size despite the far column.
+                    IconButton(
+                        onClick = onPrev,
+                        enabled = now?.hasPrev ?: false,
+                        modifier = Modifier.size(TRANSPORT_TARGET_DP.dp),
+                    ) {
                         Icon(
                             Icons.Filled.SkipPrevious,
                             contentDescription = "Previous",
                             tint = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.size(40.dp),
+                            modifier = Modifier.size(TRANSPORT_ICON_DP.dp),
                         )
                     }
-                    FilledIconButton(onClick = onPlayPause) {
+                    FilledIconButton(
+                        onClick = onPlayPause,
+                        modifier = Modifier.size(TRANSPORT_TARGET_DP.dp),
+                    ) {
                         Icon(
                             if (now?.isPlaying == true) Icons.Filled.Pause else Icons.Filled.PlayArrow,
                             contentDescription = "Play/Pause",
-                            modifier = Modifier.size(32.dp),
+                            modifier = Modifier.size(TRANSPORT_ICON_DP.dp),
                         )
                     }
-                    IconButton(onClick = onNext, enabled = now?.hasNext ?: false) {
+                    IconButton(
+                        onClick = onNext,
+                        enabled = now?.hasNext ?: false,
+                        modifier = Modifier.size(TRANSPORT_TARGET_DP.dp),
+                    ) {
                         Icon(
                             Icons.Filled.SkipNext,
                             contentDescription = "Next",
                             tint = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.size(40.dp),
+                            modifier = Modifier.size(TRANSPORT_ICON_DP.dp),
                         )
                     }
                 }
@@ -292,3 +309,8 @@ private fun formatTime(ms: Long): String {
     val s = totalSec % 60
     return "%d:%02d".format(m, s)
 }
+
+/** §2.2 MediaCard spec: 28 sp title, 88 dp transport targets (icons drawn at 40 dp). */
+private const val TITLE_SP = 28
+private const val TRANSPORT_TARGET_DP = 88
+private const val TRANSPORT_ICON_DP = 40

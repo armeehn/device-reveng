@@ -407,7 +407,7 @@ private fun FavoriteChip(
         )
         Text(
             text = app.label,
-            style = MaterialTheme.typography.labelLarge,
+            style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -458,7 +458,7 @@ private fun AppTile(
         }
         Text(
             text = app.label,
-            style = MaterialTheme.typography.labelLarge,
+            style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onBackground,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -500,7 +500,7 @@ private fun SystemFolderTile(count: Int, onClick: () -> Unit, focused: Boolean =
         }
         Text(
             text = "System ($count)",
-            style = MaterialTheme.typography.labelLarge,
+            style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onBackground,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,

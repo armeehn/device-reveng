@@ -106,4 +106,23 @@ class BuiltInThemesTest {
         assertTrue(BuiltInThemes.RIPOSTE.day.accent2 != 0L)
         assertTrue(BuiltInThemes.RIPOSTE.day.accent3 != 0L)
     }
+
+    @Test
+    fun proximityRampIsDistinct() {
+        // Safety-adjacent: the parking aids encode clear/near/close in colour. If two steps
+        // collapse to one colour (tertiary falls back to primary in 10 of 11 presets), the
+        // "near" warning never shows. Every preset, both variants.
+        BuiltInThemes.ALL.forEach { theme ->
+            listOf(false, true).forEach { night ->
+                val ramp = proximityRamp(theme.variant(night).toColorScheme())
+                val steps = listOf(ramp.clear, ramp.near, ramp.close)
+
+                assertEquals(
+                    "${theme.id} (night=$night) ramp steps collapse: $steps",
+                    steps.size,
+                    steps.toSet().size,
+                )
+            }
+        }
+    }
 }

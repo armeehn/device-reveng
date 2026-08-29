@@ -33,6 +33,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.reveng.carlauncher.ui.LocalParkedOnlyLock
 import com.reveng.carlauncher.ui.theme.carShape
+import com.reveng.carlauncher.ui.theme.DISABLED_ALPHA
 import com.reveng.carlauncher.ui.withTapFeedback
 
 /**
@@ -76,7 +77,7 @@ fun CarTextField(
     val locked = LocalParkedOnlyLock.current
 
     val borderColor = if (locked) {
-        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = LOCKED_ALPHA)
+        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = DISABLED_ALPHA)
     } else {
         MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = BORDER_ALPHA)
     }
@@ -268,8 +269,6 @@ private const val FIELD_CORNER_DP = 12
 private const val CURSOR_WIDTH_DP = 4
 private const val CURSOR_HEIGHT_DP = 34
 
-/** Material's standard disabled-content opacity, used for the locked field outline. */
-private const val LOCKED_ALPHA = 0.38f
 private const val BORDER_ALPHA = 0.6f
 
 private const val DONE_LABEL = "Done"
