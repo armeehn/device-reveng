@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -42,21 +43,29 @@ fun DisplaySettingsScreen(
     val snap by controller.snapshot.collectAsStateWithLifecycle()
     snap
 
-    // Live WRITE_SETTINGS status, re-checked on resume (e.g. after the grant screen).
-    var canWrite by remember { mutableStateOf(BrightnessController.canWrite(context)) }
-    // null = the backlight level is unreadable; the slider has no position to show, so it stays
-    // disabled rather than inventing one.
-    var brightness by remember { mutableStateOf(BrightnessController.currentPercent(context)) }
+    // Live WRITE_SETTINGS status + backlight level, re-read on resume (e.g. after the grant
+    // screen). canWrite is an AppOps binder call and currentPercent a provider query — neither
+    // belongs in the composition body or an ON_RESUME callback on main (QuickControls'
+    // BrightnessControl is the in-repo pattern). null = not resolved yet: the slider stays
+    // disabled rather than claiming a missing permission or a made-up level.
+    var canWrite by remember { mutableStateOf<Boolean?>(null) }
+    var brightness by remember { mutableStateOf<Int?>(null) }
+    var probe by remember { mutableIntStateOf(0) }
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val obs = LifecycleEventObserver { _, e ->
             if (e == Lifecycle.Event.ON_RESUME) {
-                canWrite = BrightnessController.canWrite(context)
-                brightness = BrightnessController.currentPercent(context)
+                probe++
             }
         }
         lifecycleOwner.lifecycle.addObserver(obs)
         onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
+    }
+    LaunchedEffect(probe) {
+        val granted = withContext(Dispatchers.IO) { BrightnessController.canWrite(context) }
+        val percent = withContext(Dispatchers.IO) { BrightnessController.currentPercent(context) }
+        canWrite = granted
+        brightness = percent
     }
 
     // The shade's brightness slider already applies levels through a conflated pipe on
@@ -77,7 +86,8 @@ fun DisplaySettingsScreen(
             SliderSetting(
                 label = "Brightness",
                 description = when {
-                    !canWrite -> "Grant permission below to control the backlight live"
+                    canWrite == null -> "Reading the current level…"
+                    canWrite == false -> "Grant permission below to control the backlight live"
                     brightness == null -> "The current backlight level cannot be read"
                     else -> "Changes the display immediately"
                 },
@@ -87,10 +97,10 @@ fun DisplaySettingsScreen(
                     brightness = it
                     brightnessWrites.trySend(it)
                 },
-                enabled = canWrite && brightness != null,
+                enabled = canWrite == true && brightness != null,
                 format = { "$it%" },
             )
-            if (!canWrite) {
+            if (canWrite == false) {
                 ActionRow(
                     label = "Enable live brightness control",
                     description = "Opens Android's \"Modify system settings\" for Car Launcher",

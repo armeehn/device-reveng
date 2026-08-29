@@ -66,14 +66,16 @@ fun ShadeOverlay(
 
         if (enabled) {
             // Top-edge grab strip: a vertical drag downward past the threshold opens the shade.
-            // Height is generous for a moving-vehicle tap target but stays clear of the status
-            // row's own controls, which sit below it.
+            // It is drawn IN FRONT of the Home content, so any overlap with the status row's
+            // controls (icons at y 12-40 dp) eats their taps — the strip must end where the
+            // row's touch targets begin, at the row's 12 dp top padding. A swipe from the
+            // physical top edge first lands within those 12 dp, which is all the gesture needs.
             var dragAccum = 0f
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .windowInsetsPadding(WindowInsets.statusBars)
-                    .height(28.dp)
+                    .height(GRAB_STRIP_HEIGHT_DP.dp)
                     .align(Alignment.TopCenter)
                     .pointerInput(Unit) {
                         detectVerticalDragGestures(
@@ -169,3 +171,10 @@ fun ShadeOverlay(
 // while driving. The gesture accumulates raw drag so a fast flick trips it in one move.
 private const val OPEN_THRESHOLD_PX = 48f
 private const val CLOSE_THRESHOLD_PX = 40f
+
+/**
+ * Grab-strip height: exactly the StatusBar's 12 dp top padding, i.e. the dead band above its
+ * icons. The previous 28 dp strip covered the icons' upper half (centres at y≈26) and silently
+ * ate taps on every status-bar control.
+ */
+private const val GRAB_STRIP_HEIGHT_DP = 12

@@ -59,13 +59,22 @@ class RadioPresetsStore(
         }
         .stateIn(scope, SharingStarted.Eagerly, emptyList())
 
-    /** Add a preset (no-op if an identical band+freq already exists). */
-    suspend fun add(preset: RadioPreset) {
+    /**
+     * Add a preset. Returns false when the store is full ([MAX_PRESETS]) — the UIs render
+     * exactly six slots (`presets.take(6)`), so an uncapped 7th would be invisible and
+     * undeletable there, and could displace a shown one by sort order. A band+freq that
+     * already exists is a no-op success.
+     */
+    suspend fun add(preset: RadioPreset): Boolean {
+        var accepted = false
         context.radioPresetsDataStore.edit { prefs ->
-            val current = prefs[key]?.toMutableSet() ?: mutableSetOf()
-            current.add(preset.encode())
-            prefs[key] = current
+            val next = addCapped(prefs[key] ?: emptySet(), preset)
+            if (next != null) {
+                prefs[key] = next
+                accepted = true
+            }
         }
+        return accepted
     }
 
     /** Remove a preset if present. */
@@ -74,6 +83,27 @@ class RadioPresetsStore(
             val current = prefs[key]?.toMutableSet() ?: mutableSetOf()
             current.remove(preset.encode())
             prefs[key] = current
+        }
+    }
+
+    companion object {
+        /** The UIs show `presets.take(6)`; the store must never hold more than they render. */
+        const val MAX_PRESETS = 6
+
+        /**
+         * Pure add-with-cap over the stored token set: the new set, the same set for a
+         * duplicate, or null when full (reject — the caller informs, nothing is written).
+         * Counts raw tokens, not decodable ones: corrupt entries still occupy visible slots.
+         */
+        internal fun addCapped(current: Set<String>, preset: RadioPreset): Set<String>? {
+            val token = preset.encode()
+            if (token in current) {
+                return current
+            }
+            if (current.size >= MAX_PRESETS) {
+                return null
+            }
+            return current + token
         }
     }
 }

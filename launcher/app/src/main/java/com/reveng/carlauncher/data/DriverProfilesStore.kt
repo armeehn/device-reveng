@@ -143,9 +143,12 @@ class DriverProfilesStore(
     /**
      * Write [profile] through to the stores that own each setting, then record it as active.
      *
-     * Order matters: the settings that only re-theme or re-sort land before [markActive], so a
-     * failure part-way leaves the profile un-marked rather than marked-but-unapplied. A driver
-     * seeing the old name next to their new theme is a much smaller lie than the reverse.
+     * Order matters: every write lands (is awaited) before [markActive], so a failure part-way
+     * leaves the profile un-marked rather than marked-but-unapplied. A driver seeing the old
+     * name next to their new theme is a much smaller lie than the reverse. The theme and
+     * driver-side setters run on their stores' own scopes and return [kotlinx.coroutines.Job]s;
+     * fire-and-forgetting those let markActive commit first, which is exactly the
+     * marked-but-unapplied state this ordering exists to rule out.
      */
     suspend fun apply(
         profile: DriverProfile,
@@ -154,10 +157,12 @@ class DriverProfilesStore(
         appOrderStore: AppOrderStore,
         settingsStore: SettingsStore,
     ) {
-        themeStore.setActive(profile.themeId)
+        val themeWrite = themeStore.setActive(profile.themeId)
         favoritesStore.setAll(profile.favorites)
         appOrderStore.setOrder(profile.appOrder)
-        settingsStore.setDriverSideMode(profile.driverSide)
+        val sideWrite = settingsStore.setDriverSideMode(profile.driverSide)
+        themeWrite.join()
+        sideWrite.join()
 
         markActive(profile.id)
     }

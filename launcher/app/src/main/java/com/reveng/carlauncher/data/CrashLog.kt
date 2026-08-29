@@ -193,11 +193,34 @@ object CrashLog {
         previous: Thread.UncaughtExceptionHandler?,
     ): Thread.UncaughtExceptionHandler = Recorder(file, version, previous)
 
-    /** Append, evict, rewrite — one open, one write, no partial-append state to reason about. */
-    private fun store(file: File, record: String) {
+    private const val TMP_SUFFIX = ".tmp"
+
+    /** Serializes [store]: two threads crashing at once must not interleave in the same file. */
+    private val storeLock = Any()
+
+    /**
+     * Append, evict, rewrite. The rewrite goes to a side file that is renamed into place:
+     * truncating the log and rewriting it in-place meant a power cut mid-write — the normal
+     * crash environment in a car — destroyed the entire history. A torn write now tears only
+     * the tmp file; the log itself is always the previous complete version or the new one.
+     */
+    private fun store(file: File, record: String) = synchronized(storeLock) {
         val existing = if (file.isFile) file.readText() else ""
         val kept = evict(split(existing) + record)
-        FileOutputStream(file, false).use { it.write(join(kept).toByteArray()) }
+        val bytes = join(kept).toByteArray()
+
+        val tmp = File(file.parentFile, file.name + TMP_SUFFIX)
+        FileOutputStream(tmp, false).use {
+            it.write(bytes)
+            it.fd.sync() // flushed before the rename, or the rename can land an empty file
+        }
+
+        if (!tmp.renameTo(file)) {
+            // Same-directory rename should not fail; if it somehow does, an in-place write is
+            // still better than dropping the record.
+            FileOutputStream(file, false).use { it.write(bytes) }
+            tmp.delete()
+        }
     }
 
     private class Recorder(

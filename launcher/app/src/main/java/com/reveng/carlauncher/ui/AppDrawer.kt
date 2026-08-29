@@ -208,7 +208,17 @@ private fun ReorderableAppGrid(
     // ring so the SWC key dispatcher navigates the exact tiles the drawer shows. The System
     // folder tile (when present) is the last focusable index.
     val hasSystem = systemApps.isNotEmpty()
-    val effectiveColumns = if (columns > 0) columns else 3
+    // v0.4.7.1: in adaptive mode, read the real column count off the laid-out grid — the items
+    // sharing the first visible row's y-offset. Hardcoding 3 while Adaptive(140dp) rendered ~5
+    // columns on this panel made wheel UP/DOWN jump diagonally (row stride used the wrong width).
+    val effectiveColumns = if (columns > 0) {
+        columns
+    } else {
+        val visible = gridState.layoutInfo.visibleItemsInfo
+        val firstRowY = visible.firstOrNull()?.offset?.y
+        val measured = visible.count { it.offset.y == firstRowY }
+        if (measured > 0) measured else FALLBACK_COLUMNS // before the first layout pass
+    }
     if (gridFocus != null) {
         SideEffect {
             gridFocus.count = items.size + if (hasSystem) 1 else 0
@@ -547,6 +557,9 @@ private fun SystemFolderDialog(
         }
     }
 }
+
+/** SWC grid stride before the adaptive grid has laid out (no visible items to measure yet). */
+private const val FALLBACK_COLUMNS = 3
 
 /**
  * Convert a launcher [android.graphics.drawable.Drawable] icon into a Compose Painter by

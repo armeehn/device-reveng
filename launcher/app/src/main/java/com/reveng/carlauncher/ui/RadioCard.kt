@@ -90,9 +90,9 @@ fun RadioCard(
      * binder round-trip to the vendor gateway. This card sits on Home, one tap away while
      * driving, and a held seek button ran that IPC on the main thread.
      */
-    fun control(action: () -> Unit) {
+    fun control(action: suspend () -> Unit) {
         scope.launch {
-            withContext(Dispatchers.IO) { runCatching(action) }
+            withContext(Dispatchers.IO) { runCatching { action() } }
             refresh++
         }
     }
@@ -170,8 +170,20 @@ fun RadioCard(
                 if (presets.isNotEmpty()) {
                     StationStrip(
                         presets = presets,
+                        activeBand = info.band,
                         activeFreq = info.freq,
-                        onRecall = { p -> control { carService.sendUserFreq(p.freq) } },
+                        // v0.4.7.1: land on the preset's band before tuning (RadioTuning) —
+                        // an AM preset recalled while on FM mistuned.
+                        onRecall = { p ->
+                            control {
+                                RadioTuning.recallPreset(
+                                    readBand = { carService.getRadioBand() },
+                                    toggleBand = { carService.radioBandToggle() },
+                                    tune = { carService.sendUserFreq(it) },
+                                    preset = p,
+                                )
+                            }
+                        },
                         onDelete = { p -> scope.launch { presetsStore?.remove(p) } },
                     )
                 }
@@ -262,6 +274,7 @@ private fun TransportButton(
 @Composable
 private fun StationStrip(
     presets: List<RadioPreset>,
+    activeBand: Int,
     activeFreq: Int,
     onRecall: (RadioPreset) -> Unit,
     onDelete: (RadioPreset) -> Unit,
@@ -274,7 +287,8 @@ private fun StationStrip(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         presets.forEach { p ->
-            val active = p.freq == activeFreq
+            // Band is part of the identity: AM 8750 must not light while tuned FM 87.5.
+            val active = RadioTuning.presetMatches(p, activeBand, activeFreq)
             Surface(
                 color = if (active) MaterialTheme.colorScheme.primaryContainer
                 else MaterialTheme.colorScheme.secondaryContainer,

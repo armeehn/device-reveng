@@ -187,8 +187,15 @@ class LauncherFocus {
         if (nav == glanceKey) leftTop() else rightTop()
 
     /**
-     * Handle a directional / CENTER key. Returns true (always handled while on Home). The
-     * first press on a cleared ring just reveals focus without moving.
+     * Handle a directional / CENTER key. Returns true only when something actually happened —
+     * focus revealed, focus moved, or an item activated. An edge press that moves nothing
+     * returns false so the caller can withhold the haptic/beep confirmation: confirming a move
+     * that didn't happen tells the driver the ring is somewhere it isn't. The first press on a
+     * cleared ring just reveals focus without moving.
+     *
+     * The ring's wrap decisions are deliberate and unchanged: the thumb column wraps (see
+     * [FocusTarget.Quick]); the glance column and the grid's side edges stop. This flag only
+     * makes the feedback honest about them.
      */
     fun onKey(nav: NavKey): Boolean {
         if (current == FocusTarget.None) {
@@ -198,12 +205,11 @@ class LauncherFocus {
             set(firstTarget())
             return true
         }
-        when (nav) {
+        return when (nav) {
             NavKey.CENTER -> activate()
             NavKey.UP, NavKey.DOWN, NavKey.LEFT, NavKey.RIGHT -> move(nav)
-            else -> {}
+            else -> false
         }
-        return true
     }
 
     /**
@@ -221,14 +227,21 @@ class LauncherFocus {
         return onSecondary(c)
     }
 
-    private fun activate() {
+    private fun activate(): Boolean {
         val c = current
-        if (c is FocusTarget.Grid && c.index >= grid.count) return
+        if (c is FocusTarget.Grid && c.index >= grid.count) return false
         onActivate(c)
+        return true
     }
 
-    private fun move(nav: NavKey) {
-        set(next(current, nav))
+    /** True when the key changed the focused target; false against a non-wrapping edge. */
+    private fun move(nav: NavKey): Boolean {
+        val target = next(current, nav)
+        if (target == current) {
+            return false
+        }
+        set(target)
+        return true
     }
 
     private fun next(c: FocusTarget, nav: NavKey): FocusTarget = when (c) {

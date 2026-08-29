@@ -22,7 +22,8 @@ sealed interface MiniScreenState {
     data object Hidden : MiniScreenState
     /** The video app was launched as a freeform window over the home-card slot. */
     data class Active(val packageName: String) : MiniScreenState
-    data class Failed(val reason: String) : MiniScreenState
+    /** [packageName] lets a Close on a failed launch register as a real user Close. */
+    data class Failed(val reason: String, val packageName: String? = null) : MiniScreenState
 }
 
 /**
@@ -87,12 +88,12 @@ class MiniScreenController(
                 // Refusing is the safe failure: launching without freeform would open the video
                 // app FULL SCREEN over the home the driver is looking at, from no visible action.
                 Log.w(TAG, "freeform unavailable; not launching $packageName")
-                _state.value = MiniScreenState.Failed("Freeform windows unavailable")
+                _state.value = MiniScreenState.Failed("Freeform windows unavailable", packageName)
                 return@launch
             }
             val intent = context.packageManager.getLaunchIntentForPackage(packageName)
             if (intent == null) {
-                _state.value = MiniScreenState.Failed("App can't be launched")
+                _state.value = MiniScreenState.Failed("App can't be launched", packageName)
                 return@launch
             }
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -102,7 +103,8 @@ class MiniScreenController(
                     .onSuccess { _state.value = MiniScreenState.Active(packageName) }
                     .onFailure {
                         Log.w(TAG, "mini launch $packageName failed: ${it.message}")
-                        _state.value = MiniScreenState.Failed("Couldn't open the video window")
+                        _state.value =
+                            MiniScreenState.Failed("Couldn't open the video window", packageName)
                     }
             }
         }
@@ -114,19 +116,28 @@ class MiniScreenController(
      */
     fun dismiss(userClosed: Boolean = false) {
         val cur = _state.value
-        if (userClosed && cur is MiniScreenState.Active) _userClosed.value = cur.packageName
+        if (userClosed) {
+            // Failed counts too: without it, Close after a failed launch recorded nothing, the
+            // home screen auto-showed again at once, and the card wedged at "Opening…".
+            when (cur) {
+                is MiniScreenState.Active -> _userClosed.value = cur.packageName
+                is MiniScreenState.Failed -> cur.packageName?.let { _userClosed.value = it }
+                MiniScreenState.Hidden -> {}
+            }
+        }
         _state.value = MiniScreenState.Hidden
         if (cur !is MiniScreenState.Active) return
         scope.launch(Dispatchers.IO) {
-            // Arm the window only once the HOME really went in. Arming first meant that when the
-            // injection failed — no root, Magisk denied — the window was still open and ate the
-            // driver's next real HOME press, so Close then the wheel HOME key did nothing.
+            // Arm the suppression BEFORE the shell runs: the injected HOME can echo back into
+            // onNewIntent before exec() returns, and arming after let it beat the window and
+            // snap the UI to Home. A failed injection — no root, Magisk denied — disarms again,
+            // so the window never eats the driver's next real HOME press.
+            suppressHomeUntil = SystemClock.elapsedRealtime() + HOME_INJECTION_WINDOW_MS
             val r = RootShell.exec("input keyevent 3")
             if (r.code != 0) {
+                suppressHomeUntil = 0L
                 Log.w(TAG, "dismiss keyevent failed: ${r.err.joinToString()}")
-                return@launch
             }
-            suppressHomeUntil = SystemClock.elapsedRealtime() + HOME_INJECTION_WINDOW_MS
         }
     }
 

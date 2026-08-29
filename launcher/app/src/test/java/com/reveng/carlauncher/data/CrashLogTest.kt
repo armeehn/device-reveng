@@ -1,6 +1,7 @@
 package com.reveng.carlauncher.data
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -170,6 +171,56 @@ class CrashLogTest {
             .uncaughtException(Thread.currentThread(), IllegalStateException("boom"))
 
         assertEquals(1, CrashLog.parse(log.readText()).size)
+    }
+
+    @Test
+    fun storeWritesThroughATmpFileAndLeavesNoneBehind() {
+        // The fix for the torn-write hazard: store() must write the new content to a side file
+        // and rename it into place, so a power cut mid-write (the normal crash environment in a
+        // car) tears the *tmp* file, never the log. A stale tmp from such an interrupted write
+        // must be consumed/replaced by the next store, not left rotting next to the log.
+        val log = File(temp.root, "crashes.log")
+        val tmp = File(temp.root, "crashes.log.tmp")
+        log.writeText(CrashLog.join(listOf(record(1_000L, "first"))))
+        tmp.writeText("garbage from a write a power cut interrupted")
+
+        CrashLog.handler(log, version, Delegate())
+            .uncaughtException(Thread.currentThread(), IllegalStateException("second"))
+
+        val stored = CrashLog.parse(log.readText())
+        assertEquals(2, stored.size)
+        assertEquals("java.lang.RuntimeException: first", stored[0].summary)
+        assertTrue(stored[1].summary.endsWith("second"))
+        assertFalse("a stale tmp must not survive a successful store", tmp.exists())
+    }
+
+    @Test
+    fun concurrentCrashesAllLand() {
+        // Several threads dying at once is exactly when this file matters. Unsynchronized
+        // truncate-and-rewrite loses records (both read, both write, one wins) or interleaves
+        // two writers in one file.
+        val log = File(temp.root, "crashes.log")
+        val handler = CrashLog.handler(log, version, Delegate())
+        val threads = 8
+        val start = java.util.concurrent.CountDownLatch(1)
+        val done = java.util.concurrent.CountDownLatch(threads)
+
+        repeat(threads) { i ->
+            Thread {
+                start.await()
+                handler.uncaughtException(Thread.currentThread(), IllegalStateException("boom $i"))
+                done.countDown()
+            }.start()
+        }
+        start.countDown()
+        assertTrue(done.await(30, java.util.concurrent.TimeUnit.SECONDS))
+
+        val stored = CrashLog.parse(log.readText())
+        assertEquals(threads, stored.size)
+        val messages = stored.map { it.summary }.toSet()
+        repeat(threads) { i ->
+            assertTrue("crash $i lost", "java.lang.IllegalStateException: boom $i" in messages)
+        }
     }
 
     @Test
