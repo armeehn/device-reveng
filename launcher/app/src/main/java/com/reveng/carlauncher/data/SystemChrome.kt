@@ -7,7 +7,9 @@ import com.reveng.carlauncher.carlib.RootShell
  * v2.5 — suppression of the vendor/system top chrome, so the launcher's own shade
  * ([com.reveng.carlauncher.ui.ShadeOverlay]) replaces it instead of stacking under it.
  *
- * Two independent mechanisms, both confirmed on-device (GT6-EAU T16.00.050, 2026-08-28):
+ * Two independent mechanisms, both confirmed on-device (GT6-EAU T16.00.050, 2026-08-28). They are
+ * run as separate shell commands, because they really are independent: a non-zero exit from the
+ * `cmd statusbar` half must not drop the `setprop` half, which is the only reboot-persistent one.
  *
  *  * `cmd statusbar disable-for-setup true` — StatusBarManager's setup-mode disable flags.
  *    Verified to fully block the SystemUI pull-down (`expand-settings` becomes a no-op).
@@ -46,7 +48,7 @@ object SystemChrome {
                 "setprop persist.sys.show_statusbar 1",
             )
         }
-        if (!res.ok) Log.w(TAG, "apply(replaceBars=$replaceBars) failed: $res")
+        if (!res.ok) Log.w(TAG, "apply(replaceBars=$replaceBars) failed: ${res.failures}")
         return res.ok
     }
 }
