@@ -34,7 +34,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,6 +50,9 @@ import com.reveng.carlauncher.data.ThemeTransfer // v2.7
 import com.reveng.carlauncher.ui.settings.DialogTextButton // v2.7
 import com.reveng.carlauncher.ui.theme.CarTheme
 import com.reveng.carlauncher.ui.theme.ThemeColors
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File // v2.7
 
 /**
@@ -70,13 +75,18 @@ fun ThemesScreen(
     onBack: () -> Unit,
     onImport: (CarTheme) -> Unit = {}, // v2.7
 ) {
-    // v2.7 — theme import/export. The file work happens inline on the composition thread: these
-    // are single-digit-kilobyte writes to app-private storage, and the result has to be reported
-    // in the same gesture. If a theme ever grows large enough to make that a stutter, the fix is
-    // a coroutine here, not a different storage location.
+    // v2.7 — theme import/export. The files live on external storage, where a stat can block for
+    // tens of milliseconds on this unit's eMMC, so every read and write below runs on
+    // Dispatchers.IO: the listing via produceState (keyed on the dialog, not on recomposition) and
+    // the export/import from the click handler's own scope.
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var importing by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
+    val importable by produceState(initialValue = emptyList<File>(), importing) {
+        value = if (importing) withContext(Dispatchers.IO) { ThemeTransfer.listImportable(context) }
+        else emptyList()
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
@@ -121,9 +131,13 @@ fun ThemesScreen(
                     onEdit = { onEdit(theme) },
                     onDelete = { onDelete(theme) },
                     onExport = {
-                        val file = ThemeTransfer.export(context, theme)
-                        message = if (file != null) "Exported to ${file.absolutePath}"
-                        else "Export failed — external storage unavailable."
+                        scope.launch {
+                            val file = withContext(Dispatchers.IO) {
+                                ThemeTransfer.export(context, theme)
+                            }
+                            message = if (file != null) "Exported to ${file.absolutePath}"
+                            else "Export failed — external storage unavailable."
+                        }
                     },
                 )
             }
@@ -132,14 +146,16 @@ fun ThemesScreen(
 
     if (importing) {
         ImportThemeDialog(
-            files = ThemeTransfer.listImportable(context),
+            files = importable,
             onPick = { file ->
                 importing = false
-                val theme = ThemeTransfer.import(file)
-                if (theme == null) {
-                    message = "${file.name} is not a readable theme file."
-                } else {
-                    onImport(theme)
+                scope.launch {
+                    val theme = withContext(Dispatchers.IO) { ThemeTransfer.import(file) }
+                    if (theme == null) {
+                        message = "${file.name} is not a readable theme file."
+                    } else {
+                        onImport(theme)
+                    }
                 }
             },
             onDismiss = { importing = false },

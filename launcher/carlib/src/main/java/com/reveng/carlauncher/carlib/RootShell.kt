@@ -65,8 +65,32 @@ object RootShell {
         return execProcessBuilder(command)
     }
 
-    /** Convenience: run multiple commands in one root session. */
-    fun exec(vararg commands: String): Result = exec(commands.joinToString(" && "))
+    /** One command from the vararg [exec], paired with what it returned. */
+    data class Outcome(val command: String, val result: Result)
+
+    /**
+     * What several independent commands did. [ok] only when every one exited 0; [failures] names
+     * the ones that did not, so a caller can report *which* repair failed instead of reporting a
+     * single boolean that hides a partial success.
+     */
+    data class MultiResult(val outcomes: List<Outcome>) {
+        val ok: Boolean get() = outcomes.all { it.result.ok }
+        val failures: List<Outcome> get() = outcomes.filter { !it.result.ok }
+    }
+
+    /**
+     * Convenience: run several INDEPENDENT commands, each as its own [exec].
+     *
+     * Deliberately not `a && b && c`. That made every command conditional on the one before it, so
+     * one non-zero exit — an already-granted permission, a vendor `pm` quirk — silently dropped
+     * every command after it: a "repair all" that repaired up to the first failure and then said
+     * nothing. Each command now runs whatever the ones before it did, in order.
+     */
+    fun exec(vararg commands: String): MultiResult = execEach(commands.asList()) { exec(it) }
+
+    /** The fan-out of [exec], with the backend passed in so it is testable without a real `su`. */
+    internal fun execEach(commands: List<String>, run: (String) -> Result): MultiResult =
+        MultiResult(commands.map { Outcome(it, run(it)) })
 
     /**
      * v2.9 — wrap [s] in single quotes, escaping any embedded single quote, for exactly one shell

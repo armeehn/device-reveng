@@ -72,14 +72,32 @@ object NavRepository {
     }
 
     /**
+     * Set once the grant has been settled for this process — either it was already in place, or we
+     * made our one attempt at it. [NavCard] calls this from a LaunchedEffect and is disposed and
+     * recomposed on every Home ↔ Settings ↔ Media round trip, so without this a unit where the
+     * grant does not stick pays a fresh `su` fork plus a Magisk policy check on every Home entry.
+     */
+    @Volatile
+    private var listenerSettled = false
+
+    /**
      * Root-enable the nav notification listener so onNotificationPosted() delivers Maps'
      * navigation notifications. Best-effort — safe to call on a non-rooted unit (it just
      * fails and nav info stays empty; the tap-to-navigate launcher still works).
+     *
+     * Idempotent and cheap on repeat: at most one shell attempt per process. A failure here needs
+     * root or a user repair to change, neither of which a recomposition can supply.
      */
     fun ensureListenerEnabled(context: Context) {
-        if (isListenerEnabled(context)) return
+        if (listenerSettled) return
+        if (isListenerEnabled(context)) {
+            listenerSettled = true
+            return
+        }
+
         val comp = ComponentName(context, NavListenerService::class.java).flattenToString()
-        val r = RootShell.exec("cmd notification allow_listener '$comp'")
+        val r = RootShell.exec("cmd notification allow_listener ${RootShell.quote(comp)}")
+        listenerSettled = true
         Log.i(TAG, "allow_listener $comp -> code=${r.code} ${r.stdout}")
     }
 

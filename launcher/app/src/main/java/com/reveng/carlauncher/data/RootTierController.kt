@@ -19,8 +19,9 @@ import kotlinx.coroutines.withContext
  * work underneath is blocking root I/O, and the boundary between them belongs in one place. The UI
  * reads StateFlows and calls plain methods; it never learns that a shell exists.
  *
- * Nothing here runs at construction except two cheap reads, so wiring it into MainActivity costs a
- * launch nothing.
+ * Nothing here runs at construction except one SharedPreferences read. The two probes that are not
+ * cheap — the vendor-launcher package-manager query and the SysVar key sweep — both run inside
+ * [refresh] on Dispatchers.IO, so wiring it into MainActivity costs a launch nothing.
  */
 class RootTierController(
     context: Context,
@@ -41,7 +42,8 @@ class RootTierController(
      */
     val chromeKeysPresent: StateFlow<List<String>?> = _chromeKeysPresent.asStateFlow()
 
-    private val _vendorLauncher = MutableStateFlow(VendorLauncher.state(appContext))
+    private val _vendorLauncher = MutableStateFlow(VendorLauncher.State.UNKNOWN)
+    /** UNKNOWN until [refresh] has probed — which is also how the UI already reads "no control". */
     val vendorLauncher: StateFlow<VendorLauncher.State> = _vendorLauncher.asStateFlow()
 
     private val _rollbackDeadline = MutableStateFlow<Long?>(null)
@@ -61,9 +63,14 @@ class RootTierController(
     }
 
     fun refresh() {
-        _vendorLauncher.value = VendorLauncher.state(appContext)
+        // VendorLauncher.state() is a getApplicationEnabledSetting binder call. refresh() is called
+        // from init, i.e. from the activity's onCreate, so it belongs off the main thread with the
+        // SysVar sweep rather than on the launcher's cold-start path.
         scope.launch {
-            _chromeKeysPresent.value = withContext(Dispatchers.IO) { chrome.presentKeys() }
+            withContext(Dispatchers.IO) {
+                _chromeKeysPresent.value = chrome.presentKeys()
+                _vendorLauncher.value = VendorLauncher.state(appContext)
+            }
         }
     }
 
