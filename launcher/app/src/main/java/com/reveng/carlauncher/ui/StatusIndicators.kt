@@ -43,7 +43,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -53,12 +52,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.reveng.carlauncher.carlib.CarService
 import com.reveng.carlauncher.data.BrightnessController
 import com.reveng.carlauncher.ui.theme.carShape
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
@@ -68,22 +69,46 @@ import kotlinx.coroutines.withContext
  * Controls panel, so status lives in the bar and control sits one tap below it.
  *
  * Every chip degrades by disappearing (or greying) rather than freezing: no Bluetooth adapter
- * -> no chip, EventService unbound -> no volume chip. A chip that lies is worse than no chip.
+ * -> no chip, EventService unbound -> no volume chip, unreadable backlight -> no brightness chip.
+ * A chip that lies is worse than no chip.
  *
  * Update paths, cheapest first:
  *   Wi-Fi       push  — ConnectivityManager.NetworkCallback (signal via onCapabilitiesChanged)
  *   Bluetooth   push  — adapter state + connection-state broadcasts
  *   brightness  push  — ContentObserver on Settings.System.SCREEN_BRIGHTNESS
- *   volume      poll  — the vendor AIDL exposes no volume event on main yet, so a slow
- *                       [VOLUME_POLL_MS] read + an immediate re-read when Quick Controls
- *                       closes ([refreshKey]). Swap to the event flow when one lands.
+ *   volume      poll  — no volume event exists to ride; the search is written up on
+ *                       [rememberVolumeStatus]. Binder death is still a push, so the chip
+ *                       goes the moment the service dies rather than a poll period later.
  */
 
 private const val VOLUME_POLL_MS = 5_000L
+
+/**
+ * Gateway status line that *may* announce a main-volume change. It is a constant of the vendor's
+ * LocalSocket text protocol (CAR_API §3.3), and whether it is also pushed over the
+ * `addMessageListener(ICommunication)` channel we are already registered on is UNCONFIRMED — so it
+ * only nudges a re-read of the confirmed getter. The number on the chip is never parsed out of it.
+ */
+private const val VOLUME_MESSAGE_PREFIX = "SYSTEM_VOLUME"
+
 private const val WIFI_BARS = 4
 
 // WifiInfo.INVALID_RSSI is @hide; the framework uses -127 as the sentinel.
 private const val INVALID_RSSI = -127
+
+/**
+ * Stable identities for the four chips, pinned by the instrumentation suite
+ * (app/src/androidTest). ROADMAP holds the strip as a stability invariant from v3.1 to v4.0:
+ * a redesign may restyle a chip freely, but must not silently drop one. Tags are asserted on,
+ * so renaming one is the same breaking change as deleting the chip — do both in one commit.
+ */
+internal object StatusIndicatorTags {
+    const val GROUP = "statusIndicators"
+    const val WIFI = "statusIndicator.wifi"
+    const val BLUETOOTH = "statusIndicator.bluetooth"
+    const val VOLUME = "statusIndicator.volume"
+    const val BRIGHTNESS = "statusIndicator.brightness"
+}
 
 @Composable
 fun StatusIndicators(
@@ -94,19 +119,43 @@ fun StatusIndicators(
 ) {
     val context = LocalContext.current.applicationContext
 
-    val wifi = rememberWifiStatus(context)
-    val bt = rememberBluetoothStatus(context)
-    val volume = rememberVolumeStatus(carService, refreshKey)
-    val brightnessPercent = rememberBrightnessPercent(context, refreshKey)
+    StatusIndicatorsRow(
+        wifi = rememberWifiStatus(context),
+        bt = rememberBluetoothStatus(context),
+        volume = rememberVolumeStatus(carService, refreshKey),
+        brightnessPercent = rememberBrightnessPercent(context, refreshKey),
+        modifier = modifier,
+        onOpen = onOpen,
+    )
+}
 
+/**
+ * The strip's rendering, with every source already resolved. Split out from [StatusIndicators]
+ * so a test can drive all four sources — including the ones an emulator has no hardware for
+ * (no vendor EventService, so no volume; no car, so no MCU backlight) — without pretending a
+ * source is there. Each parameter carries its own "absent" value, and absent means *no chip*:
+ * that is the ROADMAP rule the tests exist to hold. A chip that lies is worse than no chip.
+ */
+@Composable
+internal fun StatusIndicatorsRow(
+    wifi: WifiStatus,
+    bt: BtStatus,
+    volume: VolumeStatus,
+    brightnessPercent: Int?,
+    modifier: Modifier = Modifier,
+    onOpen: (() -> Unit)? = null,
+) {
     Row(
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
+            .testTag(StatusIndicatorTags.GROUP)
             .clip(carShape(8.dp))
             .then(if (onOpen != null) Modifier.clickable(onClick = onOpen) else Modifier)
             .padding(horizontal = 8.dp, vertical = 4.dp),
     ) {
+        // Wi-Fi is the one source the framework always answers for, radio off included, so this
+        // chip is unconditional — "off" is a state, not a missing source.
         WifiChip(wifi)
         if (bt.present) {
             BluetoothChip(bt)
@@ -114,18 +163,23 @@ fun StatusIndicators(
         if (volume.available) {
             VolumeChip(volume)
         }
-        StatusChip(
-            icon = Icons.Filled.BrightnessMedium,
-            description = "Brightness $brightnessPercent%",
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            text = "$brightnessPercent%",
-        )
+        // null = brightness unreadable (no WRITE_SETTINGS, no MCU backlight): the chip goes,
+        // rather than parking on a stale percentage.
+        if (brightnessPercent != null) {
+            StatusChip(
+                icon = Icons.Filled.BrightnessMedium,
+                description = "Brightness $brightnessPercent%",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                text = "$brightnessPercent%",
+                tag = StatusIndicatorTags.BRIGHTNESS,
+            )
+        }
     }
 }
 
 // ---- Wi-Fi -----------------------------------------------------------------
 
-private data class WifiStatus(
+internal data class WifiStatus(
     val enabled: Boolean,
     val connected: Boolean,
     val validated: Boolean,
@@ -146,7 +200,7 @@ private fun WifiChip(wifi: WifiStatus) {
         !wifi.validated -> MaterialTheme.colorScheme.error
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
-    StatusChip(icon = icon, description = description, tint = tint)
+    StatusChip(icon = icon, description = description, tint = tint, tag = StatusIndicatorTags.WIFI)
 }
 
 private fun wifiBarsIcon(bars: Int): ImageVector = when (bars) {
@@ -242,7 +296,7 @@ private fun wifiBars(wm: WifiManager?, rssi: Int?): Int {
 
 // ---- Bluetooth -------------------------------------------------------------
 
-private data class BtStatus(
+internal data class BtStatus(
     val present: Boolean,
     val on: Boolean,
     val connectedCount: Int,
@@ -268,6 +322,7 @@ private fun BluetoothChip(bt: BtStatus) {
         description = description,
         tint = tint,
         text = if (bt.connectedCount > 1) "${bt.connectedCount}" else null,
+        tag = StatusIndicatorTags.BLUETOOTH,
     )
 }
 
@@ -343,11 +398,22 @@ private fun rememberBluetoothStatus(context: Context): BtStatus {
 
 // ---- Volume ----------------------------------------------------------------
 
-private data class VolumeStatus(
+internal data class VolumeStatus(
     val available: Boolean,
     val level: Int,
     val muted: Boolean,
 )
+
+/** The chip's "say nothing" state: unbound, dead binder, or a read that failed. */
+private val VOLUME_UNAVAILABLE = VolumeStatus(available = false, level = 0, muted = false)
+
+/**
+ * True for a gateway status line that may carry a main-volume change. Prefix-only on purpose:
+ * the payload format after the marker is not documented anywhere in the decompile, so nothing
+ * downstream reads it — see [VOLUME_MESSAGE_PREFIX].
+ */
+internal fun isVolumeMessage(message: String?): Boolean =
+    message?.trimStart()?.startsWith(VOLUME_MESSAGE_PREFIX) == true
 
 @Composable
 private fun VolumeChip(volume: VolumeStatus) {
@@ -356,6 +422,7 @@ private fun VolumeChip(volume: VolumeStatus) {
             icon = Icons.AutoMirrored.Filled.VolumeOff,
             description = "Muted",
             tint = Color.Gray,
+            tag = StatusIndicatorTags.VOLUME,
         )
     } else {
         StatusChip(
@@ -363,32 +430,75 @@ private fun VolumeChip(volume: VolumeStatus) {
             description = "Volume ${volume.level}",
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
             text = "${volume.level}",
+            tag = StatusIndicatorTags.VOLUME,
         )
     }
 }
 
+/**
+ * The chip's value still comes from a poll, because **the vendor AIDL exposes no volume event**.
+ * What was checked, so the next reader does not repeat it:
+ *
+ *  - Every `ICallbackfn` registrar in the 144-method interface: `setRadioCallback` (29),
+ *    `setCurModeCallback` (30), `setCamAuxCallback` (66), `setCanA6DataCallback` (131),
+ *    `setCanA5DataCallback` (132), `setDashBoardCallback` (143), `setUpgradeCallback` (144).
+ *    None is audio- or volume-scoped, and none takes an event-id selector that AIDL_ORDINALS.md
+ *    maps to volume. `ICallbackfn.aidl` is additionally a *placeholder* — its real method
+ *    signature was never recovered — so registering any of them would be a guessed transaction
+ *    into the vendor service, which is how PR #29 bricked the top bar.
+ *  - The audio surface itself: `getMainVolval` (103), `IsMuteOn` (104), `sendVolState` (77),
+ *    `sendMuteState` (8), `getSndSWVol` (58). All getters and setters, no subscription.
+ *  - The broadcast API (`CarEvents`, from the decompiled `EventUtils` constant table): it carries
+ *    reverse, ACC, day/night backlight, SWC, CAN and radio actions. There is no volume action.
+ *  - `SYSTEM_VOLUME` exists only as a *LocalSocket* text-protocol marker (CAR_API §3.3), a channel
+ *    the spec says is there for the stock UI apps.
+ *
+ * So the poll stays, and the two things that would make it lie are handled as pushes instead:
+ * a dead binder and an unbind both take the chip away immediately.
+ */
 @Composable
 private fun rememberVolumeStatus(carService: CarService?, refreshKey: Int): VolumeStatus {
-    var status by remember { mutableStateOf(VolumeStatus(available = false, level = 0, muted = false)) }
+    var status by remember { mutableStateOf(VOLUME_UNAVAILABLE) }
 
     LaunchedEffect(carService, refreshKey) {
         if (carService == null) {
-            status = VolumeStatus(available = false, level = 0, muted = false)
+            status = VOLUME_UNAVAILABLE
             return@LaunchedEffect
         }
+
+        // Both getters are read-only and run off the main thread. CarService guards each call, so
+        // a RemoteException or a DeadObjectException from a binder that died mid-read arrives here
+        // as null — and null removes the chip instead of freezing the last number on screen.
+        suspend fun read(): VolumeStatus = withContext(Dispatchers.IO) {
+            val level = runCatching { carService.getMainVolume() }.getOrNull()
+                ?: return@withContext VOLUME_UNAVAILABLE
+            val muted = runCatching { carService.isMuteOn() }.getOrDefault(false)
+            VolumeStatus(available = true, level = level, muted = muted)
+        }
+
+        // The one real push available: onServiceDisconnected flips `connected`, so a dropped
+        // binder clears the chip at once rather than up to [VOLUME_POLL_MS] later.
+        launch {
+            carService.connected.collect { live ->
+                if (!live) {
+                    status = VOLUME_UNAVAILABLE
+                }
+            }
+        }
+
+        // Opportunistic only: the message listener is already registered on bind, so watching it
+        // costs no extra call into the vendor service. If a volume line ever does arrive, re-read
+        // the confirmed getter; if it never does, this is inert and the poll is unchanged.
+        launch {
+            carService.messages.collect { message ->
+                if (isVolumeMessage(message)) {
+                    status = read()
+                }
+            }
+        }
+
         while (true) {
-            val level = withContext(Dispatchers.IO) {
-                runCatching { carService.getMainVolume() }.getOrNull()
-            }
-            val muted = withContext(Dispatchers.IO) {
-                runCatching { carService.isMuteOn() }.getOrDefault(false)
-            }
-            // null = EventService unbound: the chip disappears rather than showing stale.
-            status = if (level == null) {
-                VolumeStatus(available = false, level = 0, muted = false)
-            } else {
-                VolumeStatus(available = true, level = level, muted = muted)
-            }
+            status = read()
             delay(VOLUME_POLL_MS)
         }
     }
@@ -398,8 +508,9 @@ private fun rememberVolumeStatus(carService: CarService?, refreshKey: Int): Volu
 // ---- Brightness ------------------------------------------------------------
 
 @Composable
-private fun rememberBrightnessPercent(context: Context, refreshKey: Int): Int {
-    var percent by remember { mutableIntStateOf(BrightnessController.currentPercent(context)) }
+private fun rememberBrightnessPercent(context: Context, refreshKey: Int): Int? {
+    // null = nothing readable behind the chip, so the chip disappears rather than freezing.
+    var percent by remember { mutableStateOf(BrightnessController.currentPercent(context)) }
 
     LaunchedEffect(refreshKey) {
         percent = BrightnessController.currentPercent(context)
@@ -431,10 +542,14 @@ private fun StatusChip(
     description: String,
     tint: Color,
     text: String? = null,
+    // Identity, not styling: the tag says *which* indicator this is, so a test can pin the
+    // chip's presence while a redesign is free to change its icon, colour and wording.
+    tag: String,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(3.dp),
+        modifier = Modifier.testTag(tag),
     ) {
         Icon(
             imageVector = icon,
