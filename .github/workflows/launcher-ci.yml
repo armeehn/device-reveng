@@ -215,6 +215,12 @@ jobs:
           arch: x86_64
           avd-name: ${{ env.AVD_NAME }}
           force-avd-creation: true
+          # Must match the cold-start job. Without it the emulator inherits a
+          # 7.2 GB userdata partition, cannot create it beside the Gradle
+          # caches, and dies before boot -- which surfaces only as a wall of
+          # "device 'emulator-5554' not found" and a boot timeout, never as a
+          # disk error. This job caches more than cold-start, not less.
+          disk-size: 4096M
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           disable-animations: true
           pre-emulator-launch-script: .github/scripts/headunit-avd.sh
