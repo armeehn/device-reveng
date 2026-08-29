@@ -59,6 +59,7 @@ import com.reveng.carlauncher.data.BrightnessController
 import com.reveng.carlauncher.ui.theme.carShape
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
@@ -75,12 +76,21 @@ import kotlinx.coroutines.withContext
  *   Wi-Fi       push  — ConnectivityManager.NetworkCallback (signal via onCapabilitiesChanged)
  *   Bluetooth   push  — adapter state + connection-state broadcasts
  *   brightness  push  — ContentObserver on Settings.System.SCREEN_BRIGHTNESS
- *   volume      poll  — the vendor AIDL exposes no volume event on main yet, so a slow
- *                       [VOLUME_POLL_MS] read + an immediate re-read when Quick Controls
- *                       closes ([refreshKey]). Swap to the event flow when one lands.
+ *   volume      poll  — no volume event exists to ride; the search is written up on
+ *                       [rememberVolumeStatus]. Binder death is still a push, so the chip
+ *                       goes the moment the service dies rather than a poll period later.
  */
 
 private const val VOLUME_POLL_MS = 5_000L
+
+/**
+ * Gateway status line that *may* announce a main-volume change. It is a constant of the vendor's
+ * LocalSocket text protocol (CAR_API §3.3), and whether it is also pushed over the
+ * `addMessageListener(ICommunication)` channel we are already registered on is UNCONFIRMED — so it
+ * only nudges a re-read of the confirmed getter. The number on the chip is never parsed out of it.
+ */
+private const val VOLUME_MESSAGE_PREFIX = "SYSTEM_VOLUME"
+
 private const val WIFI_BARS = 4
 
 // WifiInfo.INVALID_RSSI is @hide; the framework uses -127 as the sentinel.
@@ -394,6 +404,17 @@ internal data class VolumeStatus(
     val muted: Boolean,
 )
 
+/** The chip's "say nothing" state: unbound, dead binder, or a read that failed. */
+private val VOLUME_UNAVAILABLE = VolumeStatus(available = false, level = 0, muted = false)
+
+/**
+ * True for a gateway status line that may carry a main-volume change. Prefix-only on purpose:
+ * the payload format after the marker is not documented anywhere in the decompile, so nothing
+ * downstream reads it — see [VOLUME_MESSAGE_PREFIX].
+ */
+internal fun isVolumeMessage(message: String?): Boolean =
+    message?.trimStart()?.startsWith(VOLUME_MESSAGE_PREFIX) == true
+
 @Composable
 private fun VolumeChip(volume: VolumeStatus) {
     if (volume.muted) {
@@ -414,28 +435,70 @@ private fun VolumeChip(volume: VolumeStatus) {
     }
 }
 
+/**
+ * The chip's value still comes from a poll, because **the vendor AIDL exposes no volume event**.
+ * What was checked, so the next reader does not repeat it:
+ *
+ *  - Every `ICallbackfn` registrar in the 144-method interface: `setRadioCallback` (29),
+ *    `setCurModeCallback` (30), `setCamAuxCallback` (66), `setCanA6DataCallback` (131),
+ *    `setCanA5DataCallback` (132), `setDashBoardCallback` (143), `setUpgradeCallback` (144).
+ *    None is audio- or volume-scoped, and none takes an event-id selector that AIDL_ORDINALS.md
+ *    maps to volume. `ICallbackfn.aidl` is additionally a *placeholder* — its real method
+ *    signature was never recovered — so registering any of them would be a guessed transaction
+ *    into the vendor service, which is how PR #29 bricked the top bar.
+ *  - The audio surface itself: `getMainVolval` (103), `IsMuteOn` (104), `sendVolState` (77),
+ *    `sendMuteState` (8), `getSndSWVol` (58). All getters and setters, no subscription.
+ *  - The broadcast API (`CarEvents`, from the decompiled `EventUtils` constant table): it carries
+ *    reverse, ACC, day/night backlight, SWC, CAN and radio actions. There is no volume action.
+ *  - `SYSTEM_VOLUME` exists only as a *LocalSocket* text-protocol marker (CAR_API §3.3), a channel
+ *    the spec says is there for the stock UI apps.
+ *
+ * So the poll stays, and the two things that would make it lie are handled as pushes instead:
+ * a dead binder and an unbind both take the chip away immediately.
+ */
 @Composable
 private fun rememberVolumeStatus(carService: CarService?, refreshKey: Int): VolumeStatus {
-    var status by remember { mutableStateOf(VolumeStatus(available = false, level = 0, muted = false)) }
+    var status by remember { mutableStateOf(VOLUME_UNAVAILABLE) }
 
     LaunchedEffect(carService, refreshKey) {
         if (carService == null) {
-            status = VolumeStatus(available = false, level = 0, muted = false)
+            status = VOLUME_UNAVAILABLE
             return@LaunchedEffect
         }
+
+        // Both getters are read-only and run off the main thread. CarService guards each call, so
+        // a RemoteException or a DeadObjectException from a binder that died mid-read arrives here
+        // as null — and null removes the chip instead of freezing the last number on screen.
+        suspend fun read(): VolumeStatus = withContext(Dispatchers.IO) {
+            val level = runCatching { carService.getMainVolume() }.getOrNull()
+                ?: return@withContext VOLUME_UNAVAILABLE
+            val muted = runCatching { carService.isMuteOn() }.getOrDefault(false)
+            VolumeStatus(available = true, level = level, muted = muted)
+        }
+
+        // The one real push available: onServiceDisconnected flips `connected`, so a dropped
+        // binder clears the chip at once rather than up to [VOLUME_POLL_MS] later.
+        launch {
+            carService.connected.collect { live ->
+                if (!live) {
+                    status = VOLUME_UNAVAILABLE
+                }
+            }
+        }
+
+        // Opportunistic only: the message listener is already registered on bind, so watching it
+        // costs no extra call into the vendor service. If a volume line ever does arrive, re-read
+        // the confirmed getter; if it never does, this is inert and the poll is unchanged.
+        launch {
+            carService.messages.collect { message ->
+                if (isVolumeMessage(message)) {
+                    status = read()
+                }
+            }
+        }
+
         while (true) {
-            val level = withContext(Dispatchers.IO) {
-                runCatching { carService.getMainVolume() }.getOrNull()
-            }
-            val muted = withContext(Dispatchers.IO) {
-                runCatching { carService.isMuteOn() }.getOrDefault(false)
-            }
-            // null = EventService unbound: the chip disappears rather than showing stale.
-            status = if (level == null) {
-                VolumeStatus(available = false, level = 0, muted = false)
-            } else {
-                VolumeStatus(available = true, level = level, muted = muted)
-            }
+            status = read()
             delay(VOLUME_POLL_MS)
         }
     }
