@@ -209,6 +209,17 @@ private fun VolumeControl(carService: CarService) {
         }
     }
 
+    // Conflated single-consumer pipe, the same shape BrightnessControl uses below. The slider
+    // fires on every pointer move, and CarService.setVolume is *two* blocking AIDL round-trips
+    // (IsMuteOn then sendVolState) — inline that was tens of main-thread binder calls a second
+    // during a drag. Conflated, not queued: after the finger lifts only the final level matters.
+    val volumeWrites = remember { Channel<Int>(Channel.CONFLATED) }
+    LaunchedEffect(Unit) {
+        for (level in volumeWrites) {
+            withContext(Dispatchers.IO) { runCatching { carService.setVolume(level) } }
+        }
+    }
+
     ControlRow(
         icon = if (muted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
         title = if (available) "Volume" else "Volume (unavailable)",
@@ -223,7 +234,7 @@ private fun VolumeControl(carService: CarService) {
             value = volume,
             onValueChange = { v ->
                 volume = v
-                if (available) runCatching { carService.setVolume(v.toInt()) }
+                if (available) volumeWrites.trySend(v.toInt())
             },
             valueRange = 0f..CarService.MAX_VOLUME.toFloat(),
             enabled = available && !muted,

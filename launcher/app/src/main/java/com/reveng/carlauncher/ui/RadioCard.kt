@@ -83,6 +83,20 @@ fun RadioCard(
     var refresh by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
 
+    /**
+     * Drive one tuner control, then re-poll — the same helper [RadioScreen] uses.
+     *
+     * `sendRadioKey` / `sendUserFreq` are not `oneway` in the AIDL, so each is a *blocking*
+     * binder round-trip to the vendor gateway. This card sits on Home, one tap away while
+     * driving, and a held seek button ran that IPC on the main thread.
+     */
+    fun control(action: () -> Unit) {
+        scope.launch {
+            withContext(Dispatchers.IO) { runCatching(action) }
+            refresh++
+        }
+    }
+
     val info by produceState(initialValue = RadioInfo.UNKNOWN, refresh) {
         while (true) {
             value = withContext(Dispatchers.IO) {
@@ -157,9 +171,7 @@ fun RadioCard(
                     StationStrip(
                         presets = presets,
                         activeFreq = info.freq,
-                        onRecall = { p ->
-                            carService.sendUserFreq(p.freq); refresh++
-                        },
+                        onRecall = { p -> control { carService.sendUserFreq(p.freq) } },
                         onDelete = { p -> scope.launch { presetsStore?.remove(p) } },
                     )
                 }
@@ -171,20 +183,20 @@ fun RadioCard(
                     TransportButton(
                         icon = Icons.Filled.FastRewind,
                         contentDescription = "Seek down",
-                        onClick = { carService.radioSeekDown(); refresh++ },
+                        onClick = { control { carService.radioSeekDown() } },
                         modifier = Modifier.weight(1.25f),
                     )
                     TransportButton(
                         icon = Icons.Filled.SwapHoriz,
                         contentDescription = "Band",
-                        onClick = { carService.radioBandToggle(); refresh++ },
+                        onClick = { control { carService.radioBandToggle() } },
                         modifier = Modifier.weight(1f),
                         emphasized = true,
                     )
                     TransportButton(
                         icon = Icons.Filled.FastForward,
                         contentDescription = "Seek up",
-                        onClick = { carService.radioSeekUp(); refresh++ },
+                        onClick = { control { carService.radioSeekUp() } },
                         modifier = Modifier.weight(1.25f),
                     )
                 }
