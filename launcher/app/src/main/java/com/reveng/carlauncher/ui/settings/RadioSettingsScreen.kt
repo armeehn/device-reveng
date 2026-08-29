@@ -76,6 +76,19 @@ fun RadioSettingsScreen(
         }
     }
 
+    /**
+     * Drive one tuner control, then re-read. The blocking *reads* above were moved off the main
+     * thread after the incident noted there; the *writes* stayed inline. `sendRadioKey` /
+     * `sendUserFreq` are not `oneway` either, so each was a blocking binder round-trip on the
+     * main thread, and a held seek chip spammed them.
+     */
+    fun control(action: () -> Unit) {
+        scope.launch {
+            withContext(Dispatchers.IO) { runCatching(action) }
+            refreshTick++
+        }
+    }
+
     SettingsScaffold(
         title = "Radio",
         onBack = onBack,
@@ -91,12 +104,12 @@ fun RadioSettingsScreen(
         SettingsSection(title = "Controls") {
             ActionRow(
                 label = "Toggle band (FM/AM)",
-                onClick = { carService.radioBandToggle(); refreshTick++ },
+                onClick = { control { carService.radioBandToggle() } },
                 enabled = connected,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                SmallActionChip("Seek ◀", connected) { carService.radioSeekDown(); refreshTick++ }
-                SmallActionChip("Seek ▶", connected) { carService.radioSeekUp(); refreshTick++ }
+                SmallActionChip("Seek ◀", connected) { control { carService.radioSeekDown() } }
+                SmallActionChip("Seek ▶", connected) { control { carService.radioSeekUp() } }
             }
         }
 
@@ -112,10 +125,7 @@ fun RadioSettingsScreen(
                     PresetRow(
                         label = formatFreqLabel(preset.band, preset.freq) +
                             "  ·  " + bandLabel(preset.band, carService),
-                        onRecall = {
-                            carService.sendUserFreq(preset.freq, direct = true)
-                            refreshTick++
-                        },
+                        onRecall = { control { carService.sendUserFreq(preset.freq, direct = true) } },
                         onDelete = { scope.launch { radioPresetsStore.remove(preset) } },
                         enabled = connected,
                     )

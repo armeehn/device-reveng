@@ -14,15 +14,20 @@ import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.reveng.carlauncher.carlib.CarService
 import com.reveng.carlauncher.data.CarSettingsController
 import com.reveng.carlauncher.data.SettingKeys
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * v1.5 — Audio & EQ. Mirrors the vendor sound settings, reskinned. The live audio state
@@ -51,15 +56,28 @@ fun AudioSettingsScreen(
     var subVol by remember { mutableIntStateOf(0) }
     var loudness by remember { mutableStateOf(false) }
     var seeded by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
-    if (connected && !seeded) {
-        eqMode = carService.getEqMode() ?: 0
-        carService.getBalanceFader()?.let {
-            if (it.size >= 2) { balance = it[0]; fader = it[1] }
+    // Seed off the main thread. These four getters are blocking AIDL round-trips and ran in the
+    // composition body, so opening Audio & EQ made four synchronous gateway calls before the
+    // first frame — and stalled composition outright if the gateway was wedged.
+    LaunchedEffect(connected) {
+        if (!connected || seeded) return@LaunchedEffect
+
+        withContext(Dispatchers.IO) {
+            eqMode = carService.getEqMode() ?: 0
+            carService.getBalanceFader()?.let {
+                if (it.size >= 2) { balance = it[0]; fader = it[1] }
+            }
+            subVol = carService.getSubVolume() ?: 0
+            loudness = carService.getLoudness() ?: false
         }
-        subVol = carService.getSubVolume() ?: 0
-        loudness = carService.getLoudness() ?: false
         seeded = true
+    }
+
+    /** Apply one vendor write off the main thread; the local echo has already updated. */
+    fun control(action: () -> Unit) {
+        scope.launch { withContext(Dispatchers.IO) { runCatching(action) } }
     }
 
     SettingsScaffold(
@@ -80,7 +98,7 @@ fun AudioSettingsScreen(
                     5 to "Vocal",
                     6 to "Custom",
                 ),
-                onSelect = { eqMode = it; carService.setEqMode(it) },
+                onSelect = { eqMode = it; control { carService.setEqMode(it) } },
                 enabled = connected,
             )
         }
@@ -91,7 +109,7 @@ fun AudioSettingsScreen(
                 description = "Left ↔ right",
                 value = balance,
                 range = -8..8,
-                onChange = { balance = it; carService.setBalanceFader(balance, fader) },
+                onChange = { balance = it; control { carService.setBalanceFader(it, fader) } },
                 enabled = connected,
                 format = { balanceLabel(it) },
             )
@@ -100,7 +118,7 @@ fun AudioSettingsScreen(
                 description = "Front ↔ rear",
                 value = fader,
                 range = -8..8,
-                onChange = { fader = it; carService.setBalanceFader(balance, fader) },
+                onChange = { fader = it; control { carService.setBalanceFader(balance, it) } },
                 enabled = connected,
                 format = { faderLabel(it) },
             )
@@ -112,7 +130,7 @@ fun AudioSettingsScreen(
                 label = "Subwoofer level",
                 value = subVol,
                 range = 0..20,
-                onChange = { subVol = it; carService.setSubVolume(it) },
+                onChange = { subVol = it; control { carService.setSubVolume(it) } },
                 enabled = connected,
             )
             InfoRow(label = "Loudness (live)", value = if (loudness) "On" else "Off")
@@ -134,7 +152,7 @@ fun AudioSettingsScreen(
             ActionRow(
                 label = "Test beep",
                 description = "Play a short tone through the audio path",
-                onClick = { carService.beep() },
+                onClick = { control { carService.beep() } },
                 enabled = connected,
             )
         }
