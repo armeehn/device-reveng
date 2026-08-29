@@ -106,20 +106,30 @@ object RootBroadcastHelper {
     }
 
     private val receiver = object : BroadcastReceiver() {
+        /**
+         * v0.4.7 — same guard as CarEvents' in-process receiver: reading any extra force-unparcels
+         * the whole Bundle, and a vendor Parcelable under an unrelated key throws
+         * BadParcelableException. Unguarded, that kills this process and the bridge respawns it
+         * every 2 s forever. Emit nothing on failure.
+         */
         override fun onReceive(context: Context?, intent: Intent?) {
             val action = intent?.action ?: return
             val wanted = CAPTURED[action] ?: return
 
-            val line = StringBuilder(EVENT_PREFIX).append(SEP).append(action)
-            for (extra in wanted) {
-                val value = intent.getIntExtra(extra, EXTRA_ABSENT)
-                if (value == EXTRA_ABSENT) {
-                    continue
-                }
-                line.append(SEP).append(extra).append('=').append(value)
-            }
+            runCatching {
+                intent.setExtrasClassLoader(javaClass.classLoader)
 
-            emit(line.toString())
+                val line = StringBuilder(EVENT_PREFIX).append(SEP).append(action)
+                for (extra in wanted) {
+                    val value = intent.getIntExtra(extra, EXTRA_ABSENT)
+                    if (value == EXTRA_ABSENT) {
+                        continue
+                    }
+                    line.append(SEP).append(extra).append('=').append(value)
+                }
+
+                emit(line.toString())
+            }
         }
     }
 

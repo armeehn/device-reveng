@@ -115,6 +115,15 @@ class CarSettingsController(
     // ---- Optimistic writes -------------------------------------------------
 
     fun setString(key: String, value: String) {
+        // v0.4.7 — every SysVar write funnels through here; the UI refusals are presentation
+        // only. A refuse-listed key can brick the unit (see ProtectedSettingKeys), so refuse at
+        // the choke point and surface the failure.
+        if (ProtectedSettingKeys.isProtected(key)) {
+            Log.w(TAG, "refused write to protected key: $key")
+            _writeEvents.tryEmit(WriteEvent(key, value, ok = false))
+            return
+        }
+
         val previous = _snapshot.value[key]
         pending[key] = value
         // Optimistic: reflect immediately.
