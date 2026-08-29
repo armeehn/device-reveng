@@ -39,6 +39,7 @@ import com.reveng.carlauncher.data.AppDirectoryStore // v0.4.2
 import com.reveng.carlauncher.data.AppOrderStore // v3.0
 import com.reveng.carlauncher.data.DriverProfilesStore // v3.0
 import com.reveng.carlauncher.data.FavoritesStore // v3.0
+import com.reveng.carlauncher.data.IgnitionSession // v0.4.7.1
 import com.reveng.carlauncher.data.DayNightMode // v0.6
 import com.reveng.carlauncher.data.DriverSide // v2.8
 import com.reveng.carlauncher.data.NotificationFilterStore // v2.7
@@ -77,6 +78,7 @@ import com.reveng.carlauncher.ui.RadioScreen // v2.6
 import com.reveng.carlauncher.ui.rememberClockNight // v2.7
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay // v2.6
+import kotlinx.coroutines.flow.combine // v0.4.7.1 muted-aware TTS
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -120,6 +122,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var profilesStore: DriverProfilesStore
     private lateinit var gatewayHandshake: GatewayHandshake
 
+    private lateinit var ignitionSession: IgnitionSession // v0.4.7.1 session timer holder
     private lateinit var watchHistoryStore: WatchHistoryStore // v2.7
     private lateinit var continueWatching: ContinueWatchingRepository // v2.7
     private lateinit var miniScreen: MiniScreenController // v4.1 video mini screen
@@ -174,11 +177,17 @@ class MainActivity : ComponentActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         carEvents = CarEvents(applicationContext).also { it.register() }
+        // v0.4.7.1: activity-scoped so opening the Dashboard doesn't restart the session timer.
+        ignitionSession = IgnitionSession(lifecycleScope, carEvents.accOn)
         carService = CarService(applicationContext).also { it.bind() }
         appRepository = AppRepository(this)
         nowPlaying = NowPlayingRepository(applicationContext).also { it.start(lifecycleScope) }
         themeStore = ThemeStore(applicationContext)
         settingsStore = SettingsStore(applicationContext) // v0.6
+
+        // v2.7: the notification shelf's mute filter. Constructed before the speech controller
+        // below, which shares it.
+        notificationFilter = NotificationFilterStore(applicationContext, lifecycleScope)
 
         // v0.4.2: text-to-speech — announces the now-playing track when the user opts in
         // (SettingsStore.readNowPlaying, off by default). The controller no-ops until its engine
@@ -189,9 +198,14 @@ class MainActivity : ComponentActivity() {
                 nowPlaying.state,
                 settingsStore.settings.map { s -> s.readNowPlaying },
             )
+            // The same mute filter the shelf renders with: TTS was fed the raw repository and
+            // read notifications aloud from apps the driver had muted.
             it.observeNotifications(
                 lifecycleScope,
-                com.reveng.carlauncher.notif.NotificationRepository.items,
+                combine(
+                    com.reveng.carlauncher.notif.NotificationRepository.items,
+                    notificationFilter.muted,
+                ) { items, muted -> items.filterNot { n -> n.packageName in muted } },
                 settingsStore.settings.map { s -> s.readNotifications },
             )
         }
@@ -220,7 +234,6 @@ class MainActivity : ComponentActivity() {
 
         // v2.7: the notification shelf's listener. Root-enable off the main thread — this shells
         // out, and a launcher that blocks its first frame on `su` is a launcher that looks broken.
-        notificationFilter = NotificationFilterStore(applicationContext, lifecycleScope)
         lifecycleScope.launch(Dispatchers.IO) {
             NotificationRepository.ensureListenerEnabled(applicationContext)
         }
@@ -494,6 +507,7 @@ class MainActivity : ComponentActivity() {
                             // v3.0: the cockpit dashboard.
                             Screen.Dashboard -> DashboardScreen(
                                 carEvents = carEvents,
+                                ignitionSession = ignitionSession, // v0.4.7.1
                                 onBack = { screen = Screen.Home },
                             )
 
@@ -695,10 +709,25 @@ class MainActivity : ComponentActivity() {
 
         when (event.action) {
             KeyEvent.ACTION_DOWN -> if (event.repeatCount == 0) keyPump.down(nav)
-            KeyEvent.ACTION_UP -> keyPump.up(nav)
+            // A system-cancelled press (focus loss, gesture takeover) must drop the held key,
+            // not fire the deferred short action a normal release would.
+            KeyEvent.ACTION_UP ->
+                if (event.flags and KeyEvent.FLAG_CANCELED != 0) keyPump.cancel()
+                else keyPump.up(nav)
             else -> return super.dispatchKeyEvent(event)
         }
         return true
+    }
+
+    /**
+     * The pump holds a key across events; a window that loses focus never sees the release, and
+     * an unreleased REPEATING key would auto-repeat forever into a screen the driver has left.
+     */
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (!hasFocus && ::keyPump.isInitialized) {
+            keyPump.cancel()
+        }
     }
 
     /**
