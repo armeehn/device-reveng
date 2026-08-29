@@ -33,6 +33,7 @@ import com.reveng.carlauncher.carlib.GatewayHandshake // v3.0
 import com.reveng.carlauncher.carlib.RootShell
 import com.reveng.carlauncher.data.CarSettingsController // v1.1 settings suite
 import com.reveng.carlauncher.data.CrashLog // v0.4.3.7
+import com.reveng.carlauncher.data.AppDirectoryStore // v0.4.2
 import com.reveng.carlauncher.data.AppOrderStore // v3.0
 import com.reveng.carlauncher.data.DriverProfilesStore // v3.0
 import com.reveng.carlauncher.data.FavoritesStore // v3.0
@@ -113,6 +114,7 @@ class MainActivity : ComponentActivity() {
     // handshake needs to outlive any one screen.
     private lateinit var favoritesStore: FavoritesStore
     private lateinit var appOrderStore: AppOrderStore
+    private lateinit var appDirectoryStore: AppDirectoryStore
     private lateinit var profilesStore: DriverProfilesStore
     private lateinit var gatewayHandshake: GatewayHandshake
 
@@ -198,6 +200,10 @@ class MainActivity : ComponentActivity() {
         // v3.0: driver profiles + the vendor-gateway UIMODE channel.
         favoritesStore = FavoritesStore(applicationContext, lifecycleScope)
         appOrderStore = AppOrderStore(applicationContext, lifecycleScope)
+        // One instance per DataStore file, owned here. The drawer, Home and the app-directory
+        // screen used to `remember` their own, and each duplicate starts its own eager collector
+        // — a Home <-> Settings round trip re-read three preference files for nothing.
+        appDirectoryStore = AppDirectoryStore(applicationContext, lifecycleScope)
         profilesStore = DriverProfilesStore(applicationContext, lifecycleScope)
         gatewayHandshake = GatewayHandshake(applicationContext).also { it.register() }
 
@@ -306,7 +312,14 @@ class MainActivity : ComponentActivity() {
             // until DataStore resolves; we hold a plain themed frame (below) until then so a
             // returning user never flashes the onboarding screen.
             val firstRun by settingsStore.firstRun.collectAsStateWithLifecycle()
-            var routed by remember { mutableStateOf(false) }
+
+            // v1.0: route to onboarding on a genuine first run — derived, not written back.
+            // Assigning `screen` (and a `routed` latch) inside the composition wrote state this
+            // same composition had already read, so Compose invalidated the scope and the
+            // first-run frame composed twice. Onboarding's onFinish clears firstRun, and that is
+            // what releases the route; nothing is written during composition any more.
+            val shownScreen =
+                if (firstRun == true && screen == Screen.Home) Screen.Onboarding else screen
 
             // v2.5: the parked-only verdict. Gated features block on MOVING only — UNKNOWN
             // fails open, see CarEvents.motion.
@@ -351,7 +364,7 @@ class MainActivity : ComponentActivity() {
             val maneuvering = settings.radarLayoutConfirmed &&
                 !reverse &&
                 speedKmh <= MANEUVER_MAX_KMH &&
-                screen != Screen.Onboarding
+                shownScreen != Screen.Onboarding
 
             CarLauncherTheme(theme = activeTheme, night = night) {
               CompositionLocalProvider(
@@ -372,17 +385,13 @@ class MainActivity : ComponentActivity() {
                     if (firstRun == null) {
                         // holding frame: just the background Surface
                     } else {
-                      // v1.0: apply first-run routing once, DURING composition and before the
-                      // Crossfade's first pass, so a genuine first boot composes straight to
-                      // Onboarding. Doing this in a post-composition LaunchedEffect made the
-                      // Crossfade render Home for a frame and then animate a 300ms crossfade into
-                      // Onboarding — the exact flash the holding frame is meant to prevent.
-                      if (!routed) {
-                          if (firstRun == true && screen == Screen.Home) screen = Screen.Onboarding
-                          routed = true
-                      }
+                      // v1.0: the first-run route is already folded into [shownScreen] above, so
+                      // a genuine first boot composes straight to Onboarding without the
+                      // Crossfade rendering Home for a frame first — the flash the holding frame
+                      // is meant to prevent, and which a post-composition LaunchedEffect brought
+                      // back when this was tried that way.
                       Crossfade(
-                        targetState = screen,
+                        targetState = shownScreen,
                         animationSpec = tween(durationMillis = 300),
                         label = "screen",
                       ) { s ->
@@ -390,6 +399,7 @@ class MainActivity : ComponentActivity() {
                             Screen.Onboarding -> OnboardingScreen(
                                 themeStore = themeStore,
                                 appRepository = appRepository,
+                                favoritesStore = favoritesStore,
                                 night = night,
                                 onFinish = {
                                     settingsStore.setFirstRunComplete()
@@ -408,6 +418,11 @@ class MainActivity : ComponentActivity() {
                                     carService = carService,
                                     appRepository = appRepository,
                                     nowPlaying = nowPlaying,
+                                    // The launcher-owned stores, rather than a second eager
+                                    // collector per screen on the same DataStore files.
+                                    favoritesStore = favoritesStore,
+                                    appOrderStore = appOrderStore,
+                                    appDirectoryStore = appDirectoryStore,
                                     onOpenThemes = { screen = Screen.Themes },
                                     // v0.6: wire settings + a Settings-screen entry point.
                                     settingsStore = settingsStore,
@@ -508,6 +523,7 @@ class MainActivity : ComponentActivity() {
                                 radioPresetsStore = radioPresetsStore,
                                 rootTier = rootTierController, // v2.9
                                 onExit = { screen = Screen.Home },
+                                appDirectoryStore = appDirectoryStore,
                                 initialRoute = s.initialRoute,
                             )
 
@@ -548,12 +564,19 @@ class MainActivity : ComponentActivity() {
                                     .collectAsStateWithLifecycle()
                                 val muted by notificationFilter.muted
                                     .collectAsStateWithLifecycle()
+                                // A Settings.Secure ContentResolver query — it ran on the
+                                // main thread the first time the shelf opened. null = not
+                                // resolved yet, read as enabled so the "access is off" warning
+                                // never flashes before the answer arrives.
+                                val listenerEnabled by produceState<Boolean?>(initialValue = null) {
+                                    value = withContext(Dispatchers.IO) {
+                                        NotificationRepository.isListenerEnabled(applicationContext)
+                                    }
+                                }
                                 NotificationShelfScreen(
                                     items = items,
                                     muted = muted,
-                                    listenerEnabled = remember {
-                                        NotificationRepository.isListenerEnabled(applicationContext)
-                                    },
+                                    listenerEnabled = listenerEnabled ?: true,
                                     onSetMuted = notificationFilter::setMuted,
                                     onDismiss = NotificationRepository::dismiss,
                                     onOpenApp = {
@@ -568,9 +591,18 @@ class MainActivity : ComponentActivity() {
                                 onBack = { screen = Screen.Home },
                             ) {
                                 val shelf by continueWatching.shelf.collectAsStateWithLifecycle()
+                                // Two PackageManager lookups per candidate package, off the
+                                // main thread for the same reason. null is also the screen's
+                                // "no client installed" state, which is what it renders for the
+                                // frame before the lookups land.
+                                val jellyfinLabel by produceState<String?>(initialValue = null) {
+                                    value = withContext(Dispatchers.IO) {
+                                        continueWatching.jellyfinLabel()
+                                    }
+                                }
                                 ContinueWatchingScreen(
                                     entries = shelf,
-                                    jellyfinLabel = remember { continueWatching.jellyfinLabel() },
+                                    jellyfinLabel = jellyfinLabel,
                                     onOpenJellyfin = { continueWatching.openJellyfin() },
                                     onForget = { continueWatching.forget(lifecycleScope, it) },
                                     onBack = { screen = Screen.Home },

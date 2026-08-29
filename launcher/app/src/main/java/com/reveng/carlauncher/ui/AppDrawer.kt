@@ -94,14 +94,19 @@ fun AppDrawer(
     modifier: Modifier = Modifier,
     columns: Int = 0, // v0.6: 0 = adaptive sizing; >0 = fixed column count (SettingsStore)
     gridFocus: GridFocus? = null, // v0.8: roving focus over grid tiles (null = touch-only)
+    // The launcher-owned stores. Constructing them here instead opened a second eager collector
+    // on each DataStore file, so the drawer re-read them on every Home <-> Settings round trip.
+    // Null falls back to local instances, which keeps previews and standalone use working.
+    favoritesStore: FavoritesStore? = null,
+    appOrderStore: AppOrderStore? = null,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val favoritesStore = remember { FavoritesStore(context.applicationContext, scope) }
-    val orderStore = remember { AppOrderStore(context.applicationContext, scope) }
+    val favStore = favoritesStore ?: remember { FavoritesStore(context.applicationContext, scope) }
+    val ordStore = appOrderStore ?: remember { AppOrderStore(context.applicationContext, scope) }
 
-    val favorites by favoritesStore.favorites.collectAsStateSafe(initial = emptySet())
-    val savedOrder by orderStore.order.collectAsStateSafe(initial = emptyList())
+    val favorites by favStore.favorites.collectAsStateSafe(initial = emptySet())
+    val savedOrder by ordStore.order.collectAsStateSafe(initial = emptyList())
     var showSearch by remember { mutableStateOf(false) } // v2.3 full-screen search overlay
     var showSystem by remember { mutableStateOf(false) }
 
@@ -114,7 +119,7 @@ fun AppDrawer(
     }
     val favoriteApps = orderedApps.filter { it.packageName in favorites }
 
-    val toggleFavorite: (AppInfo) -> Unit = { app -> scope.launch { favoritesStore.toggle(app.packageName) } }
+    val toggleFavorite: (AppInfo) -> Unit = { app -> scope.launch { favStore.toggle(app.packageName) } }
 
     Column(modifier = modifier.fillMaxSize()) {
         DrawerSearchTrigger(
@@ -137,7 +142,7 @@ fun AppDrawer(
             reorderEnabled = true,
             onLaunch = onLaunch,
             onToggleFavorite = toggleFavorite,
-            onReorder = { newOrder -> scope.launch { orderStore.setOrder(newOrder.map { it.packageName }) } },
+            onReorder = { newOrder -> scope.launch { ordStore.setOrder(newOrder.map { it.packageName }) } },
             onOpenSystem = { showSystem = true },
             columns = columns, // v0.6 density
             gridFocus = gridFocus, // v0.8
