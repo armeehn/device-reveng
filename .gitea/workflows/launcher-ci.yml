@@ -158,7 +158,12 @@ jobs:
   # The debug build is what gets installed because release is arm64-only
   # (app/build.gradle.kts) — debug adds x86_64 for exactly this kind of run.
   cold-start:
-    runs-on: ubuntu-latest
+    # Only x's runner has /dev/kvm (LXC 123 dev0 + the device in its
+    # container options); vile has none and carries Channel Z0's live uplink.
+    # The label is what keeps these two jobs off it -- both runners otherwise
+    # advertise ubuntu-latest, so placement would be a coin toss and a failure
+    # would read as flake.
+    runs-on: kvm
     needs: build
     timeout-minutes: 45
     steps:
@@ -211,7 +216,12 @@ jobs:
   # EventService and no car, so the volume chip is legitimately absent here
   # and the suite asserts that absence instead of demanding a lie.
   instrumentation:
-    runs-on: ubuntu-latest
+    # Only x's runner has /dev/kvm (LXC 123 dev0 + the device in its
+    # container options); vile has none and carries Channel Z0's live uplink.
+    # The label is what keeps these two jobs off it -- both runners otherwise
+    # advertise ubuntu-latest, so placement would be a coin toss and a failure
+    # would read as flake.
+    runs-on: kvm
     needs: build
     timeout-minutes: 45
     steps:
