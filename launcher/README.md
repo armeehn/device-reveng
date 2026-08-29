@@ -84,6 +84,19 @@ is **confirmed unobtainable** — `../CUSTOM_ANDROID.md` §2b, `../LAUNCHER_DESI
 `signature`-level vendor broadcasts and the SysVar writes come from **root** instead; see
 *Root-native tier (v2.9)*.
 
+### Which APK is in the car
+
+Every green build of `main` is tagged `v<versionName>+<versionCode>.g<short-sha>` (e.g.
+`v0.4.3.3+66.g1a2b3c4`) and the release APK from that same CI run is published as a
+GitHub Release against the tag, with the APK's SHA-256 in the release body.
+
+Neither version field identifies a build on its own: `versionName` repeats, and so does
+`versionCode` — the two merges before this one both shipped `61`. The commit SHA is what
+makes the tag name one build and only one.
+
+Side-load only that asset. To identify what is already installed, pull the APK off the
+head unit and match its `sha256sum` against the release body.
+
 ## Capability notes (see CAR_API.md §6.4)
 
 | Capability | As normal app | Notes |

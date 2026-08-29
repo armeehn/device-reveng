@@ -13,7 +13,7 @@ android {
         applicationId = "com.reveng.carlauncher"
         minSdk = 33
         targetSdk = 33
-        versionCode = 65
+        versionCode = 66
         // 1.0.0 is reserved for the polished public release. versionCode keeps climbing normally.
         versionName = "0.4.3.6"
 
@@ -48,6 +48,13 @@ android {
             )
             // No release keystore for this side-loaded head-unit build: sign release with the
             // debug key so `assembleRelease` produces an installable APK out of the box.
+            //
+            // HAZARD, unfixed: a debug keystore is generated per machine and per CI runner, so
+            // two builds of the same commit can carry different signatures. Installing one over
+            // the other fails with INSTALL_FAILED_UPDATE_INCOMPATIBLE, and on a device where this
+            // app is HOME that leaves the car with no launcher until it is uninstalled by hand.
+            // The fix is a real keystore held as repository secrets — it cannot be committed here,
+            // it needs owner action. See the release job in .github/workflows/launcher-ci.yml.
             signingConfig = signingConfigs.getByName("debug")
         }
     }
