@@ -31,7 +31,9 @@ import com.reveng.carlauncher.carlib.CarEvents
 import com.reveng.carlauncher.carlib.CarService
 import com.reveng.carlauncher.carlib.GatewayHandshake // v3.0
 import com.reveng.carlauncher.carlib.RootShell
+import com.reveng.carlauncher.carlib.SysVar // v0.4.9 vendor hidden-apps list
 import com.reveng.carlauncher.data.CarSettingsController // v1.1 settings suite
+import com.reveng.carlauncher.data.parseVendorHidden // v0.4.9
 import com.reveng.carlauncher.data.CrashLog // v0.4.3.7
 import com.reveng.carlauncher.data.AppDirectoryStore // v0.4.2
 import com.reveng.carlauncher.data.AppOrderStore // v3.0
@@ -247,6 +249,14 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        // v0.4.9: the vendor gateway's "open the app drawer" broadcast
+        // (ZXW_ACTION_LAUNCHER_ALLAPPS_START_EVT, CUSTOMERUI_NOTES §6). Our drawer is the Home
+        // centre grid, so the request routes through the same screen switch every other
+        // navigation uses.
+        lifecycleScope.launch {
+            carEvents.openAppList.collect { screenState.value = Screen.Home }
+        }
+
         // v2.8: reverse is an interruption, not navigation. The vendor composites its reverse
         // window over us and takes the screen; when it hands the screen back, put the ring where
         // the driver left it instead of making them find their place again.
@@ -413,6 +423,15 @@ class MainActivity : ComponentActivity() {
                                 settingsStore = settingsStore,
                                 enabled = settings.shadeEnabled, // v2.5 shade
                             ) {
+                                // v0.4.9: the vendor hidden-apps list, read (never written)
+                                // out of the SysVar snapshot the settings suite already keeps
+                                // live, so a change in the vendor settings screen applies here
+                                // without a new observer.
+                                val sysVars by carSettingsController.snapshot
+                                    .collectAsStateWithLifecycle()
+                                val vendorHidden = remember(sysVars) {
+                                    parseVendorHidden(sysVars[SysVar.KEY_LAUNCHER_APP_HIDE])
+                                }
                                 HomeScreen(
                                     carEvents = carEvents,
                                     carService = carService,
@@ -423,6 +442,7 @@ class MainActivity : ComponentActivity() {
                                     favoritesStore = favoritesStore,
                                     appOrderStore = appOrderStore,
                                     appDirectoryStore = appDirectoryStore,
+                                    vendorHidden = vendorHidden, // v0.4.9
                                     onOpenThemes = { screen = Screen.Themes },
                                     // v0.6: wire settings + a Settings-screen entry point.
                                     settingsStore = settingsStore,
