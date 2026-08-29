@@ -309,7 +309,7 @@ class NowPlayingRepository(private val context: Context) {
     private fun ensureListenerEnabled() {
         if (isListenerEnabled()) return
         val comp = listenerComponent.flattenToString()
-        val r = RootShell.exec("cmd notification allow_listener '$comp'")
+        val r = RootShell.exec("cmd notification allow_listener ${RootShell.quote(comp)}")
         Log.i(TAG, "allow_listener $comp -> code=${r.code} ${r.stdout}")
     }
 }

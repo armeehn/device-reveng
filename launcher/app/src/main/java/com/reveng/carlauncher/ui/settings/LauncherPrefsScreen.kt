@@ -68,12 +68,19 @@ fun LauncherPrefsScreen(
         rootAvailable = withContext(Dispatchers.IO) { RootShell.isRootAvailable() }
     }
 
-    var isDefaultHome by remember { mutableStateOf(HomeRole.isDefaultHome(context)) }
+    // HomeRole.isDefaultHome is a PackageManager.resolveActivity binder round-trip, so it is
+    // resolved off the main thread and seeded false rather than run in the composable body on
+    // every entry to this screen. `homeProbe` re-runs it on resume (return from the picker).
+    var isDefaultHome by remember { mutableStateOf(false) }
+    var homeProbe by remember { mutableStateOf(0) }
+    LaunchedEffect(homeProbe) {
+        isDefaultHome = withContext(Dispatchers.IO) { HomeRole.isDefaultHome(context) }
+    }
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                isDefaultHome = HomeRole.isDefaultHome(context)
+                homeProbe++
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)

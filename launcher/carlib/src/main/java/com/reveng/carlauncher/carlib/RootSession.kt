@@ -1,5 +1,6 @@
 package com.reveng.carlauncher.carlib
 
+import android.os.SystemClock
 import android.util.Log
 import java.io.BufferedReader
 import java.io.BufferedWriter
@@ -44,8 +45,16 @@ internal object RootSession {
     private var stdin: BufferedWriter? = null
     private var stdout: BufferedReader? = null
 
-    /** Set once `su` cannot be started at all, so every later write doesn't re-pay the attempt. */
-    private var unavailable = false
+    /**
+     * Set when `su` cannot be started at all, so every later write doesn't re-pay the attempt.
+     *
+     * It expires rather than latching for the process. A denied or timed-out Magisk prompt at
+     * launcher startup — exactly when [CarEvents.register], the root broadcast bridge and the
+     * root-tier controller all race for `su` — used to cost the persistent channel permanently,
+     * putting a fresh `su` fork back on every later SysVar write. The spacing is what keeps a
+     * standing denial from turning into a prompt storm at the driver.
+     */
+    private val unavailable = RetryLatch()
 
     /**
      * Run [command] over the persistent channel.
@@ -60,7 +69,7 @@ internal object RootSession {
         }
 
         synchronized(lock) {
-            if (unavailable) {
+            if (unavailable.isLatched()) {
                 return null
             }
 
@@ -81,9 +90,10 @@ internal object RootSession {
         }
     }
 
-    /** Drop the channel. The next [exec] opens a new one. */
+    /** Drop the channel. The next [exec] opens a new one, without waiting out the retry spacing. */
     fun close() {
         synchronized(lock) {
+            unavailable.clear()
             runCatching { stdin?.close() }
             runCatching { stdout?.close() }
             runCatching { process?.destroy() }
@@ -110,7 +120,7 @@ internal object RootSession {
             true
         }.getOrElse {
             Log.d(TAG, "no persistent su channel: ${it.message}")
-            unavailable = true
+            unavailable.latch()
             false
         }
     }
@@ -144,5 +154,37 @@ internal object RootSession {
             val code = line.removePrefix(MARKER).trim().toIntOrNull() ?: -1
             return RootShell.Result(code, lines, emptyList())
         }
+    }
+}
+
+/**
+ * A "don't try that again just yet" flag that expires on its own.
+ *
+ * Latching for the life of the process is what turned one denied Magisk prompt into a permanent
+ * loss of the persistent channel; retrying immediately would instead re-prompt the driver on every
+ * write. [RETRY_AFTER_MS] is the middle ground: at most one `su` attempt per window.
+ *
+ * The clock is injected so this is testable without the Android framework.
+ */
+internal class RetryLatch(private val now: () -> Long = SystemClock::elapsedRealtime) {
+
+    private var retryAt = 0L
+
+    /** True while the last failure is still recent enough that a retry is not worth the prompt. */
+    fun isLatched(): Boolean = now() < retryAt
+
+    /** Record a failure. Blocks retries for [RETRY_AFTER_MS]. */
+    fun latch() {
+        retryAt = now() + RETRY_AFTER_MS
+    }
+
+    /** Allow a retry now — the caller knows something changed. */
+    fun clear() {
+        retryAt = 0L
+    }
+
+    companion object {
+        /** Long enough that a standing denial costs one prompt per window, not a storm. */
+        const val RETRY_AFTER_MS = 5 * 60 * 1_000L
     }
 }

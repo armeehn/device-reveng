@@ -3,6 +3,7 @@ package com.reveng.carlauncher.data
 import android.content.Context
 import android.content.pm.PackageManager
 import android.provider.Settings
+import android.util.Log
 import androidx.core.content.ContextCompat
 import com.reveng.carlauncher.carlib.RootShell
 import kotlinx.coroutines.CoroutineScope
@@ -79,10 +80,15 @@ class SetupDoctor(
                     .filter { !it.ok && it.rootCommand != null }
                     .map { it.rootCommand!! }
                 if (commands.isNotEmpty() && runCatching { RootShell.isRootAvailable() }.getOrDefault(false)) {
-                    // Each command is independent; run them together so a single su round-trip
-                    // grants everything. RootShell refuses newline-bearing commands, and none here
-                    // contain one (fixed package/component/permission strings).
+                    // Each command is independent, and RootShell now runs them that way: one
+                    // failing `pm grant` (already granted, or a vendor `pm` quirk) must not drop
+                    // the listener grants queued behind it. RootShell refuses newline-bearing
+                    // commands, and none here contain one (fixed package/component/permission
+                    // strings).
                     runCatching { RootShell.exec(*commands.toTypedArray()) }
+                        .onSuccess { res ->
+                            if (!res.ok) Log.w(TAG, "repairAll: these did not apply: ${res.failures}")
+                        }
                 }
             }
             _checks.value = withContext(Dispatchers.IO) { probe() }
@@ -173,5 +179,9 @@ class SetupDoctor(
             "enabled_notification_listeners",
         ).orEmpty()
         return raw.split(':').filter { it.isNotBlank() }.toSet()
+    }
+
+    private companion object {
+        const val TAG = "SetupDoctor"
     }
 }

@@ -117,11 +117,13 @@ object VendorLauncher {
             "if [ ! -f $KEEP_FILE ]; then pm enable $PACKAGE; fi; rm -f $KEEP_FILE"
 
         // Order matters: arm first. Disabling first would leave a window, however short, in which
-        // a crash strands the unit with no rollback pending at all.
+        // a crash strands the unit with no rollback pending at all. These three are NOT
+        // independent, so they stay one `&&` chain rather than going through the vararg
+        // [RootShell.exec] — if arming fails, the disable must not happen at all.
         val res = RootShell.exec(
-            "rm -f $KEEP_FILE",
-            "(nohup sh -c ${RootShell.quote(rollback)} >/dev/null 2>&1 &)",
-            "pm disable-user --user 0 $PACKAGE",
+            "rm -f $KEEP_FILE && " +
+                "(nohup sh -c ${RootShell.quote(rollback)} >/dev/null 2>&1 &) && " +
+                "pm disable-user --user 0 $PACKAGE"
         )
 
         if (!res.ok) {

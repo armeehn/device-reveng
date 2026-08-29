@@ -61,12 +61,21 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.CarLauncher">
 
+        <!--
+          configChanges: HOME must not be destroyed by a configuration change. A recreate
+          unregisters car events, unbinds the car service and stops now-playing before rebinding,
+          with the driver looking at a blank home meanwhile. Sys_Screen_Width / Sys_Screen_Height
+          are editable from the Advanced browser and from the vendor settings app, and a resolution
+          change fires screenLayout + smallestScreenSize — neither of which used to be declared.
+          fontScale, locale and layoutDirection are declared for the same reason. Compose re-reads
+          the Configuration itself, so the UI still follows every one of these.
+        -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTask"
             android:screenOrientation="landscape"
-            android:configChanges="orientation|screenSize|keyboardHidden|uiMode|density"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|uiMode|density|fontScale|locale|layoutDirection"
             android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.CarLauncher"
             android:stateNotNeeded="true"

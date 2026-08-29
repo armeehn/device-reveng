@@ -103,12 +103,18 @@ fun OnboardingScreen(
         apps = withContext(Dispatchers.IO) { appRepository.loadApps() }.filter { !it.isSystem }
     }
 
-    // Live default-home status for step 3, refreshed on resume (return from the picker).
-    var isDefaultHome by remember { mutableStateOf(HomeRole.isDefaultHome(context)) }
+    // Live default-home status for step 3, refreshed on resume (return from the picker). The probe
+    // is a PackageManager.resolveActivity binder round-trip, so it runs on Dispatchers.IO and the
+    // state is seeded false rather than resolved in the composable body.
+    var isDefaultHome by remember { mutableStateOf(false) }
+    var homeProbe by remember { mutableStateOf(0) }
+    LaunchedEffect(homeProbe) {
+        isDefaultHome = withContext(Dispatchers.IO) { HomeRole.isDefaultHome(context) }
+    }
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) isDefaultHome = HomeRole.isDefaultHome(context)
+            if (event == Lifecycle.Event.ON_RESUME) homeProbe++
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
