@@ -112,6 +112,16 @@ class SetupDoctor(
             detail = "Needed for the Bluetooth status chip.",
             permission = android.Manifest.permission.BLUETOOTH_CONNECT,
         )
+        // WRITE_SETTINGS is special-access (an appop, not a runtime dialog), and a reinstall
+        // drops it like the rest: without it the brightness slider silently does nothing.
+        checks += DoctorCheck(
+            id = "write_settings",
+            title = "Modify system settings",
+            detail = "Needed by the brightness slider (framework backlight writes).",
+            ok = Settings.System.canWrite(appContext),
+            adbCommand = "adb shell appops set $pkg WRITE_SETTINGS allow",
+            rootCommand = "appops set $pkg WRITE_SETTINGS allow",
+        )
         checks += listenerCheck(
             id = "listener_media",
             title = "Media notification listener",

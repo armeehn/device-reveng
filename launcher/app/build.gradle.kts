@@ -154,6 +154,10 @@ dependencies {
     // the store codecs). See carlib/build.gradle.kts for why there is no Robolectric.
     testImplementation("junit:junit:4.13.2")
 
+    // Virtual-time tests for the coroutine-driven input timing (KeyPump's repeat/long-press
+    // timers) and the ignition-session holder. Same version line as coroutines-android above.
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
+
     // The real org.json, for the theme and driver-profile codecs. `org.json` ships in the
     // platform, so the app declares no JSON dependency — but a local unit test compiles against
     // the stub android.jar, where every JSONObject call throws "not mocked". This is the
