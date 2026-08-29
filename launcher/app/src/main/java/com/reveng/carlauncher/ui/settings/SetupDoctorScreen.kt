@@ -74,6 +74,7 @@ fun SetupDoctorScreen(
     var crashes by remember { mutableStateOf<List<CrashRecord>>(emptyList()) }
     var opened by remember { mutableStateOf<CrashRecord?>(null) }
     var exported by remember { mutableStateOf<String?>(null) }
+    var confirmClear by remember { mutableStateOf(false) }
 
     fun reloadCrashes() {
         scope.launch { crashes = withContext(Dispatchers.IO) { CrashLog.read(context) } }
@@ -173,17 +174,13 @@ fun SetupDoctorScreen(
                         }
                     },
                 )
+                // v0.4.7 — behind ConfirmDialog like reboot: a one-tap permanent delete of all
+                // crash evidence was a mis-tap away while driving.
                 ActionRow(
                     label = "Clear crash log",
                     description = "Delete every stored crash",
                     destructive = true,
-                    onClick = {
-                        scope.launch {
-                            withContext(Dispatchers.IO) { CrashLog.clear(context) }
-                            exported = null
-                            reloadCrashes()
-                        }
-                    },
+                    onClick = { confirmClear = true },
                 )
                 Text(
                     text = "Pull over adb:\nadb pull /sdcard/Android/data/${context.packageName}/files/crash-logs/",
@@ -192,6 +189,24 @@ fun SetupDoctorScreen(
                 )
             }
         }
+    }
+
+    if (confirmClear) {
+        ConfirmDialog(
+            title = "Clear crash log?",
+            message = "Every stored crash record is deleted. This cannot be undone.",
+            confirmLabel = "Clear",
+            destructive = true,
+            onConfirm = {
+                confirmClear = false
+                scope.launch {
+                    withContext(Dispatchers.IO) { CrashLog.clear(context) }
+                    exported = null
+                    reloadCrashes()
+                }
+            },
+            onDismiss = { confirmClear = false },
+        )
     }
 }
 

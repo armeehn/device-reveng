@@ -52,6 +52,7 @@ fun BackupSettingsScreen(
     var backups by remember { mutableStateOf<List<File>>(emptyList()) }
     var busy by remember { mutableStateOf(false) }
     var restoreTarget by remember { mutableStateOf<File?>(null) }
+    var deleteTarget by remember { mutableStateOf<File?>(null) }
 
     fun reload() {
         scope.launch { backups = withContext(Dispatchers.IO) { LauncherBackup.list(context) } }
@@ -96,12 +97,8 @@ fun BackupSettingsScreen(
                 BackupRow(
                     backup = backup,
                     onRestore = { restoreTarget = backup },
-                    onDelete = {
-                        scope.launch {
-                            withContext(Dispatchers.IO) { LauncherBackup.delete(backup) }
-                            reload()
-                        }
-                    },
+                    // v0.4.7 — confirmed below: a one-tap permanent delete was a mis-tap away.
+                    onDelete = { deleteTarget = backup },
                 )
             }
         }
@@ -120,6 +117,24 @@ fun BackupSettingsScreen(
                 scope.launch {
                     val ok = withContext(Dispatchers.IO) { LauncherBackup.restore(context, target) }
                     if (ok) LauncherBackup.restartApp(context)
+                }
+            },
+        )
+    }
+
+    val doomed = deleteTarget
+    if (doomed != null) {
+        ConfirmDialog(
+            title = "Delete this backup?",
+            message = "The backup file is removed. This cannot be undone.",
+            confirmLabel = "Delete",
+            destructive = true,
+            onDismiss = { deleteTarget = null },
+            onConfirm = {
+                deleteTarget = null
+                scope.launch {
+                    withContext(Dispatchers.IO) { LauncherBackup.delete(doomed) }
+                    reload()
                 }
             },
         )
