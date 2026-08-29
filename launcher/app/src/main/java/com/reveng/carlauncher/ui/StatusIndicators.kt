@@ -43,7 +43,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -68,7 +67,8 @@ import kotlinx.coroutines.withContext
  * Controls panel, so status lives in the bar and control sits one tap below it.
  *
  * Every chip degrades by disappearing (or greying) rather than freezing: no Bluetooth adapter
- * -> no chip, EventService unbound -> no volume chip. A chip that lies is worse than no chip.
+ * -> no chip, EventService unbound -> no volume chip, unreadable backlight -> no brightness chip.
+ * A chip that lies is worse than no chip.
  *
  * Update paths, cheapest first:
  *   Wi-Fi       push  — ConnectivityManager.NetworkCallback (signal via onCapabilitiesChanged)
@@ -114,12 +114,14 @@ fun StatusIndicators(
         if (volume.available) {
             VolumeChip(volume)
         }
-        StatusChip(
-            icon = Icons.Filled.BrightnessMedium,
-            description = "Brightness $brightnessPercent%",
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            text = "$brightnessPercent%",
-        )
+        if (brightnessPercent != null) {
+            StatusChip(
+                icon = Icons.Filled.BrightnessMedium,
+                description = "Brightness $brightnessPercent%",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                text = "$brightnessPercent%",
+            )
+        }
     }
 }
 
@@ -398,8 +400,9 @@ private fun rememberVolumeStatus(carService: CarService?, refreshKey: Int): Volu
 // ---- Brightness ------------------------------------------------------------
 
 @Composable
-private fun rememberBrightnessPercent(context: Context, refreshKey: Int): Int {
-    var percent by remember { mutableIntStateOf(BrightnessController.currentPercent(context)) }
+private fun rememberBrightnessPercent(context: Context, refreshKey: Int): Int? {
+    // null = nothing readable behind the chip, so the chip disappears rather than freezing.
+    var percent by remember { mutableStateOf(BrightnessController.currentPercent(context)) }
 
     LaunchedEffect(refreshKey) {
         percent = BrightnessController.currentPercent(context)
