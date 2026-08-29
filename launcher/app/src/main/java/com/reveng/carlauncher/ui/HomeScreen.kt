@@ -393,7 +393,14 @@ fun HomeScreen(
 
         // v0.9: minimal, transparent reverse overlay that COEXISTS with the vendor reverse
         // window (radar bars + optional static guide lines are now owned by ReverseOverlay).
-        ReverseOverlay(visible = reverse, radar = radar, modifier = Modifier.fillMaxSize())
+        ReverseOverlay(
+            visible = reverse,
+            radar = radar,
+            // v0.4.7.1: the guide-lines choice is persisted, not per-reversal.
+            guideLines = settings.reverseGuideLines,
+            onToggleGuideLines = { on -> settingsStore?.setReverseGuideLines(on) },
+            modifier = Modifier.fillMaxSize(),
+        )
     }
 }
 

@@ -13,9 +13,9 @@ android {
         applicationId = "com.reveng.carlauncher"
         minSdk = 33
         targetSdk = 33
-        versionCode = 71
+        versionCode = 75
         // 1.0.0 is reserved for the polished public release. versionCode keeps climbing normally.
-        versionName = "0.4.4.2"
+        versionName = "0.4.7.1"
 
         // Single head-unit target: arm64 landscape @240dpi, 1920x720.
         ndk { abiFilters += "arm64-v8a" }
@@ -119,6 +119,10 @@ dependencies {
     // JVM unit tests for the pure logic (preset codec, frequency formatting, theme table,
     // the store codecs). See carlib/build.gradle.kts for why there is no Robolectric.
     testImplementation("junit:junit:4.13.2")
+
+    // Virtual-time tests for the coroutine-driven input timing (KeyPump's repeat/long-press
+    // timers) and the ignition-session holder. Same version line as coroutines-android above.
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
 
     // The real org.json, for the theme and driver-profile codecs. `org.json` ships in the
     // platform, so the app declares no JSON dependency — but a local unit test compiles against
