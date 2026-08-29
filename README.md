@@ -63,6 +63,20 @@ Result: Magisk **30.7**, root confirmed, unit boots clean.
 - `README.md`, `STATUS.md`, `debloat-plan.md` — project docs and current state.
 - `backup.sh`, `root.sh`, `debloat.sh`, `camera-diag.sh` — the runbook scripts (below).
 - Reverse-engineering **findings** written up in this README (MCU protocol, camera signal-detection logic, package inventory).
+- `launcher/` — **CarLauncher**, our Kotlin/Compose HOME launcher with in-launcher rewrites of
+  the vendor surfaces (radio, media, climate readout, settings reskin). Lives in this repo;
+  see `launcher/README.md`.
+- `rav4-apps/` — **git submodule** → [`armeehn/rav4-apps`](../../../rav4-apps): standalone
+  clean-room replacements for individual OEM packages, installed as a Magisk systemless
+  overlay. Separate repo because it has its own history, a Gradle-free build pipeline, and
+  runs from the laptop at the car. Clone with `git clone --recurse-submodules`, or
+  `git submodule update --init` in an existing checkout. The pointer here pins the version
+  the findings in this repo were checked against; after advancing rav4-apps, refresh it with
+  `git submodule update --remote rav4-apps` and commit the pointer bump.
+  **Boundary:** anything drawn inside the launcher belongs in `launcher/`; anything shipped
+  as its own APK under an OEM package name belongs in `rav4-apps`. Vendor findings
+  (`CAR_API.md`, `CUSTOMERUI_NOTES.md`, …) live only here — rav4-apps consumes them, never
+  forks them.
 
 **Not included (deliberately):**
 
