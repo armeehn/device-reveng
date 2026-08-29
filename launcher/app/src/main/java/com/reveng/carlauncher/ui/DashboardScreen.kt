@@ -37,6 +37,7 @@ import androidx.compose.foundation.Canvas
 import com.reveng.carlauncher.carlib.CarEvents
 import com.reveng.carlauncher.carlib.GpsSpeedSource
 import com.reveng.carlauncher.carlib.RadarState
+import com.reveng.carlauncher.data.IgnitionSession
 import com.reveng.carlauncher.ui.theme.carShape
 import com.reveng.carlauncher.ui.theme.carCard
 import kotlinx.coroutines.delay
@@ -56,6 +57,9 @@ import kotlinx.coroutines.delay
 fun DashboardScreen(
     carEvents: CarEvents,
     onBack: () -> Unit,
+    // v0.4.7.1: the session start lives at activity scope (null keeps previews working) —
+    // held inside this composition, it reset every time the Dashboard was opened.
+    ignitionSession: IgnitionSession? = null,
 ) {
     val speed by carEvents.speedKmh.collectAsStateSafe(initial = GpsSpeedSource.SPEED_UNKNOWN)
     val motion by carEvents.motion.collectAsStateSafe(initial = CarEvents.Motion.UNKNOWN)
@@ -63,6 +67,8 @@ fun DashboardScreen(
     val steering by carEvents.steeringAngle.collectAsStateSafe(initial = CarEvents.VALUE_UNKNOWN)
     val accOn by carEvents.accOn.collectAsStateSafe(initial = true)
     val radar by carEvents.radar.collectAsStateSafe(initial = null)
+    val sessionStartMs by (ignitionSession?.startedAt?.collectAsStateSafe(initial = null)
+        ?: remember { androidx.compose.runtime.mutableStateOf<Long?>(null) })
 
     Column(modifier = Modifier.fillMaxSize()) {
         DashboardHeader(onBack = onBack)
@@ -96,7 +102,7 @@ fun DashboardScreen(
                         .weight(1f),
                 )
                 TripTile(
-                    accOn = accOn,
+                    sessionStartMs = sessionStartMs,
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f),
@@ -193,21 +199,21 @@ private fun SpeedTile(speed: Int, motion: CarEvents.Motion, modifier: Modifier =
  * `CAN_CAR_TIRP_INFO` exists in the constant table, but no extras were recovered for it, so a
  * real trip computer is not readable. This times how long the ignition has been on, which is
  * honest about being ours: the label says "this session", not "trip".
+ *
+ * v0.4.7.1: the start lives in [IgnitionSession]; this tile only ticks and formats. Holding
+ * the start here made every visit to the Dashboard restart the "session".
  */
 @Composable
-private fun TripTile(accOn: Boolean, modifier: Modifier = Modifier) {
-    var startedAt by remember { mutableLongStateOf(System.currentTimeMillis()) }
+private fun TripTile(sessionStartMs: Long?, modifier: Modifier = Modifier) {
     var elapsedMs by remember { mutableLongStateOf(0L) }
 
-    // Ignition off resets the session; the next ACC-on starts a fresh one.
-    LaunchedEffect(accOn) {
-        if (!accOn) {
+    LaunchedEffect(sessionStartMs) {
+        if (sessionStartMs == null) {
             elapsedMs = 0L
             return@LaunchedEffect
         }
-        startedAt = System.currentTimeMillis()
         while (true) {
-            elapsedMs = System.currentTimeMillis() - startedAt
+            elapsedMs = System.currentTimeMillis() - sessionStartMs
             delay(TRIP_TICK_MS)
         }
     }

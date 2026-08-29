@@ -122,6 +122,7 @@ fun StatusBar(
             var quickClosed by remember { mutableIntStateOf(0) }
             StatusIndicators(
                 carService = carService,
+                carEvents = carEvents, // v0.4.9 vendor BT status
                 refreshKey = quickClosed,
                 onOpen = if (carService != null && settingsStore != null) {
                     { quickOpen = true }

@@ -74,6 +74,10 @@ fun CarTextField(
     commit: CommitMode = CommitMode.LIVE,
 ) {
     var editing by remember { mutableStateOf(false) }
+    // The value as it was when the editor opened. In LIVE mode every keystroke has already gone
+    // through onValueChange by the time Cancel (or the motion-gate force-close) fires, so cancel
+    // must put this back — otherwise "Cancel" kept the last keystrokes committed.
+    var valueOnOpen by remember { mutableStateOf(value) }
     val locked = LocalParkedOnlyLock.current
 
     val borderColor = if (locked) {
@@ -99,7 +103,10 @@ fun CarTextField(
                 .clip(carShape(FIELD_CORNER_DP.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant)
                 .border(1.dp, borderColor, carShape(FIELD_CORNER_DP.dp))
-                .clickable(enabled = !locked) { editing = true }
+                .clickable(enabled = !locked) {
+                    valueOnOpen = value
+                    editing = true
+                }
                 .padding(horizontal = 14.dp, vertical = 10.dp),
         ) {
             Text(
@@ -122,7 +129,13 @@ fun CarTextField(
         initial = value,
         onLive = { if (commit == CommitMode.LIVE) onValueChange(it) },
         onDone = { onValueChange(it); editing = false },
-        onCancel = { editing = false },
+        onCancel = {
+            // LIVE has already committed keystroke by keystroke; cancel means none of them.
+            if (commit == CommitMode.LIVE) {
+                onValueChange(valueOnOpen)
+            }
+            editing = false
+        },
     )
 }
 

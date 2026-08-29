@@ -71,4 +71,39 @@ class RadioPresetTest {
         // belongs downstream — formatFreqLabel already renders a non-positive freq as "--".
         assertEquals(RadioPreset(band = -1, freq = -5), RadioPreset.decode("-1:-5"))
     }
+
+    // ---- addCapped: the store must never hold more presets than the UIs render ------------
+
+    @Test
+    fun addBelowCapAppends() {
+        val current = setOf("0:8750")
+
+        val next = RadioPresetsStore.addCapped(current, RadioPreset(band = 3, freq = 1010))
+
+        assertEquals(setOf("0:8750", "3:1010"), next)
+    }
+
+    @Test
+    fun addAtCapIsRejected() {
+        val full = (1..RadioPresetsStore.MAX_PRESETS).map { "0:${8000 + it}" }.toSet()
+
+        assertNull(RadioPresetsStore.addCapped(full, RadioPreset(band = 0, freq = 9910)))
+    }
+
+    @Test
+    fun duplicateIsANoOpEvenAtCap() {
+        val full = (1..RadioPresetsStore.MAX_PRESETS).map { "0:${8000 + it}" }.toSet()
+
+        assertEquals(full, RadioPresetsStore.addCapped(full, RadioPreset(band = 0, freq = 8001)))
+    }
+
+    @Test
+    fun corruptTokensStillOccupySlots() {
+        // A token decode() rejects still fills a stored slot; counting only the decodable ones
+        // would let adds push the set past what the six-slot UIs can ever show or delete.
+        val full = (1 until RadioPresetsStore.MAX_PRESETS).map { "0:${8000 + it}" }.toSet() +
+            "not-a-preset"
+
+        assertNull(RadioPresetsStore.addCapped(full, RadioPreset(band = 0, freq = 9910)))
+    }
 }

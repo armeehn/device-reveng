@@ -17,10 +17,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -48,14 +44,17 @@ import com.reveng.carlauncher.ui.theme.proximityRamp
  *   vendor window composites above us, these extras are only visible in the (assumed) margins
  *   the vendor view doesn't cover — which is exactly the non-intrusive behavior we want.
  *
- * The static guide lines are toggleable via a small corner chip (local state, default on).
+ * The static guide lines are toggleable via a small corner chip. v0.4.7.1: the choice is
+ * hoisted — held in `remember` inside the AnimatedVisibility content, it was forgotten on
+ * every reversal. The caller persists it (SettingsStore.reverseGuideLines).
  */
 @Composable
 fun ReverseOverlay(
     visible: Boolean,
     modifier: Modifier = Modifier,
     radar: RadarState? = null,               // v0.9
-    guideLinesDefaultOn: Boolean = true,     // v0.9
+    guideLines: Boolean = true,              // v0.4.7.1 hoisted + persisted by the caller
+    onToggleGuideLines: (Boolean) -> Unit = {},
 ) {
     AnimatedVisibility(
         visible = visible,
@@ -65,8 +64,6 @@ fun ReverseOverlay(
     ) {
         // NOTE: intentionally NO .background(...) here — the overlay is transparent so the
         // vendor reverse window (above us) is never occluded. See KDoc coexistence rationale.
-        var guideLines by remember { mutableStateOf(guideLinesDefaultOn) }
-
         Box(modifier = Modifier.fillMaxSize()) {
             // Optional static parking-guide lines (fixed trajectory, not steering-linked).
             if (guideLines) {
@@ -80,7 +77,7 @@ fun ReverseOverlay(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .defaultMinSize(minWidth = TOGGLE_TARGET_DP.dp, minHeight = TOGGLE_TARGET_DP.dp)
-                    .clickable { guideLines = !guideLines },
+                    .clickable { onToggleGuideLines(!guideLines) },
                 contentAlignment = Alignment.TopEnd,
             ) {
                 Surface(

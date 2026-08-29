@@ -64,7 +64,12 @@ fun NavCard(
     // Best-effort: root-enable our notification listener so Maps nav is readable (no-op if
     // already enabled or if the unit isn't rooted). Same mechanism as the media listener.
     LaunchedEffect(Unit) {
-        withContext(Dispatchers.IO) { NavRepository.ensureListenerEnabled(context) }
+        withContext(Dispatchers.IO) {
+            NavRepository.ensureListenerEnabled(context)
+            // v0.4.9: pick up the vendor-configured nav app (SysVar, open read) so the tap
+            // target matches the vendor settings screen. Cached; Maps stays the fallback.
+            NavRepository.refreshVendorNav(context)
+        }
     }
 
     Card(

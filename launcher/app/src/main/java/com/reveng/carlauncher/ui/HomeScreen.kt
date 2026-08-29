@@ -105,6 +105,8 @@ fun HomeScreen(
     favoritesStore: com.reveng.carlauncher.data.FavoritesStore? = null,
     appOrderStore: com.reveng.carlauncher.data.AppOrderStore? = null,
     appDirectoryStore: AppDirectoryStore? = null,
+    // v0.4.9: packages the VENDOR settings hide (SysVar SYS_LAUNCHER_APP_HIDE_KEY, read-only).
+    vendorHidden: Set<String> = emptySet(),
 ) {
     val reverse by carEvents.reverse.collectAsStateSafe(initial = false)
     val media by nowPlaying.state.collectAsStateSafe(initial = null)
@@ -112,6 +114,10 @@ fun HomeScreen(
     // v0.6: observe launcher settings (null store -> defaults, keeps previews working).
     val settings by (settingsStore?.settings?.collectAsStateSafe(initial = LauncherSettings())
         ?: remember { mutableStateOf(LauncherSettings()) })
+
+    // v0.4.7 — the radar byte decode is GUESSED; same gate as MainActivity's maneuvering strips:
+    // until the layout is confirmed, no Home or reverse surface renders a radar claim.
+    val shownRadar = if (settings.radarLayoutConfirmed) radar else null
 
     var apps by remember { mutableStateOf<List<AppInfo>>(emptyList()) }
     LaunchedEffect(Unit) {
@@ -126,8 +132,10 @@ fun HomeScreen(
     val directoryStore = appDirectoryStore ?: remember { AppDirectoryStore(appContext, dirScope) }
     val placements by directoryStore.placements.collectAsStateSafe(initial = emptyMap())
     // One pass: resolve each app's effective placement once and group. HIDDEN apps land in neither
-    // list, so they simply fall out.
-    val byPlacement = remember(apps, placements) { apps.groupBy { it.effectivePlacement(placements) } }
+    // list, so they simply fall out. v0.4.9: vendor-hidden packages are unioned in as HIDDEN.
+    val byPlacement = remember(apps, placements, vendorHidden) {
+        apps.groupBy { it.effectivePlacement(placements, vendorHidden) }
+    }
     val userApps = byPlacement[Placement.HOME].orEmpty()
     val systemApps = byPlacement[Placement.SYSTEM].orEmpty()
 
@@ -308,7 +316,7 @@ fun HomeScreen(
                         ) {
                             NavCard(
                                 carEvents = carEvents,
-                                radar = radar,
+                                radar = shownRadar,
                                 modifier = Modifier.fillMaxSize(),
                             )
                         }
@@ -393,7 +401,16 @@ fun HomeScreen(
 
         // v0.9: minimal, transparent reverse overlay that COEXISTS with the vendor reverse
         // window (radar bars + optional static guide lines are now owned by ReverseOverlay).
-        ReverseOverlay(visible = reverse, radar = radar, modifier = Modifier.fillMaxSize())
+        ReverseOverlay(
+            visible = reverse,
+            // shownRadar, not radar: the decode is GUESSED, so the bars stay hidden until a
+            // capture confirms the byte layout. Never widen this back to the raw flow.
+            radar = shownRadar,
+            // the guide-lines choice is persisted, not per-reversal.
+            guideLines = settings.reverseGuideLines,
+            onToggleGuideLines = { on -> settingsStore?.setReverseGuideLines(on) },
+            modifier = Modifier.fillMaxSize(),
+        )
     }
 }
 
