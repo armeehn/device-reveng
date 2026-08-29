@@ -13,12 +13,16 @@ android {
         applicationId = "com.reveng.carlauncher"
         minSdk = 33
         targetSdk = 33
-        versionCode = 62
+        versionCode = 64
         // 1.0.0 is reserved for the polished public release. versionCode keeps climbing normally.
-        versionName = "0.4.3.2"
+        versionName = "0.4.3.5"
 
         // Single head-unit target: arm64 landscape @240dpi, 1920x720.
         ndk { abiFilters += "arm64-v8a" }
+
+        // Compose UI tests under app/src/androidTest run on an emulator in CI
+        // (`connectedDebugAndroidTest`); they never run on the head unit.
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
@@ -116,4 +120,17 @@ dependencies {
     // not byte-identical to Android's copy (Android's getString coerces a number to its text,
     // this one throws), so the codec tests stay off type coercion.
     testImplementation("org.json:json:20240303")
+
+    // Compose UI tests (app/src/androidTest): they pin the four status indicators by test tag.
+    // Semantics, not pixels — a colour or icon change must not turn this suite red, only an
+    // indicator going missing. Versions come from the same Compose BOM as the app.
+    androidTestImplementation(composeBom)
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test:core:1.6.1")
+
+    // createComposeRule() hosts the composable in a stub activity that only exists in this
+    // manifest; without it the test APK has no activity to launch and every test errors out.
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
