@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
 import com.reveng.carlauncher.carlib.RadarState
+import com.reveng.carlauncher.ui.theme.proximityRamp
 
 /**
  * v2.8 — the low-speed maneuvering side-strips (LAUNCHER_DESIGN §3.6).
@@ -54,11 +55,13 @@ fun RadarSideStrip(
         return
     }
 
-    // Green → amber → red from the theme rather than literal colours, so the strip re-skins with
-    // the rest of the launcher; the same three roles ParkingGuideLines already borrows.
-    val clear = MaterialTheme.colorScheme.primary
-    val near = MaterialTheme.colorScheme.tertiary
-    val close = MaterialTheme.colorScheme.error
+    // Green → amber → red derived from the theme rather than literal colours, so the strip
+    // re-skins with the rest of the launcher; same ramp as ParkingGuideLines. See proximityRamp
+    // for why the middle step is derived instead of reading the tertiary role.
+    val ramp = proximityRamp(MaterialTheme.colorScheme)
+    val clear = ramp.clear
+    val near = ramp.near
+    val close = ramp.close
     val track = MaterialTheme.colorScheme.surfaceVariant
 
     Box(modifier = modifier.fillMaxSize()) {

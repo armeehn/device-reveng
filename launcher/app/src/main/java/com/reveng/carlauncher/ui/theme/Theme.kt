@@ -47,6 +47,13 @@ fun CarLauncherTheme(
 const val CROSSFADE_MS = 420
 
 /**
+ * Material's standard disabled/inactive content opacity. One app-wide constant —
+ * six screens used to carry a private copy each, and off/locked tints hard-coded
+ * Color.Gray, which reads *brighter* than night-theme text.
+ */
+const val DISABLED_ALPHA = 0.38f
+
+/**
  * Returns a [ColorScheme] whose visible roles are each driven by an [animateColorAsState],
  * so a change in [target] animates smoothly instead of snapping. Only the roles the launcher
  * actually paints with are animated; the rest are copied through from [target] unchanged.

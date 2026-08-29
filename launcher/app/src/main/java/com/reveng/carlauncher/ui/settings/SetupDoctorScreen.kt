@@ -32,8 +32,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import com.reveng.carlauncher.ui.theme.JetBrainsMono
 import com.reveng.carlauncher.data.CarSettingsController
 import com.reveng.carlauncher.data.CrashLog // v0.4.3.7
 import com.reveng.carlauncher.data.CrashRecord // v0.4.3.7
@@ -184,7 +184,7 @@ fun SetupDoctorScreen(
                 )
                 Text(
                     text = "Pull over adb:\nadb pull /sdcard/Android/data/${context.packageName}/files/crash-logs/",
-                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = JetBrainsMono),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -253,7 +253,7 @@ private fun CrashDetail(record: CrashRecord, onBack: () -> Unit) {
             ) {
                 Text(
                     text = record.trace.ifEmpty { "(no trace recorded)" },
-                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = JetBrainsMono),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f),
                 )
@@ -316,7 +316,7 @@ private fun DoctorCheckRow(check: DoctorCheck, showAdb: Boolean) {
             ) {
                 Text(
                     text = check.adbCommand,
-                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = JetBrainsMono),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f),
                 )

@@ -39,6 +39,7 @@ import com.reveng.carlauncher.carlib.GpsSpeedSource
 import com.reveng.carlauncher.carlib.RadarState
 import com.reveng.carlauncher.data.IgnitionSession
 import com.reveng.carlauncher.ui.theme.carShape
+import com.reveng.carlauncher.ui.theme.carCard
 import kotlinx.coroutines.delay
 
 /**
@@ -345,6 +346,7 @@ private fun ValueTile(
 private fun Tile(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     Column(
         modifier = modifier
+            .carCard()
             .clip(carShape(18.dp))
             .background(MaterialTheme.colorScheme.surface)
             .padding(20.dp),

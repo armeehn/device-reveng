@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.SignalWifi4Bar
 import androidx.compose.material.icons.filled.SignalWifiOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import com.reveng.carlauncher.ui.theme.DISABLED_ALPHA
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -200,7 +201,8 @@ private fun WifiChip(wifi: WifiStatus) {
             if (wifi.validated) "" else " (no internet)"
     }
     val tint = when {
-        !wifi.enabled || !wifi.connected -> Color.Gray
+        !wifi.enabled || !wifi.connected ->
+            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = DISABLED_ALPHA)
         // Connected but unvalidated (captive portal / no internet): distinct, not alarming.
         !wifi.validated -> MaterialTheme.colorScheme.error
         else -> MaterialTheme.colorScheme.onSurfaceVariant
@@ -310,7 +312,11 @@ internal data class BtStatus(
 @Composable
 private fun BluetoothChip(bt: BtStatus) {
     val (icon, description, tint) = when {
-        !bt.on -> Triple(Icons.Filled.BluetoothDisabled, "Bluetooth off", Color.Gray)
+        !bt.on -> Triple(
+            Icons.Filled.BluetoothDisabled,
+            "Bluetooth off",
+            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = DISABLED_ALPHA),
+        )
         bt.connectedCount > 0 -> Triple(
             Icons.Filled.BluetoothConnected,
             "Bluetooth: ${bt.connectedCount} connected",
@@ -472,7 +478,7 @@ private fun VolumeChip(volume: VolumeStatus) {
         StatusChip(
             icon = Icons.AutoMirrored.Filled.VolumeOff,
             description = "Muted",
-            tint = Color.Gray,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = DISABLED_ALPHA),
             tag = StatusIndicatorTags.VOLUME,
         )
     } else {

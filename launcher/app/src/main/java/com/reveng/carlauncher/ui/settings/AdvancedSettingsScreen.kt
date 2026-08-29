@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import com.reveng.carlauncher.ui.theme.carShape
+import com.reveng.carlauncher.ui.theme.carCard
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -160,6 +161,7 @@ private fun RawEditDialog(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .carCard()
                 .clip(carShape(22.dp))
                 .background(MaterialTheme.colorScheme.surface)
                 .padding(24.dp),

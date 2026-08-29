@@ -494,7 +494,8 @@ private fun QuickLaunchRow(app: AppInfo, onClick: () -> Unit, modifier: Modifier
         Spacer(Modifier.width(16.dp))
         Text(
             text = app.label,
-            style = MaterialTheme.typography.titleMedium,
+            // §1.1 tile labels ≥22sp — this row is the driver thumb zone's launch surface.
+            style = MaterialTheme.typography.titleLarge,
             color = MaterialTheme.colorScheme.onBackground,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,

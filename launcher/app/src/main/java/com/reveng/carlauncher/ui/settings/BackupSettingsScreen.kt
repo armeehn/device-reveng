@@ -26,8 +26,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import com.reveng.carlauncher.ui.theme.JetBrainsMono
 import com.reveng.carlauncher.data.LauncherBackup
 import com.reveng.carlauncher.ui.theme.carShape
 import kotlinx.coroutines.Dispatchers
@@ -80,7 +80,7 @@ fun BackupSettingsScreen(
             Text(
                 text = "Pull/push over adb:\n" +
                     "adb pull /sdcard/Android/data/$pkg/files/backups/",
-                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                style = MaterialTheme.typography.bodySmall.copy(fontFamily = JetBrainsMono),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }

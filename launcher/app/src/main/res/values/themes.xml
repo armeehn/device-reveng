@@ -6,6 +6,8 @@
       no-action-bar Material dark background so there is no white flash on launch.
     -->
     <style name="Theme.CarLauncher" parent="android:Theme.Material.NoActionBar.Fullscreen">
+        <!-- Pre-Compose launch-flash colour: deliberately the Midnight dark background,
+             never themed — a light flash at night would blind before Compose draws. -->
         <item name="android:windowBackground">@color/car_background</item>
         <item name="android:statusBarColor">@color/car_background</item>
         <item name="android:navigationBarColor">@color/car_background</item>

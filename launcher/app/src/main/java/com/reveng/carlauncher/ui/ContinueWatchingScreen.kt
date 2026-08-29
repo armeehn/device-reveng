@@ -32,6 +32,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.reveng.carlauncher.data.WatchEntry
 import com.reveng.carlauncher.ui.theme.carShape
+import com.reveng.carlauncher.ui.theme.carCard
 
 /**
  * v2.7 — the Jellyfin continue-watching shelf (parked-only; gated by the caller).
@@ -112,6 +113,7 @@ private fun WatchRow(entry: WatchEntry, onOpen: () -> Unit, onForget: () -> Unit
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .carCard()
             .clip(carShape(CARD_CORNER_DP.dp))
             .background(MaterialTheme.colorScheme.surface)
             .clickable(onClick = open)

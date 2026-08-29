@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
@@ -39,6 +38,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.reveng.carlauncher.ui.theme.DISABLED_ALPHA
+import com.reveng.carlauncher.ui.theme.carShape
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.reveng.carlauncher.AppInfo
@@ -181,7 +182,7 @@ private fun QueryLine(query: String, onDismiss: () -> Unit) {
 
 @Composable
 private fun SearchResultTile(app: AppInfo, highlighted: Boolean, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(16.dp)
+    val shape = carShape(16.dp)
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -202,7 +203,7 @@ private fun SearchResultTile(app: AppInfo, highlighted: Boolean, onClick: () -> 
         )
         Text(
             text = app.label,
-            style = MaterialTheme.typography.labelLarge,
+            style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onBackground,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -232,7 +233,7 @@ fun DrawerSearchTrigger(onClick: () -> Unit, modifier: Modifier = Modifier) {
             .fillMaxWidth()
             .padding(horizontal = 8.dp)
             .height(56.dp)
-            .clip(RoundedCornerShape(16.dp))
+            .clip(carShape(16.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant)
             .clickable(enabled = !locked, onClick = onClick)
             .padding(horizontal = 16.dp),
@@ -251,5 +252,3 @@ fun DrawerSearchTrigger(onClick: () -> Unit, modifier: Modifier = Modifier) {
     }
 }
 
-/** Material's standard disabled-content opacity. */
-private const val DISABLED_ALPHA = 0.38f

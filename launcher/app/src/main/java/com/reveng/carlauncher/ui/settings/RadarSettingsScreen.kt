@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -157,7 +158,9 @@ private fun SensorRow(label: String, levels: List<Int>, rs: RadarState) {
                         Text(
                             text = "$level",
                             style = MaterialTheme.typography.labelSmall,
-                            color = Color.White,
+                            // The chip lerps surfaceVariant → error, which is near-white at
+                            // the clear end of a light theme: pick ink/white by luminance.
+                            color = if (color.luminance() > 0.5f) Color.Black else Color.White,
                         )
                     }
                 }

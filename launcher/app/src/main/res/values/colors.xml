@@ -1,7 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="car_background">#FF0B0E11</color>
-    <color name="car_surface">#FF161B22</color>
-    <color name="car_accent">#FF2F81F7</color>
     <color name="ic_launcher_background">#FF0B0E11</color>
 </resources>

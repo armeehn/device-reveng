@@ -15,9 +15,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import com.reveng.carlauncher.ui.theme.carCard
 import com.reveng.carlauncher.ui.theme.carShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -44,12 +46,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext // v2.7
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog // v2.7
 import com.reveng.carlauncher.data.ThemeTransfer // v2.7
 import com.reveng.carlauncher.ui.settings.DialogTextButton // v2.7
 import com.reveng.carlauncher.ui.theme.CarTheme
 import com.reveng.carlauncher.ui.theme.ThemeColors
+import com.reveng.carlauncher.ui.theme.ThemeStyle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -182,6 +186,7 @@ private fun ImportThemeDialog(files: List<File>, onPick: (File) -> Unit, onDismi
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .carCard()
                 .clip(carShape(22.dp))
                 .background(MaterialTheme.colorScheme.surface)
                 .padding(24.dp),
@@ -230,6 +235,7 @@ private fun MessageDialog(text: String, onDismiss: () -> Unit) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .carCard()
                 .clip(carShape(22.dp))
                 .background(MaterialTheme.colorScheme.surface)
                 .padding(24.dp),
@@ -269,6 +275,7 @@ private fun ThemeCard(
     ) {
         ThemePreviewSwatch(
             colors = theme.variant(night),
+            style = theme.style,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(96.dp),
@@ -311,39 +318,67 @@ private fun ThemeCard(
 }
 
 /**
- * A miniature mock of the launcher (background → surface card → accent chip + text lines)
+ * A miniature mock of the launcher (background → surface card → accent chips + text lines)
  * rendered directly from a [ThemeColors] variant. Shared by the Themes list and the live
  * preview in the editor.
+ *
+ * Corners come from the PREVIEWED theme's [ThemeStyle] via literal [RoundedCornerShape]s —
+ * carShape() would apply the *active* theme's corner scale to another theme's preview. The
+ * mock card always draws a thin outline: themes where surface == background (Riposte's
+ * bone-on-bone, whose real cards separate with their own ink border) would otherwise
+ * preview as a blank rectangle.
  */
 @Composable
-fun ThemePreviewSwatch(colors: ThemeColors, modifier: Modifier = Modifier) {
+fun ThemePreviewSwatch(
+    colors: ThemeColors,
+    modifier: Modifier = Modifier,
+    style: ThemeStyle = ThemeStyle(),
+) {
+    fun shape(radius: Dp) = RoundedCornerShape(radius * style.cornerScale)
+    fun accentChip(argb: Long, modifier: Modifier) =
+        modifier
+            .size(16.dp)
+            .clip(shape(4.dp))
+            .background(Color(argb))
+
     Box(
         modifier = modifier
-            .clip(carShape(12.dp))
+            .clip(shape(12.dp))
             .background(Color(colors.background))
             .padding(10.dp),
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .clip(carShape(8.dp))
+                .clip(shape(8.dp))
                 .background(Color(colors.surface))
+                .border(
+                    width = if (style.hardEdge) 2.dp else 1.dp,
+                    color = if (style.hardEdge) Color(colors.onBackground)
+                    else Color(colors.onSurfaceMuted).copy(alpha = SWATCH_OUTLINE_ALPHA),
+                    shape = shape(8.dp),
+                )
                 .padding(8.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(16.dp)
-                        .clip(carShape(4.dp))
-                        .background(Color(colors.primary)),
-                )
-                Spacer(Modifier.width(8.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Box(modifier = accentChip(colors.primary, Modifier))
+                // The optional accent trio, only when the theme actually sets it.
+                if (colors.accent2 != 0L) {
+                    Box(modifier = accentChip(colors.accent2, Modifier))
+                }
+                if (colors.accent3 != 0L) {
+                    Box(modifier = accentChip(colors.accent3, Modifier))
+                }
+                Spacer(Modifier.width(4.dp))
                 Box(
                     modifier = Modifier
                         .height(8.dp)
                         .width(70.dp)
-                        .clip(carShape(4.dp))
+                        .clip(shape(4.dp))
                         .background(Color(colors.onSurface)),
                 )
             }
@@ -351,19 +386,22 @@ fun ThemePreviewSwatch(colors: ThemeColors, modifier: Modifier = Modifier) {
                 modifier = Modifier
                     .height(6.dp)
                     .fillMaxWidth()
-                    .clip(carShape(3.dp))
+                    .clip(shape(3.dp))
                     .background(Color(colors.onSurfaceMuted)),
             )
             Box(
                 modifier = Modifier
                     .height(6.dp)
                     .width(90.dp)
-                    .clip(carShape(3.dp))
+                    .clip(shape(3.dp))
                     .background(Color(colors.surfaceVariant)),
             )
         }
     }
 }
+
+/** Same weight the theme system gives ColorScheme.outline (onSurfaceMuted at half alpha). */
+private const val SWATCH_OUTLINE_ALPHA = 0.5f
 
 /** Small square icon button used across the Themes/editor UI. */
 @Composable
