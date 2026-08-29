@@ -70,8 +70,16 @@ jobs:
 
       # Always upload, so a red run leaves the failure reports behind.
       - name: Upload test reports
-        if: always()
+        if: ${{ (always()) && contains(github.server_url, 'github.com') }}
         uses: actions/upload-artifact@v4
+        with:
+          name: carlauncher-test-reports
+          path: launcher/*/build/reports/tests/
+          if-no-files-found: ignore
+
+      - name: Upload test reports (Gitea)
+        if: ${{ (always()) && !contains(github.server_url, 'github.com') }}
+        uses: https://github.com/christopherHX/gitea-upload-artifact@v4
         with:
           name: carlauncher-test-reports
           path: launcher/*/build/reports/tests/
@@ -84,8 +92,16 @@ jobs:
         run: ./gradlew --no-daemon :app:lintRelease
 
       - name: Upload lint report
-        if: always()
+        if: ${{ (always()) && contains(github.server_url, 'github.com') }}
         uses: actions/upload-artifact@v4
+        with:
+          name: carlauncher-lint-report
+          path: launcher/app/build/reports/lint-results-release.html
+          if-no-files-found: ignore
+
+      - name: Upload lint report (Gitea)
+        if: ${{ (always()) && !contains(github.server_url, 'github.com') }}
+        uses: https://github.com/christopherHX/gitea-upload-artifact@v4
         with:
           name: carlauncher-lint-report
           path: launcher/app/build/reports/lint-results-release.html
@@ -126,6 +142,7 @@ jobs:
       # versionCode actually baked into the APK, and the release job reads the
       # version from it (there is no version line in the build file to parse).
       - name: Upload release APK
+        if: ${{ contains(github.server_url, 'github.com') }}
         uses: actions/upload-artifact@v4
         with:
           name: carlauncher-release-apk
@@ -134,8 +151,27 @@ jobs:
             launcher/app/build/outputs/apk/release/output-metadata.json
           if-no-files-found: error
 
+      - name: Upload release APK (Gitea)
+        if: ${{ !contains(github.server_url, 'github.com') }}
+        uses: https://github.com/christopherHX/gitea-upload-artifact@v4
+        with:
+          name: carlauncher-release-apk
+          path: |
+            launcher/app/build/outputs/apk/release/*.apk
+            launcher/app/build/outputs/apk/release/output-metadata.json
+          if-no-files-found: error
+
       - name: Upload debug APK
+        if: ${{ contains(github.server_url, 'github.com') }}
         uses: actions/upload-artifact@v4
+        with:
+          name: carlauncher-debug-apk
+          path: launcher/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
+      - name: Upload debug APK (Gitea)
+        if: ${{ !contains(github.server_url, 'github.com') }}
+        uses: https://github.com/christopherHX/gitea-upload-artifact@v4
         with:
           name: carlauncher-debug-apk
           path: launcher/app/build/outputs/apk/debug/*.apk
@@ -163,6 +199,13 @@ jobs:
           java-version: "17"
 
       - uses: actions/download-artifact@v4
+        if: ${{ contains(github.server_url, 'github.com') }}
+        with:
+          name: carlauncher-debug-apk
+          path: apk
+
+      - uses: https://github.com/christopherHX/gitea-download-artifact@v4
+        if: ${{ !contains(github.server_url, 'github.com') }}
         with:
           name: carlauncher-debug-apk
           path: apk
@@ -295,8 +338,16 @@ jobs:
 
       # Always upload: a red emulator run is exactly when the HTML report matters.
       - name: Upload instrumentation reports
-        if: always()
+        if: ${{ (always()) && contains(github.server_url, 'github.com') }}
         uses: actions/upload-artifact@v4
+        with:
+          name: carlauncher-androidtest-reports
+          path: launcher/app/build/reports/androidTests/
+          if-no-files-found: ignore
+
+      - name: Upload instrumentation reports (Gitea)
+        if: ${{ (always()) && !contains(github.server_url, 'github.com') }}
+        uses: https://github.com/christopherHX/gitea-upload-artifact@v4
         with:
           name: carlauncher-androidtest-reports
           path: launcher/app/build/reports/androidTests/
@@ -324,7 +375,15 @@ jobs:
       # commit. Nothing is rebuilt here; a rebuild would not be the artifact the
       # tag is meant to identify.
       - name: Fetch the release APK from this run
+        if: ${{ contains(github.server_url, 'github.com') }}
         uses: actions/download-artifact@v4
+        with:
+          name: carlauncher-release-apk
+          path: artifact
+
+      - name: Fetch the release APK from this run (Gitea)
+        if: ${{ !contains(github.server_url, 'github.com') }}
+        uses: https://github.com/christopherHX/gitea-download-artifact@v4
         with:
           name: carlauncher-release-apk
           path: artifact
