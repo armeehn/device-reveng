@@ -123,6 +123,9 @@ fun SystemSettingsScreen(
             title = "Reboot head unit?",
             message = "The unit will restart now.",
             confirmLabel = "Reboot",
+            // v0.4.3.8: destructive, so ConfirmDialog's parked-only lock withholds the confirm
+            // while moving. A mis-tap at speed takes reverse camera, SWC, radio and launcher down.
+            destructive = true,
             onConfirm = { confirmReboot = false; power { carService.reboot() } },
             onDismiss = { confirmReboot = false },
         )
