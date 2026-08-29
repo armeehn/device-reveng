@@ -22,7 +22,9 @@
 # =====================================================================================
 set -euo pipefail
 
-: "${AVD_NAME:?AVD_NAME must be set by the workflow, and must match the action's avd-name}"
+# No apostrophe in this message: bash re-parses quotes inside ${var:?word}, so one there ends
+# the script in a parse error — which the action prints and then launches the emulator anyway.
+: "${AVD_NAME:?AVD_NAME must be set by the workflow, matching the action avd-name input}"
 
 # The action creates AVDs under $ANDROID_AVD_HOME when it is set, and under the legacy
 # ~/.android/avd otherwise. Try both rather than assume the runner image's layout.
@@ -52,7 +54,19 @@ set_prop hw.lcd.height 720
 set_prop hw.lcd.density 240
 set_prop hw.initialOrientation landscape
 set_prop skin.name 1920x720
+# A packaged skin outranks hw.lcd.*, and a bare AVD has one: the first run of this job booted
+# androidboot.qemu.skin=320x640. _no_skin is what hands control back to the hw.lcd.* values.
 set_prop skin.path _no_skin
 
 echo "patched $config:"
 grep -E '^(hw\.lcd\.|hw\.initialOrientation|skin\.)' "$config"
+
+# Read back what actually landed. The action does not check this script's exit status — it
+# prints a failure and launches the emulator regardless — so this is a diagnostic in the log
+# rather than a gate. assert-geometry.sh is the gate, after boot, on what the emulator did.
+for expected in hw.lcd.width=1920 hw.lcd.height=720 hw.lcd.density=240 skin.path=_no_skin; do
+  if ! grep -qx "$expected" "$config"; then
+    echo "::error::config.ini is missing $expected after patching — the emulator will fall back"
+    exit 1
+  fi
+done
