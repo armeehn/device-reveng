@@ -79,7 +79,7 @@ jobs:
 
       - name: Upload test reports (Gitea)
         if: ${{ (always()) && !contains(github.server_url, 'github.com') }}
-        uses: https://github.com/christopherHX/gitea-upload-artifact@v4
+        uses: christopherHX/gitea-upload-artifact@v4
         with:
           name: carlauncher-test-reports
           path: launcher/*/build/reports/tests/
@@ -101,7 +101,7 @@ jobs:
 
       - name: Upload lint report (Gitea)
         if: ${{ (always()) && !contains(github.server_url, 'github.com') }}
-        uses: https://github.com/christopherHX/gitea-upload-artifact@v4
+        uses: christopherHX/gitea-upload-artifact@v4
         with:
           name: carlauncher-lint-report
           path: launcher/app/build/reports/lint-results-release.html
@@ -153,7 +153,7 @@ jobs:
 
       - name: Upload release APK (Gitea)
         if: ${{ !contains(github.server_url, 'github.com') }}
-        uses: https://github.com/christopherHX/gitea-upload-artifact@v4
+        uses: christopherHX/gitea-upload-artifact@v4
         with:
           name: carlauncher-release-apk
           path: |
@@ -171,7 +171,7 @@ jobs:
 
       - name: Upload debug APK (Gitea)
         if: ${{ !contains(github.server_url, 'github.com') }}
-        uses: https://github.com/christopherHX/gitea-upload-artifact@v4
+        uses: christopherHX/gitea-upload-artifact@v4
         with:
           name: carlauncher-debug-apk
           path: launcher/app/build/outputs/apk/debug/*.apk
@@ -204,7 +204,7 @@ jobs:
           name: carlauncher-debug-apk
           path: apk
 
-      - uses: https://github.com/christopherHX/gitea-download-artifact@v4
+      - uses: christopherHX/gitea-download-artifact@v4
         if: ${{ !contains(github.server_url, 'github.com') }}
         with:
           name: carlauncher-debug-apk
@@ -347,7 +347,7 @@ jobs:
 
       - name: Upload instrumentation reports (Gitea)
         if: ${{ (always()) && !contains(github.server_url, 'github.com') }}
-        uses: https://github.com/christopherHX/gitea-upload-artifact@v4
+        uses: christopherHX/gitea-upload-artifact@v4
         with:
           name: carlauncher-androidtest-reports
           path: launcher/app/build/reports/androidTests/
@@ -383,7 +383,7 @@ jobs:
 
       - name: Fetch the release APK from this run (Gitea)
         if: ${{ !contains(github.server_url, 'github.com') }}
-        uses: https://github.com/christopherHX/gitea-download-artifact@v4
+        uses: christopherHX/gitea-download-artifact@v4
         with:
           name: carlauncher-release-apk
           path: artifact
