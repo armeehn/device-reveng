@@ -8,7 +8,8 @@ vendor gateway `com.szchoiceway.eventcenter` per [`../CAR_API.md`](../CAR_API.md
 > (`MAIN + HOME + DEFAULT + LAUNCHER`). The user chooses whether to make it the default
 > home from the system chooser; the stock launcher (`com.szchoiceway.customerui`) stays
 > installed. Privileged car actions (writing SysVar, reverse/SWC/day-night broadcasts) go
-> through **root** or require installing as a privileged/system app — see below.
+> through **root** — the privileged/system-app route is ruled out, since the vendor platform key
+> is confirmed unobtainable. See *Root-native tier (v2.9)* below.
 
 ## Module structure
 
@@ -77,15 +78,11 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 # then press HOME and pick "Car Launcher" (set as default if you want it to be the home)
 ```
 
-To go from *normal app* to *privileged/system app* (needed for `signature`-level vendor
-broadcasts and direct SysVar writes without a root shell — CAR_API §6.4), on this rooted
-device push to `/system/priv-app` and platform-sign, then reboot:
-
-```bash
-adb root && adb remount
-adb push app-debug.apk /system/priv-app/CarLauncher/CarLauncher.apk
-adb reboot
-```
+There is no privileged/system-app install to graduate to. It would need the vendor's platform
+key (`sharedUserId=android.uid.system` must match the running framework's signature), and that key
+is **confirmed unobtainable** — `../CUSTOM_ANDROID.md` §2b, `../LAUNCHER_DESIGN.md` §6.4. The
+`signature`-level vendor broadcasts and the SysVar writes come from **root** instead; see
+*Root-native tier (v2.9)*.
 
 ### Which APK is in the car
 
@@ -106,11 +103,11 @@ head unit and match its `sha256sum` against the release body.
 |---|---|---|
 | Be HOME, app drawer, launch apps | ✅ | standard |
 | Unprotected events (ACC, media, radio) | ✅ | |
-| Protected events (reverse `ACTION_BACKCAR_*`, SWC `STEER_WHEEL_INFOR`, day/night) | ⚠️ only if granted `com.szchoiceway.permission.broadcast` | likely `signature` → needs system app; `CarEvents` falls back to unprotected `MCU_MSG_BACKCAR_*` |
+| Protected events (reverse `ACTION_BACKCAR_*`, SWC `STEER_WHEEL_INFOR`, day/night) | ⚠️ only if granted `com.szchoiceway.permission.broadcast` | likely `signature`, and the platform key is unobtainable → captured at uid 0 by the root tier below; without root `CarEvents` falls back to unprotected `MCU_MSG_BACKCAR_*` |
 | Read SysVar provider | ✅ | `SysVar.getString/readAll` |
 | Write SysVar provider | ❌ direct | `SysVar.putString` routes through **root** (`content` shell) |
 | Bind `EventService`, read-only AIDL | ✅ | exported service |
-| AIDL control side-effects | ⚠️ | best as system app |
+| AIDL control side-effects | ⚠️ | not recovered by root either; see *Root-native tier* |
 
 ## Settings suite (v1.1 → v2.0)
 
@@ -601,6 +598,10 @@ approximation; a sunset calculation would be wrong exactly when it matters.
   **ordinals almost certainly do not match** the real service — regenerate from the
   decompiled `IEventService.java` preserving method order before relying on any call.
 - **`ICallbackfn.aidl`** signature is a placeholder; verify against the device.
+- **No volume event.** The status-bar volume chip polls because nothing pushes: none of the seven
+  `ICallbackfn` registrars is audio-scoped, the `EventUtils` broadcast table has no volume action,
+  and `SYSTEM_VOLUME` is a LocalSocket text-protocol marker. Capturing that socket, or the real
+  `ICallbackfn` signature, is what would replace the poll. See `ui/StatusIndicators.kt`.
 - **Numeric speed** now comes from GPS (v2.5, above). The gateway still broadcasts none, so
   decoding the CAN bulk frame (`CAN_BASIC_EVT` / `MCU_CAR_CAN_INFO`) remains the upgrade worth
   making: it is available at power-on and indoors, where GPS is not.
