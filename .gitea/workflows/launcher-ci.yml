@@ -188,6 +188,22 @@ jobs:
       # SDK device profile is that shape) and asserts it before measuring.
       # That is a different, larger surface to lay out and draw, so the
       # numbers from this job are not comparable to runs before this change.
+      # The GitHub-hosted runner image ships X11/GL client libraries; the
+      # self-hosted job image (catthehacker/ubuntu, 24.04) does not. Even with
+      # -no-window the emulator's gfxstream/Vulkan path dlopens them and aborts:
+      #   SharedLibrary::open for [libX11-xcb]
+      #   ERROR | Could not open libX11-xcb.so.1, give up
+      # The action then polls a device that never appeared and reports only
+      # "Timeout waiting for emulator to boot" -- a missing-library problem
+      # wearing an emulator costume. Verified missing in the image:
+      # libX11-xcb.so.1, libGL.so.1, libnss3.so, libpulse.so.0.
+      - name: Install emulator runtime libraries
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            libx11-xcb1 libxcb1 libx11-6 libgl1 libglu1-mesa libnss3 \
+            libxcomposite1 libxcursor1 libxi6 libxtst6 libpulse0
+
       - name: Measure cold start
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -240,6 +256,22 @@ jobs:
 
       # The debug variant is what installs: release is arm64-only
       # (app/build.gradle.kts), debug adds x86_64 for exactly this.
+      # The GitHub-hosted runner image ships X11/GL client libraries; the
+      # self-hosted job image (catthehacker/ubuntu, 24.04) does not. Even with
+      # -no-window the emulator's gfxstream/Vulkan path dlopens them and aborts:
+      #   SharedLibrary::open for [libX11-xcb]
+      #   ERROR | Could not open libX11-xcb.so.1, give up
+      # The action then polls a device that never appeared and reports only
+      # "Timeout waiting for emulator to boot" -- a missing-library problem
+      # wearing an emulator costume. Verified missing in the image:
+      # libX11-xcb.so.1, libGL.so.1, libnss3.so, libpulse.so.0.
+      - name: Install emulator runtime libraries
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            libx11-xcb1 libxcb1 libx11-6 libgl1 libglu1-mesa libnss3 \
+            libxcomposite1 libxcursor1 libxi6 libxtst6 libpulse0
+
       - name: Run Compose UI tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
