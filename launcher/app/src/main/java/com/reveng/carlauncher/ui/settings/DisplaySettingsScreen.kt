@@ -5,7 +5,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -41,7 +40,9 @@ fun DisplaySettingsScreen(
 
     // Live WRITE_SETTINGS status, re-checked on resume (e.g. after the grant screen).
     var canWrite by remember { mutableStateOf(BrightnessController.canWrite(context)) }
-    var brightness by remember { mutableIntStateOf(BrightnessController.currentPercent(context)) }
+    // null = the backlight level is unreadable; the slider has no position to show, so it stays
+    // disabled rather than inventing one.
+    var brightness by remember { mutableStateOf(BrightnessController.currentPercent(context)) }
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val obs = LifecycleEventObserver { _, e ->
@@ -58,15 +59,18 @@ fun DisplaySettingsScreen(
         SettingsSection(title = "Screen backlight") {
             SliderSetting(
                 label = "Brightness",
-                description = if (canWrite) "Changes the display immediately"
-                else "Grant permission below to control the backlight live",
-                value = brightness,
+                description = when {
+                    !canWrite -> "Grant permission below to control the backlight live"
+                    brightness == null -> "The current backlight level cannot be read"
+                    else -> "Changes the display immediately"
+                },
+                value = brightness ?: 0,
                 range = 0..100,
                 onChange = {
                     brightness = it
                     BrightnessController.setPercent(context, it, carService)
                 },
-                enabled = canWrite,
+                enabled = canWrite && brightness != null,
                 format = { "$it%" },
             )
             if (!canWrite) {
