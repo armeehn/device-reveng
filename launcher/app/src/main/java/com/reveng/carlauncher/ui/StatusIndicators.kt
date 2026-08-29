@@ -279,7 +279,9 @@ private fun rememberWifiStatus(context: Context): WifiStatus {
             context.registerReceiver(
                 stateReceiver,
                 IntentFilter(WifiManager.WIFI_STATE_CHANGED_ACTION),
-                Context.RECEIVER_EXPORTED,
+                // System broadcast: delivered to NOT_EXPORTED receivers identically,
+                // and NOT_EXPORTED refuses same-named spoofs from other apps.
+                Context.RECEIVER_NOT_EXPORTED,
             )
         }
 
@@ -427,7 +429,8 @@ private fun rememberBluetoothStatus(context: Context, carEvents: CarEvents? = nu
                 addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
                 addAction(BluetoothAdapter.ACTION_CONNECTION_STATE_CHANGED)
             }
-            runCatching { context.registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED) }
+            // System broadcasts — NOT_EXPORTED receives them identically (see Wi-Fi receiver).
+            runCatching { context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED) }
 
             onDispose { runCatching { context.unregisterReceiver(receiver) } }
         }
