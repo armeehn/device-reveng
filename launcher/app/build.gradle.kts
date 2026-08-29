@@ -105,7 +105,15 @@ dependencies {
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 
-    // JVM unit tests for the pure logic (preset codec, frequency formatting, theme table).
-    // See carlib/build.gradle.kts for why there is no Robolectric.
+    // JVM unit tests for the pure logic (preset codec, frequency formatting, theme table,
+    // the store codecs). See carlib/build.gradle.kts for why there is no Robolectric.
     testImplementation("junit:junit:4.13.2")
+
+    // The real org.json, for the theme and driver-profile codecs. `org.json` ships in the
+    // platform, so the app declares no JSON dependency — but a local unit test compiles against
+    // the stub android.jar, where every JSONObject call throws "not mocked". This is the
+    // reference implementation of the same API, test-scope only: nothing reaches the APK. It is
+    // not byte-identical to Android's copy (Android's getString coerces a number to its text,
+    // this one throws), so the codec tests stay off type coercion.
+    testImplementation("org.json:json:20240303")
 }
