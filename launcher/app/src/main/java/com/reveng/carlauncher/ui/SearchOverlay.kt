@@ -1,6 +1,5 @@
 package com.reveng.carlauncher.ui
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -195,11 +194,7 @@ private fun SearchResultTile(app: AppInfo, highlighted: Boolean, onClick: () -> 
             .clickable(onClick = onClick)
             .padding(vertical = 10.dp),
     ) {
-        Image(
-            painter = rememberDrawablePainter(app),
-            contentDescription = app.label,
-            modifier = Modifier.size(84.dp),
-        )
+        AppIcon(app = app, size = 84.dp)
         Text(
             text = app.label,
             style = MaterialTheme.typography.labelLarge,
