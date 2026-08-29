@@ -57,6 +57,9 @@ set_prop skin.name 1920x720
 # A packaged skin outranks hw.lcd.*, and a bare AVD has one: the first run of this job booted
 # androidboot.qemu.skin=320x640. _no_skin is what hands control back to the hw.lcd.* values.
 set_prop skin.path _no_skin
+# The action appends this too, but a blind append loses to any earlier duplicate.
+# Routed through set_prop so exactly one occurrence survives, as the last line.
+set_prop disk.dataPartition.size 4096M
 
 echo "patched $config:"
 grep -E '^(hw\.lcd\.|hw\.initialOrientation|skin\.)' "$config"
