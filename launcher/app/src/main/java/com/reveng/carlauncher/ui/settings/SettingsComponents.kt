@@ -39,6 +39,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.reveng.carlauncher.input.focusRing // v2.8
+import com.reveng.carlauncher.ui.withTapFeedback // v2.5
 import kotlin.math.roundToInt
 
 /**
@@ -103,13 +104,14 @@ fun SettingsScaffold(
 /** A rounded, tappable icon button (back / home) matching the launcher's tiles. */
 @Composable
 fun SettingsIconTile(icon: ImageVector, label: String, onClick: () -> Unit) {
+    val press = withTapFeedback(onClick) // v2.5
     Box(
         modifier = Modifier
             .size(48.dp)
             .clip(carShape(14.dp))
             .background(MaterialTheme.colorScheme.surface)
             .focusRing(cornerRadiusDp = 14) // v2.8
-            .clickable(onClick = onClick),
+            .clickable(onClick = press),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
@@ -154,6 +156,7 @@ fun SettingsCategoryCard(
     subtitle: String,
     onClick: () -> Unit,
 ) {
+    val press = withTapFeedback(onClick) // v2.5
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -161,7 +164,7 @@ fun SettingsCategoryCard(
             .clip(carShape(18.dp))
             .background(MaterialTheme.colorScheme.surface)
             .focusRing(cornerRadiusDp = 18) // v2.8
-            .clickable(onClick = onClick)
+            .clickable(onClick = press)
             .padding(horizontal = 20.dp, vertical = 18.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -202,6 +205,9 @@ fun SettingsCategoryCard(
     }
 }
 
+/** Stable stand-in for a row with no action, so the feedback wrapper keeps its identity. */
+private val NO_ACTION: () -> Unit = {}
+
 /** Base row: a label (+ optional description) on the left, arbitrary trailing content. */
 @Composable
 fun SettingRow(
@@ -216,8 +222,11 @@ fun SettingRow(
         .heightIn(min = 56.dp)
     // v2.8: the roving ring needs somewhere to land on every settings screen; adding it to the
     // shared row is what makes the whole suite wheel-drivable without twelve per-screen models.
+
+    // v2.5: a settings row is a discrete activating tap, so it confirms itself eyes-free.
+    val press = withTapFeedback(onClick ?: NO_ACTION)
     val clickable = if (onClick != null && enabled) {
-        base.focusRing().clickable(onClick = onClick)
+        base.focusRing().clickable(onClick = press)
     } else {
         base
     }
@@ -254,15 +263,20 @@ fun ToggleSetting(
     description: String? = null,
     enabled: Boolean = true,
 ) {
+    // The row and the switch are two targets for one toggle. The row's feedback comes from
+    // [SettingRow]; the switch, which a driver hits directly, gets its own wrap of the same action.
+    val flip: () -> Unit = { if (enabled) onChange(!checked) }
+    val flipConfirmed = withTapFeedback(flip) // v2.5
+
     SettingRow(
         label = label,
         description = description,
         enabled = enabled,
-        onClick = { if (enabled) onChange(!checked) },
+        onClick = flip,
     ) {
         Switch(
             checked = checked,
-            onCheckedChange = { if (enabled) onChange(it) },
+            onCheckedChange = { flipConfirmed() },
             enabled = enabled,
             colors = SwitchDefaults.colors(
                 checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
@@ -397,12 +411,13 @@ fun ActionRow(
     enabled: Boolean = true,
 ) {
     val tint = if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+    val press = withTapFeedback(onClick) // v2.5
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 56.dp)
             .focusRing() // v2.8
-            .clickable(enabled = enabled, onClick = onClick)
+            .clickable(enabled = enabled, onClick = press)
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -502,12 +517,13 @@ fun VolumeSlider(
 
 @Composable
 private fun StepButton(glyph: String, enabled: Boolean, onClick: () -> Unit) {
+    val press = withTapFeedback(onClick) // v2.5
     Box(
         modifier = Modifier
             .size(44.dp)
             .clip(carShape(12.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant)
-            .clickable(enabled = enabled, onClick = onClick),
+            .clickable(enabled = enabled, onClick = press),
         contentAlignment = Alignment.Center,
     ) {
         Text(
@@ -534,12 +550,13 @@ fun DialogTextButton(
         else -> MaterialTheme.colorScheme.primary
     }
     val fg = if (filled) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+    val press = withTapFeedback(onClick) // v2.5
     Row(
         modifier = modifier
             .clip(carShape(14.dp))
             .background(bg)
             .focusRing() // v2.8
-            .clickable(onClick = onClick)
+            .clickable(onClick = press)
             .padding(vertical = 14.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,

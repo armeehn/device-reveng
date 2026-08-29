@@ -241,7 +241,7 @@ fun HomeScreen(
                                 // v2.6: tapping the card body opens the full player. The card's
                                 // own transport buttons consume their taps first, so this only
                                 // catches the art / title area.
-                                .clickable(onClick = onOpenMedia),
+                                .clickable(onClick = withTapFeedback(onOpenMedia)), // v2.5
                         ) {
                             if (miniWanted && videoNow != null) {
                                 VideoMiniCard(
@@ -352,7 +352,7 @@ fun HomeScreen(
                                 .fillMaxWidth()
                                 .height(180.dp)
                                 .launcherFocusTarget(focus, FocusTarget.Radio)
-                                .clickable(onClick = onOpenRadio), // v2.6
+                                .clickable(onClick = withTapFeedback(onOpenRadio)), // v2.6, v2.5
                         ) {
                             RadioCard(
                                 carService = carService,
@@ -452,11 +452,12 @@ private fun QuickLaunchRow(app: AppInfo, onClick: () -> Unit, modifier: Modifier
     val bmp = remember(app.packageName + app.activityName) {
         app.icon.toBitmap(width = 108, height = 108).asImageBitmap()
     }
+    val press = withTapFeedback(onClick) // v2.5
     Row(
         modifier = modifier
             .fillMaxWidth()
             .clip(carShape(15.dp))
-            .clickable(onClick = onClick)
+            .clickable(onClick = press)
             .padding(horizontal = 8.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

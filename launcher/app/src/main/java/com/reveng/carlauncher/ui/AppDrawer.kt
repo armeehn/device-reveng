@@ -118,7 +118,7 @@ fun AppDrawer(
 
     Column(modifier = modifier.fillMaxSize()) {
         DrawerSearchTrigger(
-            onClick = { showSearch = true },
+            onClick = withTapFeedback { showSearch = true }, // v2.5
             modifier = Modifier.padding(top = 4.dp, bottom = 4.dp),
         )
 
@@ -302,12 +302,15 @@ private fun ReorderableAppGrid(
             key = { _, app -> app.packageName + "/" + app.activityName },
         ) { index, app ->
             val dragging = index == draggingIndex
+            // v2.5: feedback wraps the launch, not the tap — a tap swallowed by the drag guard
+            // below did nothing, and confirming nothing is its own kind of lie.
+            val launch = withTapFeedback { onLaunch(app) }
             AppTile(
                 app = app,
                 onClick = {
                     // Ignore the click that rides along with a long-press-release (favorite toggle)
                     // or that lands just after a drag ends.
-                    if (draggingIndex < 0 && SystemClock.uptimeMillis() >= suppressTapUntil) onLaunch(app)
+                    if (draggingIndex < 0 && SystemClock.uptimeMillis() >= suppressTapUntil) launch()
                 },
                 favorite = app.packageName in favorites,
                 focused = index == focusedIndex, // v0.8 focus ring
@@ -327,7 +330,7 @@ private fun ReorderableAppGrid(
             item(key = "__system_folder__") {
                 SystemFolderTile(
                     count = systemApps.size,
-                    onClick = onOpenSystem,
+                    onClick = withTapFeedback(onOpenSystem), // v2.5
                     focused = focusedIndex == items.size, // v0.8: folder is the last index
                 )
             }
@@ -358,7 +361,7 @@ private fun FavoritesRow(
             items(apps, key = { "fav_" + it.packageName + "/" + it.activityName }) { app ->
                 FavoriteChip(
                     app = app,
-                    onClick = { onLaunch(app) },
+                    onClick = withTapFeedback { onLaunch(app) }, // v2.5
                     onLongClick = { onToggleFavorite(app) },
                 )
             }
@@ -532,7 +535,7 @@ private fun SystemFolderDialog(
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
                     items(systemApps, key = { it.packageName + "/" + it.activityName }) { app ->
-                        AppTile(app = app, onClick = { onLaunch(app) })
+                        AppTile(app = app, onClick = withTapFeedback { onLaunch(app) }) // v2.5
                     }
                 }
             }

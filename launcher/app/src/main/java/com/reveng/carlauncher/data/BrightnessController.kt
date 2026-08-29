@@ -24,6 +24,8 @@ object BrightnessController {
 
     private const val TAG = "BrightnessController"
     private const val MAX = 255
+    /** What the settings provider reads back for a key that was never written. */
+    private const val UNSET = "null"
     /** Never let the head-unit backlight go fully black from a settings slider. */
     private const val MIN_APPLY = 6 // ~2%
 
@@ -65,12 +67,36 @@ object BrightnessController {
             .onFailure { Log.w(TAG, "cannot open WRITE_SETTINGS screen", it) }
     }
 
-    /** Current system brightness as a 0–100 % slider position (perceptual curve). */
-    fun currentPercent(context: Context): Int {
+    /**
+     * Current system brightness as a 0–100 % slider position, or **null** when there is no level
+     * to report. Callers must hide their readout on null rather than substitute a value: a chip
+     * that lies is worse than no chip (ROADMAP v3.1).
+     */
+    fun currentPercent(context: Context): Int? {
         val raw = runCatching {
-            Settings.System.getInt(context.contentResolver, Settings.System.SCREEN_BRIGHTNESS)
-        }.getOrDefault(128)
-        return rawToPercent(raw)
+            Settings.System.getString(context.contentResolver, Settings.System.SCREEN_BRIGHTNESS)
+        }.getOrNull()
+        return parsePercent(raw)
+    }
+
+    /**
+     * A raw `screen_brightness` reading → slider percent, or null for anything that is not a
+     * backlight level: read failure, blank, the literal "null" an unset key reads back as
+     * (`settings get system screen_brightness` prints exactly that), non-numeric, or outside the
+     * framework's 0–[MAX] band.
+     */
+    internal fun parsePercent(raw: String?): Int? {
+        val value = raw?.trim()
+        if (value.isNullOrEmpty() || value == UNSET) {
+            return null
+        }
+
+        val level = value.toIntOrNull() ?: return null
+        if (level !in 0..MAX) {
+            return null
+        }
+
+        return rawToPercent(level)
     }
 
     /**
