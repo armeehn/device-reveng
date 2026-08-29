@@ -8,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -16,16 +17,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.reveng.carlauncher.carlib.RadarState
+import com.reveng.carlauncher.ui.theme.proximityRamp
 
 /**
  * Reverse-camera overlay (CAR_API §1.3, §6.3 "Reverse / radar").
@@ -46,14 +44,17 @@ import com.reveng.carlauncher.carlib.RadarState
  *   vendor window composites above us, these extras are only visible in the (assumed) margins
  *   the vendor view doesn't cover — which is exactly the non-intrusive behavior we want.
  *
- * The static guide lines are toggleable via a small corner chip (local state, default on).
+ * The static guide lines are toggleable via a small corner chip. v0.4.7.1: the choice is
+ * hoisted — held in `remember` inside the AnimatedVisibility content, it was forgotten on
+ * every reversal. The caller persists it (SettingsStore.reverseGuideLines).
  */
 @Composable
 fun ReverseOverlay(
     visible: Boolean,
     modifier: Modifier = Modifier,
     radar: RadarState? = null,               // v0.9
-    guideLinesDefaultOn: Boolean = true,     // v0.9
+    guideLines: Boolean = true,              // v0.4.7.1 hoisted + persisted by the caller
+    onToggleGuideLines: (Boolean) -> Unit = {},
 ) {
     AnimatedVisibility(
         visible = visible,
@@ -63,29 +64,34 @@ fun ReverseOverlay(
     ) {
         // NOTE: intentionally NO .background(...) here — the overlay is transparent so the
         // vendor reverse window (above us) is never occluded. See KDoc coexistence rationale.
-        var guideLines by remember { mutableStateOf(guideLinesDefaultOn) }
-
         Box(modifier = Modifier.fillMaxSize()) {
             // Optional static parking-guide lines (fixed trajectory, not steering-linked).
             if (guideLines) {
                 ParkingGuideLines(modifier = Modifier.fillMaxSize())
             }
 
-            // Small, non-intrusive toggle for the guide lines (top-end corner).
-            Surface(
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
-                shape = carShape(50),
+            // Small, non-intrusive toggle for the guide lines (top-end corner). The chip stays
+            // visually small so it never competes with the camera feed, but this is a control on
+            // the REVERSING screen, so the invisible Box around it carries the §1.2 76 dp target.
+            Box(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .padding(16.dp)
-                    .clickable { guideLines = !guideLines },
+                    .defaultMinSize(minWidth = TOGGLE_TARGET_DP.dp, minHeight = TOGGLE_TARGET_DP.dp)
+                    .clickable { onToggleGuideLines(!guideLines) },
+                contentAlignment = Alignment.TopEnd,
             ) {
-                Text(
-                    text = if (guideLines) "Guide lines: On" else "Guide lines: Off",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                )
+                Surface(
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
+                    shape = carShape(50),
+                    modifier = Modifier.padding(16.dp),
+                ) {
+                    Text(
+                        text = if (guideLines) "Guide lines: On" else "Guide lines: Off",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    )
+                }
             }
 
             // Bottom edge: radar bars + guidance. Only renders when a real frame is present
@@ -123,9 +129,12 @@ fun ReverseOverlay(
  */
 @Composable
 private fun ParkingGuideLines(modifier: Modifier = Modifier) {
-    val red = MaterialTheme.colorScheme.error.copy(alpha = 0.85f)
-    val amber = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.85f)
-    val green = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f)
+    // Same derived clear/near/close ramp as RadarSideStrip — the tertiary role collapses
+    // into primary in themes that leave accent3 unset (see proximityRamp).
+    val ramp = proximityRamp(MaterialTheme.colorScheme)
+    val red = ramp.close.copy(alpha = BAND_ALPHA)
+    val amber = ramp.near.copy(alpha = BAND_ALPHA)
+    val green = ramp.clear.copy(alpha = BAND_ALPHA)
     Canvas(modifier = modifier) {
         val w = size.width
         val h = size.height
@@ -152,3 +161,9 @@ private fun ParkingGuideLines(modifier: Modifier = Modifier) {
         bandAt(0.85f, green)
     }
 }
+
+/** Driving-relevant touch target (LAUNCHER_DESIGN §1.2) for the guide-line toggle. */
+private const val TOGGLE_TARGET_DP = 76
+
+/** Guide lines are semi-transparent so they read over the camera feed. */
+private const val BAND_ALPHA = 0.85f

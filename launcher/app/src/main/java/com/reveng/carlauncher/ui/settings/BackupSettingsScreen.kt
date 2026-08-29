@@ -26,8 +26,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import com.reveng.carlauncher.ui.theme.JetBrainsMono
 import com.reveng.carlauncher.data.LauncherBackup
 import com.reveng.carlauncher.ui.theme.carShape
 import kotlinx.coroutines.Dispatchers
@@ -52,6 +52,7 @@ fun BackupSettingsScreen(
     var backups by remember { mutableStateOf<List<File>>(emptyList()) }
     var busy by remember { mutableStateOf(false) }
     var restoreTarget by remember { mutableStateOf<File?>(null) }
+    var deleteTarget by remember { mutableStateOf<File?>(null) }
 
     fun reload() {
         scope.launch { backups = withContext(Dispatchers.IO) { LauncherBackup.list(context) } }
@@ -79,7 +80,7 @@ fun BackupSettingsScreen(
             Text(
                 text = "Pull/push over adb:\n" +
                     "adb pull /sdcard/Android/data/$pkg/files/backups/",
-                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                style = MaterialTheme.typography.bodySmall.copy(fontFamily = JetBrainsMono),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -96,12 +97,8 @@ fun BackupSettingsScreen(
                 BackupRow(
                     backup = backup,
                     onRestore = { restoreTarget = backup },
-                    onDelete = {
-                        scope.launch {
-                            withContext(Dispatchers.IO) { LauncherBackup.delete(backup) }
-                            reload()
-                        }
-                    },
+                    // v0.4.7 — confirmed below: a one-tap permanent delete was a mis-tap away.
+                    onDelete = { deleteTarget = backup },
                 )
             }
         }
@@ -120,6 +117,24 @@ fun BackupSettingsScreen(
                 scope.launch {
                     val ok = withContext(Dispatchers.IO) { LauncherBackup.restore(context, target) }
                     if (ok) LauncherBackup.restartApp(context)
+                }
+            },
+        )
+    }
+
+    val doomed = deleteTarget
+    if (doomed != null) {
+        ConfirmDialog(
+            title = "Delete this backup?",
+            message = "The backup file is removed. This cannot be undone.",
+            confirmLabel = "Delete",
+            destructive = true,
+            onDismiss = { deleteTarget = null },
+            onConfirm = {
+                deleteTarget = null
+                scope.launch {
+                    withContext(Dispatchers.IO) { LauncherBackup.delete(doomed) }
+                    reload()
                 }
             },
         )

@@ -11,6 +11,7 @@ import com.szchoiceway.eventcenter.IEventService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.util.concurrent.Executors
 
 /**
  * CarService — binds the vendor control service (CAR_API §3.1) and exposes a thin,
@@ -59,6 +60,15 @@ class CarService(private val appContext: Context) {
     @Volatile
     private var service: IEventService? = null
 
+    /**
+     * v0.4.7 — connection callbacks run here, not on the main thread: onServiceConnected makes a
+     * non-oneway transaction to the vendor gateway (addMessageListener), and at boot contention
+     * that block on the UI thread is an ANR in HOME.
+     */
+    private val connectionExecutor = Executors.newSingleThreadExecutor { r ->
+        Thread(r, "car-service-conn")
+    }
+
     private val connection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
             service = IEventService.Stub.asInterface(binder)
@@ -93,7 +103,13 @@ class CarService(private val appContext: Context) {
     fun bind(): Boolean {
         val intent = Intent(BIND_ACTION).apply { setPackage(BIND_PACKAGE) }
         return try {
-            val ok = appContext.bindService(intent, connection, Context.BIND_AUTO_CREATE)
+            // 4-arg overload: callbacks land on [connectionExecutor] instead of the main thread.
+            val ok = appContext.bindService(
+                intent,
+                Context.BIND_AUTO_CREATE,
+                connectionExecutor,
+                connection,
+            )
             if (!ok) Log.w(TAG, "bindService returned false (service not found?)")
             ok
         } catch (t: Throwable) {

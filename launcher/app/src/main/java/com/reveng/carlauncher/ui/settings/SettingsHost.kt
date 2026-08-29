@@ -6,10 +6,25 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import com.reveng.carlauncher.carlib.CarEvents
+import com.reveng.carlauncher.ui.theme.carShape
+import kotlinx.coroutines.delay
 import com.reveng.carlauncher.carlib.CarService
 import com.reveng.carlauncher.data.AppDirectoryStore
 import com.reveng.carlauncher.data.CarSettingsController
@@ -61,7 +76,26 @@ fun SettingsHost(
 
     val current = backStack.last()
 
-    AnimatedContent(
+    // v0.4.7.1: the one collector of the controller's write results. A failed SysVar persist
+    // rolls the control back (CarSettingsController) — without this, that snap-back had no
+    // explanation anywhere on screen.
+    var failedWriteKey by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(controller) {
+        controller.writeEvents.collect { event ->
+            if (!event.ok) {
+                failedWriteKey = event.key
+            }
+        }
+    }
+    LaunchedEffect(failedWriteKey) {
+        if (failedWriteKey != null) {
+            delay(WRITE_FAILURE_TOAST_MS)
+            failedWriteKey = null
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+      AnimatedContent(
         targetState = current,
         transitionSpec = {
             (fadeIn(tween(220))) togetherWith (fadeOut(tween(180)))
@@ -207,8 +241,37 @@ fun SettingsHost(
                 )
             }
         }
+      }
+
+      failedWriteKey?.let { key -> WriteFailureToast(key = key) }
     }
 }
+
+/** Small themed notice naming the SysVar whose persist failed and visibly snapped back. */
+@Composable
+private fun WriteFailureToast(key: String) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(bottom = 24.dp),
+        contentAlignment = Alignment.BottomCenter,
+    ) {
+        Surface(
+            color = MaterialTheme.colorScheme.errorContainer,
+            contentColor = MaterialTheme.colorScheme.onErrorContainer,
+            shape = carShape(14.dp),
+        ) {
+            Text(
+                text = "Couldn't save $key — the value was rolled back",
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+            )
+        }
+    }
+}
+
+/** Long enough to read one line, short enough not to nag on a rootless unit. */
+private const val WRITE_FAILURE_TOAST_MS = 4_000L
 
 /** The routes inside the Settings subtree. */
 sealed interface SettingsRoute {

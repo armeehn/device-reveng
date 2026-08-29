@@ -32,28 +32,31 @@ fun PowerSettingsScreen(
         }
 
         SettingsSection(title = "ACC power delays") {
-            SliderSetting(
+            GuessedRangeSlider(
+                controller = controller,
                 label = "Power-on delay",
                 description = "Wait before the unit wakes after ACC on",
-                value = controller.getInt(SettingKeys.ACC_ON_DELAY, 0),
+                key = SettingKeys.ACC_ON_DELAY,
+                default = 0,
                 range = 0..30,
-                onChange = { controller.setInt(SettingKeys.ACC_ON_DELAY, it) },
                 format = { "${it}s" },
             )
-            SliderSetting(
+            GuessedRangeSlider(
+                controller = controller,
                 label = "Power-off delay",
                 description = "Keep running after ACC off",
-                value = controller.getInt(SettingKeys.ACC_OFF_DELAY, 0),
+                key = SettingKeys.ACC_OFF_DELAY,
+                default = 0,
                 range = 0..30,
-                onChange = { controller.setInt(SettingKeys.ACC_OFF_DELAY, it) },
                 format = { "${it}s" },
             )
-            SliderSetting(
+            GuessedRangeSlider(
+                controller = controller,
                 label = "Full power-off delay",
                 description = "Delay before a full shutdown",
-                value = controller.getInt(SettingKeys.POWER_OFF_DELAY, 0),
+                key = SettingKeys.POWER_OFF_DELAY,
+                default = 0,
                 range = 0..60,
-                onChange = { controller.setInt(SettingKeys.POWER_OFF_DELAY, it) },
                 format = { "${it}s" },
             )
         }
@@ -65,12 +68,13 @@ fun PowerSettingsScreen(
                 checked = controller.getBoolean(SettingKeys.SLEEP_SWITCH, false),
                 onChange = { controller.setBoolean(SettingKeys.SLEEP_SWITCH, it) },
             )
-            SliderSetting(
+            GuessedRangeSlider(
+                controller = controller,
                 label = "Sleep after",
                 description = "Idle time before sleeping",
-                value = controller.getInt(SettingKeys.SLEEP_TIME, 10),
+                key = SettingKeys.SLEEP_TIME,
+                default = 10,
                 range = 1..60,
-                onChange = { controller.setInt(SettingKeys.SLEEP_TIME, it) },
                 enabled = controller.getBoolean(SettingKeys.SLEEP_SWITCH, false),
                 format = { "${it} min" },
             )
@@ -83,4 +87,41 @@ fun PowerSettingsScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
+}
+
+/**
+ * A slider over a SysVar whose range is a guess (see the header ⚠). A vendor value outside the
+ * declared range proves the guess wrong for this unit — a plain slider would coerce it into
+ * range and commit the coerced value on the first touch, destroying the original. Such a value
+ * is rendered read-only, raw, until the range is confirmed on-device. A missing key falls back
+ * to [default] and stays adjustable.
+ */
+@Composable
+private fun GuessedRangeSlider(
+    controller: CarSettingsController,
+    label: String,
+    description: String,
+    key: String,
+    default: Int,
+    range: IntRange,
+    format: (Int) -> String,
+    enabled: Boolean = true,
+) {
+    val raw = controller.getString(key)
+    val value = if (raw.isBlank()) default else raw.trim().toIntOrNull()
+
+    if (value == null || value !in range) {
+        InfoRow(label = label, value = "$raw — read-only, outside the expected range")
+        return
+    }
+
+    SliderSetting(
+        label = label,
+        description = description,
+        value = value,
+        range = range,
+        onChange = { controller.setInt(key, it) },
+        enabled = enabled,
+        format = format,
+    )
 }

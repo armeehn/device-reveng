@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.sp
 import com.reveng.carlauncher.media.MediaSource
 import com.reveng.carlauncher.media.NowPlaying
 import com.reveng.carlauncher.ui.theme.carShape
+import com.reveng.carlauncher.ui.theme.DISABLED_ALPHA
 import kotlinx.coroutines.delay
 
 /**
@@ -287,10 +288,14 @@ private fun Progress(now: NowPlaying, onSeek: (Long) -> Unit) {
     var scrubbing by remember { mutableStateOf(false) }
     var scrubValue by remember { mutableFloatStateOf(0f) }
     var livePos by remember { mutableLongStateOf(now.livePositionMs()) }
+    // v0.4.7 — a committed seek holds the bar at its target until the controller pushes a fresh
+    // snapshot, instead of snapping back to the stale pre-drag position.
+    var seekHold by remember { mutableStateOf(false) }
 
     LaunchedEffect(now.positionMs, now.positionTimestamp, now.isPlaying) {
+        seekHold = false
         while (true) {
-            if (!scrubbing) livePos = now.livePositionMs()
+            if (!scrubbing && !seekHold) livePos = now.livePositionMs()
             if (!now.isPlaying) break
             delay(POSITION_TICK_MS)
         }
@@ -317,7 +322,12 @@ private fun Progress(now: NowPlaying, onSeek: (Long) -> Unit) {
             Slider(
                 value = displayMs.coerceIn(0L, duration).toFloat(),
                 onValueChange = { scrubbing = true; scrubValue = it },
-                onValueChangeFinished = { onSeek(scrubValue.toLong()); scrubbing = false },
+                onValueChangeFinished = {
+                    livePos = scrubValue.toLong()
+                    seekHold = true
+                    onSeek(scrubValue.toLong())
+                    scrubbing = false
+                },
                 valueRange = 0f..duration.toFloat(),
                 enabled = now.canSeek,
                 modifier = Modifier.fillMaxWidth(),
@@ -420,7 +430,6 @@ private const val TITLE_SP = 40f
 private const val TRANSPORT_TARGET_DP = 96
 
 private const val ART_SCRIM_ALPHA = 0.82f
-private const val DISABLED_ALPHA = 0.38f
 
 /** Twice a second is enough for a seek bar and costs nothing; matches MediaCard. */
 private const val POSITION_TICK_MS = 500L

@@ -32,8 +32,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import com.reveng.carlauncher.ui.theme.JetBrainsMono
 import com.reveng.carlauncher.data.CarSettingsController
 import com.reveng.carlauncher.data.CrashLog // v0.4.3.7
 import com.reveng.carlauncher.data.CrashRecord // v0.4.3.7
@@ -74,6 +74,7 @@ fun SetupDoctorScreen(
     var crashes by remember { mutableStateOf<List<CrashRecord>>(emptyList()) }
     var opened by remember { mutableStateOf<CrashRecord?>(null) }
     var exported by remember { mutableStateOf<String?>(null) }
+    var confirmClear by remember { mutableStateOf(false) }
 
     fun reloadCrashes() {
         scope.launch { crashes = withContext(Dispatchers.IO) { CrashLog.read(context) } }
@@ -173,25 +174,39 @@ fun SetupDoctorScreen(
                         }
                     },
                 )
+                // v0.4.7 — behind ConfirmDialog like reboot: a one-tap permanent delete of all
+                // crash evidence was a mis-tap away while driving.
                 ActionRow(
                     label = "Clear crash log",
                     description = "Delete every stored crash",
                     destructive = true,
-                    onClick = {
-                        scope.launch {
-                            withContext(Dispatchers.IO) { CrashLog.clear(context) }
-                            exported = null
-                            reloadCrashes()
-                        }
-                    },
+                    onClick = { confirmClear = true },
                 )
                 Text(
                     text = "Pull over adb:\nadb pull /sdcard/Android/data/${context.packageName}/files/crash-logs/",
-                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = JetBrainsMono),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
+    }
+
+    if (confirmClear) {
+        ConfirmDialog(
+            title = "Clear crash log?",
+            message = "Every stored crash record is deleted. This cannot be undone.",
+            confirmLabel = "Clear",
+            destructive = true,
+            onConfirm = {
+                confirmClear = false
+                scope.launch {
+                    withContext(Dispatchers.IO) { CrashLog.clear(context) }
+                    exported = null
+                    reloadCrashes()
+                }
+            },
+            onDismiss = { confirmClear = false },
+        )
     }
 }
 
@@ -238,7 +253,7 @@ private fun CrashDetail(record: CrashRecord, onBack: () -> Unit) {
             ) {
                 Text(
                     text = record.trace.ifEmpty { "(no trace recorded)" },
-                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = JetBrainsMono),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f),
                 )
@@ -301,7 +316,7 @@ private fun DoctorCheckRow(check: DoctorCheck, showAdb: Boolean) {
             ) {
                 Text(
                     text = check.adbCommand,
-                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = JetBrainsMono),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f),
                 )

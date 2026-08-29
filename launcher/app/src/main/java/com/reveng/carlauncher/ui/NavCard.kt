@@ -64,7 +64,12 @@ fun NavCard(
     // Best-effort: root-enable our notification listener so Maps nav is readable (no-op if
     // already enabled or if the unit isn't rooted). Same mechanism as the media listener.
     LaunchedEffect(Unit) {
-        withContext(Dispatchers.IO) { NavRepository.ensureListenerEnabled(context) }
+        withContext(Dispatchers.IO) {
+            NavRepository.ensureListenerEnabled(context)
+            // v0.4.9: pick up the vendor-configured nav app (SysVar, open read) so the tap
+            // target matches the vendor settings screen. Cached; Maps stays the fallback.
+            NavRepository.refreshVendorNav(context)
+        }
     }
 
     Card(
@@ -74,7 +79,8 @@ fun NavCard(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
     ) {
         Column(
-            modifier = Modifier.fillMaxSize().padding(20.dp),
+            // 16dp (not 20) so header + distance row + instruction fit the 150dp slot.
+            modifier = Modifier.fillMaxSize().padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -111,6 +117,12 @@ fun NavCard(
     }
 }
 
+/**
+ * Live guidance, glance-first: the turn distance is the number the driver acts on, so it
+ * leads the row at [DISTANCE_SP] (was a 16 sp afterthought under the instruction). The
+ * instruction drops to one line at 24 sp — with the big distance both fit the 150 dp slot,
+ * and a manoeuvre description longer than a line is read from the nav app, not this tile.
+ */
 @Composable
 private fun NavLive(nav: NavState) {
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -121,33 +133,35 @@ private fun NavLive(nav: NavState) {
             modifier = Modifier.size(34.dp),
         )
         Spacer(Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
+        if (nav.distance.isNotEmpty()) {
             Text(
-                text = nav.instruction,
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 2,
+                text = nav.distance,
+                fontSize = DISTANCE_SP.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 1,
+            )
+            Spacer(Modifier.width(12.dp))
+        }
+        if (nav.eta.isNotEmpty()) {
+            Spacer(Modifier.weight(1f))
+            Text(
+                text = nav.eta,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            if (nav.distance.isNotEmpty()) {
-                Text(
-                    text = nav.distance,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            }
         }
     }
-    if (nav.eta.isNotEmpty()) {
-        Text(
-            text = nav.eta,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
+    Text(
+        text = nav.instruction,
+        fontSize = INSTRUCTION_SP.sp,
+        fontWeight = FontWeight.Medium,
+        color = MaterialTheme.colorScheme.onSurface,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
 }
 
 @Composable
@@ -181,3 +195,7 @@ private fun DrivingInfo(speedKmh: Int) {
         )
     }
 }
+
+/** Glance sizes: the distance is the primary value (§1.1), the instruction secondary. */
+private const val DISTANCE_SP = 32
+private const val INSTRUCTION_SP = 24

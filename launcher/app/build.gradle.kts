@@ -1,3 +1,5 @@
+import java.util.Base64
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -59,6 +61,37 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    // Real release signing, fed entirely by environment variables so no key
+    // material ever enters the repo. All four must be set (in CI they come from
+    // repository secrets — see SIGNING.md); with any missing, release falls
+    // back to the debug key exactly as before.
+    val releaseSigningEnv = listOf(
+        "RELEASE_KEYSTORE_B64",
+        "RELEASE_KEYSTORE_PASS",
+        "RELEASE_KEY_ALIAS",
+        "RELEASE_KEY_PASS",
+    ).associateWith { System.getenv(it) }
+    val hasReleaseSigning = releaseSigningEnv.values.all { !it.isNullOrBlank() }
+
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                // The keystore travels as base64 (an Actions secret cannot hold
+                // a binary file); materialize it under build/ (gitignored).
+                val ksFile = layout.buildDirectory.file("release.keystore").get().asFile
+                ksFile.parentFile.mkdirs()
+                ksFile.writeBytes(
+                    Base64.getDecoder()
+                        .decode(releaseSigningEnv.getValue("RELEASE_KEYSTORE_B64"))
+                )
+                storeFile = ksFile
+                storePassword = releaseSigningEnv.getValue("RELEASE_KEYSTORE_PASS")
+                keyAlias = releaseSigningEnv.getValue("RELEASE_KEY_ALIAS")
+                keyPassword = releaseSigningEnv.getValue("RELEASE_KEY_PASS")
+            }
+        }
+    }
+
     buildTypes {
         debug {
             isMinifyEnabled = false
@@ -80,16 +113,21 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            // No release keystore for this side-loaded head-unit build: sign release with the
-            // debug key so `assembleRelease` produces an installable APK out of the box.
+            // With the RELEASE_* env vars set, sign with the real keystore (see
+            // signingConfigs above and SIGNING.md). Without them, sign with the
+            // debug key so `assembleRelease` still installs out of the box.
             //
-            // HAZARD, unfixed: a debug keystore is generated per machine and per CI runner, so
-            // two builds of the same commit can carry different signatures. Installing one over
-            // the other fails with INSTALL_FAILED_UPDATE_INCOMPATIBLE, and on a device where this
-            // app is HOME that leaves the car with no launcher until it is uninstalled by hand.
-            // The fix is a real keystore held as repository secrets — it cannot be committed here,
-            // it needs owner action. See the release job in .github/workflows/launcher-ci.yml.
-            signingConfig = signingConfigs.getByName("debug")
+            // HAZARD while on the debug fallback: a debug keystore is generated per
+            // machine and per CI runner, so two builds of the same commit can carry
+            // different signatures. Installing one over the other fails with
+            // INSTALL_FAILED_UPDATE_INCOMPATIBLE, and on a device where this app is
+            // HOME that leaves the car with no launcher until it is uninstalled by
+            // hand. The fix needs owner action: add the secrets listed in SIGNING.md.
+            signingConfig = if (hasReleaseSigning) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 
@@ -100,10 +138,14 @@ android {
 
     // v1.0: `assembleRelease` runs lint-vital by default, which drags in extra resolution we
     // don't need for a side-loaded head-unit APK (and can't fetch on an offline builder).
-    // Disable it so a release assemble is self-contained; run `./gradlew lint` explicitly if wanted.
+    // Disable it so a release assemble is self-contained. Lint DOES run: CI has a dedicated
+    // `:app:lintRelease` step. Errors fail that task; warnings are reported, never fatal.
+    // Pre-existing errors owned by other in-flight PRs live in lint-baseline.xml — shrink
+    // it over time, never add to it to dodge a new error.
     lint {
         checkReleaseBuilds = false
-        abortOnError = false
+        abortOnError = true
+        baseline = file("lint-baseline.xml")
     }
 
     compileOptions {
@@ -153,6 +195,10 @@ dependencies {
     // JVM unit tests for the pure logic (preset codec, frequency formatting, theme table,
     // the store codecs). See carlib/build.gradle.kts for why there is no Robolectric.
     testImplementation("junit:junit:4.13.2")
+
+    // Virtual-time tests for the coroutine-driven input timing (KeyPump's repeat/long-press
+    // timers) and the ignition-session holder. Same version line as coroutines-android above.
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
 
     // The real org.json, for the theme and driver-profile codecs. `org.json` ships in the
     // platform, so the app declares no JSON dependency — but a local unit test compiles against

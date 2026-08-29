@@ -23,8 +23,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import com.reveng.carlauncher.ui.theme.JetBrainsMono
 import com.reveng.carlauncher.data.CarSettingsController
 import com.reveng.carlauncher.data.SysVarExport
 import com.reveng.carlauncher.ui.collectAsStateSafe
@@ -50,6 +50,7 @@ fun SysVarExportScreen(
     val snapshot by controller.snapshot.collectAsStateSafe(initial = emptyMap())
     var exports by remember { mutableStateOf<List<File>>(emptyList()) }
     var busy by remember { mutableStateOf(false) }
+    var deleteTarget by remember { mutableStateOf<File?>(null) }
 
     fun reload() {
         scope.launch { exports = withContext(Dispatchers.IO) { SysVarExport.list(context) } }
@@ -83,7 +84,7 @@ fun SysVarExportScreen(
             )
             Text(
                 text = "Pull over adb:\nadb pull /sdcard/Android/data/" + pkg + "/files/sysvar-dumps/",
-                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                style = MaterialTheme.typography.bodySmall.copy(fontFamily = JetBrainsMono),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -99,15 +100,29 @@ fun SysVarExportScreen(
             exports.forEach { file ->
                 ExportRow(
                     file = file,
-                    onDelete = {
-                        scope.launch {
-                            withContext(Dispatchers.IO) { SysVarExport.delete(file) }
-                            reload()
-                        }
-                    },
+                    // v0.4.7 — confirmed below: a one-tap permanent delete was a mis-tap away.
+                    onDelete = { deleteTarget = file },
                 )
             }
         }
+    }
+
+    val doomed = deleteTarget
+    if (doomed != null) {
+        ConfirmDialog(
+            title = "Delete this export?",
+            message = "The export file is removed. This cannot be undone.",
+            confirmLabel = "Delete",
+            destructive = true,
+            onDismiss = { deleteTarget = null },
+            onConfirm = {
+                deleteTarget = null
+                scope.launch {
+                    withContext(Dispatchers.IO) { SysVarExport.delete(doomed) }
+                    reload()
+                }
+            },
+        )
     }
 }
 

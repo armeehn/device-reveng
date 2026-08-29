@@ -19,8 +19,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import com.reveng.carlauncher.ui.theme.JetBrainsMono
 import com.reveng.carlauncher.carlib.CanFrame
 import com.reveng.carlauncher.carlib.CarEvents
 import com.reveng.carlauncher.carlib.RadarCapture
@@ -146,14 +146,14 @@ internal fun ExtraRow(key: String, value: String) {
     ) {
         Text(
             text = key,
-            style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+            style = MaterialTheme.typography.bodyMedium.copy(fontFamily = JetBrainsMono),
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.weight(1f),
         )
         Spacer(Modifier.size(12.dp))
         Text(
             text = value,
-            style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+            style = MaterialTheme.typography.bodySmall.copy(fontFamily = JetBrainsMono),
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier
                 .weight(1.4f)

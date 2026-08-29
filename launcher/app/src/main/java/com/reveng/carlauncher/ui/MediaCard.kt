@@ -29,6 +29,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
@@ -50,6 +51,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.reveng.carlauncher.R
 import com.reveng.carlauncher.media.NowPlaying
 import kotlinx.coroutines.delay
@@ -101,7 +103,9 @@ fun MediaCard(
             }
 
             Column(
-                modifier = Modifier.fillMaxSize().padding(20.dp),
+                // 16dp (not 20) so art row + chip + seek bar + the 88dp transport row all
+                // fit the card's home slot.
+                modifier = Modifier.fillMaxSize().padding(16.dp),
                 verticalArrangement = Arrangement.SpaceBetween,
             ) {
                 // ---- top: art thumb + title/artist + source chip ----
@@ -136,7 +140,8 @@ fun MediaCard(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = now?.title ?: stringResource(R.string.media_placeholder_title),
-                            style = MaterialTheme.typography.titleLarge,
+                            // §2.2: now-playing title ≥28sp.
+                            style = MaterialTheme.typography.titleLarge.copy(fontSize = TITLE_SP.sp),
                             color = MaterialTheme.colorScheme.onSurface,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -175,27 +180,40 @@ fun MediaCard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    IconButton(onClick = onPrev, enabled = now?.hasPrev ?: false) {
+                    // §2.2: each transport control is an 88 dp target — the one interactive
+                    // row of an otherwise glance card, kept full-size despite the far column.
+                    IconButton(
+                        onClick = onPrev,
+                        enabled = now?.hasPrev ?: false,
+                        modifier = Modifier.size(TRANSPORT_TARGET_DP.dp),
+                    ) {
                         Icon(
                             Icons.Filled.SkipPrevious,
                             contentDescription = "Previous",
                             tint = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.size(40.dp),
+                            modifier = Modifier.size(TRANSPORT_ICON_DP.dp),
                         )
                     }
-                    FilledIconButton(onClick = onPlayPause) {
+                    FilledIconButton(
+                        onClick = onPlayPause,
+                        modifier = Modifier.size(TRANSPORT_TARGET_DP.dp),
+                    ) {
                         Icon(
                             if (now?.isPlaying == true) Icons.Filled.Pause else Icons.Filled.PlayArrow,
                             contentDescription = "Play/Pause",
-                            modifier = Modifier.size(32.dp),
+                            modifier = Modifier.size(TRANSPORT_ICON_DP.dp),
                         )
                     }
-                    IconButton(onClick = onNext, enabled = now?.hasNext ?: false) {
+                    IconButton(
+                        onClick = onNext,
+                        enabled = now?.hasNext ?: false,
+                        modifier = Modifier.size(TRANSPORT_TARGET_DP.dp),
+                    ) {
                         Icon(
                             Icons.Filled.SkipNext,
                             contentDescription = "Next",
                             tint = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.size(40.dp),
+                            modifier = Modifier.size(TRANSPORT_ICON_DP.dp),
                         )
                     }
                 }
@@ -208,6 +226,9 @@ fun MediaCard(
  * Live seek bar. Ticks the interpolated position while playing; dragging scrubs locally and
  * commits on release via [onSeek] (MediaController.transportControls.seekTo). Disabled when
  * the session doesn't advertise ACTION_SEEK_TO (bar still reflects progress).
+ *
+ * v0.4.7 — scrubbing is parked-only, mirroring MediaScreen's Progress: while moving the same
+ * progress renders as a read-only bar under [LocalParkedOnlyLock].
  */
 @Composable
 private fun SeekBar(now: NowPlaying, onSeek: (Long) -> Unit) {
@@ -215,26 +236,51 @@ private fun SeekBar(now: NowPlaying, onSeek: (Long) -> Unit) {
     var scrubbing by remember { mutableStateOf(false) }
     var scrubValue by remember { mutableFloatStateOf(0f) }
     var livePos by remember { mutableLongStateOf(now.livePositionMs()) }
+    // v0.4.7 — a committed seek holds the bar at its target until the controller pushes a fresh
+    // snapshot, instead of snapping back to the stale pre-drag position.
+    var seekHold by remember { mutableStateOf(false) }
 
     // Re-tick whenever the source snapshot changes (new position base / play state).
     LaunchedEffect(now.positionMs, now.positionTimestamp, now.isPlaying) {
+        seekHold = false
         while (true) {
-            if (!scrubbing) livePos = now.livePositionMs()
+            if (!scrubbing && !seekHold) livePos = now.livePositionMs()
             if (!now.isPlaying) break
             delay(500)
         }
     }
 
+    // While moving, drop any in-progress drag: the gate can close mid-gesture.
+    val locked = LocalParkedOnlyLock.current
+    LaunchedEffect(locked) {
+        if (locked) scrubbing = false
+    }
+
     val displayMs = if (scrubbing) scrubValue.toLong() else livePos
     Column(modifier = Modifier.fillMaxWidth()) {
-        Slider(
-            value = displayMs.coerceIn(0L, duration).toFloat(),
-            onValueChange = { scrubbing = true; scrubValue = it },
-            onValueChangeFinished = { onSeek(scrubValue.toLong()); scrubbing = false },
-            valueRange = 0f..duration.toFloat(),
-            enabled = now.canSeek,
-            modifier = Modifier.fillMaxWidth().height(24.dp),
-        )
+        if (locked) {
+            LinearProgressIndicator(
+                progress = { displayMs.coerceIn(0L, duration).toFloat() / duration.toFloat() },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(10.dp)
+                    .clip(carShape(5.dp)),
+            )
+        } else {
+            Slider(
+                value = displayMs.coerceIn(0L, duration).toFloat(),
+                onValueChange = { scrubbing = true; scrubValue = it },
+                onValueChangeFinished = {
+                    livePos = scrubValue.toLong()
+                    seekHold = true
+                    onSeek(scrubValue.toLong())
+                    scrubbing = false
+                },
+                valueRange = 0f..duration.toFloat(),
+                enabled = now.canSeek,
+                modifier = Modifier.fillMaxWidth().height(24.dp),
+            )
+        }
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -292,3 +338,8 @@ private fun formatTime(ms: Long): String {
     val s = totalSec % 60
     return "%d:%02d".format(m, s)
 }
+
+/** §2.2 MediaCard spec: 28 sp title, 88 dp transport targets (icons drawn at 40 dp). */
+private const val TITLE_SP = 28
+private const val TRANSPORT_TARGET_DP = 88
+private const val TRANSPORT_ICON_DP = 40
