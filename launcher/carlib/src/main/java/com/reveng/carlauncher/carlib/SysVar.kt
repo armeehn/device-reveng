@@ -52,6 +52,9 @@ class SysVar(private val context: Context) {
         const val KEY_SCREEN_DENSITY = "Sys_Screen_Density"
         const val KEY_LAUNCHER_APP_HIDE = "SYS_LAUNCHER_APP_HIDE_KEY"
         const val KEY_HOME_PAGE_DISPLAY = "Sys_Home_Page_Display"
+        // v0.4.9: the vendor-configured navigation app (CAR_API §6.3, CUSTOMERUI_NOTES §3e).
+        const val KEY_NAV_PACKAGE = "Set_NavPackageName"
+        const val KEY_NAV_CLASS = "Set_NavClassName"
     }
 
     // ---- Reads --------------------------------------------------------------

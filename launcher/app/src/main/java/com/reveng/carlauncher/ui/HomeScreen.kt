@@ -105,6 +105,8 @@ fun HomeScreen(
     favoritesStore: com.reveng.carlauncher.data.FavoritesStore? = null,
     appOrderStore: com.reveng.carlauncher.data.AppOrderStore? = null,
     appDirectoryStore: AppDirectoryStore? = null,
+    // v0.4.9: packages the VENDOR settings hide (SysVar SYS_LAUNCHER_APP_HIDE_KEY, read-only).
+    vendorHidden: Set<String> = emptySet(),
 ) {
     val reverse by carEvents.reverse.collectAsStateSafe(initial = false)
     val media by nowPlaying.state.collectAsStateSafe(initial = null)
@@ -130,8 +132,10 @@ fun HomeScreen(
     val directoryStore = appDirectoryStore ?: remember { AppDirectoryStore(appContext, dirScope) }
     val placements by directoryStore.placements.collectAsStateSafe(initial = emptyMap())
     // One pass: resolve each app's effective placement once and group. HIDDEN apps land in neither
-    // list, so they simply fall out.
-    val byPlacement = remember(apps, placements) { apps.groupBy { it.effectivePlacement(placements) } }
+    // list, so they simply fall out. v0.4.9: vendor-hidden packages are unioned in as HIDDEN.
+    val byPlacement = remember(apps, placements, vendorHidden) {
+        apps.groupBy { it.effectivePlacement(placements, vendorHidden) }
+    }
     val userApps = byPlacement[Placement.HOME].orEmpty()
     val systemApps = byPlacement[Placement.SYSTEM].orEmpty()
 

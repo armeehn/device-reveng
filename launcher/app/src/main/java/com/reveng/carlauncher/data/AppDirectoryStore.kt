@@ -33,6 +33,42 @@ fun AppInfo.effectivePlacement(placements: Map<String, Placement>): Placement =
     placements[packageName] ?: if (isSystem) Placement.SYSTEM else Placement.HOME
 
 /**
+ * v0.4.9 — [effectivePlacement] with the VENDOR's hidden-apps list unioned in. The stock
+ * launcher hides the packages named by SysVar `SYS_LAUNCHER_APP_HIDE_KEY` (CAR_API §2.3/§6.3);
+ * honouring it keeps our drawer in step with the vendor settings screen. Vendor-hidden wins
+ * over a local placement: the union of the two hidden sets is hidden.
+ */
+fun AppInfo.effectivePlacement(
+    placements: Map<String, Placement>,
+    vendorHidden: Set<String>,
+): Placement = mergedPlacement(packageName, isSystem, placements, vendorHidden)
+
+/** The pure core of the two-source placement rule, reachable by a JVM unit test. */
+internal fun mergedPlacement(
+    packageName: String,
+    isSystem: Boolean,
+    placements: Map<String, Placement>,
+    vendorHidden: Set<String>,
+): Placement = when {
+    packageName in vendorHidden -> Placement.HIDDEN
+    else -> placements[packageName] ?: if (isSystem) Placement.SYSTEM else Placement.HOME
+}
+
+/**
+ * v0.4.9 — parse the vendor hidden-apps list (SysVar `SYS_LAUNCHER_APP_HIDE_KEY`) into package
+ * names. READ-ONLY: this launcher never writes the key. The vendor's separator is undocumented,
+ * so this splits on every plausible one (`,` `;` `|`, plus whitespace) and keeps only tokens
+ * shaped like a package name — a defensive parse of an unconfirmed format, never a guess about
+ * what a malformed entry meant.
+ */
+internal fun parseVendorHidden(raw: String?): Set<String> =
+    raw.orEmpty()
+        .split(',', ';', '|', ' ', '\t', '\n')
+        .map { it.trim() }
+        .filter { token -> token.isNotEmpty() && token.all { it.isLetterOrDigit() || it == '.' || it == '_' } }
+        .toSet()
+
+/**
  * Persists the user's custom app directory (v0.4.2): a per-package [Placement] that overrides the
  * hard-coded user/system split in [com.reveng.carlauncher.AppRepository]. Lets the driver pull a
  * misclassified vendor app onto the home grid, tuck a cluttering app into the System folder, or

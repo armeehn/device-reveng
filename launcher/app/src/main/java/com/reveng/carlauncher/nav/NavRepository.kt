@@ -7,6 +7,7 @@ import android.net.Uri
 import android.provider.Settings
 import android.util.Log
 import com.reveng.carlauncher.carlib.RootShell
+import com.reveng.carlauncher.carlib.SysVar // v0.4.9 vendor nav target
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -50,12 +51,59 @@ object NavRepository {
     fun clear() { _state.value = null }
 
     /**
-     * Launch Google Maps (which also drives Android Auto projection). Falls back to the
-     * generic geo: intent chooser if Maps isn't installed under its usual package.
+     * v0.4.9 — the vendor-configured nav app (SysVar `Set_NavPackageName`/`Set_NavClassName`,
+     * CAR_API §6.3), cached off the main thread by [refreshVendorNav]. Null = not configured /
+     * not yet read → Maps. READ-ONLY: this launcher never writes those keys.
+     */
+    @Volatile
+    private var vendorNav: NavTarget? = null
+
+    /** A vendor nav target: package, plus an explicit activity class when one is set. */
+    data class NavTarget(val packageName: String, val className: String?)
+
+    /**
+     * Normalise the two SysVar values into a [NavTarget], or null when no package is set.
+     * Defensive: values are trimmed, a class without a package is meaningless (ignored), and a
+     * relative class name (`.MapsActivity`) is resolved against the package the Android way.
+     */
+    fun vendorNavTarget(pkg: String?, cls: String?): NavTarget? {
+        val p = pkg?.trim().orEmpty()
+        if (p.isEmpty()) return null
+        val c = cls?.trim().orEmpty()
+        return NavTarget(
+            packageName = p,
+            className = when {
+                c.isEmpty() -> null
+                c.startsWith(".") -> p + c
+                else -> c
+            },
+        )
+    }
+
+    /** Re-read the vendor nav keys. BLOCKING (ContentResolver) — call from Dispatchers.IO. */
+    fun refreshVendorNav(context: Context) {
+        val sysVar = SysVar(context.applicationContext)
+        vendorNav = vendorNavTarget(
+            sysVar.getString(SysVar.KEY_NAV_PACKAGE),
+            sysVar.getString(SysVar.KEY_NAV_CLASS),
+        )
+    }
+
+    /**
+     * Launch the navigation app: the vendor-configured one when it is set AND resolvable,
+     * else Google Maps (which also drives Android Auto projection), else the generic geo:
+     * chooser. A configured-but-uninstalled vendor entry must not brick the tap.
      */
     fun launchMaps(context: Context) {
         val pm = context.packageManager
-        val direct = pm.getLaunchIntentForPackage(MAPS_PACKAGE)
+        val vendor = vendorNav?.let { target ->
+            val explicit = target.className?.let { cls ->
+                Intent().setComponent(ComponentName(target.packageName, cls))
+                    .takeIf { pm.resolveActivity(it, 0) != null }
+            }
+            explicit ?: pm.getLaunchIntentForPackage(target.packageName)
+        }
+        val direct = vendor ?: pm.getLaunchIntentForPackage(MAPS_PACKAGE)
         val intent = direct ?: Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q="))
         runCatching {
             context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
