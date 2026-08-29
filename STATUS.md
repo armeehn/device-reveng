@@ -1,6 +1,6 @@
 # RAV4 AiNavi Head-Unit Project — STATUS
 
-_Last updated: 2026-08-27. Unit: Choiceway/AiNavi **GT6-EAU**, Qualcomm **QCM6125**, Android 13, in a 2019 Toyota RAV4 (XA50)._
+_Last updated: 2026-08-28. Unit: Choiceway/AiNavi **GT6-EAU**, Qualcomm **QCM6125**, Android 13, in a 2019 Toyota RAV4 (XA50)._
 
 ## ✅ Done
 - **Identified** the unit: GT6-EAU / QCM6125 / MCU `RLC0_GT6E` (Hangrui). Bootloader **unlocked** (orange), SELinux **permissive**.
@@ -22,6 +22,32 @@ _Last updated: 2026-08-27. Unit: Choiceway/AiNavi **GT6-EAU**, Qualcomm **QCM612
 3. **HVAC controls don't work.** Investigating whether RAV4 climate is CAN-controllable or display-only (likely display-only).
 4. **Play / Android Auto reliability** — Magisk Play Integrity module.
 5. **Performance / boot-time.**
+
+## 📱 CarLauncher — our own home app (`launcher/`)
+- **What it is.** `com.reveng.carlauncher`, a Kotlin + Jetpack Compose HOME launcher written for
+  this unit, talking to the vendor gateway `com.szchoiceway.eventcenter` per `CAR_API.md`. Two
+  Gradle modules: `carlib` (car integration layer) + `app` (UI). Currently **0.4.3.2**; 1.0 is
+  reserved for a polished public release.
+- **It is a HOME app, side-loaded.** Registers `MAIN + HOME + DEFAULT + LAUNCHER` and is picked
+  from the Android home chooser; stock `com.szchoiceway.customerui` stays installed. Settings ▸
+  Root tier ▸ sole-HOME can `pm disable-user` it, arming an automatic rollback *before* it does.
+- **What it does.** Three-column Home (media / nav / quick-launch + climate readout), app drawer,
+  MediaSession player, radio over the vendor AIDL, read-only climate, vehicle dashboard with a
+  provenance line per signal, driver profiles, notification shelf, on-screen keyboard, and a full
+  reskin of the vendor settings (455 live SysVar keys reachable). Fully drivable from the SWC
+  keys. GPS-derived speed gates the distracting bits parked-only.
+- **Root tier (v2.9) is the top tier there will be.** The vendor platform signing key is
+  **confirmed unobtainable** (`CUSTOM_ANDROID.md` §2b), so the platform-signed `/system/priv-app`
+  build is ruled out for good; Magisk root replaced it. A root `app_process` helper receives the
+  `signature`-protected broadcasts (SWC, day/night, reverse) at uid 0. Without root it all
+  degrades silently.
+- **Blocked, do not read as done.** HVAC writes (needs goal #3 above answered), radar byte layout
+  (GUESSED — the maneuvering strips stay hidden), radio scan / RDS station text (no such method in
+  the vendor AIDL), and anything drawn over the reverse camera (vendor-composited, out of scope).
+- **Unvalidated on the unit.** None of the recent releases has run on the head unit; treat the
+  feature list as built, not proven.
+- **Docs:** `launcher/README.md` (what each release actually shipped) and `LAUNCHER_DESIGN.md`
+  (UI/UX spec + the capability tiers).
 
 ## 🗂️ Staged assets (all under /home/sasha/rav4-headunit/)
 - `run/` — loader, TWRP (recovery_ADB.img / recovery_KB.img), Magisk.apk/.zip

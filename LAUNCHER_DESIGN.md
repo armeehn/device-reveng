@@ -198,7 +198,10 @@ As laid out in §2. Root destination; SWC HOME key always returns here (§4).
 - Auto-exit at the configured speed threshold (SysVar `Sys_Backcar_speed_threshold`).
 - Companion-mode caveat: `ACTION_BACKCAR_START` is *protected*; if we can't hold the permission,
   the vendor `BackCarActivity` still handles reverse and our overlay simply doesn't appear — no
-  regression. Full radar overlay is a **system-build** feature.
+  regression. Root gets the trigger (§6.4), but **nothing of ours draws over the camera picture**:
+  the vendor composites its own reverse window above all apps and `ui/ReverseOverlay.kt` never
+  contends for those pixels. The radar decode is UNCONFIRMED besides, so the maneuvering
+  side-strips stay hidden.
 
 ### 3.7 Settings
 - Large-tile settings: Theme (Day/Night/Auto), Reachability mirror (LHD/RHD), QuickLaunch
@@ -304,9 +307,10 @@ Composables are stateless and hoist events up.
 
 ---
 
-## 6. Companion → full-replacement roadmap
+## 6. Companion → root-tier capability map
 
-The capability split follows CAR_API §6.4. Three tiers:
+The capability split follows CAR_API §6.4. Three live tiers, plus a fourth that was investigated
+and permanently ruled out (§6.4):
 
 ### 6.1 Works as a NORMAL app (companion build, no root)
 - Register as HOME (`category.HOME/DEFAULT/LAUNCHER`) and coexist; user picks default in Android
@@ -335,25 +339,54 @@ The capability split follows CAR_API §6.4. Three tiers:
 - Suppress/replace the vendor status & nav bar (SysVar `Sys_Statusbar_Icon_Config_Key`,
   `SYS_SHOW_TOOL_NAVI_BAR_WND`).
 
-### 6.4 Needs SYSTEM / SIGNATURE (full-replacement build)
-Install to `/system/priv-app` + platform signature, `sharedUserId=android.uid.system` (CAR_API
-§6.4). Unlocks:
-- Reliably hold the `signature` broadcast permission → **native reverse overlay with our radar +
-  trajectory**, reliable SWC + day/night.
-- AIDL **control side-effects**: mode switch (`sendMode`), MCU passthrough, secure-settings, EQ,
-  and thus a **write-enabled Climate** control screen (A/C key opcodes, CAR_API §5).
-- Become the sole HOME (disable/replace `com.szchoiceway.customerui`), own the launcher↔gateway
-  UIMODE handshake (`ACTION_LAUNCHER_TO_EVENTCENTER_UIMODE_EVENT`, CAR_API §6.2).
+### 6.4 RULED OUT — SYSTEM / SIGNATURE (full-replacement build)
+This tier was planned as install to `/system/priv-app` + platform signature,
+`sharedUserId=android.uid.system` (CAR_API §6.4). It was **investigated and is permanently closed**.
+Kept here rather than deleted, so it is not proposed again.
+
+**Why it cannot be built.** An app declaring `android.uid.system` must be signed with the *same
+platform key as the running framework*, and Choiceway's private platform key is **confirmed
+unobtainable** — `CUSTOM_ANDROID.md` §2b calls this the fatal blocker, and the launcher sources
+treat it as settled (`carlib/RootBroadcastHelper` and `ui/settings/RootTierSettingsScreen` KDoc).
+Supplying our own platform key means signing a whole framework, which breaks the vendor car stack
+for the very same signature reason (`CUSTOM_ANDROID.md` §2b) — a different project, not a build
+variant of this one.
+
+**What replaced it: the root tier (§6.3), shipped in v2.9.** Magisk root plus permissive SELinux
+buys back most of what the signature was going to buy, because AMS's `checkComponentPermission`
+short-circuits to GRANTED for uid 0 before it consults granted permissions. Point by point:
+- *Hold the `signature` broadcast permission* → `carlib/RootBroadcastHelper` runs our own dex as a
+  bare `app_process` under `su`, registers the receiver at uid 0 and pipes the events back through
+  `carlib/RootBroadcastBridge` into the existing `CarEvents` flows, so SWC keys, day/night and the
+  reverse trigger become reliable with no consumer change. `CarEvents.rootCapture` reports whether
+  it is live; with no root it fails silently and the unprotected fallbacks stand.
+- *Write SysVar without a fork per write* → `carlib/RootSession` holds one `su` open behind
+  `RootShell.exec` (§6.3 is the capability; this is only its transport).
+- *Suppress the vendor status & nav bar* → `carlib/VendorChrome`, opt-in because both keynames are
+  GUESSED; it only writes a key already present in the live table and restores the original value.
+- *Become the sole HOME* → `carlib/VendorLauncher` runs `pm disable-user
+  com.szchoiceway.customerui` behind a destructive, parked-only confirm, arming a rollback in a
+  detached root shell **before** the disable.
+- *Own the launcher↔gateway UIMODE handshake* → `carlib/GatewayHandshake`
+  (`ACTION_LAUNCHER_TO_EVENTCENTER_UIMODE_EVENT`, CAR_API §6.2); this needed no privilege at all.
+
+**What died with the tier and was not recovered by root:** the AIDL control side-effects
+(`sendMode` and friends) and the **write-enabled Climate** screen. Climate stays read-only (§3.5),
+and root is not what is blocking it — see §7.
 
 ### 6.5 Migration property
 The same `:app` codebase runs in all builds. A `PrivilegeLevel` capability object
-(`NORMAL | ROOTED | SYSTEM`), resolved at startup, feature-flags the gated paths. UI degrades
+(`NORMAL | ROOTED`), resolved at startup, feature-flags the gated paths. UI degrades
 gracefully: a feature that needs a higher tier shows a greyed control with a one-line reason,
 never a crash or a dead button.
 
 ---
 
-## 7. Phased plan (MVP → v1 → v2)
+## 7. Phased plan (MVP → v1 → root tier)
+
+MVP and v1 shipped. The planned third phase — *v2, full replacement, system app* — was ruled out
+(§6.4) and replaced by the **root tier**, which shipped in v2.9. The MVP and v1 lists are left as
+written: they are the plan those releases were built against.
 
 ### MVP — companion, normal app, "it's a better home"
 - `CarThe­me` day/night (via SysVar fallback), `CarScaffold` 3-column Home.
@@ -374,14 +407,29 @@ never a crash or a dead button.
   reachability mirror. `SettingsScreen` + basic `SysVarInspector`.
 - Reachability mirror (LHD/RHD) wired to `Sys_CarType`.
 
-### v2 — full replacement, system app
-- Platform-sign + `/system/priv-app` install; hold the signature permission reliably.
-- Native full-screen `ReverseScreen` with our `RadarOverlay` + `TrajectoryLines`, guide-line
-  settings.
-- **Write-enabled Climate** and audio/EQ control via AIDL side-effects.
-- Own the launcher↔gateway UIMODE handshake; optionally become sole HOME and manage the
-  status/nav bar.
-- Polish: ambient-aware brightness passthrough, refined night palette, per-driver profiles.
+### ~~v2 — full replacement, system app~~ → the root tier (v2.9)
+The platform signature is unobtainable (§6.4), so this phase was never buildable. What shipped in
+its place, on a plain user install of the rooted unit:
+- Protected broadcasts captured at uid 0 (`RootBroadcastHelper` + `RootBroadcastBridge`) — SWC,
+  day/night and the reverse trigger, feeding the unchanged `CarEvents` flows.
+- One persistent `su` channel (`RootSession`) behind `RootShell.exec`, so a SysVar write is no
+  longer a `su` fork per slider tick.
+- Vendor status/nav-bar suppression (`VendorChrome`) and sole-HOME mode with an armed rollback
+  (`VendorLauncher`), both opt-in; Settings ▸ **Root tier** reports what is actually working.
+- The UIMODE handshake (`GatewayHandshake`), per-driver profiles (`data/DriverProfilesStore`) and
+  brightness passthrough (`data/BrightnessController`) — none of which needed the signature.
+- Everything above **degrades silently without root**: no dialog, no error, the pre-root fallbacks
+  stand.
+
+**Still not shipped, and blocked on the vehicle or the vendor API rather than on effort:**
+- **Write-enabled Climate.** Whether this car's HVAC is CAN-writable at all is untested (STATUS
+  goal #3, "likely display-only"), so §3.5 stays read-only. Root does not change this.
+- **Our radar/trajectory over the camera picture.** The vendor composites the reverse window above
+  all apps; §3.6.
+- **Radar side-strips.** The `MCU_CAR_CAN_RADAR_INFO` byte layout is GUESSED, so they stay hidden
+  until a capture confirms the offsets.
+- **Radio scan and RDS station text.** The vendor AIDL has no PS/RT getter and nothing that starts
+  a scan; seek is the whole control surface.
 
 ---
 
@@ -397,5 +445,7 @@ SWC keys through a `SwcFocusManager` roving focus ring, sources every widget fro
 CAR_API (MediaSession/`ZXW_MUSIC_*` media, AIDL `EventService` radio, `CarAirState` climate,
 `SysVarProvider` settings, `MCU_CAR_CAN_RADAR_INFO` radar), and ships first as a coexisting normal
 companion app that degrades gracefully around the protected `com.szchoiceway.permission.broadcast`
-and root-only SysVar writes, following an MVP→v1→v2 path to a platform-signed `/system/priv-app`
-full replacement that unlocks native radar overlays and write-enabled climate/audio control.
+and root-only SysVar writes, following an MVP→v1→root-tier path: the platform-signed
+`/system/priv-app` full replacement is ruled out for good because the vendor key is unobtainable,
+Magisk root stands in for the signature where it can, and native radar overlays and write-enabled
+climate/audio control remain unbuilt.
