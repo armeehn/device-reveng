@@ -28,7 +28,10 @@ on:
 
 concurrency:
   group: launcher-ci-${{ github.ref }}
-  cancel-in-progress: true
+  # Cancel superseded runs on PRs only. On main, two merges landing within one
+  # run's duration share the group, and cancelling the older run would kill its
+  # release job — that merged build would never be tagged or published.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # The AVD name is shared: the action creates the AVD under it and
 # headunit-avd.sh has to find that same directory to patch its config.ini.
@@ -74,9 +77,33 @@ jobs:
           path: launcher/*/build/reports/tests/
           if-no-files-found: ignore
 
+      # The only lint run anywhere: assembleRelease deliberately skips
+      # lint-vital (app/build.gradle.kts). Errors fail the job, warnings do
+      # not; pre-existing errors are frozen in app/lint-baseline.xml.
+      - name: Lint
+        run: ./gradlew --no-daemon :app:lintRelease
+
+      - name: Upload lint report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: carlauncher-lint-report
+          path: launcher/app/build/reports/lint-results-release.html
+          if-no-files-found: ignore
+
       # The runner image ships the Android SDK; AGP resolves it via
       # ANDROID_HOME and downloads any missing platform/build-tools itself.
+      #
+      # The RELEASE_* secrets are optional and currently unset: absent secrets
+      # resolve to empty strings and the release build falls back to the debug
+      # key, exactly as before. Adding them (launcher/SIGNING.md) switches the
+      # release APK to a stable owner-held signature with no workflow change.
       - name: Build release and debug APKs
+        env:
+          RELEASE_KEYSTORE_B64: ${{ secrets.RELEASE_KEYSTORE_B64 }}
+          RELEASE_KEYSTORE_PASS: ${{ secrets.RELEASE_KEYSTORE_PASS }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASS: ${{ secrets.RELEASE_KEY_PASS }}
         run: ./gradlew --no-daemon assembleRelease assembleDebug
 
       # R8 and resource shrinking fail quietly: a lost keep rule or a newly
@@ -407,9 +434,10 @@ jobs:
           goes on-device. To identify what is already installed, pull the APK off the
           head unit and compare its \`sha256sum\` with the value above.
 
-          Signed with a **debug** key (see \`launcher/app/build.gradle.kts\`), so the
-          signature is not stable across runners and an update can be refused with a
-          signature mismatch. Fixing that needs owner action.
+          Unless the RELEASE_* repository secrets are configured (see
+          \`launcher/SIGNING.md\`), this is signed with a **debug** key
+          (\`launcher/app/build.gradle.kts\`), so the signature is not stable across
+          runners and an update can be refused with a signature mismatch.
           EOF
 
           gh release create "${TAG}" "${asset}" \
