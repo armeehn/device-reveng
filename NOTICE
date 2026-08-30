@@ -1,0 +1,44 @@
+Car Launcher / device-reveng
+Copyright 2026 Sasha Zero <sasha@ripostelabs.xyz>
+
+This product includes software developed at Riposte Laboratories.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use
+this file except in compliance with the License. You may obtain a copy of the
+License at http://www.apache.org/licenses/LICENSE-2.0
+
+--------------------------------------------------------------------------------
+THIRD-PARTY COMPONENTS
+--------------------------------------------------------------------------------
+
+JetBrains Mono (bundled font)
+  launcher/app/src/main/res/font/jetbrains_mono_{regular,bold,extrabold}.ttf
+  Copyright 2020 The JetBrains Mono Project Authors
+  SIL Open Font License 1.1 — full text in third_party/JetBrainsMono-OFL.txt
+  https://github.com/JetBrains/JetBrainsMono
+
+libsu (build-time dependency, not vendored)
+  Copyright topjohnwu
+  Apache License 2.0 — https://github.com/topjohnwu/libsu
+
+Gradle wrapper (launcher/gradle/wrapper, claude-car-app/gradle/wrapper)
+  Copyright Gradle Inc.
+  Apache License 2.0 — https://github.com/gradle/gradle
+
+AndroidX / Jetpack Compose / Material Components (build-time dependencies)
+  Copyright The Android Open Source Project
+  Apache License 2.0 — https://source.android.com
+
+--------------------------------------------------------------------------------
+VENDOR INTERFACES (NOT LICENSED HERE)
+--------------------------------------------------------------------------------
+
+launcher/carlib/src/main/aidl/com/szchoiceway/eventcenter/*.aidl are hand-written
+AIDL interface declarations describing a third-party vendor service, reproduced
+for interoperability so this launcher can talk to the head unit it runs on. They
+contain no vendor code. "Choiceway", "AiNavi", "HiWorld", "Toyota", "RAV4",
+"Qualcomm" and "Magisk" are trademarks of their respective owners; this project
+is not affiliated with, endorsed by, or supported by any of them.
+
+No vendor firmware, ROM, MCU image, or decompiled vendor application source is
+included in this repository. See README.md.

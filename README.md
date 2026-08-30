@@ -1,196 +1,226 @@
-# RAV4 GT6-EAU Head-Unit: Root & Reverse-Engineering
+# device-reveng
 
-Rooting and reverse-engineering a Choiceway / AiNavi **"GT6-EAU"** aftermarket Android 13 head unit (Qualcomm **QCM6125**) installed in a 2019 Toyota RAV4 (XA50) — full EDL backup, TWRP + Magisk root, decompiled vendor apps, and a documented MCU serial + reverse-camera protocol.
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![CI](https://github.com/armeehn/device-reveng/actions/workflows/ci.yml/badge.svg)](https://github.com/armeehn/device-reveng/actions/workflows/ci.yml)
 
----
+Rooting, reverse-engineering and **replacing the software** on a Choiceway / AiNavi
+**"GT6-EAU"** aftermarket Android 13 head unit (Qualcomm QCM6125), as fitted to a 2019
+Toyota RAV4 (XA50).
 
-## ⚠️ Disclaimer
+Two things live here:
 
-- This is **personal research on hardware I own**. It is shared in case it helps other owners of the same unit.
-- **Not affiliated** with Choiceway, AiNavi, Shenzhen Choiceway, Toyota, or Qualcomm. All trademarks belong to their owners.
-- **No firmware, ROM, or MCU images are included** — the stock firmware and decompiled vendor APKs are copyrighted by their vendors and are **not redistributed here**. Package names and protocol findings are documented for interoperability/repair purposes only.
-- **No device secrets are included** — the full EDL backup, any credentials, pairing codes, IP addresses, and personal data are deliberately kept out of this repo. Placeholders like `<ip:port>` and `<pkg>` are used throughout.
-- **This can brick your unit.** Flashing the wrong firmware or MCU image is a well-known way to permanently break these head units. Everything here is provided as-is, with no warranty. Proceed only if you understand the recovery path and accept the risk.
-
----
-
-## Hardware summary
-
-| Item | Value |
+| | What it is |
 |---|---|
-| Marketing name | AiNavi / Choiceway **GT6-EAU** (XDA "Ainavi H6" family) |
-| Product/model/device (Android) | `GT6-CAR` |
-| SoC | Qualcomm **QCM6125** (Trinket family, `ro.board.platform=trinket`, soc_id 467, Adreno GPU) |
-| OS | Android **13** (`userdebug`, `ro.debuggable=0`) |
-| Storage | **UFS**, Qualcomm A/B slot layout (~256 GB unit, `/data` ~221 GB) |
-| Kernel | 4.14.190-perf |
-| MCU | **RLC0_GT6E** (Hangrui / HR) — image `RLC0.bin` |
-| CAN box | **HiWorld**, speaks the **0x2E serial protocol** |
-| Reverse camera | External-HAL camera via **XS9922B** video decoder + AVM/Xyq360 stack |
-| Bootloader | **Unlocked** (`verifiedbootstate=orange`, `flash.locked=0`, `vbmeta … unlocked`) |
-| SELinux | **Permissive** |
-| Build fingerprint | Spoofed to Pixel 3 XL (`google/crosshatch:13`) for Play/Android-Auto integrity |
-| Flash port | Port labelled **"4PIN"** = EDL (`05c6:9008`) / fastboot |
+| **[`launcher/`](launcher/)** | **Car Launcher** — a Kotlin/Compose HOME launcher that talks to the car. Installable today; see [Quick start](#quick-start). |
+| **[`HEAD_UNIT.md`](HEAD_UNIT.md)** | The research: EDL backup, TWRP + Magisk root, the MCU serial protocol, the reverse-camera stack, debloat. |
 
-> **Variant matters.** This is a **GT6-E** (MCU `RLC0_GT6E`), **not** GT6-SE (MCU `AT01_GT6SE`). Only GT6-EAU firmware is correct for this unit. The Android ROM is common across QCM6125 units, but the **MCU image is manufacturer-specific — never flash another vendor's MCU.**
+![Car Launcher home screen](screenshots/v1.0-home-dashboard.png)
 
 ---
 
-## How it was rooted (high level)
+## ⚠️ Read this first
 
-The bootloader is already unlocked, so root is a standard EDL-backup → TWRP → Magisk flow. Order matters: **back up first.**
-
-1. **Connect over Wi-Fi ADB.** Android "Wireless debugging" (pair once, then `adb connect <ip:port>`). Note: it turns **off on every reboot** and the port rotates — re-enable and re-read `<ip:port>` each session.
-2. **Full EDL backup** (`backup.sh`). `adb reboot edl`, connect the **4PIN** USB cable, then dump every partition read-only. This is the safety net and a **hard prerequisite** for everything below.
-3. **Boot TWRP in RAM** (`root.sh`). `adb reboot bootloader` → `fastboot boot recovery_ADB.img`. TWRP is *booted*, not flashed — nothing is persisted until Magisk installs.
-4. **Install Magisk from TWRP over ADB.** The TWRP touchscreen is buggy on this unit, so it is driven entirely via `adb shell "twrp install /sdcard/Magisk.zip"`. The unlocked bootloader boots the patched `boot` image despite dm-verity, so there is no bootloop.
-5. **Verify.** Install the Magisk app; `su -c id` → `uid=0 … u:r:magisk:s0`. The first `su` pops a **Grant dialog on the head-unit screen** that must be tapped physically.
-
-Result: Magisk **30.7**, root confirmed, unit boots clean.
-
-### Hardware access notes
-
-- The **4PIN** USB port is the EDL/fastboot port. It needs a **USB-A ↔ USB-A data cable into the laptop's USB-A (host) port**. A USB-C-to-A cable into a laptop's USB-C port does **not** work — the CC resistor makes the C host ignore the device. This was a laptop-*port* problem, not a cable problem.
-- On Linux, EDL/fastboot USB access needs root; here that is done via `pkexec` (start a polkit agent first).
-- EDL entry: `adb reboot edl` on a booting unit (screen goes black-but-backlit = the EDL indicator). Hardware fallback for a dead unit is shorting two mainboard test points on power-on — not covered here.
+- **This is personal research on hardware I own**, shared in case it helps other owners.
+- **Not affiliated** with Choiceway, AiNavi, Toyota, Qualcomm or Magisk. All trademarks
+  belong to their owners.
+- **No firmware, ROM, MCU images or decompiled vendor sources are redistributed here.**
+  Only findings and original code.
+- **Rooting can brick your unit.** Flashing the wrong firmware or MCU image is a
+  well-known way to permanently break these head units. Everything is provided as-is,
+  with no warranty. The launcher itself does not require you to reflash anything — but
+  it does need root for the car-integration features.
 
 ---
 
-## Repo contents
+## Does this fit my unit?
 
-**Included (safe to share):**
+Developed and tested against exactly one configuration:
 
-- `README.md`, `STATUS.md`, `debloat-plan.md` — project docs and current state.
-- `backup.sh`, `root.sh`, `debloat.sh`, `camera-diag.sh` — the runbook scripts (below).
-- Reverse-engineering **findings** written up in this README (MCU protocol, camera signal-detection logic, package inventory).
-- `launcher/` — **CarLauncher**, our Kotlin/Compose HOME launcher with in-launcher rewrites of
-  the vendor surfaces (radio, media, climate readout, settings reskin). Lives in this repo;
-  see `launcher/README.md`.
-- `rav4-apps/` — **git submodule** → [`armeehn/rav4-apps`](../../../rav4-apps): standalone
-  clean-room replacements for individual OEM packages, installed as a Magisk systemless
-  overlay. Separate repo because it has its own history, a Gradle-free build pipeline, and
-  runs from the laptop at the car. Clone with `git clone --recurse-submodules`, or
-  `git submodule update --init` in an existing checkout. The pointer here pins the version
-  the findings in this repo were checked against; after advancing rav4-apps, refresh it with
-  `git submodule update --remote rav4-apps` and commit the pointer bump.
-  **Boundary:** anything drawn inside the launcher belongs in `launcher/`; anything shipped
-  as its own APK under an OEM package name belongs in `rav4-apps`. Vendor findings
-  (`CAR_API.md`, `CUSTOMERUI_NOTES.md`, …) live only here — rav4-apps consumes them, never
-  forks them.
+| | Value |
+|---|---|
+| Unit | AiNavi / Choiceway **GT6-EAU** (XDA "Ainavi H6" family) |
+| MCU | **`RLC0_GT6E`** |
+| SoC | Qualcomm **QCM6125** (`ro.board.platform=trinket`) |
+| OS | Android **13**, API 33 |
+| Screen | 1920x720 landscape @240dpi |
+| Root | Magisk (bootloader unlocked, SELinux permissive) |
 
-**Not included (deliberately):**
+Check yours:
 
-- **Stock firmware / ROM / MCU images** (`update*.zip`, `RLC0.bin`, boot images) — copyrighted vendor material; source them yourself from the vendor / XDA thread.
-- **Decompiled vendor APK sources** — copyrighted; only behavioral findings are documented here.
-- **The EDL backup** (`backup-*/`) — it contains device-unique EFS/`persist`/modem data and is a security/privacy risk. Yours is your own safety net; keep it private.
-- **Any credentials, IPs, pairing codes, or serials.**
+```bash
+adb shell getprop | grep -E "ro.product.(model|device)|ro.board.platform|persist.sys.mcu"
+```
 
----
+> **Variant matters.** A **GT6-SE** (MCU `AT01_GT6SE`) is a *different* unit. The Android
+> ROM is broadly common across QCM6125 units, but the **MCU image is manufacturer-specific
+> — never flash another vendor's MCU.**
 
-## The scripts
-
-All scripts default to the first `adb` device; most accept an explicit `<ip:port>` as `$1`.
-
-### `backup.sh` — full EDL partition backup (READ-ONLY)
-Precondition: unit already in EDL (`adb reboot edl`) with the 4PIN cable attached.
-1. Checks for the Qualcomm `05c6:9008` device on USB.
-2. Runs a **non-destructive `printgpt`** — this is the make-or-break test that the Firehose loader passes Sahara auth on this SoC. If it fails, it stops and writes nothing.
-3. `edl.py rl <dir> --memory=ufs --loader=<loader> --genxml` dumps **all** partitions and emits `rawprogram*.xml` for later restore.
-
-Writes nothing to the device. Verify `boot_a/boot_b`, `abl`, `vbmeta`, `dtbo`, modem/EFS are present and non-zero before trusting it.
-
-### `root.sh` — TWRP + Magisk
-`adb push` Magisk → `adb reboot bootloader` → `fastboot boot recovery_ADB.img` (RAM-only) → write a TWRP OpenRecoveryScript / `twrp install` over ADB. Intentionally stops **before** the final reboot so each step can be confirmed.
-
-### `debloat.sh` — reversible debloat
-`pm uninstall -k --user 0 <pkg>` for a curated Tier-1 list (Tier-2 commented out). Removes apps for the main user while keeping them in the system image, so anything is restorable with `cmd package install-existing <pkg>` (or a factory reset). Verifies each package exists before touching it.
-
-### `camera-diag.sh` — reverse-camera latency capture
-Dumps camera props/services/HAL, reads the AVM/AUXCamera stored config (root helps), then does a timed `logcat` capture while you **shift into reverse** — to measure trigger→first-frame latency and see which channel/signal the XS9922B decoder selected.
+The launcher degrades rather than crashes on a unit it does not recognise: without root
+or the vendor gateway it still runs as a plain HOME launcher, and the car-specific panels
+report themselves unavailable. If you try it on another unit, a
+[hardware report](https://github.com/armeehn/device-reveng/issues/new?template=hardware_report.yml)
+is genuinely useful — including a negative one.
 
 ---
 
-## Key technical findings
+## Quick start
 
-### MCU `0x2E` serial protocol
-The head unit talks to the car via a **HiWorld CAN box** over a serial protocol whose frames use command byte **`0x2E`**. On Toyota, HiWorld profiles are largely interchangeable across cars ("try them all"). The MCU-facing app stack that carries this protocol lives in the `com.szchoiceway.canbus2` / `eventcenter` / `canoriginalcarmedia` apps (see package map). Live frame-level confirmation on the wire is still pending.
+### 1. Install the launcher
 
-### Reverse-camera XS9922B auto-detection (root cause of the lag)
-Decompiling **`AUXCamera.apk`** revealed the reverse camera runs through an **XS9922B video decoder with runtime signal auto-detection** — which is the "slow to appear" cause.
+Tagged builds are published to
+**[armeehn/carlauncher-releases](https://github.com/armeehn/carlauncher-releases/releases/latest)**
+— a public, releases-only repo. Grab the latest APK there, then:
 
-- The property `persist.camera.sensorcfg.signal` holds a **4-channel CSV** of the detected signal per camera.
-- `getXS9922BSignalState()` selects a field by `mCameraChannel` (ch `"9"`→idx0, `"2"`→idx1, `"10"`→idx3, else idx2) and parses the last character as the signal code.
-- `CameraManager.openCamera()` branches on camera type: `iBackCamType == 0` → `Camera.open(1)` on a **fast, fixed 800×480 path**; otherwise `Camera.open(0)` with **signal-based resolution** (the slow detect path). The detect loop retries via a handler with **100 ms delays**.
-- On this unit the format is **not pinned** (`persist.camera.sensorcfg.resolution` is empty), so it auto-detects on every reverse.
+```bash
+adb install -r carlauncher-<version>.apk
+```
 
-**Camera signal codes** (`CamerasSignalDetection.java`):
+Once it is running, it can update itself: **Settings → Updates** checks that same
+repo and installs the newer build, so this is a one-time side-load.
 
-| Code | Signal | Resolution |
-|---|---|---|
-| 0 | NO SIGNAL | — |
-| 1 | NTSC | 720×480 |
-| 2 | PAL | 720×576 |
-| 3 | AHD 720p @25 | 1280×720 |
-| 4 | AHD 1080p @25 | 1920×1080 |
+Press **HOME** and pick **Car Launcher**. The stock launcher
+(`com.szchoiceway.customerui`) stays installed — this registers as an *alternative*
+home, not a replacement, so you can always switch back.
 
-The higher AVM layer (`com.ivicar.avm`, `camera-provider-2-4-ext` external HAL, AIS automotive-camera HAL in `/vendor/etc/camera/`) sits on top. The reverse **trigger** on this build is `ro.screen.reverse` (0/1) plus `Camera360Receiver` `CAR_*` events — **not** `sys.backcar.state`, which is empty here.
+### 2. Run the Setup Doctor
 
-### Vendor package map (from the debloat plan)
-- **Keep — car-critical:** `com.szchoiceway.canbus2`, `eventcenter`, `canoriginalcarmedia`, `com.lfg.szchoiceway.canupgrade`, `learn.key`, `gps`; cameras `com.szchoiceway.auxcamera`, `com.ivicar.avm`; audio/radio `com.choiceway.dsp`, `radio`, `zxwmedia`, `btsuite`; launcher `com.szchoiceway.customerui`; projection `com.zjinnova.zlink`; plus Google Play/GMS for Play + Android Auto.
-- **Remove — telemetry/phone-home:** see Debloat below.
+Open **Settings → Setup Doctor** inside the launcher. It checks root, the vendor
+gateway, each special-access permission and the companion app suite, and prints the
+exact `adb`/`su` command to fix anything it finds. Start there rather than guessing.
 
----
+### 3. Optional: grant the extras
 
-## Reverse-camera lag analysis
+Without root the launcher works, but reverse/steering-wheel/day-night events and
+SysVar writes are unreachable — those broadcasts are `signature`-protected and the
+vendor platform key is [confirmed unobtainable](CUSTOM_ANDROID.md). With root it picks
+them up automatically. Two grants are worth doing once:
 
-The #1 owner complaint is a laggy reverse camera. Findings:
+```bash
+adb shell pm grant com.ripostelabs.carlauncher android.permission.BLUETOOTH_CONNECT
+adb shell appops set com.ripostelabs.carlauncher WRITE_SETTINGS allow
+```
 
-1. **3D render is not the cause.** The reverse view is already forced to 2D (`AVM_REVERSE_FORCE_2D_REAR_VIEW=true` in the AVM prefs), so the delay is upstream of rendering.
-2. **Signal auto-detection is the cause.** Because the resolution/signal is not pinned, each reverse triggers XS9922B probing with 100 ms handler retries before a frame appears (see above).
-3. **Fix candidates** (to validate against a real drive capture before committing):
-   - **Pin `persist.camera.sensorcfg.signal`** to the rear camera's real value so the decoder skips probing. The valid values are proprietary to `AUXCamera.apk` / `EventCenter.apk` / `Navigation.apk` — **decompile and confirm, do not guess.**
-   - Or trim the detect loop's delay/retry count.
-   - **Or take the vendor's Feb-2026 GT6-EAU firmware**, which explicitly *"improves rear camera performance"* (demod lives in the MCU `RLC0.bin`, so this is likely a real fix). Caveat: a 2026 ROM may **lock EDL** — see the warning below.
-
-A drive-time `logcat` capture (`camera-diag.sh` / on-device capture script) is used to measure the actual trigger→first-frame latency and confirm which channel/signal is in use.
-
----
-
-## Debloat / de-spyware
-
-Reversible method: `pm uninstall -k --user 0 <pkg>` (kept in the system image; restore with `cmd package install-existing <pkg>`). Nothing is deleted from `/system`, and the full EDL backup is a further safety net.
-
-**Tier 1 — telemetry / phone-home (recommended, in `debloat.sh`):**
-
-| Package | What it is | Why remove |
-|---|---|---|
-| `com.szchoiceway.logcatupload` | Uploads device logcat to vendor | Phone-home (was running live) |
-| `com.choiceway.logcapture` | Captures logs for upload | Phone-home companion |
-| `com.szchoiceway.update` | OTA updater | Phone-homes; can push unwanted / EDL-locking updates |
-| `com.es.file.explorer.manager` | ES File Explorer | Bundled adware / data collection |
-| `com.syu.market` | 3rd-party app market | Bloat + ad/telemetry vector |
-| `com.google.android.partnersetup` | Google partner setup | Partner telemetry |
-
-**Tier 2 — bloat (optional, commented out):** X-Browser, vendor weather/photo/video/music/instructions apps, AOSP sample leftovers.
-
-**Do not remove:** anything in the car-critical keep list above (CAN/MCU, cameras, audio/radio, launcher, projection, Play/GMS). After debloating, **reboot and verify reverse, steering-wheel controls, radio, Bluetooth, and Android Auto still work.**
-
-Separate root-enabled win: the build fingerprint is spoofed to a Pixel 3 XL for Play/Android-Auto; a Magisk **Play Integrity Fix** module is the cleaner path to reliable Play + AA than the spoof.
+> **Upgrading from a build that was still `com.reveng.carlauncher`?** The application ID
+> changed to `com.ripostelabs.carlauncher`. Android treats that as a different app, so the
+> new APK installs *alongside* the old one rather than upgrading it, and it does **not**
+> inherit the old settings. Migrate deliberately:
+>
+> ```bash
+> # 1. In the old launcher: Settings -> Backup & restore -> Create backup.
+> # 2. Copy it off the unit BEFORE uninstalling anything.
+> adb pull /sdcard/Android/data/com.reveng.carlauncher/files/backups/
+> # 3. Install the new APK and set it as HOME, THEN remove the old one.
+> adb install -r carlauncher-<version>.apk
+> adb uninstall com.reveng.carlauncher
+> # 4. Push the backup into the new app and restore it from the same screen.
+> adb push <backup-file> /sdcard/Android/data/com.ripostelabs.carlauncher/files/backups/
+> ```
+>
+> Order matters: uninstalling the old launcher while it is your HOME app leaves the unit
+> with no launcher until a new one is set.
 
 ---
 
-## Recovery / safety (EDL)
+## Build from source
 
-- **The EDL backup is the safety net.** It was verified: 9.4 GB, all 6 LUNs, both A/B slots, all EFS (`persist`, `modemst1/2`, `fsg`, `fsc`), `super`, `boot_a/b`, with `rawprogram0-5.xml` for restore — zero empty files.
-- **Recovery if root ever goes wrong:** flash the backed-up `boot_b` image back via fastboot or EDL (the unlocked bootloader allows `fastboot flash boot`).
-- The Firehose loader authenticates on this SoC (proven by the `printgpt` step in `backup.sh`), and `adb reboot edl` reliably enters true EDL; the hardware test-point fallback exists for a non-booting unit.
+Requires **JDK 17** and an **Android SDK** with platform 34. Nothing else — the Gradle
+wrapper pins Gradle 8.9.
 
-> **🚫 Critical update warning.** A 2025+ Choiceway ROM is reported to **disable the unsigned EDL Firehose programmer** — after which EDL-based root/backup becomes **permanently impossible**. This unit shipped on a pre-lock build. **Do not let it take an OTA** (`com.szchoiceway.update`) unless you have accepted losing the EDL path. Update manually, deliberately, and only with the **correct GT6-EAU** firmware + `RLC0_GT6E` MCU — never another vendor's ROM or MCU image.
+```bash
+git clone https://github.com/armeehn/device-reveng.git
+cd device-reveng/launcher
+./gradlew :app:assembleDebug
+```
+
+APK lands in `launcher/app/build/outputs/apk/debug/`.
+
+```bash
+./gradlew test              # JVM unit tests — no device or emulator needed
+./gradlew :app:lintRelease  # lint
+./gradlew :app:assembleRelease
+```
+
+Two things that bite:
+
+- **Clone in full.** `versionCode` is derived from git commit count, so a shallow clone
+  would silently produce a wrong version. The build detects this and fails with an
+  explicit message instead.
+- **Release signing is optional.** With the `RELEASE_*` environment variables unset,
+  `assembleRelease` falls back to the debug key so the build still works out of the box.
+  A debug key is generated per machine, so APKs from two different machines will not
+  install over each other. See [`launcher/SIGNING.md`](launcher/SIGNING.md).
+
+The `rav4-apps` submodule holds 26 companion apps and is **not needed to build the
+launcher**. A plain `git clone` skips it; that is fine.
 
 ---
 
-## Status
+## What the launcher does
 
-Done: hardware identified, Wi-Fi ADB, unlocked-bootloader + permissive-SELinux confirmed, full verified EDL backup, rooted via TWRP + Magisk, EDL recovery proven, vendor apps decompiled, MCU/camera protocols mapped.
+Car integration goes through the vendor gateway `com.szchoiceway.eventcenter` over
+hand-written AIDL ([`CAR_API.md`](CAR_API.md)), with a root fallback for the
+`signature`-protected parts.
 
-Open: pin the reverse-camera signal (pending drive capture), run Tier-1 debloat, Play Integrity module, HVAC-over-CAN investigation, boot-time/perf. See `STATUS.md` for the live list.
+- **Home** — dashboard, live car state, media, favourites, app drawer.
+- **Motion awareness** — parked-only locks driven by real speed, so text-heavy screens
+  stand down while moving.
+- **Media & radio** — now-playing, transport, presets, band switching.
+- **Climate** — read-out from the CAN/MCU stream. Writes are deliberately not shipped.
+- **Steering-wheel controls** — the whole app is drivable from the wheel.
+- **Notification shelf**, on-screen **keyboard**, **driver profiles**, **theming** with
+  an editor and import/export, **Setup Doctor**, **backup/restore**, and a **CAN capture**
+  tool for further reverse engineering.
+
+Honest status, including what is guessed and what is unvalidated on real hardware, is in
+[`launcher/README.md`](launcher/README.md) and [`STATUS.md`](STATUS.md). The radar byte
+layout in particular is **unconfirmed**.
+
+---
+
+## Repo map
+
+| Path | What |
+|---|---|
+| [`launcher/`](launcher/) | The Car Launcher app (`:app` + `:carlib`) |
+| [`HEAD_UNIT.md`](HEAD_UNIT.md) | Root, EDL backup, camera and MCU findings, debloat |
+| [`CAR_API.md`](CAR_API.md) | The vendor car-integration API |
+| [`AIDL_ORDINALS.md`](AIDL_ORDINALS.md) | Transaction ordinals for the vendor AIDL |
+| [`LAUNCHER_DESIGN.md`](LAUNCHER_DESIGN.md) | UI/UX spec and capability tiers |
+| [`CUSTOMERUI_NOTES.md`](CUSTOMERUI_NOTES.md) | Stock launcher, decompiled — reference |
+| [`CUSTOM_ANDROID.md`](CUSTOM_ANDROID.md) | Custom-ROM feasibility; why the platform key is out |
+| [`ZLINK_NATIVE_ANALYSIS.md`](ZLINK_NATIVE_ANALYSIS.md) / [`CARPLAY.md`](CARPLAY.md) | Projection stack |
+| [`can-integration/`](can-integration/) | CANable / LIN tapping plans and decoders |
+| [`boot-speed/`](boot-speed/) | Boot-time measurement and tuning |
+| [`FINDINGS.md`](FINDINGS.md), [`STATUS.md`](STATUS.md) | Raw findings, live status |
+| `backup.sh`, `root.sh`, `debloat.sh`, `camera-diag.sh` | Runbook scripts |
+
+### Runbook scripts
+
+They expect the vendor files (Firehose loader, TWRP image, Magisk) in a workspace
+directory. That defaults to `~/rav4-headunit` and is overridable:
+
+```bash
+RAV4_HOME=/path/to/workspace ./backup.sh
+```
+
+Each script checks its inputs up front and tells you exactly what is missing rather
+than failing halfway through. Sourcing those files is on you — see
+[HEAD_UNIT.md](HEAD_UNIT.md#getting-the-vendor-files).
+
+**`backup.sh` first, always.** It is read-only and it is the only thing standing between
+a bad flash and a dead unit.
+
+---
+
+## Contributing
+
+Bug reports from other GT6 owners are the most useful thing. See
+[CONTRIBUTING.md](CONTRIBUTING.md) — the short version is: one feature per PR, never
+commit vendor material or device secrets, and say which unit you have.
+
+Security issues: [SECURITY.md](SECURITY.md).
+
+## License
+
+[Apache License 2.0](LICENSE). Third-party components and the vendor-interface
+carve-out are listed in [NOTICE](NOTICE).

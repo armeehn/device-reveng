@@ -7,7 +7,7 @@ DEV="${1:-$(adb devices | awk 'NR>1 && $2=="device"{print $1; exit}')}"
 [ -z "$DEV" ] && { echo "no adb device"; exit 1; }
 A(){ adb -s "$DEV" "$@"; }
 SU(){ adb -s "$DEV" shell "su 0 sh -c '$*' 2>/dev/null || $*"; }   # try root, fall back to shell
-OUT=/home/sasha/rav4-headunit/camera-diag-out; mkdir -p "$OUT"
+OUT="${RAV4_HOME:-$HOME/rav4-headunit}/camera-diag-out"; mkdir -p "$OUT"
 
 echo "=== 1. camera-related props (format pinned or Auto?) ==="
 A shell getprop | grep -iE "camera|backcar|reverse|avm|ivicar|xs9922|cvbs|ahd|screen.reverse" | tee "$OUT/props.txt"
