@@ -78,7 +78,20 @@ so nothing below is confirmed working against real hardware. That is what the st
 - **v3.1 Status you can see** — Wi-Fi and Bluetooth chips in the top bar, push-driven, display
   only, opening the quick-controls pull-down on tap.
 
-## v3.2 → v4.0 — the window, now allocated
+## One version scale from here on
+
+This file grew two of them. Feature milestones were named `vN.N` (v2.5 … v4.0) while the APK
+shipped `versionName = 0.4.<versionCode>`, and nothing wrote down how the two related — which is
+how a PR titled `v0.4.7.0` came to ship `0.4.3.2`. The `vN.N` ladder is retired: a milestone is
+now named by the base it ships, and the section below is the last one carrying an old name.
+
+## v3.2 → v4.0 — the window, allocated and now closed
+
+**Every item in this section has landed on `main`, verified by reading the code at `7cc818d`,
+not by the presence of a branch with the right name** (squash-merges leave branches behind, so
+`git branch --merged` says nothing here). Kept in full rather than deleted: each one records a
+decision, and two of them record a rule — an indicator with no source disappears, and a guessed
+decode is never written to the vehicle — that the next feature has to keep.
 
 The previous revision left this deliberately empty pending a week of daily driving. That week
 has not happened, but a full audit of the shipped code has, and it found enough real work to
@@ -146,6 +159,36 @@ port rotates on every reboot, so a crash on the road currently leaves no evidenc
 The design doc still promises the signature/system-app tier that was proven impossible, and the
 project status file does not mention that a custom launcher exists at all. Both mislead the next
 reader into re-deriving settled decisions.
+
+## 0.5 — the suite lands
+
+The 0.4 window was corrections. 0.5 is the release that makes the *rest* of the unit ours: the
+twenty-six standalone rewrites in `armeehn/rav4-apps` (`com.reveng.clock`, `…browser`,
+`…weather`, …) stop being a separate project that happens to be installed, and become apps the
+launcher knows about and styles.
+
+Shipped in this milestone:
+
+- **The launcher publishes its active palette.** `ThemeProvider` serves the resolved day/night
+  variant as a one-row cursor on `content://com.reveng.carlauncher.theme/active`. Pull-based so
+  a cold-started app is themed before its first frame rather than flashing a fallback;
+  no runtime grant, so a freshly installed app is themed without a trip to the car; observable,
+  so an app on screen re-paints on a theme switch or a night crossing. Read-only — a suite app
+  that could write the palette could restyle the home screen of a moving car.
+- **`RevengSuite`, the registry of what the suite is.** Nothing on the device marks the
+  twenty-six as one family, and a `com.reveng.` prefix match would swallow the launcher itself
+  and its `.debug` sibling. Membership is an explicit list, so an app that failed to install is
+  reported missing instead of silently leaving the family.
+- **Setup Doctor counts the suite.** `Rewritten app suite (n/26)`, naming what is absent. It
+  never blocks: the launcher is complete without any of them, so a partial suite is reported,
+  not treated as a fault to repair.
+- **The provider authority is applicationId-scoped**, so a `.debug` launcher installs alongside
+  the release one instead of failing on a conflicting authority. Clients pin the release
+  authority: a bench build must not restyle the suite the car is running.
+
+Open on the suite side of the boundary (tracked in `armeehn/rav4-apps`, not here): each app
+reads the provider and paints it, falling back to its built-in palette when the launcher is
+absent or older.
 
 ## Deferred — needs the car, not the desk
 
