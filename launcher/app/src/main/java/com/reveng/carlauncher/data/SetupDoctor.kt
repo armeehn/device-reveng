@@ -143,7 +143,47 @@ class SetupDoctor(
             component = "$pkg/com.reveng.carlauncher.notif.ShelfListenerService",
             enabled = enabledListeners,
         )
+        checks += suiteCheck()
         return checks
+    }
+
+    /**
+     * v0.5 — how much of the com.reveng.* suite is actually on the unit.
+     *
+     * Not a grant, but it fails the same silent way: the suite installs app by app, and a member
+     * that failed to install just never appears in the drawer. Naming the missing packages here
+     * is the difference between "the Clock rewrite doesn't work" and "the Clock rewrite isn't
+     * installed". Never [ok] == false in a way that blocks anything — the launcher works fine
+     * with none of them, so a partial suite is reported, not treated as a fault to repair.
+     */
+    private fun suiteCheck(): DoctorCheck {
+        val installed = RevengSuite.installed(installedPackages())
+        val missing = RevengSuite.missing(installedPackages())
+        val detail = if (missing.isEmpty()) {
+            "All ${RevengSuite.APPS.size} rewritten apps are installed."
+        } else {
+            "Missing: " + missing.joinToString { it.label }
+        }
+        return DoctorCheck(
+            id = "reveng_suite",
+            title = "Rewritten app suite (${installed.size}/${RevengSuite.APPS.size})",
+            detail = detail,
+            ok = missing.isEmpty(),
+            // The suite ships as a set of ordinary APKs; there is no single command that
+            // installs them, so this points at the directory they are published from.
+            adbCommand = "adb install-multiple <rav4-apps>/apps/*/app-debug.apk",
+            rootCommand = null,
+        )
+    }
+
+    /** Installed package names, empty if PackageManager refuses the query. */
+    private fun installedPackages(): Set<String> = runCatching {
+        appContext.packageManager
+            .getInstalledPackages(0)
+            .mapTo(mutableSetOf()) { it.packageName }
+    }.getOrElse {
+        Log.w(TAG, "package enumeration failed", it)
+        emptySet()
     }
 
     private fun permissionCheck(
