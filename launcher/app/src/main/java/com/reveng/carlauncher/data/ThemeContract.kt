@@ -2,6 +2,7 @@ package com.reveng.carlauncher.data
 
 import android.net.Uri
 import com.reveng.carlauncher.ui.theme.ThemeColors
+import com.reveng.carlauncher.ui.theme.ThemeStyle
 
 /**
  * v0.5 — the wire format the launcher publishes its active palette on, for the standalone
@@ -74,6 +75,15 @@ object ThemeContract {
     const val COL_ACCENT2 = "accent2"
     const val COL_ACCENT3 = "accent3"
 
+    // v0.8 — the active theme's [ThemeStyle], appended so the suite can follow a theme's *shape*
+    // (Riposte's sharp corners, mono type, hard edges) and not just its palette. Appending is safe
+    // by the read-by-name rule above; a client that predates these columns keeps its own defaults,
+    // which are exactly the neutral `ThemeStyle()` values. Booleans are published as int 0/1 like
+    // [COL_NIGHT]; `corner_scale` is a Float.
+    const val COL_CORNER_SCALE = "corner_scale"
+    const val COL_MONO_TYPE = "mono_type"
+    const val COL_HARD_EDGE = "hard_edge"
+
     /** Cursor column order. Clients must read by name; this order is an implementation detail. */
     val COLUMNS: Array<String> = arrayOf(
         COL_THEME_ID,
@@ -89,6 +99,9 @@ object ThemeContract {
         COL_ERROR,
         COL_ACCENT2,
         COL_ACCENT3,
+        COL_CORNER_SCALE,
+        COL_MONO_TYPE,
+        COL_HARD_EDGE,
     )
 
     /**
@@ -101,6 +114,7 @@ object ThemeContract {
         val themeName: String,
         val night: Boolean,
         val colors: ThemeColors,
+        val style: ThemeStyle = ThemeStyle(),
     )
 
     /**
@@ -126,6 +140,9 @@ object ThemeContract {
             c.error,
             if (c.accent2 != 0L) c.accent2 else c.primary,
             if (c.accent3 != 0L) c.accent3 else c.primary,
+            snapshot.style.cornerScale,
+            if (snapshot.style.monoType) 1 else 0,
+            if (snapshot.style.hardEdge) 1 else 0,
         )
     }
 }
