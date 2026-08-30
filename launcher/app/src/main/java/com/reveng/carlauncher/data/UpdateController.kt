@@ -32,12 +32,14 @@ import kotlinx.coroutines.withContext
  * v0.7 — the auto-updater: pull the latest CI build from GitHub and install it over ourselves.
  *
  * The head unit's internet is the phone hotspot, so github.com is reachable whenever any
- * network is — unlike the home Gitea, which the car's tailnet ACL cannot see. CI mirrors every
- * tagged main build to github.com/armeehn/device-reveng as a release whose single asset is the
- * APK and whose notes carry its SHA-256 (launcher-ci.yml, "Mirror release to GitHub"). This
- * controller reads that feed, and when the release's versionCode (monotonic — it is the main
- * commit count) beats [BuildConfig.VERSION_CODE], downloads the APK, hashes it against the
- * published digest, and hands it to a root `pm install -r`.
+ * network is — unlike the home Gitea, which the car's tailnet ACL cannot see. CI publishes
+ * every tagged main build to github.com/armeehn/carlauncher-releases — a PUBLIC releases-only
+ * repo (the source stays private) — as a release whose single asset is the APK and whose notes
+ * carry its SHA-256 (launcher-ci.yml, "Publish release to GitHub"). Public on purpose: the car
+ * carries no credential, and a fresh install updates itself with zero setup. This controller
+ * reads that feed, and when the release's versionCode (monotonic — it is the main commit
+ * count) beats [BuildConfig.VERSION_CODE], downloads the APK, hashes it against the published
+ * digest, and hands it to a root `pm install -r`.
  *
  * `pm install -r` — never uninstall+install: an uninstall wipes every DataStore irrecoverably
  * (see LauncherBackup's reason to exist) and drops the Magisk grant. The trade is that a
@@ -47,9 +49,10 @@ import kotlinx.coroutines.withContext
  * refuse to read APKs off the emulated-storage FUSE mount, and "worked from adb, failed from
  * the app" is exactly the kind of ghost that costs an evening.
  *
- * The repo is private, so every request carries a GitHub token (fine-grained, contents:read is
- * enough). It is typed once into Settings ▸ Updates — or, kinder to whoever is holding the
- * car keyboard, pushed as a file and imported on the next check (see [tokenImportFile]).
+ * A GitHub token is OPTIONAL: unauthenticated, GitHub allows 60 API calls an hour per IP,
+ * which dwarfs one check a day — the token field exists for a hotspot IP that shares that
+ * budget badly, or in case the releases repo ever goes private. It can be typed into
+ * Settings ▸ Updates or pushed as a file and imported on the next check ([tokenImportFile]).
  *
  * Sits where [RootTierController] sits and follows its rules: the UI reads StateFlows and
  * calls plain methods; nothing heavier than a DataStore read runs at construction.
@@ -80,33 +83,25 @@ class UpdateController(
 
     /**
      * The launch-time entry point, called once from MainActivity.onCreate. Self-gating: does
-     * nothing unless auto-check is on, a token exists, and the last check is older than
-     * [CHECK_INTERVAL_MS] — so a launcher restart (which every successful install causes)
-     * doesn't turn into a check loop. With auto-install also on, a found update proceeds
-     * straight to [installLatest]; the car is parked at launch in every scenario that matters,
-     * which is why the auto path hangs off launch rather than a mid-drive timer.
+     * nothing unless auto-check is on and the last check is older than [CHECK_INTERVAL_MS] —
+     * so a launcher restart (which every successful install causes) doesn't turn into a check
+     * loop. With auto-install also on, a found update proceeds straight to [installLatest];
+     * the car is parked at launch in every scenario that matters, which is why the auto path
+     * hangs off launch rather than a mid-drive timer.
      */
     fun autoCheckOnLaunch() {
         scope.launch {
             val prefs = ds.data.first().toUpdaterSettings()
             if (!prefs.autoCheck) return@launch
-            val token = effectiveToken(prefs) ?: return@launch
             if (System.currentTimeMillis() - prefs.lastCheckMillis < CHECK_INTERVAL_MS) return@launch
-            runCheck(token, thenInstall = prefs.autoInstall)
+            runCheck(effectiveToken(prefs), thenInstall = prefs.autoInstall)
         }
     }
 
     /** Manual "Check now" from the Updates screen. */
     fun checkNow() {
         scope.launch {
-            val token = effectiveToken(ds.data.first().toUpdaterSettings())
-            if (token == null) {
-                _status.value = UpdateStatus.Failed(
-                    "No GitHub token. Add one below, or push it over adb.",
-                )
-                return@launch
-            }
-            runCheck(token, thenInstall = false)
+            runCheck(effectiveToken(ds.data.first().toUpdaterSettings()), thenInstall = false)
         }
     }
 
@@ -114,8 +109,7 @@ class UpdateController(
     fun installLatest() {
         val available = _status.value as? UpdateStatus.Available ?: return
         scope.launch {
-            val token = effectiveToken(ds.data.first().toUpdaterSettings()) ?: return@launch
-            runInstall(available.release, token)
+            runInstall(available.release, effectiveToken(ds.data.first().toUpdaterSettings()))
         }
     }
 
@@ -143,7 +137,7 @@ class UpdateController(
                         )
                     UpdateFeed.isNewer(release, BuildConfig.VERSION_CODE) -> {
                         _status.value = UpdateStatus.Available(release)
-                        if (thenInstall) runInstall(release, effectiveToken(ds.data.first().toUpdaterSettings()) ?: return)
+                        if (thenInstall) runInstall(release, token)
                     }
                     else -> _status.value = UpdateStatus.UpToDate(release)
                 }
@@ -224,7 +218,9 @@ class UpdateController(
         val conn = URL(url).openConnection() as HttpURLConnection
         conn.connectTimeout = CONNECT_TIMEOUT_MS
         conn.readTimeout = READ_TIMEOUT_MS
-        conn.setRequestProperty("Authorization", "Bearer $token")
+        if (token.isNotBlank()) {
+            conn.setRequestProperty("Authorization", "Bearer $token")
+        }
         conn.setRequestProperty("Accept", accept)
         conn.setRequestProperty("X-GitHub-Api-Version", API_VERSION)
         return conn
@@ -271,9 +267,9 @@ class UpdateController(
 
     private fun httpFail(code: Int): String? = when (code) {
         in 200..299 -> null
-        401 -> "GitHub rejected the token (401). Re-check it in the field below."
-        403 -> "GitHub refused the request (403) — rate limit, or the token lacks access."
-        404 -> "Release not found (404) — for a private repo this usually means the token can't see it."
+        401 -> "GitHub rejected the token (401). Clear or re-check it in the field below."
+        403 -> "GitHub refused the request (403) — likely the anonymous rate limit; try later or set a token."
+        404 -> "No release found (404) — nothing published to carlauncher-releases yet?"
         else -> "GitHub answered HTTP $code."
     }
 
@@ -299,11 +295,12 @@ class UpdateController(
     // ---- Token --------------------------------------------------------------
 
     /**
-     * The stored token, or a one-shot import: a file pushed to
+     * The stored token, a one-shot import, or "" for anonymous (the normal case — the
+     * releases repo is public). The import: a file pushed to
      * `Android/data/<applicationId>/files/updates/github-token.txt` is read, persisted and
      * deleted. A 90-character PAT on the car keyboard is a hazing ritual; `adb push` is not.
      */
-    private suspend fun effectiveToken(prefs: UpdaterSettings): String? {
+    private suspend fun effectiveToken(prefs: UpdaterSettings): String {
         if (prefs.token.isNotBlank()) return prefs.token
         val imported = withContext(Dispatchers.IO) {
             val f = tokenImportFile() ?: return@withContext null
@@ -311,7 +308,7 @@ class UpdateController(
             val value = runCatching { f.readText().trim() }.getOrNull()
             f.delete()
             value?.takeIf { it.isNotBlank() }
-        } ?: return null
+        } ?: return ""
         ds.edit { it[TOKEN_KEY] = imported }
         return imported
     }
@@ -326,8 +323,8 @@ class UpdateController(
     private companion object {
         const val TAG = "UpdateController"
 
-        /** The GitHub mirror the CI release job publishes to. */
-        const val API_BASE = "https://api.github.com/repos/armeehn/device-reveng"
+        /** The public releases-only repo the CI release job publishes to. */
+        const val API_BASE = "https://api.github.com/repos/armeehn/carlauncher-releases"
         const val API_VERSION = "2022-11-28"
         const val ACCEPT_JSON = "application/vnd.github+json"
         const val ACCEPT_BINARY = "application/octet-stream"
