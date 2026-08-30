@@ -1,0 +1,40 @@
+# Keeps the rav4-apps submodule pointer on main tracking the latest rav4-apps main.
+# Runs daily and on manual dispatch; only commits when the pointer actually moved,
+# and the resulting push to main goes through the normal launcher-ci release flow.
+name: bump-rav4-apps
+
+on:
+  schedule:
+    - cron: "0 9 * * *" # 09:00 UTC daily
+  workflow_dispatch: {}
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    # Only this job writes refs; the token is the Gitea Actions token.
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Relative submodule URL (../rav4-apps.git) reuses this checkout's auth.
+          submodules: recursive
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Bump rav4-apps to latest main
+        run: |
+          set -euo pipefail
+          git submodule sync rav4-apps
+          git submodule update --remote --init rav4-apps
+          if git diff --quiet -- rav4-apps; then
+            echo "rav4-apps already at latest main; nothing to do."
+            exit 0
+          fi
+          new="$(git -C rav4-apps rev-parse --short HEAD)"
+          git config user.name "gitea-actions[bot]"
+          git config user.email "gitea-actions@ripostelabs.xyz"
+          git add rav4-apps
+          git commit -m "chore: bump rav4-apps submodule to ${new}"
+          git push origin HEAD:main
+          echo "Bumped rav4-apps to ${new} and pushed to main."
