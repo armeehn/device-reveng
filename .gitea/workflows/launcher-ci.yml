@@ -427,6 +427,11 @@ jobs:
           cp "${apks[0]}" "${asset}"
           sha="$(sha256sum "${asset}" | cut -d' ' -f1)"
 
+          # Percent-encode for the query string: a literal "+" there decodes to a
+          # SPACE, which published the first release asset under a name that did
+          # not match its tag. The filename on disk keeps the "+".
+          asset_q="$(printf '%s' "${asset}" | jq -sRr @uri)"
+
           # Idempotent independently of the tag step, so a re-run after a publish
           # that half-finished still completes the release for an existing tag.
           code=$(curl -s -o /dev/null -w '%{http_code}' \
@@ -475,7 +480,7 @@ jobs:
           up=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
             -H "Authorization: token ${TOKEN}" \
             -F "attachment=@${asset}" \
-            "${api}/releases/${id}/assets?name=${asset}")
+            "${api}/releases/${id}/assets?name=${asset_q}")
           if [ "$up" != "201" ]; then
             echo "::error::attaching ${asset} to release ${TAG} failed with HTTP ${up}"
             exit 1
