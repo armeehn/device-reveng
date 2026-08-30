@@ -89,6 +89,42 @@ object UpdateFeed {
     fun isNewer(release: Release, installedVersionCode: Int): Boolean =
         release.versionCode > installedVersionCode
 
+    /**
+     * Is a downloaded APK actually an update to *us*? Returns null when it is, else the reason
+     * to show the driver. Pure so the rule is testable; [UpdateController] supplies the values
+     * by reading the APK's own manifest back off disk.
+     *
+     * Both refusals exist because the feed states a *claim* while `pm install -r` acts on the
+     * *file*, and a disagreement between them is silent and expensive:
+     *
+     *  * **Different package.** On 2026-08-30 main's applicationId changed
+     *    (`com.reveng.carlauncher` → `com.ripostelabs.carlauncher`). A launcher on the old
+     *    package would have seen the new versionCode, called it an update, and installed a
+     *    different package — which Android puts SIDE BY SIDE. The running launcher would be
+     *    untouched, its versionCode unchanged, so the next check would find the same "update"
+     *    and repeat it forever while the driver saw nothing change. A rename is a migration a
+     *    human performs (back up, install, re-assign HOME, re-grant, uninstall the old one),
+     *    never something an updater should attempt on its own.
+     *  * **Not actually newer.** Makes the install decision rest on the APK rather than on
+     *    release notes, which are prose and can be hand-edited into disagreeing with the file.
+     */
+    fun selfUpdateRefusal(
+        apkPackage: String,
+        apkVersionCode: Int,
+        ourPackage: String,
+        ourVersionCode: Int,
+        releaseName: String,
+    ): String? = when {
+        apkPackage != ourPackage ->
+            "Release $releaseName is a different app ($apkPackage), not an update to " +
+                "$ourPackage. Installing it would add a second launcher rather than update " +
+                "this one — that needs a manual migration."
+        apkVersionCode <= ourVersionCode ->
+            "Release $releaseName really carries versionCode $apkVersionCode, which is not " +
+                "newer than this build ($ourVersionCode)."
+        else -> null
+    }
+
     // versionName is dotted digits (the release job enforces that shape before tagging),
     // versionCode decimal, then the short SHA. Anchored: a prefix match is not a CI tag.
     private val TAG_SHAPE = Regex("""^v(\d+(?:\.\d+){1,3})\+(\d+)\.g[0-9a-f]+$""")

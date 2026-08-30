@@ -209,7 +209,49 @@ class UpdateController(
             dest.delete()
             throw IOException("Downloaded APK failed its SHA-256 check — bad transfer or bad asset.")
         }
+
+        // The digest proves the bytes are the ones CI published. It does NOT prove they are an
+        // update to *this* app, and those are different claims — see [selfUpdateRefusal].
+        val refusal = selfUpdateRefusal(dest, release)
+        if (refusal != null) {
+            dest.delete()
+            throw IOException(refusal)
+        }
         return dest
+    }
+
+    /**
+     * Why the manifest is read back out of the downloaded APK: the feed says what a release
+     * *claims* to be (a tag, a versionCode), but `pm install -r` acts on what the file actually
+     * *is*. Where those disagree, the mismatch is silent and expensive.
+     *
+     * The case that forced this: on 2026-08-30 main's applicationId changed
+     * (`com.reveng.carlauncher` → `com.ripostelabs.carlauncher`). A launcher on the old package
+     * would have seen the new versionCode, called it an update, and `pm install -r`-ed a
+     * *different package* — which Android happily installs SIDE BY SIDE. The running launcher
+     * would be untouched, its own versionCode unchanged, so the next check would find the same
+     * "update" and do it again, forever, while the driver saw nothing change.
+     *
+     * So: refuse anything whose package is not ours (a rename is a migration a human performs,
+     * not something an updater should attempt), and refuse anything whose real versionCode is
+     * not actually newer than ours — that second check makes the install decision rest on the
+     * APK itself rather than on release notes a hand-edit could get wrong.
+     *
+     * Returns null when the APK is a genuine self-update, else the reason to show the driver.
+     */
+    private fun selfUpdateRefusal(apk: File, release: UpdateFeed.Release): String? {
+        val info = appContext.packageManager.getPackageArchiveInfo(apk.absolutePath, 0)
+            ?: return "Downloaded file isn't a readable APK."
+
+        @Suppress("DEPRECATION") // longVersionCode needs API 28; versionCode is fine at minSdk 33.
+        val apkVersionCode = info.versionCode
+        return UpdateFeed.selfUpdateRefusal(
+            apkPackage = info.packageName,
+            apkVersionCode = apkVersionCode,
+            ourPackage = BuildConfig.APPLICATION_ID,
+            ourVersionCode = BuildConfig.VERSION_CODE,
+            releaseName = release.versionName,
+        )
     }
 
     // ---- HTTP ---------------------------------------------------------------
