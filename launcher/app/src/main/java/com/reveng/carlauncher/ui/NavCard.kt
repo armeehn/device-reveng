@@ -28,7 +28,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.reveng.carlauncher.carlib.CarEvents
@@ -145,22 +144,18 @@ private fun NavLive(nav: NavState) {
         }
         if (nav.eta.isNotEmpty()) {
             Spacer(Modifier.weight(1f))
-            Text(
+            AutoSizeText(
                 text = nav.eta,
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
             )
         }
     }
-    Text(
+    AutoSizeText(
         text = nav.instruction,
         fontSize = INSTRUCTION_SP.sp,
         fontWeight = FontWeight.Medium,
         color = MaterialTheme.colorScheme.onSurface,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
     )
 }
 
