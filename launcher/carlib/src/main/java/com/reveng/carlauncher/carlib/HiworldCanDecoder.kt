@@ -29,20 +29,30 @@ object HiworldCanDecoder {
 
     // ---- Opcodes we decode (== the byte after LEN). See variance.txt for observed counts. ----
     private const val OP_BASIC_STATUS = 0x11   // key/SWC + doors + steering
-    private const val OP_TRIP_INFO = 0x13      // vehicle information page (range/trip)
+    private const val OP_TRIP_INFO = 0x13      // vehicle information page (range/trip) + speed candidate p[0:1]
+    private const val OP_SPEED = 0x17          // dedicated low-rate speed field (2026-08-29 drive); p[0:1] BE ×0.1 km/h
     private const val OP_RPM_GEAR_MIRROR = 0x1A // unparsed by OEM; RPM + gear raw found in capture
     private const val OP_HYBRID = 0x1F         // hybrid battery + energy flow
-    private const val OP_VEHICLE_INFO = 0x32   // RPM / speed / coolant
+    private const val OP_VEHICLE_INFO = 0x32   // RPM / coolant (NOT road speed — see 2026-08-29 finding)
     private const val OP_RADAR = 0x41          // PDC ultrasonic front/rear
     private const val OP_TPMS = 0x48           // tyre pressures
     private const val OP_VERSION = 0xF0        // CANBOX firmware version ASCII
 
     /**
-     * Speed scale (raw units → km/h). **UNCONFIRMED** — the car was parked in the capture so
-     * every speed byte read 0; this factor could not be calibrated. Left at 1.0 as a documented
-     * placeholder. Calibrate via a drive capture (compare raw against GPS speed) and change here.
+     * 0x32 p[4:5] "speed" scale. **NOT ROAD SPEED.** The 2026-08-29 drive capture (0→54.8 km/h vs
+     * head-unit GPS) proved this field does not track road speed — the earlier 0x32 correlation was
+     * an interpolation artifact across a GPS dropout. Kept only so the raw byte is still surfaced as
+     * a diagnostic; do not use for a speedometer. The real speed lives in 0x17 / 0x13 (below).
      */
     const val SPEED_SCALE_KMH: Double = 1.0
+
+    /**
+     * 0x17 p[0:1] BE → km/h. Dedicated speed field found on the 2026-08-29 drive: raw 540 = 54.0 km/h
+     * exactly, raw 350 ≈ 35 km/h. Scale ≈ 0.1 km/h/LSB but rests on **only 2 distinct levels** (0x17
+     * updates ~once per 25–40 s), so it is a candidate, not a calibrated speedometer. A steady-cruise
+     * capture holding several constant speeds is needed to confirm the scale and linearity.
+     */
+    const val SPEED_017_SCALE_KMH: Double = 0.1
 
     /** OEM sentinel: 0xFF in the coolant byte means "unsupported / no reading". */
     private const val COOLANT_SENTINEL = 0xFF
@@ -96,6 +106,7 @@ object HiworldCanDecoder {
         OP_TPMS -> decodeTpms(payload)
         OP_RADAR -> decodeRadar(payload)
         OP_TRIP_INFO -> decodeTripInfo(payload)
+        OP_SPEED -> decodeSpeed(payload)
         OP_RPM_GEAR_MIRROR -> decodeRpmGearMirror(payload)
         OP_VERSION -> decodeVersion(payload)
         else -> CanSignal.Unknown(opcode, payload)
@@ -233,6 +244,22 @@ object HiworldCanDecoder {
         val raw = u16be(p, 2, 3)
         return CanSignal.TripInfo(
             rangeToEmptyKm = if (raw == U16_SENTINEL) null else raw,
+            // 2026-08-29: p[0:1] is a ~10 Hz value that tracks the speed profile up and down
+            // (R²≈0.66, capped by 1 Hz GPS lag). Best *live* speed candidate; scale UNCONFIRMED.
+            speedCandidateRaw = u16be(p, 0, 1),
+        )
+    }
+
+    /**
+     * 0x17 — dedicated speed field (2026-08-29 drive). p[0:1] BE × [SPEED_017_SCALE_KMH]. Accurate
+     * (raw 540 = 54.0 km/h) but low-rate (~once per 25–40 s) and the scale rests on 2 points.
+     */
+    private fun decodeSpeed(p: ByteArray): CanSignal.SpeedCandidate {
+        val raw = u16be(p, 0, 1)
+        return CanSignal.SpeedCandidate(
+            source = "0x17",
+            raw = raw,
+            kmh = raw * SPEED_017_SCALE_KMH,
         )
     }
 
@@ -399,9 +426,21 @@ sealed interface CanSignal {
         val frontCm: List<Int?>,
     ) : CanSignal
 
-    /** 0x13 — driving range to empty, km (other page fields not yet surfaced). null = no data. */
+    /** 0x13 — driving range to empty (km; null = no data) + the ~10 Hz raw speed candidate p[0:1]. */
     data class TripInfo(
         val rangeToEmptyKm: Int?,
+        /** p[0:1] BE — live speed candidate (2026-08-29); tracks the profile, scale UNCONFIRMED. */
+        val speedCandidateRaw: Int = 0,
+    ) : CanSignal
+
+    /**
+     * 0x17 — dedicated speed field (2026-08-29 drive). Accurate scale (~0.1 km/h/LSB) but low-rate
+     * and 2-point; a candidate speedometer, not yet calibrated. [kmh] = [raw] × SPEED_017_SCALE_KMH.
+     */
+    data class SpeedCandidate(
+        val source: String,
+        val raw: Int,
+        val kmh: Double,
     ) : CanSignal
 
     /** 0x1A — RPM mirror + raw gear bytes (gear codes UNCONFIRMED, pending drive capture). */
