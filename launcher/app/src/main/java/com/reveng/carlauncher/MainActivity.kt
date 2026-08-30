@@ -49,6 +49,7 @@ import com.reveng.carlauncher.data.RootTierController // v2.9
 import com.reveng.carlauncher.data.SettingKeys // v2.5 touch beep
 import com.reveng.carlauncher.data.SettingsStore // v0.6
 import com.reveng.carlauncher.data.SystemChrome // v2.5
+import com.reveng.carlauncher.data.ThemeSnapshotStore
 import com.reveng.carlauncher.data.ThemeStore
 import com.reveng.carlauncher.input.KeyBridge // v2.8
 import com.reveng.carlauncher.input.KeyPump // v2.8
@@ -388,6 +389,15 @@ class MainActivity : ComponentActivity() {
                 !reverse &&
                 speedKmh <= MANEUVER_MAX_KMH &&
                 shownScreen != Screen.Onboarding
+
+            // v0.5: republish the palette for the com.reveng.* suite whenever it changes.
+            // Keyed on both inputs because a night crossing changes the colours without changing
+            // the theme. The write is small and synchronous-to-memory (SharedPreferences.apply),
+            // so it stays on the composition's thread rather than racing a coroutine against the
+            // frame that shows the new colours.
+            LaunchedEffect(activeTheme, night) {
+                ThemeSnapshotStore.publish(applicationContext, activeTheme, night)
+            }
 
             CarLauncherTheme(theme = activeTheme, night = night) {
               CompositionLocalProvider(
