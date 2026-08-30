@@ -203,13 +203,11 @@ private fun RadioHeader(tuner: TunerState, onBack: () -> Unit) {
 /** §3.4's 48 sp frequency — set explicitly because it is a legibility requirement, not a style. */
 @Composable
 private fun FrequencyReadout(tuner: TunerState) {
-    Text(
+    AutoSizeText(
         text = formatFreqLabel(tuner.band, tuner.freq),
         fontSize = FREQUENCY_SP.sp,
-        lineHeight = (FREQUENCY_SP * 1.1f).sp,
         fontWeight = FontWeight.Bold,
         color = MaterialTheme.colorScheme.onBackground,
-        maxLines = 1,
     )
 }
 
@@ -231,12 +229,10 @@ private fun IndicatorRow(tuner: TunerState) {
 
         if (!tuner.ptyName.isNullOrBlank()) {
             Spacer(Modifier.width(8.dp))
-            Text(
+            AutoSizeText(
                 text = tuner.ptyName,
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
             )
         }
     }
@@ -341,12 +337,10 @@ private fun PresetSlot(
             .padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
+        AutoSizeText(
             text = formatFreqLabel(preset.band, preset.freq),
             style = MaterialTheme.typography.titleMedium,
             color = fg,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
         Icon(

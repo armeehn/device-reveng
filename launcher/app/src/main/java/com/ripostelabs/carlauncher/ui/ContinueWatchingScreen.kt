@@ -28,7 +28,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.ripostelabs.carlauncher.data.WatchEntry
 import com.ripostelabs.carlauncher.ui.theme.carShape
@@ -137,21 +136,17 @@ private fun WatchRow(entry: WatchEntry, onOpen: () -> Unit, onForget: () -> Unit
         Spacer(Modifier.width(16.dp))
 
         Column(modifier = Modifier.weight(1f)) {
-            Text(
+            AutoSizeText(
                 text = entry.title,
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurface,
                 fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
             )
             if (entry.subtitle.isNotEmpty()) {
-                Text(
+                AutoSizeText(
                     text = entry.subtitle,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
                 )
             }
             Spacer(Modifier.height(8.dp))

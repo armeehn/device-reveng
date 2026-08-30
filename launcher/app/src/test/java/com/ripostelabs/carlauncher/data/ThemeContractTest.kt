@@ -1,6 +1,7 @@
 package com.ripostelabs.carlauncher.data
 
 import com.ripostelabs.carlauncher.ui.theme.ThemeColors
+import com.ripostelabs.carlauncher.ui.theme.ThemeStyle
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -69,5 +70,33 @@ class ThemeContractTest {
         val trio = colors.copy(accent2 = 0xFFE5A0FF, accent3 = 0xFF7BE0A4)
         assertEquals(0xFFE5A0FF, value(ThemeContract.COL_ACCENT2, trio))
         assertEquals(0xFF7BE0A4, value(ThemeContract.COL_ACCENT3, trio))
+    }
+
+    /**
+     * A snapshot built without a style — every publisher that predates v0.8 — must publish the
+     * neutral `ThemeStyle()` values, so a themed suite app renders exactly what an unstyled
+     * launcher renders.
+     */
+    @Test
+    fun `style columns default to the neutral style`() {
+        assertEquals(1f, value(ThemeContract.COL_CORNER_SCALE))
+        assertEquals(0, value(ThemeContract.COL_MONO_TYPE))
+        assertEquals(0, value(ThemeContract.COL_HARD_EDGE))
+    }
+
+    /** Boolean style flags travel as int 0/1, the same convention as [ThemeContract.COL_NIGHT]. */
+    @Test
+    fun `a styled theme publishes its style in the right columns`() {
+        val styled = ThemeContract.Snapshot(
+            "builtin.riposte",
+            "Riposte",
+            false,
+            colors,
+            ThemeStyle(cornerScale = 0f, monoType = true, hardEdge = true),
+        )
+        val row = ThemeContract.row(styled)
+        assertEquals(0f, row[ThemeContract.COLUMNS.indexOf(ThemeContract.COL_CORNER_SCALE)])
+        assertEquals(1, row[ThemeContract.COLUMNS.indexOf(ThemeContract.COL_MONO_TYPE)])
+        assertEquals(1, row[ThemeContract.COLUMNS.indexOf(ThemeContract.COL_HARD_EDGE)])
     }
 }

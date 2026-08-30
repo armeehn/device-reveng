@@ -9,6 +9,7 @@ import android.net.Uri
 import com.ripostelabs.carlauncher.BuildConfig
 import com.ripostelabs.carlauncher.ui.theme.BuiltInThemes
 import com.ripostelabs.carlauncher.ui.theme.CarTheme
+import com.ripostelabs.carlauncher.ui.theme.ThemeStyle
 
 /**
  * v0.5 — publishes the launcher's active palette to the `com.ripostelabs.*` suite. Read-only; see
@@ -38,7 +39,7 @@ class ThemeProvider : ContentProvider() {
         val snapshot = ThemeSnapshotStore.read(ctx) ?: defaultSnapshot()
 
         // Always the full column set: a projection would let a client silently receive fewer
-        // columns than it asked for, and the row is thirteen values.
+        // columns than it asked for, and the row is sixteen values.
         val cursor = MatrixCursor(ThemeContract.COLUMNS, 1)
         cursor.addRow(ThemeContract.row(snapshot))
 
@@ -74,6 +75,7 @@ class ThemeProvider : ContentProvider() {
             themeName = theme.name,
             night = false,
             colors = theme.day,
+            style = theme.style,
         )
     }
 }
@@ -83,7 +85,7 @@ class ThemeProvider : ContentProvider() {
  *
  * SharedPreferences and not DataStore: [ThemeProvider] has to read this from a binder thread with
  * no coroutine to suspend in, and SharedPreferences is loaded once and answered from memory after
- * that. It holds thirteen values that are re-derived on every launcher start, so a lost write
+ * that. It holds sixteen values that are re-derived on every launcher start, so a lost write
  * costs nothing.
  */
 object ThemeSnapshotStore {
@@ -103,6 +105,9 @@ object ThemeSnapshotStore {
     private const val KEY_ERROR = "error"
     private const val KEY_ACCENT2 = "accent2"
     private const val KEY_ACCENT3 = "accent3"
+    private const val KEY_CORNER_SCALE = "corner_scale"
+    private const val KEY_MONO_TYPE = "mono_type"
+    private const val KEY_HARD_EDGE = "hard_edge"
 
     private fun prefs(context: Context) =
         context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -127,6 +132,9 @@ object ThemeSnapshotStore {
             .putLong(KEY_ERROR, c.error)
             .putLong(KEY_ACCENT2, c.accent2)
             .putLong(KEY_ACCENT3, c.accent3)
+            .putFloat(KEY_CORNER_SCALE, theme.style.cornerScale)
+            .putBoolean(KEY_MONO_TYPE, theme.style.monoType)
+            .putBoolean(KEY_HARD_EDGE, theme.style.hardEdge)
             .apply()
 
         val authority = ThemeContract.authorityFor(BuildConfig.APPLICATION_ID)
@@ -153,6 +161,11 @@ object ThemeSnapshotStore {
                 error = p.getLong(KEY_ERROR, 0),
                 accent2 = p.getLong(KEY_ACCENT2, 0),
                 accent3 = p.getLong(KEY_ACCENT3, 0),
+            ),
+            style = ThemeStyle(
+                cornerScale = p.getFloat(KEY_CORNER_SCALE, 1f),
+                monoType = p.getBoolean(KEY_MONO_TYPE, false),
+                hardEdge = p.getBoolean(KEY_HARD_EDGE, false),
             ),
         )
     }

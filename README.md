@@ -67,12 +67,16 @@ is genuinely useful — including a negative one.
 
 ### 1. Install the launcher
 
-Grab the latest signed APK from
-**[Releases](https://github.com/armeehn/device-reveng/releases/latest)**, then:
+Tagged builds are published to
+**[armeehn/carlauncher-releases](https://github.com/armeehn/carlauncher-releases/releases/latest)**
+— a public, releases-only repo. Grab the latest APK there, then:
 
 ```bash
 adb install -r carlauncher-<version>.apk
 ```
+
+Once it is running, it can update itself: **Settings → Updates** checks that same
+repo and installs the newer build, so this is a one-time side-load.
 
 Press **HOME** and pick **Car Launcher**. The stock launcher
 (`com.szchoiceway.customerui`) stays installed — this registers as an *alternative*

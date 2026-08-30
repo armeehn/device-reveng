@@ -20,7 +20,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -31,6 +30,7 @@ import com.ripostelabs.carlauncher.data.Placement
 import com.ripostelabs.carlauncher.data.effectivePlacement
 import com.ripostelabs.carlauncher.ui.collectAsStateSafe
 import com.ripostelabs.carlauncher.ui.AppIcon
+import com.ripostelabs.carlauncher.ui.AutoSizeText
 import com.ripostelabs.carlauncher.ui.theme.carShape
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -112,12 +112,10 @@ private fun AppDirectoryRow(
     ) {
         AppIcon(app = app, size = 40.dp)
         Spacer(Modifier.width(12.dp))
-        Text(
+        AutoSizeText(
             text = app.label,
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
         Spacer(Modifier.width(12.dp))

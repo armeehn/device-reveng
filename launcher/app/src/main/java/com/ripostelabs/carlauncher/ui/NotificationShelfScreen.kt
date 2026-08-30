@@ -177,13 +177,11 @@ private fun NotificationRow(item: ShelfNotification, onOpen: () -> Unit, onDismi
                 )
             }
             if (item.title.isNotEmpty()) {
-                Text(
+                AutoSizeText(
                     text = item.title,
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
                 )
             }
             if (item.text.isNotEmpty()) {
@@ -228,12 +226,10 @@ private fun AppFilterRow(label: String, shown: Boolean, onChange: (Boolean) -> U
             .padding(horizontal = 14.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
+        AutoSizeText(
             text = label,
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
         Switch(

@@ -49,7 +49,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -329,12 +328,10 @@ private fun AppPickTile(app: AppInfo, selected: Boolean, onClick: () -> Unit) {
             }
         }
         Spacer(Modifier.height(10.dp))
-        Text(
+        AutoSizeText(
             text = app.label,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,
         )
     }

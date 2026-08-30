@@ -20,7 +20,7 @@ body:
     attributes:
       label: Launcher version
       description: Settings → About, or the APK filename.
-      placeholder: "0.4.<versionCode>"
+      placeholder: "0.7.<versionCode>"
     validations:
       required: true
   - type: dropdown

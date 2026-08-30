@@ -42,7 +42,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ripostelabs.carlauncher.carlib.CarService
@@ -137,13 +136,11 @@ fun RadioCard(
                 ) {
                     BandChip(label = info.bandLabel())
                     Spacer(Modifier.width(12.dp))
-                    Text(
+                    AutoSizeText(
                         text = info.freqLabel(),
                         fontSize = 34.sp,
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f),
                     )
                     // v0.9: save the current station as a preset.
@@ -298,12 +295,11 @@ private fun StationStrip(
                     onLongClick = { onDelete(p) },
                 ),
             ) {
-                Text(
+                AutoSizeText(
                     text = formatFreqLabel(p.band, p.freq),
                     style = MaterialTheme.typography.labelLarge,
                     color = if (active) MaterialTheme.colorScheme.onPrimaryContainer
                     else MaterialTheme.colorScheme.onSecondaryContainer,
-                    maxLines = 1,
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                 )
             }

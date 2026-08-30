@@ -49,7 +49,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ripostelabs.carlauncher.R
@@ -138,15 +137,13 @@ fun MediaCard(
 
                     Spacer(Modifier.width(16.dp))
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(
+                        AutoSizeText(
                             text = now?.title ?: stringResource(R.string.media_placeholder_title),
                             // §2.2: now-playing title ≥28sp.
                             style = MaterialTheme.typography.titleLarge.copy(fontSize = TITLE_SP.sp),
                             color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
                         )
-                        Text(
+                        AutoSizeText(
                             text = when {
                                 now == null -> stringResource(R.string.media_placeholder_subtitle)
                                 now.artist.isBlank() -> stringResource(R.string.media_playing)
@@ -154,8 +151,6 @@ fun MediaCard(
                             },
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
                         )
                     }
                 }
@@ -311,12 +306,10 @@ private fun SourceChip(label: String, canCycle: Boolean, onClick: () -> Unit) {
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
+            AutoSizeText(
                 text = label,
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
             )
             if (canCycle) {
                 Spacer(Modifier.width(6.dp))

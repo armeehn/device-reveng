@@ -31,7 +31,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.ripostelabs.carlauncher.R
 import com.ripostelabs.carlauncher.media.MiniScreenState
@@ -111,12 +110,10 @@ fun VideoMiniCard(
                     modifier = Modifier.size(24.dp),
                 )
                 Spacer(Modifier.width(12.dp))
-                Text(
+                AutoSizeText(
                     text = now.title,
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
                 IconButton(onClick = onExpand) {

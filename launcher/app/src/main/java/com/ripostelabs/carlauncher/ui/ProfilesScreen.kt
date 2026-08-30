@@ -32,7 +32,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.ripostelabs.carlauncher.data.DriverProfile
 import com.ripostelabs.carlauncher.data.DriverProfilesStore
@@ -192,13 +191,11 @@ private fun ProfileRow(
             Spacer(Modifier.width(12.dp))
         }
         Column(modifier = Modifier.weight(1f)) {
-            Text(
+            AutoSizeText(
                 text = profile.name,
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.SemiBold,
                 color = fg,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
             )
             Text(
                 text = "${profile.favorites.size} favourites · ${profile.driverSide.name.lowercase()}",

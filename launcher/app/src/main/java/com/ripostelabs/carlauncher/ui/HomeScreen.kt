@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope // v2.8
@@ -14,7 +15,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import com.ripostelabs.carlauncher.ui.theme.carShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -33,8 +33,8 @@ import androidx.compose.foundation.focusGroup
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.min
 import com.ripostelabs.carlauncher.AppInfo
 import com.ripostelabs.carlauncher.AppRepository
 import com.ripostelabs.carlauncher.R
@@ -63,7 +63,7 @@ import kotlinx.coroutines.withContext
  *
  *   [ StatusBar — full width ]
  *   ┌ LEFT (glance) ┬ CENTER (app grid) ┬ RIGHT (driver thumb) ┐
- *   │ MediaCard     │ AppDrawer 2×N     │ QuickLaunch 2×3 grid  │
+ *   │ MediaCard     │ AppDrawer 2×N     │ QuickLaunch 3×2 icons │
  *   │ ClimateReadout│ (system folder)   │ RadioCard             │
  *   └───────────────┴───────────────────┴───────────────────────┘
  *
@@ -430,14 +430,15 @@ private val QUICK_LAUNCH_PINNED = listOf(
     "org.linphone",         // VoIP dialer
 )
 
-/** The quick-launch grid is a fixed 2×3: six tiles sharing the space above the RadioCard. */
+/** The quick-launch grid is a fixed 3×2: six tiles sharing the space above the RadioCard. */
 private const val QUICK_LAUNCH_SLOTS = 6
-private const val QUICK_LAUNCH_COLUMNS = 2
+private const val QUICK_LAUNCH_COLUMNS = 3
 
 /**
- * A compact 2×3 quick-launch grid (LAUNCHER_DESIGN §2.4) in the closest-reach column. The
- * rows split the available height evenly, so all six tiles always fit with no scrolling
- * whether or not the RadioCard below is enabled.
+ * A compact 3×2 icon-only quick-launch grid (LAUNCHER_DESIGN §2.4) in the closest-reach
+ * column. The rows split the available height evenly, so all six tiles always fit with no
+ * scrolling whether or not the RadioCard below is enabled. Tiles show just the app icon —
+ * labels never fit three-across, and these six are the apps the driver knows by glyph.
  *
  * SWC focus order is row-major: the existing linear Quick ring in SwcNavigator steps through
  * tiles in reading order, so every tile stays reachable with no navigator changes.
@@ -491,27 +492,24 @@ private fun QuickLaunchGrid(
     }
 }
 
+/**
+ * Icon-only quick-launch tile. [AppIcon] carries the app label as its contentDescription,
+ * so TalkBack/SWC announcements are unchanged from the old icon+label row. The icon scales
+ * with the tile (RadioCard off = taller rows = bigger icons), capped so PackageManager
+ * bitmaps rasterized at 144px don't blur.
+ */
 @Composable
 private fun QuickLaunchTile(app: AppInfo, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val press = withTapFeedback(onClick) // v2.5
-    Row(
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxHeight()
             .clip(carShape(15.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
-            .clickable(onClick = press)
-            .padding(horizontal = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .clickable(onClick = press),
+        contentAlignment = Alignment.Center,
     ) {
-        AppIcon(app = app, size = 34.dp)
-        Spacer(Modifier.width(8.dp))
-        Text(
-            text = app.label,
-            // §1.1 tile labels ≥22sp — this row is the driver thumb zone's launch surface.
-            style = MaterialTheme.typography.titleLarge,
-            color = MaterialTheme.colorScheme.onBackground,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+        val iconSize = (min(maxWidth, maxHeight) * 0.62f).coerceIn(48.dp, 88.dp)
+        AppIcon(app = app, size = iconSize)
     }
 }

@@ -51,6 +51,7 @@ import com.ripostelabs.carlauncher.data.SettingsStore // v0.6
 import com.ripostelabs.carlauncher.data.SystemChrome // v2.5
 import com.ripostelabs.carlauncher.data.ThemeSnapshotStore
 import com.ripostelabs.carlauncher.data.ThemeStore
+import com.ripostelabs.carlauncher.data.UpdateController // v0.7 auto-updater
 import com.ripostelabs.carlauncher.input.KeyBridge // v2.8
 import com.ripostelabs.carlauncher.input.KeyPump // v2.8
 import com.ripostelabs.carlauncher.data.WatchHistoryStore // v2.7
@@ -114,6 +115,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var radioPresetsStore: RadioPresetsStore // v0.9
     private lateinit var carSettingsController: CarSettingsController // v1.1 settings suite
     private lateinit var rootTierController: RootTierController // v2.9
+    private lateinit var updateController: UpdateController // v0.7 auto-updater
 
     // v3.0 cockpit: driver profiles need the stores they write through to, and the gateway
     // handshake needs to outlive any one screen.
@@ -213,6 +215,11 @@ class MainActivity : ComponentActivity() {
         radioPresetsStore = RadioPresetsStore(applicationContext, lifecycleScope) // v0.9
         carSettingsController = CarSettingsController(applicationContext, lifecycleScope) // v1.1
         rootTierController = RootTierController(applicationContext, lifecycleScope) // v2.9
+
+        // v0.7: auto-updater. The launch check self-gates (toggle, token, once a day), so on
+        // most starts this launches one coroutine that reads a DataStore and stops.
+        updateController = UpdateController(applicationContext, lifecycleScope)
+        updateController.autoCheckOnLaunch()
 
         // v3.0: driver profiles + the vendor-gateway UIMODE channel.
         favoritesStore = FavoritesStore(applicationContext, lifecycleScope)
@@ -566,6 +573,7 @@ class MainActivity : ComponentActivity() {
                                 carEvents = carEvents,
                                 radioPresetsStore = radioPresetsStore,
                                 rootTier = rootTierController, // v2.9
+                                updater = updateController, // v0.7 auto-updater
                                 onExit = { screen = Screen.Home },
                                 appDirectoryStore = appDirectoryStore,
                                 initialRoute = s.initialRoute,
