@@ -53,7 +53,6 @@ import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -405,12 +404,10 @@ private fun FavoriteChip(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         AppIcon(app = app, size = 36.dp)
-        Text(
+        AutoSizeText(
             text = app.label,
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
             modifier = Modifier.widthIn(max = 140.dp),
         )
     }
@@ -451,13 +448,14 @@ private fun AppTile(
                 )
             }
         }
-        Text(
+        // Auto-shrinks so long names (and the wider mono type of Riposte themes) stay readable
+        // instead of getting chopped to "Speedomet…".
+        AutoSizeText(
             text = app.label,
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onBackground,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 4.dp),
         )
     }
 }
@@ -493,13 +491,12 @@ private fun SystemFolderTile(count: Int, onClick: () -> Unit, focused: Boolean =
                 modifier = Modifier.size(40.dp),
             )
         }
-        Text(
+        AutoSizeText(
             text = "System ($count)",
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onBackground,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 4.dp),
         )
     }
 }

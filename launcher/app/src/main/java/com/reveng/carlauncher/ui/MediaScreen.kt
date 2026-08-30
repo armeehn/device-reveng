@@ -229,12 +229,10 @@ private fun TrackTitle(now: NowPlaying?) {
             overflow = TextOverflow.Ellipsis,
         )
         Spacer(Modifier.height(6.dp))
-        Text(
+        AutoSizeText(
             text = now?.artist?.takeIf { it.isNotBlank() } ?: "Start playback in any app",
             style = MaterialTheme.typography.headlineSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
         )
     }
 }
@@ -259,12 +257,10 @@ private fun SourcePicker(
             } else {
                 MaterialTheme.colorScheme.onSurfaceVariant
             }
-            Text(
+            AutoSizeText(
                 text = if (source.isPlaying) "▶ ${source.label}" else source.label,
                 style = MaterialTheme.typography.titleMedium,
                 color = fg,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier
                     .clip(carShape(14.dp))
                     .background(bg)

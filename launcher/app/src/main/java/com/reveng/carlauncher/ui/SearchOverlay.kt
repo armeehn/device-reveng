@@ -196,12 +196,10 @@ private fun SearchResultTile(app: AppInfo, highlighted: Boolean, onClick: () -> 
             .padding(vertical = 10.dp),
     ) {
         AppIcon(app = app, size = 84.dp)
-        Text(
+        AutoSizeText(
             text = app.label,
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onBackground,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth(),
         )
