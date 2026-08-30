@@ -268,14 +268,28 @@ object HiworldCanDecoder {
      *
      * rpmMirror = (p[9]<<8)|p[10] — tracks 0x32's RPM byte-for-byte in the capture (both p[9]/p[10]
      * here and p[2]/p[3] on 0x32 share the identical value set 0x00..0x05 / 0x00..0xE8), which is
-     * how the mapping was found. gearRaw exposed raw from p[1] and p[5] (variance: p[1] ∈ {0,1,3},
-     * p[5] ∈ {1,3}). **Gear codes are NOT yet mapped** — needs a drive capture through P/R/N/D.
+     * how the mapping was found.
+     *
+     * Gear: p[5] is the PRNDL code — mapped from a 2026-08-29 drive capture through all four gears:
+     * 0=Drive, 1=Park, 2=Neutral, 3=Reverse. p[1] is coarse (0x03 in Reverse, else 0x01) and kept
+     * only as a corroborating diagnostic. The parked variance (p[5] ∈ {1,3}) fits: D and N cannot
+     * occur while parked-testing, so they only surfaced once the car was driven.
      */
     private fun decodeRpmGearMirror(p: ByteArray): CanSignal.RpmGearMirror = CanSignal.RpmGearMirror(
         rpmMirror = u16be(p, 9, 10),
-        gearRawB1 = u(p, 1),   // UNCONFIRMED gear code
-        gearRawB5 = u(p, 5),   // UNCONFIRMED gear code
+        gear = gearFromCode(u(p, 5)),
+        gearRawB1 = u(p, 1),
+        gearRawB5 = u(p, 5),
     )
+
+    /** Map the 0x1A p[5] gear code to [Gear]; anything outside the mapped set is [Gear.UNKNOWN]. */
+    private fun gearFromCode(code: Int): Gear = when (code) {
+        0 -> Gear.DRIVE
+        1 -> Gear.PARK
+        2 -> Gear.NEUTRAL
+        3 -> Gear.REVERSE
+        else -> Gear.UNKNOWN
+    }
 
     /**
      * 0xF0 Version — CANBOX firmware string as ASCII.
@@ -367,6 +381,12 @@ object HiworldCanDecoder {
  * Decoded result model. `Unknown` is the catch-all for opcodes we see on the wire but do not
  * (yet) interpret — it keeps the raw payload so a caller can still log / capture it.
  */
+/**
+ * PRNDL gear select, decoded from the 0x1A gear byte (p[5]). UNKNOWN covers any code outside
+ * the mapped set (e.g. a transitional value), so consumers never see a wrong gear.
+ */
+enum class Gear { PARK, REVERSE, NEUTRAL, DRIVE, UNKNOWN }
+
 sealed interface CanSignal {
 
     /** 0x32 — engine RPM, raw speed (+ km/h via [HiworldCanDecoder.SPEED_SCALE_KMH]), coolant. */
@@ -443,9 +463,16 @@ sealed interface CanSignal {
         val kmh: Double,
     ) : CanSignal
 
-    /** 0x1A — RPM mirror + raw gear bytes (gear codes UNCONFIRMED, pending drive capture). */
+    /**
+     * 0x1A — RPM mirror + PRNDL gear.
+     *
+     * Gear mapping recovered from a 2026-08-29 drive capture through P/R/N/D: p[5] is the
+     * definitive gear code (0=D, 1=P, 2=N, 3=R); p[1] is coarse (0x03 in Reverse, else 0x01).
+     * Raw bytes are kept for diagnostics; [gear] is the resolved value.
+     */
     data class RpmGearMirror(
         val rpmMirror: Int,
+        val gear: Gear,
         val gearRawB1: Int,
         val gearRawB5: Int,
     ) : CanSignal
