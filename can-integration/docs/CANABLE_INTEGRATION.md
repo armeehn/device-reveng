@@ -27,7 +27,7 @@ CANable 2.0 (slcan fw) ──USB CDC-ACM──▶ /dev/ttyACM0
 | `canable-probe.sh` | Hardware bring-up / tap discovery, laptop **or** adb-shell. | POSIX sh only |
 
 > **Naming note:** the decoder's result type is `RawCanSignal`, **not** `CanSignal` — the HiWorld
-> decoder already owns `CanSignal` in `com.reveng.carlauncher.carlib`, and two top-level `CanSignal`
+> decoder already owns `CanSignal` in `com.ripostelabs.carlauncher.carlib`, and two top-level `CanSignal`
 > would not compile. Same shape as the brief asked for (Speed, WheelSpeeds, Gear, SteeringAngle,
 > GasPedal, Brake, Cruise, Cruise2, Doors, Blinkers, Unknown).
 

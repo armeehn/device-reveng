@@ -1,7 +1,7 @@
 # com.szchoiceway.customerui — Stock Launcher Notes (REFERENCE)
 
-Reference for building our own Kotlin/Compose replacement launcher (`/home/sasha/projects/device-reveng/launcher`).
-Cross-reference: `/home/sasha/projects/device-reveng/CAR_API.md` (the car-integration API).
+Reference for building the Kotlin/Compose replacement launcher in [`launcher/`](launcher/).
+Cross-reference: [`CAR_API.md`](CAR_API.md) (the car-integration API).
 
 > **STATUS — APK PULLED & DECOMPILED (2026-08-27).**
 > `com.szchoiceway.customerui.apk` (260 MB, versionName `1.0_202412261721`, minSdk 28 / target 33 /
