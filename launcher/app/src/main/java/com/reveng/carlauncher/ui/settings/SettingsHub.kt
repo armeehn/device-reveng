@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.Security // v2.9
 import androidx.compose.material.icons.filled.SettingsRemote
+import androidx.compose.material.icons.filled.SystemUpdate // v0.7 auto-updater
 import androidx.compose.material.icons.filled.Thermostat
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Videocam
@@ -124,6 +125,12 @@ fun SettingsHub(
                 title = "Backup & restore",
                 subtitle = "Save & restore themes, layout, profiles",
                 onClick = { onOpen(SettingsRoute.Backup) },
+            )
+            SettingsCategoryCard(
+                icon = Icons.Filled.SystemUpdate,
+                title = "Updates",
+                subtitle = "Pull & install tagged CI builds from GitHub",
+                onClick = { onOpen(SettingsRoute.Updates) },
             )
             SettingsCategoryCard(
                 icon = Icons.Filled.Info,

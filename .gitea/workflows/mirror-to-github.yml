@@ -1,0 +1,56 @@
+# Mirror this repository to its GitHub twin.
+#
+#   gitea (source of truth) --push--> github.com/armeehn/device-reveng
+#
+# A bare clone of this repo is pushed with --prune, so GitHub ends up with
+# exactly the refs that exist here: new branches and tags appear, deleted ones
+# disappear. The hourly schedule is what reconciles deletions, since a delete
+# raises no push event.
+#
+# Auth is an ed25519 deploy key in the MIRROR_SSH_KEY secret. Its public half
+# is a write-enabled deploy key on the GitHub repo, so the blast radius of the
+# key is that one mirror.
+name: Mirror to GitHub
+
+on:
+  push:
+    branches: ['**']
+    tags: ['**']
+  schedule:
+    # Hourly, off the hour, to stay clear of the daily jobs.
+    - cron: '17 * * * *'
+  workflow_dispatch:
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Load the deploy key
+        env:
+          KEY: ${{ secrets.MIRROR_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Push every ref to the GitHub twin
+        env:
+          # `github.token` is a Gitea token and GITHUB_SERVER_URL is this
+          # server, so cloning the source needs no extra secret.
+          TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          # Clone bare: the ref set is then exactly this server's, with no
+          # remote-tracking indirection for --prune to trip over.
+          url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
+          git clone --bare --quiet "${url%%://*}://token:${TOKEN}@${url#*://}" src.git
+
+          # --prune deletes GitHub refs that no longer exist here; --force lets
+          # a rewritten branch through. Both are what "mirror" means: this
+          # server wins, always.
+          git -C src.git push --prune --force \
+            git@github.com:armeehn/device-reveng.git \
+            '+refs/heads/*:refs/heads/*' '+refs/tags/*:refs/tags/*'
