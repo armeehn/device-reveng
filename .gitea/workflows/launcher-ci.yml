@@ -486,3 +486,84 @@ jobs:
             exit 1
           fi
           echo "Published ${TAG} with ${asset} (sha256 ${sha})."
+
+      # Publish the release to github.com/armeehn/carlauncher-releases — a PUBLIC,
+      # releases-only repo (the source stays here, private). The launcher's in-app
+      # auto-updater pulls from it: the head unit's internet is the phone hotspot,
+      # and the tailnet ACL doesn't let the car reach this Gitea — and because the
+      # repo is public, the car needs no credential, ever. The tag is created in
+      # that repo by the release call itself (on its default branch — the tag name
+      # alone carries the build identity; the notes name the source commit).
+      #
+      # GH_RELEASES_TOKEN is a GitHub token with contents:write on
+      # carlauncher-releases only. Absent secret -> the step logs and succeeds,
+      # same convention as the RELEASE_* signing secrets: nothing in this
+      # workflow hard-requires owner-held credentials.
+      - name: Publish release to GitHub (carlauncher-releases)
+        env:
+          GH_TOKEN: ${{ secrets.GH_RELEASES_TOKEN }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION_NAME: ${{ steps.version.outputs.name }}
+          VERSION_CODE: ${{ steps.version.outputs.code }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN}" ]; then
+            echo "GH_RELEASES_TOKEN not set — skipping the GitHub release publish."
+            exit 0
+          fi
+          api="https://api.github.com/repos/armeehn/carlauncher-releases"
+          auth=(-H "Authorization: Bearer ${GH_TOKEN}" -H "X-GitHub-Api-Version: 2022-11-28")
+
+          asset="carlauncher-${TAG}.apk"   # prepared by the previous step
+          sha="$(sha256sum "${asset}" | cut -d' ' -f1)"
+
+          # Idempotent like the Gitea steps: an existing release is left alone
+          # unless its APK is missing, in which case only the upload is redone.
+          existing=$(curl -s -w '\n%{http_code}' "${auth[@]}" "${api}/releases/tags/${TAG}")
+          status=$(printf '%s' "$existing" | tail -1)
+          if [ "$status" = "200" ]; then
+            id=$(printf '%s' "$existing" | head -n -1 | jq -r '.id')
+            have=$(printf '%s' "$existing" | head -n -1 | jq -r --arg n "$asset" '[.assets[].name] | index($n)')
+            if [ "$have" != "null" ]; then
+              echo "GitHub release ${TAG} already exists with its APK — leaving it untouched."
+              exit 0
+            fi
+          else
+            notes=$(cat <<EOF
+          Built by CI from device-reveng commit \`${GITHUB_SHA}\`.
+
+          | | |
+          |---|---|
+          | versionName | \`${VERSION_NAME}\` |
+          | versionCode | \`${VERSION_CODE}\` |
+          | APK | \`${asset}\` |
+          | SHA-256 | \`${sha}\` |
+
+          This asset is the CI artifact of the tagged main build — the only APK that
+          goes on-device. The launcher's auto-updater downloads it from here and
+          verifies it against the SHA-256 above before installing.
+          EOF
+            )
+            out=$(curl -s -w '\n%{http_code}' -X POST "${auth[@]}" \
+              -H "Content-Type: application/json" "${api}/releases" \
+              -d "$(jq -n --arg t "$TAG" --arg b "$notes" \
+                         '{tag_name:$t, name:$t, body:$b, draft:false, prerelease:false}')")
+            status=$(printf '%s' "$out" | tail -1)
+            if [ "$status" != "201" ]; then
+              echo "::error::creating GitHub release ${TAG} failed with HTTP ${status}"
+              printf '%s\n' "$out" | head -n -1
+              exit 1
+            fi
+            id=$(printf '%s' "$out" | head -n -1 | jq -r '.id')
+          fi
+
+          asset_q="$(printf '%s' "${asset}" | jq -sRr @uri)"
+          up=$(curl -s -o /dev/null -w '%{http_code}' -X POST "${auth[@]}" \
+            -H "Content-Type: application/vnd.android.package-archive" \
+            --data-binary "@${asset}" \
+            "https://uploads.github.com/repos/armeehn/carlauncher-releases/releases/${id}/assets?name=${asset_q}")
+          if [ "$up" != "201" ]; then
+            echo "::error::attaching ${asset} to GitHub release ${TAG} failed with HTTP ${up}"
+            exit 1
+          fi
+          echo "Published ${TAG} to carlauncher-releases with ${asset} (sha256 ${sha})."
