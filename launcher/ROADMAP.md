@@ -151,9 +151,19 @@ reader into re-deriving settled decisions.
 
 Not blocked forever, just not buildable from here. Each needs one session at the vehicle.
 
-- **CAN bulk-frame speed decode**, preferred over GPS. The capture instrument shipped; the
-  decoder needs one real capture. This is what makes the safety gate work in a garage and at
-  power-on, where GPS cannot.
+- **CAN bulk-frame speed decode**, preferred over GPS. This is what makes the safety gate work
+  in a garage and at power-on, where GPS cannot. _Progress (vc72, 2026-08-29): `HiworldCanDecoder`
+  is now wired into the CAN capture screen, decoding the live CANBOX digest — RPM, hybrid battery,
+  SWC, doors, steering and range are confirmed and shown. **Speed and gear are NOT finished:** a real
+  drive (0→54.8 km/h vs head-unit GPS) proved road speed is not the `0x32` field the decoder assumed
+  (that correlation was an interpolation artifact across a 5.7-min GPS dropout). The true speed is
+  `0x17 p[0:1]` (accurate, ~0.1 km/h/LSB — raw 540 = 54.0 km/h — but low-rate and calibrated on only
+  2 points) and `0x13 p[0:1]` (live ~10 Hz, scale unconfirmed, R²≈0.66). Both are decoded and shown as
+  **candidates**, kept out of the motion gate. Gear: only **reverse** is in the digest (`0x71` bit
+  `0x02`); P/N/D are not transmitted (the `0x1A` byte is a shift transient — D reads the same as N
+  while driving). Remaining work: a **steady-cruise capture** (hold 20/40/60/80 km/h ~10 s each, with
+  continuous 5–10 Hz GPS, no dropout) to calibrate `SPEED_017_SCALE_KMH` / the `0x13` scale; P/N/D
+  likely must be inferred (reverse from `0x71`, "in-gear & moving" from speed)._
 - **Radar byte layout confirmation**, which unblocks radar history on the dashboard.
 - **The LHD/RHD auto table.** The manual override works; the automatic side detection is inert
   because the vendor car-type values are unknown. One device read, then one line.

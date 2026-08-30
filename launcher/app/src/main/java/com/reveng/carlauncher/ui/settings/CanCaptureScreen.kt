@@ -22,7 +22,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import com.reveng.carlauncher.ui.theme.JetBrainsMono
 import com.reveng.carlauncher.carlib.CanFrame
+import com.reveng.carlauncher.carlib.CanSignal
 import com.reveng.carlauncher.carlib.CarEvents
+import com.reveng.carlauncher.carlib.HiworldCanDecoder
 import com.reveng.carlauncher.carlib.RadarCapture
 import com.reveng.carlauncher.ui.collectAsStateSafe
 import com.reveng.carlauncher.ui.theme.carShape
@@ -60,11 +62,18 @@ fun CanCaptureScreen(
 
     var capture by remember { mutableStateOf(RadarCapture()) }
     var lastFrame by remember { mutableStateOf<CanFrame?>(null) }
+    // Latest decoded value per label, from HiworldCanDecoder. Each opcode arrives in its own
+    // frame, so we merge rather than replace — the table shows the freshest reading of each.
+    var decoded by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     LaunchedEffect(frame) {
         val f = frame ?: return@LaunchedEffect
         lastFrame = f
         val bytes = f.bytes ?: return@LaunchedEffect
         capture = capture.accept(bytes)
+        HiworldCanDecoder.decodeFrame(bytes)?.let { sig ->
+            val rows = decodedRows(sig)
+            if (rows.isNotEmpty()) decoded = decoded + rows
+        }
     }
 
     SettingsScaffold(
@@ -88,6 +97,30 @@ fun CanCaptureScreen(
                 InfoRow(
                     label = "Payload",
                     value = f.bytes?.let { "byte[${it.size}]" } ?: "none found",
+                )
+            }
+        }
+
+        SettingsSection(title = "Decoded (HiworldCanDecoder)") {
+            if (decoded.isEmpty()) {
+                Text(
+                    text = "No frame decoded yet. Confirmed signals (RPM, hybrid, SWC, doors, " +
+                        "steering, range) appear as their frames arrive on a running car.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                decoded.forEach { (label, value) -> InfoRow(label = label, value = value) }
+                Spacer(Modifier.size(8.dp))
+                Text(
+                    text = "Speed is a CANDIDATE, not calibrated: the 2026-08-29 drive proved road " +
+                        "speed is NOT the 0x32 field. The real speed is 0x17 (accurate ~0.1 km/h but " +
+                        "low-rate, scale on 2 points) and 0x13 p[0:1] (live ~10 Hz, scale unconfirmed) " +
+                        "— a steady-cruise capture is needed to finish calibration. Gear: only REVERSE " +
+                        "is in the digest (0x71 bit 0x02); P/N/D are not transmitted, so 0x1A gear bytes " +
+                        "are raw only. None of these feed the motion gate or dashboard.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
                 )
             }
         }
@@ -175,6 +208,50 @@ private fun dumpToLog(frame: CanFrame?, capture: RadarCapture) {
             ),
         )
     }
+}
+
+/**
+ * Flatten one decoded [CanSignal] into label→value rows for the Decoded section. Confirmed
+ * signals are shown plainly; speed and gear are labelled RAW because the 0x32 speed field and
+ * the 0x1A gear codes are not yet calibrated (see the caveat rendered under the section).
+ */
+private fun decodedRows(sig: CanSignal): Map<String, String> = when (sig) {
+    is CanSignal.VehicleInfo -> buildMap {
+        put("RPM", sig.rpm.toString())
+        put("0x32 p[4:5] (NOT speed)", sig.speedRaw.toString())
+        put("Coolant", sig.coolantC?.let { "$it °C" } ?: "—")
+    }
+    is CanSignal.SpeedCandidate -> mapOf(
+        "Speed (${sig.source} candidate, ~0.1 km/h)" to "%.1f km/h (raw %d)".format(sig.kmh, sig.raw),
+    )
+    is CanSignal.Hybrid -> buildMap {
+        put("Hybrid battery", "${sig.batteryLevel}/15")
+        put("Energy flow", "0x%02X".format(sig.energyFlowRaw))
+    }
+    is CanSignal.BasicStatus -> buildMap {
+        put("SWC button", "${sig.swcButtonId}" + if (sig.swcPressed) " (pressed)" else "")
+        put("Driver door", if (sig.doorFrontLeftOpen) "open" else "closed")
+        put("Steering", "%.1f°".format(sig.steerAngleDeg))
+    }
+    is CanSignal.Tpms -> buildMap {
+        fun kpa(v: Int?) = v?.let { "$it kPa" } ?: "—"
+        put("TPMS FL/FR", "${kpa(sig.frontLeftKpa)} / ${kpa(sig.frontRightKpa)}")
+        put("TPMS RL/RR", "${kpa(sig.rearLeftKpa)} / ${kpa(sig.rearRightKpa)}")
+    }
+    is CanSignal.ParkingRadar -> buildMap {
+        fun cm(l: List<Int?>) = l.joinToString(" ") { it?.toString() ?: "–" }
+        put("Radar rear", cm(sig.rearCm))
+        put("Radar front", cm(sig.frontCm))
+    }
+    is CanSignal.TripInfo -> buildMap {
+        put("Range to empty", sig.rangeToEmptyKm?.let { "$it km" } ?: "—")
+        put("Speed (0x13 live candidate, raw)", sig.speedCandidateRaw.toString())
+    }
+    is CanSignal.RpmGearMirror -> mapOf(
+        "Gear raw (0x1A b1,b5)" to "0x%02X,0x%02X".format(sig.gearRawB1, sig.gearRawB5),
+    )
+    is CanSignal.Version -> mapOf("CANBOX firmware" to sig.text)
+    else -> emptyMap()
 }
 
 private const val LOG_TAG = "CanCapture"
