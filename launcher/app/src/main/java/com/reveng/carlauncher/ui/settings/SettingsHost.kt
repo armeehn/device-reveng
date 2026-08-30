@@ -31,6 +31,7 @@ import com.reveng.carlauncher.data.CarSettingsController
 import com.reveng.carlauncher.data.RadioPresetsStore
 import com.reveng.carlauncher.data.RootTierController // v2.9
 import com.reveng.carlauncher.data.SettingsStore
+import com.reveng.carlauncher.data.UpdateController // v0.7 auto-updater
 import com.reveng.carlauncher.ui.ParkedOnly // v2.5
 
 /**
@@ -53,6 +54,7 @@ fun SettingsHost(
     carEvents: CarEvents,
     radioPresetsStore: RadioPresetsStore,
     rootTier: RootTierController, // v2.9
+    updater: UpdateController, // v0.7 auto-updater
     onExit: () -> Unit,
     // The launcher-owned instance, so the app-directory screen and the drawer read one store.
     appDirectoryStore: AppDirectoryStore? = null,
@@ -231,6 +233,12 @@ fun SettingsHost(
                 onBack = ::pop,
             )
 
+            // v0.7: pull-from-GitHub auto-updater.
+            SettingsRoute.Updates -> UpdatesScreen(
+                updater = updater,
+                onBack = ::pop,
+            )
+
             SettingsRoute.Advanced -> ParkedOnly(
                 feature = "The SysVar browser",
                 onBack = ::pop,
@@ -296,4 +304,5 @@ sealed interface SettingsRoute {
     data object System : SettingsRoute
     data object Advanced : SettingsRoute
     data object SysVarExport : SettingsRoute // v0.4.7
+    data object Updates : SettingsRoute // v0.7 auto-updater
 }
