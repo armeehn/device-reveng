@@ -487,50 +487,35 @@ jobs:
           fi
           echo "Published ${TAG} with ${asset} (sha256 ${sha})."
 
-      # Mirror the release to GitHub. The git refs (commits and tags) already
-      # flow to github.com/armeehn/device-reveng through the repo mirror, but a
-      # release OBJECT and its APK asset are not refs — they stopped appearing
-      # on GitHub when CI moved here (last one was vc71). The launcher's
-      # in-app auto-updater reads GitHub (the head unit's internet is the phone
-      # hotspot, and the tailnet ACL doesn't let the car reach this Gitea), so
-      # without this step the updater would sit on a stale release list forever.
+      # Publish the release to github.com/armeehn/carlauncher-releases — a PUBLIC,
+      # releases-only repo (the source stays here, private). The launcher's in-app
+      # auto-updater pulls from it: the head unit's internet is the phone hotspot,
+      # and the tailnet ACL doesn't let the car reach this Gitea — and because the
+      # repo is public, the car needs no credential, ever. The tag is created in
+      # that repo by the release call itself (on its default branch — the tag name
+      # alone carries the build identity; the notes name the source commit).
       #
-      # GH_MIRROR_TOKEN is a fine-grained PAT with contents:read-write on the
-      # mirror repo only. Absent secret -> the step logs and succeeds, same
-      # convention as the RELEASE_* signing secrets: nothing in this workflow
-      # hard-requires owner-held credentials.
-      - name: Mirror release to GitHub
+      # GH_RELEASES_TOKEN is a GitHub token with contents:write on
+      # carlauncher-releases only. Absent secret -> the step logs and succeeds,
+      # same convention as the RELEASE_* signing secrets: nothing in this
+      # workflow hard-requires owner-held credentials.
+      - name: Publish release to GitHub (carlauncher-releases)
         env:
-          GH_TOKEN: ${{ secrets.GH_MIRROR_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_RELEASES_TOKEN }}
           TAG: ${{ steps.version.outputs.tag }}
           VERSION_NAME: ${{ steps.version.outputs.name }}
           VERSION_CODE: ${{ steps.version.outputs.code }}
         run: |
           set -euo pipefail
           if [ -z "${GH_TOKEN}" ]; then
-            echo "GH_MIRROR_TOKEN not set — skipping the GitHub release mirror."
+            echo "GH_RELEASES_TOKEN not set — skipping the GitHub release publish."
             exit 0
           fi
-          api="https://api.github.com/repos/armeehn/device-reveng"
+          api="https://api.github.com/repos/armeehn/carlauncher-releases"
           auth=(-H "Authorization: Bearer ${GH_TOKEN}" -H "X-GitHub-Api-Version: 2022-11-28")
 
           asset="carlauncher-${TAG}.apk"   # prepared by the previous step
           sha="$(sha256sum "${asset}" | cut -d' ' -f1)"
-
-          # The commit reaches GitHub via the repo mirror, on the mirror's own
-          # schedule — poll for it rather than racing it. A timeout fails the
-          # step; every call here is idempotent, so a re-run picks up cleanly.
-          for i in $(seq 1 20); do
-            code=$(curl -s -o /dev/null -w '%{http_code}' "${auth[@]}" \
-              "${api}/commits/${GITHUB_SHA}")
-            [ "$code" = "200" ] && break
-            if [ "$i" = "20" ]; then
-              echo "::error::${GITHUB_SHA} never appeared on GitHub (mirror lag?) — re-run this job once it has."
-              exit 1
-            fi
-            echo "Commit not on GitHub yet (attempt ${i}) — waiting 30s for the mirror."
-            sleep 30
-          done
 
           # Idempotent like the Gitea steps: an existing release is left alone
           # unless its APK is missing, in which case only the upload is redone.
@@ -545,7 +530,7 @@ jobs:
             fi
           else
             notes=$(cat <<EOF
-          Built by CI from commit \`${GITHUB_SHA}\`.
+          Built by CI from device-reveng commit \`${GITHUB_SHA}\`.
 
           | | |
           |---|---|
@@ -561,8 +546,8 @@ jobs:
             )
             out=$(curl -s -w '\n%{http_code}' -X POST "${auth[@]}" \
               -H "Content-Type: application/json" "${api}/releases" \
-              -d "$(jq -n --arg t "$TAG" --arg s "$GITHUB_SHA" --arg b "$notes" \
-                         '{tag_name:$t, target_commitish:$s, name:$t, body:$b, draft:false, prerelease:false}')")
+              -d "$(jq -n --arg t "$TAG" --arg b "$notes" \
+                         '{tag_name:$t, name:$t, body:$b, draft:false, prerelease:false}')")
             status=$(printf '%s' "$out" | tail -1)
             if [ "$status" != "201" ]; then
               echo "::error::creating GitHub release ${TAG} failed with HTTP ${status}"
@@ -576,9 +561,9 @@ jobs:
           up=$(curl -s -o /dev/null -w '%{http_code}' -X POST "${auth[@]}" \
             -H "Content-Type: application/vnd.android.package-archive" \
             --data-binary "@${asset}" \
-            "https://uploads.github.com/repos/armeehn/device-reveng/releases/${id}/assets?name=${asset_q}")
+            "https://uploads.github.com/repos/armeehn/carlauncher-releases/releases/${id}/assets?name=${asset_q}")
           if [ "$up" != "201" ]; then
             echo "::error::attaching ${asset} to GitHub release ${TAG} failed with HTTP ${up}"
             exit 1
           fi
-          echo "Mirrored ${TAG} to GitHub with ${asset} (sha256 ${sha})."
+          echo "Published ${TAG} to carlauncher-releases with ${asset} (sha256 ${sha})."

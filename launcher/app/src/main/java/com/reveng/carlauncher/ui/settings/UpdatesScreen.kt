@@ -89,7 +89,7 @@ fun UpdatesScreen(
         SettingsSection(title = "Automatic") {
             ToggleSetting(
                 label = "Check at startup",
-                description = "Once a day, when the launcher starts and a token is set",
+                description = "Once a day, when the launcher starts",
                 checked = settings.autoCheck,
                 onChange = updater::setAutoCheck,
             )
@@ -102,11 +102,11 @@ fun UpdatesScreen(
             )
         }
 
-        SettingsSection(title = "GitHub token") {
+        SettingsSection(title = "GitHub token (optional)") {
             Text(
-                text = "The repo is private, so checks need a fine-grained token with " +
-                    "read access to armeehn/device-reveng. Type it here, or skip the car " +
-                    "keyboard: adb push token.txt " +
+                text = "Releases come from the public carlauncher-releases repo, so no " +
+                    "token is needed. Set one only if anonymous checks hit GitHub's " +
+                    "rate limit. To skip the car keyboard: adb push token.txt " +
                     "/sdcard/Android/data/${BuildConfig.APPLICATION_ID}/files/updates/github-token.txt " +
                     "— it is imported and deleted on the next check.",
                 style = MaterialTheme.typography.bodySmall,
