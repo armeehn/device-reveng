@@ -1,0 +1,79 @@
+# GitHub-side CI for outside contributors.
+#
+# The full matrix (emulator UI tests, cold-start budget, APK size budget, release
+# publishing) runs on the self-hosted Gitea runner from .gitea/workflows/launcher-ci.yml,
+# which has the head-unit AVD and the signing secrets. This workflow deliberately keeps
+# only the three checks that need no emulator and no secrets, so a pull request from a
+# fork gets a real signal in a few minutes.
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "launcher/**"
+      - ".github/workflows/ci.yml"
+  pull_request:
+    paths:
+      - "launcher/**"
+      - ".github/workflows/ci.yml"
+  workflow_dispatch: {}
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: launcher
+    steps:
+      # Full history: versionCode is the git commit count, derived in
+      # app/build.gradle.kts, which refuses a shallow clone at configure time.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # The launcher builds without the rav4-apps submodule, and that submodule
+          # is a separate repository — never make a fork's CI depend on access to it.
+          submodules: false
+
+      # AGP 8.5 / Kotlin 2.0 need JDK 17; a newer system JDK breaks the Kotlin compile.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # Ordered fastest-failing first: a broken decoder fails in about a minute
+      # rather than after a full R8 pass.
+      - name: Unit tests
+        run: ./gradlew --no-daemon test
+
+      # assembleRelease deliberately skips lint-vital, so this is the only lint run.
+      # Errors fail the job; warnings do not. Pre-existing errors are frozen in
+      # app/lint-baseline.xml — shrink it, never grow it.
+      - name: Lint
+        run: ./gradlew --no-daemon :app:lintRelease
+
+      # Exercises R8 + resource shrinking, which is what actually ships. Without the
+      # RELEASE_* secrets this signs with the debug key, which is fine for a check —
+      # the artifact below is for inspection, not for installing over a real unit.
+      - name: Assemble release
+        run: ./gradlew --no-daemon :app:assembleRelease
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports
+          path: |
+            launcher/*/build/reports/tests/
+            launcher/app/build/reports/lint-results-release.html
+          if-no-files-found: ignore

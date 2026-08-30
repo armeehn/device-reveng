@@ -1,0 +1,54 @@
+name: Bug report
+description: Something in the launcher or the scripts misbehaves
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Head-unit bugs are almost always variant-specific. The hardware fields below
+        are what make a report actionable — please fill them in.
+  - type: input
+    id: unit
+    attributes:
+      label: Head unit
+      description: "Marketing name and MCU. Run: adb shell getprop | grep -E 'ro.product.(model|device)|persist.sys.mcu'"
+      placeholder: "GT6-EAU, MCU RLC0_GT6E"
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Launcher version
+      description: Settings → About, or the APK filename.
+      placeholder: "0.4.<versionCode>"
+    validations:
+      required: true
+  - type: dropdown
+    id: rooted
+    attributes:
+      label: Is the unit rooted?
+      options: ["Yes — Magisk", "No", "Not sure"]
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you expected, and what you got instead.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. ...
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logcat (optional)
+      description: "adb logcat -d | grep -i carlauncher — scrub IPs, serials and VINs first."
+      render: shell

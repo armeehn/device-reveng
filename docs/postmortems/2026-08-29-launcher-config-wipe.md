@@ -37,7 +37,7 @@ same feature packages.
 - Owner directive: adopt a real release keystore going forward.
 - Generated `carlauncher-release.jks` (RSA-4096, `CN=carlauncher`, SHA-256 `76e003ea…`),
   distributed to laptop + x, wired the env-var signing scheme (per `SIGNING.md`).
-- **Uninstalled** `com.reveng.carlauncher` (required to switch keys) **→ config wiped** →
+- **Uninstalled** `com.ripostelabs.carlauncher` (required to switch keys) **→ config wiped** →
   reinstalled `0.4.114` release-signed, re-granted root + 3 listeners.
 - Owner reported the regression. Investigation: `main` intact; on-car build was PR #51.
 - Restored PR #51 by re-signing its APK with the release key and `install -r` (uid preserved,
@@ -74,7 +74,7 @@ same feature packages.
 ## Action items
 
 1. **Never uninstall the launcher without a data backup first.** Pull
-   `/data/data/com.reveng.carlauncher/files/datastore/` (or run in-app `LauncherBackup` and
+   `/data/data/com.ripostelabs.carlauncher/files/datastore/` (or run in-app `LauncherBackup` and
    `adb pull` it off-device) before any uninstall / signing-key switch. *(Saved to memory.)*
 2. **Treat draft PRs as device state, not just proposals.** Before building "`main`" for the
    device, check what the unit is actually running (`dumpsys package … versionName`) and which

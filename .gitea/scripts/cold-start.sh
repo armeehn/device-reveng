@@ -27,8 +27,8 @@ APK_DIR="${1:-apk}"
 # application ID only — the namespace, and so the activity's class name, is unchanged. The
 # component is therefore <debug application id>/<undecorated class>, which look mismatched
 # side by side and are meant to.
-PACKAGE="com.reveng.carlauncher.debug"
-ACTIVITY="com.reveng.carlauncher.MainActivity"
+PACKAGE="com.ripostelabs.carlauncher.debug"
+ACTIVITY="com.ripostelabs.carlauncher.MainActivity"
 RUNS=5
 BUDGET_MS=2500
 

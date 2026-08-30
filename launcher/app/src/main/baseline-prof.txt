@@ -30,39 +30,39 @@
 # =====================================================================================
 
 # ---- The startup path proper --------------------------------------------------------
-HSPLcom/reveng/carlauncher/MainActivity;->**(**)**
-HSPLcom/reveng/carlauncher/MainActivity$**;->**(**)**
-HSPLcom/reveng/carlauncher/AppRepository;->**(**)**
-HSPLcom/reveng/carlauncher/HomeRole;->**(**)**
+HSPLcom/ripostelabs/carlauncher/MainActivity;->**(**)**
+HSPLcom/ripostelabs/carlauncher/MainActivity$**;->**(**)**
+HSPLcom/ripostelabs/carlauncher/AppRepository;->**(**)**
+HSPLcom/ripostelabs/carlauncher/HomeRole;->**(**)**
 
 # ---- Theme resolution: runs before the first frame can be drawn ----------------------
-HSPLcom/reveng/carlauncher/ui/theme/**;->**(**)**
-HSPLcom/reveng/carlauncher/data/ThemeStore;->**(**)**
-HSPLcom/reveng/carlauncher/data/ThemeStore$**;->**(**)**
-HSPLcom/reveng/carlauncher/data/SettingsStore;->**(**)**
-HSPLcom/reveng/carlauncher/data/SettingsStore$**;->**(**)**
+HSPLcom/ripostelabs/carlauncher/ui/theme/**;->**(**)**
+HSPLcom/ripostelabs/carlauncher/data/ThemeStore;->**(**)**
+HSPLcom/ripostelabs/carlauncher/data/ThemeStore$**;->**(**)**
+HSPLcom/ripostelabs/carlauncher/data/SettingsStore;->**(**)**
+HSPLcom/ripostelabs/carlauncher/data/SettingsStore$**;->**(**)**
 
 # ---- The first composition -----------------------------------------------------------
-HSPLcom/reveng/carlauncher/ui/HomeScreen**;->**(**)**
-HSPLcom/reveng/carlauncher/ui/StatusBar**;->**(**)**
-HSPLcom/reveng/carlauncher/ui/AppDrawer**;->**(**)**
-HSPLcom/reveng/carlauncher/ui/ComposeUtil**;->**(**)**
-HSPLcom/reveng/carlauncher/ui/ParkedOnly**;->**(**)**
+HSPLcom/ripostelabs/carlauncher/ui/HomeScreen**;->**(**)**
+HSPLcom/ripostelabs/carlauncher/ui/StatusBar**;->**(**)**
+HSPLcom/ripostelabs/carlauncher/ui/AppDrawer**;->**(**)**
+HSPLcom/ripostelabs/carlauncher/ui/ComposeUtil**;->**(**)**
+HSPLcom/ripostelabs/carlauncher/ui/ParkedOnly**;->**(**)**
 
 # ---- carlib: receivers and the bound service are wired in onCreate -------------------
-HSPLcom/reveng/carlauncher/carlib/CarEvents;->**(**)**
-HSPLcom/reveng/carlauncher/carlib/CarEvents$**;->**(**)**
-HSPLcom/reveng/carlauncher/carlib/CarService;->**(**)**
-HSPLcom/reveng/carlauncher/carlib/CarService$**;->**(**)**
-HSPLcom/reveng/carlauncher/carlib/SysVar;->**(**)**
-HSPLcom/reveng/carlauncher/carlib/RootShell;->**(**)**
-HSPLcom/reveng/carlauncher/carlib/GpsSpeedSource;->**(**)**
+HSPLcom/ripostelabs/carlauncher/carlib/CarEvents;->**(**)**
+HSPLcom/ripostelabs/carlauncher/carlib/CarEvents$**;->**(**)**
+HSPLcom/ripostelabs/carlauncher/carlib/CarService;->**(**)**
+HSPLcom/ripostelabs/carlauncher/carlib/CarService$**;->**(**)**
+HSPLcom/ripostelabs/carlauncher/carlib/SysVar;->**(**)**
+HSPLcom/ripostelabs/carlauncher/carlib/RootShell;->**(**)**
+HSPLcom/ripostelabs/carlauncher/carlib/GpsSpeedSource;->**(**)**
 
 # ---- Classes, not just methods -------------------------------------------------------
-Lcom/reveng/carlauncher/MainActivity;
-Lcom/reveng/carlauncher/AppRepository;
-Lcom/reveng/carlauncher/carlib/CarEvents;
-Lcom/reveng/carlauncher/carlib/CarService;
-Lcom/reveng/carlauncher/carlib/SysVar;
-Lcom/reveng/carlauncher/data/ThemeStore;
-Lcom/reveng/carlauncher/data/SettingsStore;
+Lcom/ripostelabs/carlauncher/MainActivity;
+Lcom/ripostelabs/carlauncher/AppRepository;
+Lcom/ripostelabs/carlauncher/carlib/CarEvents;
+Lcom/ripostelabs/carlauncher/carlib/CarService;
+Lcom/ripostelabs/carlauncher/carlib/SysVar;
+Lcom/ripostelabs/carlauncher/data/ThemeStore;
+Lcom/ripostelabs/carlauncher/data/SettingsStore;

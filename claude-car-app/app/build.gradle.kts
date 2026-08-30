@@ -7,11 +7,11 @@ plugins {
 }
 
 android {
-    namespace = "com.reveng.claudecar"
+    namespace = "com.ripostelabs.claudecar"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.reveng.claudecar"
+        applicationId = "com.ripostelabs.claudecar"
         minSdk = 33
         targetSdk = 33
         versionCode = 1

@@ -43,11 +43,11 @@ val gitVersionCode = git("rev-list", "--count", versionAnchor).toIntOrNull()
     ?: throw GradleException("Not a git checkout — the launcher version is derived from git history.")
 
 android {
-    namespace = "com.reveng.carlauncher"
+    namespace = "com.ripostelabs.carlauncher"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.reveng.carlauncher"
+        applicationId = "com.ripostelabs.carlauncher"
         minSdk = 33
         targetSdk = 33
         versionCode = gitVersionCode

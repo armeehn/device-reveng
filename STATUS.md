@@ -24,7 +24,7 @@ _Last updated: 2026-08-28. Unit: Choiceway/AiNavi **GT6-EAU**, Qualcomm **QCM612
 5. **Performance / boot-time.**
 
 ## 📱 CarLauncher — our own home app (`launcher/`)
-- **What it is.** `com.reveng.carlauncher`, a Kotlin + Jetpack Compose HOME launcher written for
+- **What it is.** `com.ripostelabs.carlauncher`, a Kotlin + Jetpack Compose HOME launcher written for
   this unit, talking to the vendor gateway `com.szchoiceway.eventcenter` per `CAR_API.md`. Two
   Gradle modules: `carlib` (car integration layer) + `app` (UI). Currently **0.4.3.2**; 1.0 is
   reserved for a polished public release.
@@ -49,7 +49,7 @@ _Last updated: 2026-08-28. Unit: Choiceway/AiNavi **GT6-EAU**, Qualcomm **QCM612
 - **Docs:** `launcher/README.md` (what each release actually shipped) and `LAUNCHER_DESIGN.md`
   (UI/UX spec + the capability tiers).
 
-## 🗂️ Staged assets (all under /home/sasha/rav4-headunit/)
+## 🗂️ Staged assets (all under `$RAV4_HOME`, default `~/rav4-headunit/`)
 - `run/` — loader, TWRP (recovery_ADB.img / recovery_KB.img), Magisk.apk/.zip
 - `edl/` — working edl.py; `backup-20260827-092204/` — the backup
 - `gt6-fw/` — correct firmware + MCU (RLC0.bin) + rlc0-unpack/
