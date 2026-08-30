@@ -190,6 +190,32 @@ Open on the suite side of the boundary (tracked in `armeehn/rav4-apps`, not here
 reads the provider and paints it, falling back to its built-in palette when the launcher is
 absent or older.
 
+## 0.6 and 0.7 — delivered in the app suite
+
+Neither milestone changed the launcher, and the base jumps 0.5 → 0.7 with no 0.6 build in
+between. That is deliberate, and recorded here because a reader comparing tags will otherwise
+assume a release went missing.
+
+**The base names the project's milestone, not this module's changes.** From 0.5 the launcher and
+the standalone `com.reveng.*` suite (`armeehn/rav4-apps`) are one product: the launcher publishes
+the palette and the session registry, the suite consumes them, and a milestone is only real when
+both sides of the boundary work. 0.6 and 0.7 were entirely on the suite's side of it:
+
+- **0.6 — the suite paints the launcher's palette.** 0.5 shipped the provider; the suite's Java
+  call sites followed, but colours written in *XML* resolve at inflate time and stayed on the
+  built-in palette. On a light theme that produced a half-themed screen — light ground, dark
+  cards. The suite now re-colours its finished view tree, and re-paints live when the palette
+  changes.
+- **0.7 — the suite became a citizen of the car's audio.** Its apps never requested audio focus,
+  so they played over the radio and never ducked for navigation; and none published a
+  `MediaSession`, which is what **this launcher's own now-playing card reads**. Our Music app was
+  invisible to our own home screen, and the steering-wheel media keys reached nothing. Both are
+  fixed on the suite side, against the interfaces this module already exposed.
+
+Verified on the emulated head unit: the launcher's now-playing card shows the suite's Music app
+with live position, and pausing from that card pauses the app through the session — the same path
+the wheel's buttons use.
+
 ## Deferred — needs the car, not the desk
 
 Not blocked forever, just not buildable from here. Each needs one session at the vehicle.
