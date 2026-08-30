@@ -3,7 +3,6 @@ package com.reveng.carlauncher.ui
 import android.os.SystemClock
 import com.reveng.carlauncher.ui.theme.carCard
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -52,7 +51,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -397,9 +395,6 @@ private fun FavoriteChip(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
 ) {
-    val bmp = remember(app.packageName + app.activityName) {
-        app.icon.toBitmap(width = 96, height = 96).asImageBitmap()
-    }
     Row(
         modifier = Modifier
             .clip(carShape(14.dp))
@@ -409,12 +404,7 @@ private fun FavoriteChip(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Image(
-            bitmap = bmp,
-            contentDescription = app.label,
-            contentScale = ContentScale.Fit,
-            modifier = Modifier.size(36.dp),
-        )
+        AppIcon(app = app, size = 36.dp)
         Text(
             text = app.label,
             style = MaterialTheme.typography.titleMedium,
@@ -451,12 +441,7 @@ private fun AppTile(
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Box(contentAlignment = Alignment.TopEnd) {
-            Image(
-                painter = rememberDrawablePainter(app),
-                contentDescription = app.label,
-                contentScale = ContentScale.Fit,
-                modifier = Modifier.size(72.dp),
-            )
+            AppIcon(app = app, size = 72.dp)
             if (favorite) {
                 Icon(
                     imageVector = Icons.Filled.Star,

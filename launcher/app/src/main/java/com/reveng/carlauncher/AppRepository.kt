@@ -50,6 +50,17 @@ class AppRepository(private val context: Context) {
         "com.zjinnova.zlink",
     )
 
+    /**
+     * Never shown in the drawer, search, or app directory: the launcher itself (both build
+     * variants — the release/debug sibling otherwise shows up as a second "Car Launcher")
+     * and the Claude apps, which live on the quick-launch grid instead (see HomeScreen's
+     * pinned slots, resolved through [resolveApp]).
+     */
+    private val hiddenFromUiPrefixes = listOf(
+        "com.reveng.carlauncher",
+        "com.reveng.claudecar",
+    )
+
     /** Package prefixes to always push into the System folder regardless of flags. */
     private val alwaysHidePrefixes = listOf(
         "com.szchoiceway.",
@@ -87,6 +98,7 @@ class AppRepository(private val context: Context) {
             .mapNotNull { ri ->
                 val ai = ri.activityInfo ?: return@mapNotNull null
                 if (ai.packageName == self) return@mapNotNull null
+                if (hiddenFromUiPrefixes.any { ai.packageName.startsWith(it) }) return@mapNotNull null
                 AppInfo(
                     label = ri.loadLabel(pm).toString(),
                     packageName = ai.packageName,
@@ -98,6 +110,24 @@ class AppRepository(private val context: Context) {
             .distinctBy { it.packageName + "/" + it.activityName }
             .sortedBy { it.label.lowercase() }
             .toList()
+    }
+
+    /**
+     * Resolve a single package into an [AppInfo], including ones [loadApps] filters out of
+     * the UI lists (the quick-launch grid pins Claude, which is hidden from the drawer).
+     * Null when the package isn't installed or has no launchable activity.
+     */
+    fun resolveApp(packageName: String): AppInfo? {
+        val launch = pm.getLaunchIntentForPackage(packageName) ?: return null
+        val component = launch.component ?: return null
+        val ri = pm.resolveActivity(launch, PackageManager.ResolveInfoFlags.of(0L)) ?: return null
+        return AppInfo(
+            label = ri.loadLabel(pm).toString(),
+            packageName = packageName,
+            activityName = component.className,
+            icon = ri.loadIcon(pm),
+            isSystem = false,
+        )
     }
 
     /** Launch an app. Falls back to the package's default launch intent. */

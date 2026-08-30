@@ -1,6 +1,6 @@
 package com.reveng.carlauncher.ui
 
-import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -15,9 +15,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import com.reveng.carlauncher.ui.theme.carShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -34,14 +31,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.focusGroup
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.core.graphics.drawable.toBitmap
 import com.reveng.carlauncher.AppInfo
 import com.reveng.carlauncher.AppRepository
 import com.reveng.carlauncher.R
@@ -70,7 +63,7 @@ import kotlinx.coroutines.withContext
  *
  *   [ StatusBar — full width ]
  *   ┌ LEFT (glance) ┬ CENTER (app grid) ┬ RIGHT (driver thumb) ┐
- *   │ MediaCard     │ AppDrawer 2×N     │ QuickLaunch column    │
+ *   │ MediaCard     │ AppDrawer 2×N     │ QuickLaunch 2×3 grid  │
  *   │ ClimateReadout│ (system folder)   │ RadioCard             │
  *   └───────────────┴───────────────────┴───────────────────────┘
  *
@@ -141,9 +134,21 @@ fun HomeScreen(
 
     // v0.8: the roving focus ring shared with the SWC / DPAD key dispatcher (MainActivity).
     val focus = LocalLauncherFocus.current
-    // v2.7: the Jellyfin quick-launch preset. Ordering only — the tile was already in the drawer,
-    // this just puts it in the driver's thumb column instead of alphabetically wherever it fell.
-    val quickApps = JellyfinApp.pinFirst(userApps) { it.packageName }.take(QUICK_LAUNCH_SLOTS)
+    // v0.4.7: pinned quick-launch slots, resolved directly through the repository so Claude
+    // still shows up even though loadApps hides it from the drawer. The remaining grid slots
+    // fill from the Home apps with the Jellyfin client hoisted first (v2.7).
+    var quickPins by remember { mutableStateOf<List<AppInfo>>(emptyList()) }
+    LaunchedEffect(Unit) {
+        quickPins = withContext(Dispatchers.IO) {
+            QUICK_LAUNCH_PINNED.mapNotNull(appRepository::resolveApp)
+        }
+    }
+    val quickApps = remember(quickPins, userApps) {
+        val pinned = quickPins.mapTo(HashSet()) { it.packageName }
+        val fill = JellyfinApp.pinFirst(userApps) { it.packageName }
+            .filterNot { it.packageName in pinned }
+        (quickPins + fill).take(QUICK_LAUNCH_SLOTS)
+    }
     SideEffect {
         // Keep the focus model's view of the layout in sync so navigation skips hidden regions.
         focus.showMedia = settings.showMedia
@@ -351,7 +356,7 @@ fun HomeScreen(
                         .fillMaxHeight()
                         .focusGroup(),
                 ) {
-                    QuickLaunchColumn(
+                    QuickLaunchGrid(
                         apps = quickApps,
                         onLaunch = appRepository::launch,
                         focus = focus, // v0.8
@@ -414,23 +419,35 @@ fun HomeScreen(
     }
 }
 
-/** How many tiles the right-hand thumb column holds before the RadioCard claims the rest. */
-private const val QUICK_LAUNCH_SLOTS = 4
+/**
+ * Quick-launch pins, in slot order, always offered ahead of the Home-apps fill. CarPlay comes
+ * first — it must stay one thumb-tap away, and alphabetical luck used to decide whether it
+ * appeared at all. Claude's only surface is this grid (AppRepository hides it from the drawer).
+ */
+private val QUICK_LAUNCH_PINNED = listOf(
+    "com.zjinnova.zlink",   // CarPlay (the Zlink receiver keeps one protocol alias enabled)
+    "com.reveng.claudecar", // Claude
+    "org.linphone",         // VoIP dialer
+)
+
+/** The quick-launch grid is a fixed 2×3: six tiles sharing the space above the RadioCard. */
+private const val QUICK_LAUNCH_SLOTS = 6
+private const val QUICK_LAUNCH_COLUMNS = 2
 
 /**
- * A compact quick-launch column of the driver's most-used apps (LAUNCHER_DESIGN §2.4).
- * Row-per-app icon + label with large tap targets; lives in the closest-reach column.
+ * A compact 2×3 quick-launch grid (LAUNCHER_DESIGN §2.4) in the closest-reach column. The
+ * rows split the available height evenly, so all six tiles always fit with no scrolling
+ * whether or not the RadioCard below is enabled.
  *
- * The rows live in a [LazyColumn]: when the RadioCard below squeezes the column, rows that
- * don't fit are scrollable instead of clipped. SWC focus moves keep the focused row visible
- * by scrolling to it.
+ * SWC focus order is row-major: the existing linear Quick ring in SwcNavigator steps through
+ * tiles in reading order, so every tile stays reachable with no navigator changes.
  */
 @Composable
-private fun QuickLaunchColumn(
+private fun QuickLaunchGrid(
     apps: List<AppInfo>,
     onLaunch: (AppInfo) -> Unit,
     modifier: Modifier = Modifier,
-    focus: LauncherFocus? = null, // v0.8: draw the focus ring on the focused row
+    focus: LauncherFocus? = null, // v0.8: draw the focus ring on the focused tile
 ) {
     Column(
         modifier = modifier,
@@ -442,56 +459,52 @@ private fun QuickLaunchColumn(
             color = MaterialTheme.colorScheme.onBackground,
             modifier = Modifier.padding(start = 8.dp, bottom = 4.dp),
         )
-        val listState = rememberLazyListState()
-        val focusedQuick = (focus?.current as? FocusTarget.Quick)?.index
-        LaunchedEffect(focusedQuick) {
-            if (focusedQuick != null && focusedQuick in apps.indices) {
-                listState.animateScrollToItem(focusedQuick)
-            }
-        }
-        LazyColumn(
-            state = listState,
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            itemsIndexed(
-                apps,
-                key = { _, app -> app.packageName + "/" + app.activityName },
-            ) { index, app ->
-                val rowModifier = if (focus != null) {
-                    Modifier.launcherFocusTarget(focus, FocusTarget.Quick(index), cornerRadiusDp = 15)
-                } else {
-                    Modifier
+            apps.chunked(QUICK_LAUNCH_COLUMNS).forEachIndexed { rowIndex, row ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    row.forEachIndexed { colIndex, app ->
+                        val index = rowIndex * QUICK_LAUNCH_COLUMNS + colIndex
+                        val tileModifier = if (focus != null) {
+                            Modifier
+                                .weight(1f)
+                                .launcherFocusTarget(focus, FocusTarget.Quick(index), cornerRadiusDp = 15)
+                        } else {
+                            Modifier.weight(1f)
+                        }
+                        QuickLaunchTile(app = app, onClick = { onLaunch(app) }, modifier = tileModifier)
+                    }
+                    // Pad a short last row so its tiles keep the same width as full rows.
+                    repeat(QUICK_LAUNCH_COLUMNS - row.size) { Spacer(Modifier.weight(1f)) }
                 }
-                QuickLaunchRow(app = app, onClick = { onLaunch(app) }, modifier = rowModifier)
             }
         }
     }
 }
 
 @Composable
-private fun QuickLaunchRow(app: AppInfo, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val bmp = remember(app.packageName + app.activityName) {
-        app.icon.toBitmap(width = 108, height = 108).asImageBitmap()
-    }
+private fun QuickLaunchTile(app: AppInfo, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val press = withTapFeedback(onClick) // v2.5
     Row(
         modifier = modifier
-            .fillMaxWidth()
+            .fillMaxHeight()
             .clip(carShape(15.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
             .clickable(onClick = press)
-            .padding(horizontal = 8.dp, vertical = 8.dp),
+            .padding(horizontal = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Image(
-            bitmap = bmp,
-            contentDescription = app.label,
-            contentScale = ContentScale.Fit,
-            modifier = Modifier.size(48.dp),
-        )
-        Spacer(Modifier.width(16.dp))
+        AppIcon(app = app, size = 34.dp)
+        Spacer(Modifier.width(8.dp))
         Text(
             text = app.label,
             // §1.1 tile labels ≥22sp — this row is the driver thumb zone's launch surface.
@@ -499,7 +512,6 @@ private fun QuickLaunchRow(app: AppInfo, onClick: () -> Unit, modifier: Modifier
             color = MaterialTheme.colorScheme.onBackground,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Start,
         )
     }
 }
