@@ -1,3 +1,4 @@
 [submodule "rav4-apps"]
 	path = rav4-apps
 	url = ../rav4-apps.git
+	branch = main
