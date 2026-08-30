@@ -37,6 +37,10 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
 
+    <!-- v0.7 auto-updater: HTTPS to the GitHub releases API (UpdateController). The app's
+         first and only network user; everything else on this unit talks AIDL or binder. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <!--
       v3.1 status chips: Bluetooth state. BLUETOOTH_CONNECT is a *runtime* permission on
       API 31+; ungranted, the chip degrades to adapter on/off with no device count (all
