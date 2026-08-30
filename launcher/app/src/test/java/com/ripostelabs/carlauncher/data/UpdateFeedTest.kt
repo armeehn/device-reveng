@@ -2,6 +2,7 @@ package com.ripostelabs.carlauncher.data
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -133,6 +134,74 @@ class UpdateFeedTest {
         val release = UpdateFeed.parseLatest(releaseJson(body = "hand-edited notes"))!!
         assertNull(release.sha256)
         assertEquals(132, release.versionCode)
+    }
+
+    // ---- Self-update guard --------------------------------------------------
+
+    @Test
+    fun aRenamedPackageIsRefusedNotInstalled() {
+        // The real 2026-08-30 case: main's applicationId changed under a launcher that was
+        // still on the old package. Without this refusal the updater installs a SECOND app,
+        // its own versionCode never moves, and it repeats the same "update" forever.
+        val refusal = UpdateFeed.selfUpdateRefusal(
+            apkPackage = "com.ripostelabs.carlauncher",
+            apkVersionCode = 147,
+            ourPackage = "com.reveng.carlauncher",
+            ourVersionCode = 146,
+            releaseName = "0.7.147",
+        )
+        assertNotNull("a package rename must not auto-install", refusal)
+        // The message has to name both packages: "update failed" would send someone hunting a
+        // network bug instead of reading it as the migration it is.
+        assertTrue(refusal!!.contains("com.ripostelabs.carlauncher"))
+        assertTrue(refusal.contains("com.reveng.carlauncher"))
+        assertTrue(refusal.contains("migration"))
+    }
+
+    @Test
+    fun aGenuineSelfUpdateIsAllowed() {
+        assertNull(
+            UpdateFeed.selfUpdateRefusal(
+                apkPackage = "com.ripostelabs.carlauncher",
+                apkVersionCode = 147,
+                ourPackage = "com.ripostelabs.carlauncher",
+                ourVersionCode = 146,
+                releaseName = "0.7.147",
+            )
+        )
+    }
+
+    @Test
+    fun theApkOverrulesTheReleaseNotes() {
+        // Right package, but the file is not actually newer than us — the notes claimed
+        // otherwise. The install decision must follow the APK, not the prose.
+        listOf(146, 145, 0).forEach { code ->
+            assertNotNull(
+                "versionCode $code is not newer than 146",
+                UpdateFeed.selfUpdateRefusal(
+                    apkPackage = "com.ripostelabs.carlauncher",
+                    apkVersionCode = code,
+                    ourPackage = "com.ripostelabs.carlauncher",
+                    ourVersionCode = 146,
+                    releaseName = "0.7.$code",
+                ),
+            )
+        }
+    }
+
+    @Test
+    fun theDebugSuffixCountsAsADifferentApp() {
+        // `.debug` builds install alongside release by design (applicationIdSuffix), so a
+        // release APK is not an update to a debug launcher, however new its versionCode.
+        assertNotNull(
+            UpdateFeed.selfUpdateRefusal(
+                apkPackage = "com.ripostelabs.carlauncher",
+                apkVersionCode = 200,
+                ourPackage = "com.ripostelabs.carlauncher.debug",
+                ourVersionCode = 146,
+                releaseName = "0.7.200",
+            )
+        )
     }
 
     // ---- Comparison ---------------------------------------------------------
