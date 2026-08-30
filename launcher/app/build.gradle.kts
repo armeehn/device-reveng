@@ -22,7 +22,7 @@ plugins {
 
 // 1.0.0 is reserved for the polished public release; change the base only at a
 // deliberate milestone, in its own commit.
-val displayVersionBase = "0.5"
+val displayVersionBase = "0.7"
 
 fun git(vararg args: String): String = providers.exec {
     workingDir = projectDir
