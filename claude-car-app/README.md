@@ -38,9 +38,9 @@ source ~/android-tools/env.sh
 
 `local.properties` (sdk.dir) is gitignored — recreate in a fresh checkout.
 
-Debug builds use applicationId `com.reveng.claudecar.debug` and include x86_64
+Debug builds use applicationId `com.ripostelabs.claudecar.debug` and include x86_64
 for the `rav4_headunit` emulator. This is a normal side-loaded app (not the
-launcher) — installing it does not touch `com.reveng.carlauncher`.
+launcher) — installing it does not touch `com.ripostelabs.carlauncher`.
 
 ## Prereqs on the car
 

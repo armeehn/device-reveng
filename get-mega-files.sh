@@ -3,7 +3,7 @@
 # You run this yourself so it can install a mega client and (if needed) use sudo.
 set -uo pipefail
 
-DEST="/home/sasha/rav4-headunit/thread-dl"
+DEST="${RAV4_HOME:-$HOME/rav4-headunit}/thread-dl"
 mkdir -p "$DEST"
 cd "$DEST"
 

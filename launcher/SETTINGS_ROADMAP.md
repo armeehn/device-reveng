@@ -2,7 +2,7 @@
 
 Goal: **every vendor GT6 setting reachable from our UI**, presented as a *reskinned mirror* of
 the Choiceway/Toyota settings — same structure and options, drawn entirely from our
-[`CarTheme`](app/src/main/java/com/reveng/carlauncher/ui/theme/CarTheme.kt) palette instead of
+[`CarTheme`](app/src/main/java/com/ripostelabs/carlauncher/ui/theme/CarTheme.kt) palette instead of
 the vendor's fixed blue-on-grey look. Built on top of the v1.0 launcher.
 
 ## Architecture

@@ -1,4 +1,4 @@
-# Car Launcher (`com.reveng.carlauncher`)
+# Car Launcher (`com.ripostelabs.carlauncher`)
 
 A custom **companion HOME launcher** for the Choiceway GT6-EAU head unit
 (Android 13 / API 33, 1920x720 landscape @240dpi, **rooted**). It integrates with the
@@ -21,7 +21,7 @@ launcher/
 ├── gradle/wrapper/…             # Gradle 8.9 wrapper
 │
 ├── carlib/                      # Android library — the car integration layer
-│   ├── build.gradle.kts         # namespace com.reveng.carlauncher.carlib, aidl=true, libsu dep
+│   ├── build.gradle.kts         # namespace com.ripostelabs.carlauncher.carlib, aidl=true, libsu dep
 │   ├── consumer-rules.pro       # keep vendor AIDL/Parcelable names
 │   └── src/main/
 │       ├── AndroidManifest.xml  # <uses-permission com.szchoiceway.permission.broadcast>
@@ -29,19 +29,19 @@ launcher/
 │       │   ├── ICommunication.aidl   # gateway → app callback (notifyMessage/checkIsActive)
 │       │   ├── ICallbackfn.aidl      # radio/EQ/CAN setter callback (signature = TODO)
 │       │   └── IEventService.aidl    # bound control service (SUBSET; ordinals = TODO)
-│       └── java/com/reveng/carlauncher/carlib/
+│       └── java/com/ripostelabs/carlauncher/carlib/
 │           ├── CarEvents.kt     # BroadcastReceiver → Flows/callbacks (reverse, ACC, SWC, day/night)
 │           ├── SysVar.kt        # ContentResolver read + root `content` write of SysVarProvider
 │           ├── RootShell.kt     # `su -c` via libsu (reflective) or ProcessBuilder fallback
 │           └── CarService.kt    # binds vendor EventService via IEventService AIDL
 │
 └── app/                         # Android application — the launcher UI
-    ├── build.gradle.kts         # applicationId com.reveng.carlauncher, compose, targetSdk 33
+    ├── build.gradle.kts         # applicationId com.ripostelabs.carlauncher, compose, targetSdk 33
     ├── proguard-rules.pro
     └── src/main/
         ├── AndroidManifest.xml  # HOME activity, singleTask, landscape, QUERY_ALL_PACKAGES
         ├── res/…                # dark car theme, strings, adaptive launcher icon
-        └── java/com/reveng/carlauncher/
+        └── java/com/ripostelabs/carlauncher/
             ├── MainActivity.kt      # ComponentActivity + setContent; wires CarEvents/CarService
             ├── AppRepository.kt     # queryIntentActivities(MAIN/LAUNCHER) + launch
             └── ui/
@@ -56,14 +56,17 @@ launcher/
 
 ## Build
 
-The Android SDK / JDK live under `/home/sasha/android-tools/`. Source the env first, then
-assemble the debug APK:
+Requires **JDK 17** and an **Android SDK** with platform 34 and build-tools. Point
+`JAVA_HOME` and `ANDROID_HOME` at them (Android Studio's bundled copies work), then:
 
 ```bash
-source /home/sasha/android-tools/env.sh   # sets ANDROID_HOME / JAVA_HOME / PATH
-cd /home/sasha/projects/device-reveng/launcher
+cd launcher
 ./gradlew :app:assembleDebug
 ```
+
+The Gradle wrapper pins Gradle 8.9, so no system Gradle is needed. The version is
+derived from git history, so build from a **full clone** — a shallow clone fails the
+build with an explicit message rather than producing a wrong versionCode.
 
 Output APK: `app/build/outputs/apk/debug/app-debug.apk`.
 
@@ -162,7 +165,7 @@ which look identical from the outside.
 Grant the permission with:
 
 ```sh
-adb shell pm grant com.reveng.carlauncher android.permission.ACCESS_FINE_LOCATION
+adb shell pm grant com.ripostelabs.carlauncher android.permission.ACCESS_FINE_LOCATION
 ```
 
 ### Motion budget
@@ -527,7 +530,7 @@ A row does two things: open the source app, or dismiss.
 Parked-only, and the listener needs the same grant as the other two:
 
 ```sh
-adb shell cmd notification allow_listener com.reveng.carlauncher/com.reveng.carlauncher.notif.ShelfListenerService
+adb shell cmd notification allow_listener com.ripostelabs.carlauncher/com.ripostelabs.carlauncher.notif.ShelfListenerService
 ```
 
 ### The keyboard, everywhere
@@ -555,8 +558,8 @@ construction rather than by remembering to wrap each one.
 persists with, so a file and a stored theme cannot drift — into the app's external files directory:
 
 ```sh
-adb pull /sdcard/Android/data/com.reveng.carlauncher/files/themes/
-adb push mytheme.json /sdcard/Android/data/com.reveng.carlauncher/files/themes/
+adb pull /sdcard/Android/data/com.ripostelabs.carlauncher/files/themes/
+adb push mytheme.json /sdcard/Android/data/com.ripostelabs.carlauncher/files/themes/
 ```
 
 That path needs no runtime permission on API 33. `Downloads` was rejected (scoped storage makes a

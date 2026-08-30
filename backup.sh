@@ -6,12 +6,26 @@
 # This is READ-ONLY (dumps partitions to disk). It writes NOTHING to the device.
 set -uo pipefail
 
-ROOT=/home/sasha/rav4-headunit
+# Workspace holding the EDL tools, Firehose loader, TWRP and Magisk images.
+# None of that is redistributed here — see README "Getting the vendor files".
+# Override with: RAV4_HOME=/path ./backup.sh
+ROOT="${RAV4_HOME:-$HOME/rav4-headunit}"
 PY="$ROOT/edl/venv/bin/python"
 EDL="$ROOT/edl/src/edl.py"
 LOADER="$ROOT/run/prog_firehose_Qcm6125_ddr.elf"
 STAMP=$(date +%Y%m%d-%H%M%S 2>/dev/null || echo manual)
 OUT="$ROOT/backup-$STAMP"
+
+# Preflight: each of these is vendor/third-party material the repo does not ship.
+# Naming the missing file beats a stack trace from edl.py three steps later.
+for req in "$PY:python-edl venv" "$EDL:edl.py (bkerler/edl)" "$LOADER:Firehose loader .elf"; do
+  path="${req%%:*}"; what="${req#*:}"
+  [ -e "$path" ] && continue
+  echo "!! missing $what"
+  echo "   expected at: $path"
+  echo "   See README section 'Getting the vendor files'. Set RAV4_HOME to relocate."
+  exit 1
+done
 
 # EDL USB needs raw access -> run as root.
 SUDO=""; [ "$(id -u)" -ne 0 ] && SUDO="sudo"

@@ -45,7 +45,7 @@
       v3.1 status chips: Bluetooth state. BLUETOOTH_CONNECT is a *runtime* permission on
       API 31+; ungranted, the chip degrades to adapter on/off with no device count (all
       reads are guarded). On this rooted unit pre-grant it once:
-        pm grant com.reveng.carlauncher android.permission.BLUETOOTH_CONNECT
+        pm grant com.ripostelabs.carlauncher android.permission.BLUETOOTH_CONNECT
     -->
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
@@ -148,7 +148,7 @@
             </intent-filter>
         </service>
         <!--
-          v0.5 ThemeProvider: publishes the active palette to the standalone com.reveng.* suite
+          v0.5 ThemeProvider: publishes the active palette to the standalone com.ripostelabs.* suite
           so those apps paint the launcher's theme instead of a fixed one of their own.
           Exported because the consumers are separate packages, and read-only (see the class):
           it hands out thirteen colour values and accepts nothing. No permission is declared —

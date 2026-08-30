@@ -21,7 +21,7 @@
 
       It is a runtime permission: MainActivity asks for it once. On this rooted unit it can also
       be pre-granted with
-        `pm grant com.reveng.carlauncher android.permission.ACCESS_FINE_LOCATION`.
+        `pm grant com.ripostelabs.carlauncher android.permission.ACCESS_FINE_LOCATION`.
       Denied, speed simply stays unknown and the gate fails open by design.
 
       The head unit has no cell radio, so COARSE alone would not help: only the GNSS chip
