@@ -248,6 +248,7 @@ private fun decodedRows(sig: CanSignal): Map<String, String> = when (sig) {
         put("Speed (0x13 live candidate, raw)", sig.speedCandidateRaw.toString())
     }
     is CanSignal.RpmGearMirror -> mapOf(
+        "Gear" to sig.gear.name,
         "Gear raw (0x1A b1,b5)" to "0x%02X,0x%02X".format(sig.gearRawB1, sig.gearRawB5),
     )
     is CanSignal.Version -> mapOf("CANBOX firmware" to sig.text)
