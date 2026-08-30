@@ -46,8 +46,18 @@ class CarService(private val appContext: Context) {
         const val RADIO_KEY_SEEK_DOWN = 1
         const val RADIO_KEY_SEEK_UP = 2
 
-        /** v0.6 — assumed main-volume range for QuickControls. ⚠ GUESSED (verify on-device). */
-        const val MAX_VOLUME = 30
+        /**
+         * Main-volume range for QuickControls. No longer a guess: the vendor's own volume UI
+         * (EventCenter `BackcarEvent`, decompiled in mcu-analysis/eventcenter-src) sizes its
+         * seek bar as — MCU-reported max if it is > 0, else 15 when the BT launch sound is on,
+         * else **40**. We cannot see the MCU-reported value from here, so we take the vendor's
+         * own fallback rather than a number nobody chose.
+         *
+         * This was 30, which was invented. That under-reported the top of the scale by a
+         * quarter: the slider could not reach the car's real maximum, and every position it
+         * showed mapped to a louder level than it claimed.
+         */
+        const val MAX_VOLUME = 40
 
         /** Radio band ordinal → true when it's an AM band (getRadioBand()). GUESSED split. */
         fun isAmBand(band: Int): Boolean = band >= 3
@@ -167,10 +177,15 @@ class CarService(private val appContext: Context) {
 
     // ---- v0.6: volume set (QuickControls) ----------------------------------
     /**
-     * v0.6 — set the absolute main volume. ⚠ GUESSED mapping: there is no explicit
-     * `setVolume` in the decompiled AIDL; `sendVolState(boolean z, int i)` (ordinal 77) is
-     * the closest match, read as (isMuted, volumeLevel). Verify on-device; guarded like the
-     * rest, so a wrong ordinal is a no-op rather than a crash. [MAX_VOLUME] is also a guess.
+     * v0.6 — set the absolute main volume.
+     *
+     * No longer guessed. Checked against the decompiled vendor service
+     * (mcu-analysis/eventcenter-src): `sendVolState(boolean, int)` really is transaction **77**
+     * (`IEventService.TRANSACTION_sendVolState`), and the vendor calls it as a setter in exactly
+     * this argument order — `eventService.sendVolState(eventService.IsMuteOn(), level)` in
+     * `VoiceCtrlModel`, `sendVolState(mMuteState, mSysVolume)` in `BackcarEvent`. Both the
+     * ordinal and the (isMuted, level) reading were correct; only the range was wrong, see
+     * [MAX_VOLUME]. Still guarded like the rest, so a vendor that disagrees is a no-op.
      */
     fun setVolume(level: Int) {
         val clamped = level.coerceIn(0, MAX_VOLUME)
