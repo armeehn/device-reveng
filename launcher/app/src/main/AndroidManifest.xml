@@ -143,6 +143,25 @@
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
         </service>
+        <!--
+          v0.5 ThemeProvider: publishes the active palette to the standalone com.reveng.* suite
+          so those apps paint the launcher's theme instead of a fixed one of their own.
+          Exported because the consumers are separate packages, and read-only (see the class):
+          it hands out thirteen colour values and accepts nothing. No permission is declared —
+          a permission the driver must grant by hand at the car would leave a freshly installed
+          app painting its fallback palette until they did, which is the failure this replaces.
+
+          The authority is applicationId-scoped so the .debug variant can be installed next to
+          the release one: two packages declaring the same authority is an install conflict, and
+          the launcher is HOME — losing the ability to side-load a debug build next to a working
+          release is not a trade worth making. Suite apps query the release authority
+          (ThemeContract.AUTHORITY) and so always read the real launcher.
+        -->
+        <provider
+            android:name=".data.ThemeProvider"
+            android:authorities="${applicationId}.theme"
+            android:exported="true"
+            android:grantUriPermissions="false" />
     </application>
 
 </manifest>
