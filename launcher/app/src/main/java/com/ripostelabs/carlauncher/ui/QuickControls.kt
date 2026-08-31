@@ -191,8 +191,14 @@ fun QuickControlsPanel(
 @Composable
 private fun VolumeControl(carService: CarService) {
     // Read once from the vendor service; unavailable -> control disabled.
-    var available by remember { mutableStateOf(true) }
-    var volume by remember { mutableStateOf(0f) }
+    // null = still probing, so the row reads plainly rather than claiming "unavailable"
+    // during the two blocking AIDL round-trips below.
+    var available by remember { mutableStateOf<Boolean?>(null) }
+    // null = no level yet (still probing, or the vendor would not tell us). Same rule as
+    // BrightnessControl below: a slider with no honest position gets disabled, never parked
+    // at a made-up one. Parked at 0 it was worse than cosmetic — 0 is a real, nearly silent
+    // volume, so the first touch during the probe window committed it to the car.
+    var volume by remember { mutableStateOf<Float?>(null) }
     var muted by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
@@ -202,12 +208,12 @@ private fun VolumeControl(carService: CarService) {
         val m = withContext(Dispatchers.IO) {
             runCatching { carService.isMuteOn() }.getOrNull()
         }
-        if (v == null && m == null) {
-            available = false
-        } else {
-            volume = (v ?: 0).toFloat()
-            muted = m ?: false
-        }
+        available = !(v == null && m == null)
+        // An unreadable level stays null instead of being coerced to 0. The old `v ?: 0` made
+        // a failed read indistinguishable from a genuine "volume is 0", and left that fiction
+        // sitting under the finger on an enabled slider.
+        volume = v?.toFloat()
+        muted = m ?: false
     }
 
     // Conflated single-consumer pipe, the same shape BrightnessControl uses below. The slider
@@ -238,19 +244,30 @@ private fun VolumeControl(carService: CarService) {
         muteWrites.trySend(next)
     }
 
+    val level = volume
+    // Adjustable only once the vendor has actually told us where the volume is. Until then the
+    // slider is inert, so no touch can commit a placeholder through CarService.setVolume —
+    // which is a GUESSED vendor mapping driving a real amplifier, not something to write
+    // speculatively.
+    val adjustable = available == true && level != null && !muted
+
     ControlRow(
         icon = if (muted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
-        title = if (available) "Volume" else "Volume (unavailable)",
-        onIconClick = if (available) toggleMute else null,
+        title = when {
+            available == false -> "Volume (unavailable)"
+            available == true && level == null -> "Volume (unavailable)"
+            else -> "Volume"
+        },
+        onIconClick = if (available == true) toggleMute else null,
     ) {
         Slider(
-            value = volume,
+            value = level ?: 0f,
             onValueChange = { v ->
                 volume = v
-                if (available) volumeWrites.trySend(v.toInt())
+                volumeWrites.trySend(v.toInt())
             },
             valueRange = 0f..CarService.MAX_VOLUME.toFloat(),
-            enabled = available && !muted,
+            enabled = adjustable,
             colors = accentSliderColors(),
         )
     }
