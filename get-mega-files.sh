@@ -51,7 +51,7 @@ echo; echo "==== downloaded files ===="
 ls -la "$DEST"
 echo
 if [ "$fail" = 0 ]; then
-  echo ">> All done. Tell Claude the files are in $DEST and it'll extract the loader + identify the TWRP variants."
+  echo ">> All done. Files are in $DEST; extract the loader and identify the TWRP variants next."
 else
   echo ">> Some downloads failed — you can also just grab those links in a browser into $DEST."
 fi

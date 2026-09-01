@@ -1,19 +1,8 @@
 # can-integration — CAN/LIN decoders (staged, not yet wired)
 
-> **⚠️ One-off contribution, filed manually from the laptop.**
-> This PR was NOT produced by the normal per-feature branch/versionCode workflow that the
-> roadmap describes, and the automated PR-filing agent (on server `x`) did not create it.
-> It is a **staging drop**, deliberately placed OUTSIDE the Gradle source set
-> (`launcher/*/src/…`), so:
-> - **CI does not compile it** — it cannot break the build or a green-main gate.
-> - **It claims no `versionCode`** and bumps no `build.gradle.kts` — it does not touch the
->   monotonic version sequence, so it will not collide with any open PR's claim.
-> - **It does not edit `carlib/`** — no collision with the in-flight `feat-can-capture`
->   worktree that owns the CAN-capture UI.
->
-> Nothing here is imported by the app yet. Integration is a deliberate, separate step
-> (see "Where each file goes" below), to be done by whoever picks up the roadmap item —
-> not implied by this merge. Treat this as reference material that happens to compile.
+> **Staging drop.** Nothing here is compiled or imported by the app yet: it sits outside the
+> Gradle source set on purpose, so it cannot break the build. Integration is a separate step
+> (see "Where each file goes" below). Treat it as reference material that happens to compile.
 
 ## Where this fits on the roadmap
 
@@ -23,8 +12,8 @@
 > decoder needs one real capture. This is what makes the safety gate work in a garage and at
 > power-on, where GPS cannot.
 
-That item is the headline this drop addresses. A **real capture** was taken on the laptop
-(`~/rav4-reconnect/notes/reverse-capture-live-1610.txt`, 785 CANBOX frames) and decoded
+That item is the headline this drop addresses. A **real capture** was taken parked
+(785 CANBOX frames) and decoded
 against the on-device vendor parser (`com.szchoiceway.canbus2 → HiworldCanParseToyota.java`).
 `HiworldCanDecoder.kt` is the decoder that item was waiting on.
 
@@ -65,8 +54,8 @@ the hardware is installed, not because they're ready to wire today.
 | `decoders/LinClimateDecoder.kt` + `readers/LinReaderService.kt` | `carlib/` | only after a LIN tap exists; note existing `ClimateState.kt` is a *different* (AIDL) source |
 
 ## Honest caveats (all flagged in-code, none faked)
-- **Speed scale is a placeholder** (`SPEED_SCALE_KMH`) — the capture was parked. Calibrate via
-  the drive-capture kit (`~/rav4/can-drive-capture/`).
+- **Speed scale is a placeholder** (`SPEED_SCALE_KMH`) — the capture was parked. Calibrate with a
+  drive capture.
 - **Gear** on the CANBOX path is only in the unparsed 0x1A byte; P/N/D need a drive capture.
 - **LIN checksum variant + temp scale are unconfirmed** — need a live LIN capture
   (toggle-and-diff on the panel).
@@ -74,5 +63,3 @@ the hardware is installed, not because they're ready to wire today.
   gate for the whole USB-adapter route; `canable-probe.sh` checks it.
 - Body-CAN IDs are after Fisk's **2023** car; re-verify on the 2019.
 
-Provenance: laptop session, 2026-08-28. Source artifacts live under the originating job's
-scratch dir; this is a clean copy for review.
