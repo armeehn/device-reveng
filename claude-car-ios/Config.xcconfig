@@ -1,0 +1,8 @@
+// Committed build config. Machine-local values (a signing team) go in
+// Local.xcconfig, which is gitignored. `#include?` keeps a fresh checkout
+// building without it. The backend address is never baked in: the app asks
+// for it on first launch.
+
+DEVELOPMENT_TEAM =
+
+#include? "Local.xcconfig"
