@@ -235,11 +235,18 @@ class CarService(private val appContext: Context) {
     fun setEqMode(mode: Int) { call { sendEQMode(mode) } }
 
     /**
-     * Balance/fader as [balance, fader] (getBALFADValue, ordinal 54). Vendor centre is
-     * typically the middle of each axis; ranges are GUESSED as -group..+group — verify on-device.
+     * Raw amp balance/fader as `[balance, fader]` (getBALFADValue ordinal 54 / sendBalFadValue
+     * ordinal 51). Contract verified against the vendor EventService (2026-08-30 decompile):
+     *
+     *  - Amp domain is **0..14, centre 7**: `mBALVal`/`mFADVal` default to 7, boot-restore falls
+     *    back to 7, factory reset writes 7, and boot ships `{0x2F, 7, 7}` = centre. 0 = full left /
+     *    full front, 14 = full right / full rear. Order is balance-then-fader (confirmed).
+     *  - No vendor clamp, and 0 is a valid extreme, NOT the centre — the launcher's old signed
+     *    -8..8/centre-0 model made Centre play hard left. Callers map the centred display domain
+     *    via [ampToDisplay]/[displayToAmp]; see AudioSettingsScreen.
      */
     fun getBalanceFader(): IntArray? = call { getBALFADValue() }
-    /** Set balance (L↔R) and fader (front↔rear) (sendBalFadValue, ordinal 51). */
+    /** Set raw amp balance (0..14) and fader (0..14); centre is 7. */
     fun setBalanceFader(balance: Int, fader: Int) { call { sendBalFadValue(balance, fader) } }
 
     /** Loudness on/off (getLoudness, ordinal 53). There is no AIDL setter — read-only here. */
@@ -282,3 +289,14 @@ class CarService(private val appContext: Context) {
         }
     }
 }
+
+
+/** Vendor amp balance/fader domain: 0..14 with centre 7 (see [CarService.getBalanceFader]). */
+const val BAL_FAD_CENTRE = 7
+const val BAL_FAD_HALF = 7
+
+/** Map a raw amp value (0..14, centre 7) to the centred display domain (-7..7, centre 0). */
+fun ampToDisplay(raw: Int): Int = raw.coerceIn(0, 2 * BAL_FAD_HALF) - BAL_FAD_CENTRE
+
+/** Map a centred display value (-7..7) back to the raw amp domain (0..14, centre 7). */
+fun displayToAmp(display: Int): Int = (display + BAL_FAD_CENTRE).coerceIn(0, 2 * BAL_FAD_HALF)
