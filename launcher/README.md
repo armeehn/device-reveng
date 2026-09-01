@@ -90,14 +90,16 @@ is **confirmed unobtainable** — `../CUSTOM_ANDROID.md` §2b, `../LAUNCHER_DESI
 ### Which APK is in the car
 
 Every green build of `main` is tagged `v<versionName>+<versionCode>.g<short-sha>` (e.g.
-`v0.4.106+106.g1a2b3c4`) and the release APK from that same CI run is published as a
+`v0.7+146.g91dd836`) and the release APK from that same CI run is published as a
 GitHub Release against the tag, with the APK's SHA-256 in the release body.
 
 Both version fields are derived from git at build time (`app/build.gradle.kts`):
 `versionCode` is the commit count at the merge-base with `origin/main`, so every merge
-to `main` raises it by exactly one, and `versionName` is `0.4.<versionCode>`. Nobody
-bumps a version by hand, and no PR touches a version line. The commit SHA stays in the
-tag as the belt-and-braces identity. Historical note: before versionCode 71 the fields
+to `main` raises it by exactly one, and `versionName` is the bare base (`0.7`). Nobody
+bumps a version by hand, and no PR touches a version line. Because every build on a
+line shares its versionName, a build is always named with the code beside it —
+`0.7 (146)` in the app, `+146` in the tag — and the commit SHA stays in the tag as the
+belt-and-braces identity. Historical note: before versionCode 71 the fields
 were hand-claimed per PR; they repeat in that range (two merges both shipped `61`), so
 only the SHA separates those builds.
 

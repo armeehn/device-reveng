@@ -11,7 +11,8 @@ builds are meant to go on-device as the home launcher. CI builds every PR.
 
 Both fields are derived from git in `app/build.gradle.kts` at build time: `versionCode` is
 the commit count at the merge-base with `origin/main` (each squash-merge raises it by one,
-so it is monotonic by construction), `versionName` is `0.4.<versionCode>`. `1.0.0` is
+so it is monotonic by construction), `versionName` is the bare base (`0.7`, shown as
+`0.7 (<versionCode>)` wherever a build is identified). `1.0.0` is
 reserved for the polished public release; only a deliberate milestone commit changes the
 base. **No PR touches a version line** — hand-claimed versionCodes made every squash-merge
 conflict every open sibling PR, and duplicates got claimed anyway.

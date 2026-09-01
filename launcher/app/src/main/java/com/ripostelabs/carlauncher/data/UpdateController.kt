@@ -250,7 +250,7 @@ class UpdateController(
             apkVersionCode = apkVersionCode,
             ourPackage = BuildConfig.APPLICATION_ID,
             ourVersionCode = BuildConfig.VERSION_CODE,
-            releaseName = release.versionName,
+            releaseName = "${release.versionName} (${release.versionCode})",
         )
     }
 
