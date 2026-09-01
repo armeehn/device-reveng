@@ -283,9 +283,14 @@ class NowPlayingRepository(private val context: Context) {
         )
     }
 
-    /** Resolve a package's user-visible label; falls back to the package name. */
+    /**
+     * Resolve a package's user-visible label; falls back to the package name. A few sources
+     * are named for what the driver hears, not for the app that carries the session (see
+     * [SourceLabels]): a CarPlay track is labelled "zlink5" by the receiver's own manifest.
+     */
     private fun appLabel(pkg: String?): String? {
         if (pkg == null) return null
+        SourceLabels.of(pkg)?.let { return it }
         val pm = context.packageManager
         return runCatching {
             pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
