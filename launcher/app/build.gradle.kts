@@ -15,7 +15,9 @@ plugins {
 //                 follows it — Android refuses to install a lower versionCode.
 //   versionCode = commit count at the anchor. Each squash-merge adds exactly one
 //                 commit to main, so it is monotonic by construction.
-//   versionName = "<base>.<versionCode>".
+//   versionName = "<base>" — the line a human reads (0.7). It is NOT unique per
+//                 build; anything that identifies a build shows versionCode
+//                 beside it, e.g. "0.7 (146)", and CI tags v<base>+<code>.g<sha>.
 //
 // CI reads the result from the APK's output-metadata.json (launcher-ci.yml release
 // job); nothing parses this file for a version any more.
@@ -51,7 +53,7 @@ android {
         minSdk = 33
         targetSdk = 33
         versionCode = gitVersionCode
-        versionName = "$displayVersionBase.$gitVersionCode"
+        versionName = displayVersionBase
 
         // Single head-unit target: arm64 landscape @240dpi, 1920x720.
         ndk { abiFilters += "arm64-v8a" }

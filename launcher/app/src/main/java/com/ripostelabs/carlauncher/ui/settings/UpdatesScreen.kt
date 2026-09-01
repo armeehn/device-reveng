@@ -75,7 +75,7 @@ fun UpdatesScreen(
             )
             val available = status as? UpdateStatus.Available
             ActionRow(
-                label = available?.let { "Install ${it.release.versionName}" } ?: "Install update",
+                label = available?.let { "Install ${it.release.versionName} (${it.release.versionCode})" } ?: "Install update",
                 description = when {
                     available == null -> "Enabled once a newer build is found"
                     parkedLock -> "Available when parked"
@@ -160,9 +160,9 @@ private fun StatusRows(status: UpdateStatus, lastCheckMillis: Long) {
             InfoRow("Latest", "${status.release.versionName} (${status.release.versionCode})")
             InfoRow("Size", formatSize(status.release.apkSizeBytes))
         }
-        is UpdateStatus.Downloading -> InfoRow("Status", "Downloading ${status.release.versionName}…")
-        is UpdateStatus.Installing -> InfoRow("Status", "Installing ${status.release.versionName}…")
-        is UpdateStatus.Installed -> InfoRow("Status", "Installed ${status.release.versionName} — restarting")
+        is UpdateStatus.Downloading -> InfoRow("Status", "Downloading ${status.release.versionName} (${status.release.versionCode})…")
+        is UpdateStatus.Installing -> InfoRow("Status", "Installing ${status.release.versionName} (${status.release.versionCode})…")
+        is UpdateStatus.Installed -> InfoRow("Status", "Installed ${status.release.versionName} (${status.release.versionCode}) — restarting")
         is UpdateStatus.Failed -> InfoRow("Status", status.message)
     }
 }

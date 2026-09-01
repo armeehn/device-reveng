@@ -56,6 +56,9 @@ class UpdateFeedTest {
         assertEquals("0.7.132", UpdateFeed.versionNameOfTag("v0.7.132+132.gac09e10"))
         // The four-part display scheme (0.X.Y.Z) is valid too.
         assertEquals(71, UpdateFeed.versionCodeOfTag("v0.4.4.2+71.g4f7ddef"))
+        // Current shape: versionName is the bare base, the build lives in +<code>.
+        assertEquals(146, UpdateFeed.versionCodeOfTag("v0.7+146.g91dd836"))
+        assertEquals("0.7", UpdateFeed.versionNameOfTag("v0.7+146.g91dd836"))
     }
 
     @Test
