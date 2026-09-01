@@ -28,7 +28,7 @@ CANable 2.0 (slcan fw) ──USB CDC-ACM──▶ /dev/ttyACM0
 
 > **Naming note:** the decoder's result type is `RawCanSignal`, **not** `CanSignal` — the HiWorld
 > decoder already owns `CanSignal` in `com.ripostelabs.carlauncher.carlib`, and two top-level `CanSignal`
-> would not compile. Same shape as the brief asked for (Speed, WheelSpeeds, Gear, SteeringAngle,
+> would not compile. Fields: Speed, WheelSpeeds, Gear, SteeringAngle,
 > GasPedal, Brake, Cruise, Cruise2, Doors, Blinkers, Unknown).
 
 ## STEP 0 (gate): verify USB host + CDC-ACM BEFORE anything else
