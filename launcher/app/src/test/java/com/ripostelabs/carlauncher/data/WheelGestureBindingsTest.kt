@@ -18,9 +18,10 @@ class WheelGestureBindingsTest {
         assertTrue(b.enabled)
         assertEquals(WheelGestureAction.SEEK_FORWARD_30S, b.longOf(WheelKey.NEXT))
         assertEquals(WheelGestureAction.SEEK_BACK_10S, b.longOf(WheelKey.PREV))
-        assertEquals(WheelGestureAction.OPEN_MEDIA, b.longOf(WheelKey.MODE))
+        // Gateway-owned buttons ship unbound: the vendor's short action cannot be swallowed.
+        assertEquals(WheelGestureAction.NONE, b.longOf(WheelKey.MODE))
         assertEquals(WheelGestureAction.MUTE_TOGGLE, b.longOf(WheelKey.PLAY_PAUSE))
-        assertEquals(WheelGestureAction.SIRI, b.longOf(WheelKey.TALK))
+        assertEquals(WheelGestureAction.NONE, b.longOf(WheelKey.TALK))
         assertEquals(WheelGestureAction.OPEN_HOME, b.longOf(WheelKey.RETURN))
         assertEquals(WheelGestureAction.NONE, b.longOf(WheelKey.MUTE))
         assertEquals(WheelGestureAction.NONE, b.longOf(WheelKey.VOICE))

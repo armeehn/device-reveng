@@ -61,10 +61,10 @@ data class WheelGestureBindings(
         val DEFAULT_LONG: Map<WheelKey, WheelGestureAction> = mapOf(
             WheelKey.NEXT to WheelGestureAction.SEEK_FORWARD_30S,
             WheelKey.PREV to WheelGestureAction.SEEK_BACK_10S,
-            WheelKey.MODE to WheelGestureAction.OPEN_MEDIA,
             WheelKey.PLAY_PAUSE to WheelGestureAction.MUTE_TOGGLE,
-            WheelKey.TALK to WheelGestureAction.SIRI,
             WheelKey.RETURN to WheelGestureAction.OPEN_HOME,
+            // MODE and TALK are unbound on purpose: their plain action runs inside the gateway
+            // (source switch, phone app) and cannot be swallowed, so a hold would do both.
         )
 
         /** The keys the settings screen offers, in wheel order. HANGUP is not bindable. */

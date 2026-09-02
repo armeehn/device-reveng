@@ -628,8 +628,10 @@ Media/Radio/Home, radio seek up/down, next preset, claim radio, hand audio back 
 (Zlink 1500), navigation (Zlink Maps 1504 while CarPlay reports connected, else the Nav card's
 app), mute toggle, the vendor voice assistant (`ZXW_CAN_KEY_EVT` 116, the CAN app's own path).
 Media actions go through the active `MediaController`; seek is `seekTo(position ± delta)`
-clamped to the track. Defaults: NEXT hold = +30 s, PREV hold = −10 s, MODE hold = open Media,
-PLAY/PAUSE hold = mute, TALK hold = Siri, RETURN hold = Home; **every double press = nothing**.
+clamped to the track. Defaults: NEXT hold = +30 s, PREV hold = −10 s, PLAY/PAUSE hold = mute,
+RETURN hold = Home; MODE and TALK holds ship unbound (their plain action runs inside the gateway
+and cannot be swallowed, so binding them means "source switch AND …"); **every double press =
+nothing**.
 
 **The collateral rule.** The vendor reports the key on release, so by the time a second press can
 be recognised the first press has already done its plain job (skipped a track, switched source). A
