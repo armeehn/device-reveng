@@ -54,6 +54,17 @@ object Zlink {
     const val STATUS_EXIT = "EXIT"
     const val STATUS_PHONE_CALL_ON = "PHONE_CALL_ON"
     const val STATUS_PHONE_CALL_OFF = "PHONE_CALL_OFF"
+    /** Projection audio started / stopped (`ZlinkManage.java:591-605`, the now-playing path). */
+    const val STATUS_MAIN_AUDIO_START = "MAIN_AUDIO_START"
+    const val STATUS_MAIN_AUDIO_STOP = "MAIN_AUDIO_STOP"
+
+    /**
+     * ⚠ UNVERIFIED: `page` / `feature` values for [ACTION_MAIN]. Nothing in the decompiled
+     * estate ever calls `startZlinkMainActivity`, so these are the plainest guess; the
+     * manifest routes the action to `features.main.MainActivity` regardless of the extras.
+     */
+    const val PAGE_MAIN = "main"
+    const val FEATURE_CARPLAY = "carplay"
 
     const val COMMAND_SPEC_FUNC = "REQ_SPEC_FUNC_CMD"
     const val EXTRA_SPEC_FUNC_CODE = "specFuncCode"
@@ -80,7 +91,13 @@ object Zlink {
         strings = mapOf(EXTRA_PAGE to page, EXTRA_FEATURE to feature),
     )
 
-    /** `ZlinkManage.sendKeyCodeToCarplay`. */
+    /** The launcher's CarPlay deep link (RAV4-52): [mainPage] with the [PAGE_MAIN] guess. */
+    fun open(): IntentSpec = mainPage(PAGE_MAIN, FEATURE_CARPLAY)
+
+    /**
+     * `ZlinkManage.sendKeyCodeToCarplay`. ⚠ UNVERIFIED whether Zlink 5.4.62 honours any code
+     * from a sender other than the gateway; the broadcast is unpermissioned on both sides.
+     */
     fun request(feature: Feature): IntentSpec = IntentSpec(
         action = ACTION_MESSAGE,
         strings = mapOf(EXTRA_COMMAND to COMMAND_SPEC_FUNC),

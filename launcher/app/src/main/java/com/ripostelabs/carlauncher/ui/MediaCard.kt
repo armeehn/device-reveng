@@ -74,6 +74,8 @@ fun MediaCard(
     modifier: Modifier = Modifier,
     onSeek: (Long) -> Unit = {},          // v0.9
     onCycleSource: () -> Unit = {},       // v0.9
+    // RAV4-52: with a single session, a tap on the chip opens the source app (CarPlay only).
+    onOpenSource: (() -> Unit)? = null,
 ) {
     Card(
         // Riposte hard-edge chrome; accent rotation (SEC.01) starts pink on the media card.
@@ -157,10 +159,11 @@ fun MediaCard(
 
                 // ---- source chip (active app; tap to cycle when several sessions) ----
                 if (now?.sourceLabel != null) {
+                    val canCycle = now.sessionCount > 1
                     SourceChip(
                         label = now.sourceLabel,
-                        canCycle = now.sessionCount > 1,
-                        onClick = onCycleSource,
+                        canCycle = canCycle,
+                        onClick = if (canCycle) onCycleSource else onOpenSource,
                     )
                 }
 
@@ -295,12 +298,12 @@ private fun SeekBar(now: NowPlaying, onSeek: (Long) -> Unit) {
 }
 
 @Composable
-private fun SourceChip(label: String, canCycle: Boolean, onClick: () -> Unit) {
+private fun SourceChip(label: String, canCycle: Boolean, onClick: (() -> Unit)?) {
     Surface(
         color = MaterialTheme.colorScheme.secondaryContainer,
         shape = carShape(50),
         modifier = Modifier
-            .then(if (canCycle) Modifier.clickable(onClick = onClick) else Modifier),
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
