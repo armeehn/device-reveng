@@ -22,11 +22,16 @@ import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.FastRewind
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -65,6 +70,10 @@ import kotlinx.coroutines.withContext
  *    screen shows the indicator set that genuinely exists — RDS / TA / AF / TP / stereo plus
  *    the PTY genre — instead of an empty scroller pretending to be RDS text.
  *
+ * **No NET.** The vendor radio app had an AM / FM / NET tab row. NET was its internet-radio
+ * *source*, not a tuner band: `getRadioBand()` never reports one and no AIDL method selects it,
+ * so the band toggle here is AM / FM only.
+ *
  * Reading the tuner is polled, not pushed: `setRadioCallback` exists but its `ICallbackfn`
  * signature was never recovered, so registering it would be a guess. Blocking AIDL reads stay
  * off the composition body — doing them inline once spun a main-thread IPC recomposition loop
@@ -102,11 +111,37 @@ fun RadioScreen(
         }
     }
 
+    // A committed scrub holds the readout at its target until the re-poll after `sendUserFreq`
+    // has landed, instead of snapping back to the pre-drag station for one frame.
+    var tuneHold by remember { mutableStateOf<Int?>(null) }
+    val feedback = LocalCarFeedback.current
+
+    fun tuneTo(freq: Int) {
+        tuneHold = freq
+        feedback?.tap()
+        scope.launch {
+            withContext(Dispatchers.IO) { runCatching { carService.sendUserFreq(freq) } }
+            refresh++
+            delay(TUNE_HOLD_MS)
+            tuneHold = null
+        }
+    }
+
+    fun switchBand(target: RadioTuning.BandClass) {
+        control {
+            RadioTuning.switchBandClass(
+                readBand = { carService.getRadioBand() },
+                toggleBand = { carService.radioBandToggle() },
+                target = target,
+            )
+        }
+    }
+
     val presets by (presetsStore?.presets?.collectAsStateSafe(initial = emptyList())
         ?: remember { androidx.compose.runtime.mutableStateOf(emptyList<RadioPreset>()) })
 
     Column(modifier = Modifier.fillMaxSize()) {
-        RadioHeader(tuner = tuner, onBack = onBack)
+        RadioHeader(tuner = tuner, onBack = onBack, onBand = ::switchBand)
 
         if (!tuner.available) {
             RadioUnavailableNotice()
@@ -119,7 +154,9 @@ fun RadioScreen(
                 .padding(horizontal = 28.dp),
             verticalArrangement = Arrangement.SpaceEvenly,
         ) {
-            FrequencyReadout(tuner = tuner)
+            FrequencyReadout(band = tuner.band, freq = tuneHold ?: tuner.freq)
+
+            TuneSlider(tuner = tuner, hold = tuneHold, onTune = ::tuneTo)
 
             IndicatorRow(tuner = tuner)
 
@@ -162,7 +199,11 @@ fun RadioScreen(
 }
 
 @Composable
-private fun RadioHeader(tuner: TunerState, onBack: () -> Unit) {
+private fun RadioHeader(
+    tuner: TunerState,
+    onBack: () -> Unit,
+    onBand: (RadioTuning.BandClass) -> Unit,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -187,24 +228,128 @@ private fun RadioHeader(tuner: TunerState, onBack: () -> Unit) {
             color = MaterialTheme.colorScheme.onBackground,
         )
         Spacer(Modifier.weight(1f))
-        Text(
-            text = tuner.bandLabel(),
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onPrimary,
-            modifier = Modifier
-                .clip(carShape(14.dp))
-                .background(MaterialTheme.colorScheme.primary)
-                .padding(horizontal = 24.dp, vertical = 8.dp),
+        BandToggle(
+            active = RadioTuning.bandClassOf(tuner.band),
+            enabled = tuner.available,
+            onSelect = onBand,
         )
     }
 }
 
+/**
+ * AM | FM segmented toggle. The AIDL only has a *cycle* key (FM1 → FM2 → … → AM), so selecting
+ * a class toggles until the tuner reports it — bounded, re-polled, off the main thread. Tapping
+ * the active class is a no-op rather than a cycle, so a driver who misses cannot land on FM2.
+ */
+@Composable
+private fun BandToggle(
+    active: RadioTuning.BandClass,
+    enabled: Boolean,
+    onSelect: (RadioTuning.BandClass) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .clip(carShape(14.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant),
+    ) {
+        RadioTuning.BandClass.entries.forEach { band ->
+            val selected = band == active
+            val bg = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+            val fg = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+            Text(
+                text = band.name,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = fg,
+                modifier = Modifier
+                    .clip(carShape(14.dp))
+                    .background(bg)
+                    .focusRing()
+                    .clickable(
+                        enabled = enabled && !selected,
+                        onClick = withTapFeedback { onSelect(band) },
+                    )
+                    .padding(horizontal = 24.dp, vertical = 8.dp),
+            )
+        }
+    }
+}
+
+/**
+ * Direct tuning across the band (§3.4's scrub control). Interactive while parked, read-only
+ * while moving — the same v2.5 gate as MediaScreen's progress bar: dragging to a frequency is
+ * a sustained, eyes-on gesture. Seek and presets stay available either way.
+ *
+ * The thumb snaps to the dial step on release; the readout above follows the finger live so
+ * the driver sees the target before committing.
+ */
+@Composable
+private fun TuneSlider(tuner: TunerState, hold: Int?, onTune: (Int) -> Unit) {
+    val range = RadioTuning.tuneRange(tuner.band, tuner.freq)
+    var scrubbing by remember { mutableStateOf(false) }
+    var scrubValue by remember { mutableFloatStateOf(0f) }
+
+    // While moving, drop any in-progress drag: the gate can close mid-gesture, and leaving
+    // `scrubbing` true would freeze the thumb wherever the finger happened to be.
+    val locked = LocalParkedOnlyLock.current
+    LaunchedEffect(locked) {
+        if (locked) scrubbing = false
+    }
+
+    val shown = when {
+        scrubbing -> scrubValue
+        hold != null -> hold.toFloat()
+        else -> tuner.freq.toFloat()
+    }.coerceIn(range.min.toFloat(), range.max.toFloat())
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        if (locked) {
+            LinearProgressIndicator(
+                progress = { (shown - range.min) / range.span.toFloat() },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(10.dp)
+                    .clip(carShape(5.dp)),
+            )
+        } else {
+            Slider(
+                value = shown,
+                onValueChange = { scrubbing = true; scrubValue = it },
+                onValueChangeFinished = {
+                    onTune(RadioTuning.snap(range, scrubValue))
+                    scrubbing = false
+                },
+                valueRange = range.min.toFloat()..range.max.toFloat(),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            DialEnd(band = tuner.band, freq = range.min)
+            if (scrubbing) {
+                DialEnd(band = tuner.band, freq = RadioTuning.snap(range, scrubValue))
+            }
+            DialEnd(band = tuner.band, freq = range.max)
+        }
+    }
+}
+
+@Composable
+private fun DialEnd(band: Int, freq: Int) {
+    Text(
+        text = formatFreqLabel(band, freq),
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
 /** §3.4's 48 sp frequency — set explicitly because it is a legibility requirement, not a style. */
 @Composable
-private fun FrequencyReadout(tuner: TunerState) {
+private fun FrequencyReadout(band: Int, freq: Int) {
     AutoSizeText(
-        text = formatFreqLabel(tuner.band, tuner.freq),
+        text = formatFreqLabel(band, freq),
         fontSize = FREQUENCY_SP.sp,
         fontWeight = FontWeight.Bold,
         color = MaterialTheme.colorScheme.onBackground,
@@ -468,8 +613,6 @@ private data class TunerState(
     val stereo: Boolean? = null,
     val ptyName: String? = null,
 ) {
-    fun bandLabel(): String = if (CarService.isAmBand(band)) "AM" else "FM"
-
     companion object {
         val UNKNOWN = TunerState(available = false, band = 0, freq = 0)
     }
@@ -504,6 +647,9 @@ private const val PRESET_HEIGHT_DP = 64
 
 /** Matches RadioCard's cadence: the tuner changes slowly and each read is an IPC round-trip. */
 private const val POLL_INTERVAL_MS = 3_000L
+
+/** How long a committed scrub holds the readout — long enough for the post-tune re-poll to land. */
+private const val TUNE_HOLD_MS = 500L
 
 private const val UNKNOWN_ALPHA = 0.35f
 private const val EMPTY_SLOT_ALPHA = 0.5f

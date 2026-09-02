@@ -194,13 +194,18 @@ is a sustained, eyes-on gesture, so while moving the same progress renders as a 
 Transport stays available while moving — skip and play/pause are single forgiving presses that
 exist on the wheel anyway, and withholding them would push the driver to their phone.
 
-**RadioScreen** — 48 sp frequency, band toggle, seek, six preset slots with save / recall /
-delete, and the tuner's status flags.
+**RadioScreen** — 48 sp frequency, an AM / FM band toggle, a tune slider across the dial
+(parked-only, like media scrubbing; it snaps to the 100 kHz / 10 kHz step on release), seek,
+six preset slots with save / recall / delete, and the tuner's status flags. The AIDL only has
+a band *cycle* key, so selecting AM or FM toggles until the tuner reports that class.
 
 ### What the firmware does not have
 
 Two things §3.3/§3.4 planned turned out not to exist, so they are not built:
 
+- **No NET.** The vendor radio app's AM / FM / NET row had a third tab for its internet-radio
+  source. `getRadioBand()` never reports it and no `IEventService` method selects it, so the
+  band toggle is AM / FM only.
 - **No RDS text.** The 144-method AIDL has no PS (station name) or RT (radio text) getter.
   `getRadioPTYName` (ordinal 19) returns the programme *genre* — "Pop Music" — not a station.
   So the screen shows the indicators that do exist (RDS / TA / AF / TP / stereo + PTY genre)
