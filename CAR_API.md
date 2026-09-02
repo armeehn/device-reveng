@@ -152,6 +152,10 @@ UI or the CAN layer. Registered in `EvtModel.java:210-300`.
 | `Sidebar_function_action` | `SIDEBAR_FUNCTION_ACTION` | `Sidebar_function_extra` → function id | recv `EvtModel.java` **[confirmed]** |
 | `com.szchoiceway.eventcenter.GET_DATA_REQ` / `WRITE_DATA` / `GET_DATA_RES` | `ACTION_CONFIG_GET_DATA/…` | config read/write RPC over broadcast | consts **[confirmed]** |
 | `com.szchoiceway.ACTION_VOICE_CTRL` / `ACTION_AIR_VOICE_CTRL` | — | voice control; `AirVoiceKeyWord`, `AirVoiceParam`, `VoiceKeyDIM` extras | consts **[confirmed]** |
+| `zxw_bluetooth_contral_action` (to btsuite) | `EventUtils.BLUETOOTH_CONTRAL_ACTION` | `zxw_bluetooth_contral_key` → int 3 audio→phone, 4 audio→car, 5 dial (`zxw_bluetooth_contral_key_value_str` = number), 7 query power, 8 re-send device name, 10 connect (str = MAC), 11 disconnect; receiver registered without a permission | recv `btsuite/BTService.java:1496-1530` **[confirmed]**; effect on the module **[UNVERIFIED]** |
+| `com.szchoiceway.btsuite.HBCP_HANGUP_EVENT` (to btsuite) | (btsuite) | none — hang up | recv `BTService.java:1338-1341` **[confirmed]**, effect **[UNVERIFIED]** |
+| `...EventUtils.MCU_KEY_INFOR` (to btsuite) | `MCU_KEY_INFOR_ACTION` | `EventUtils.MCU_KEY_VALUE` → int 22 hang up, 23 answer (also 2 next, 3 prev, 4 play, 5 stop, 6 play/pause for BT music) | recv `BTService.java:1801-1836` **[confirmed]**, effect **[UNVERIFIED]** |
+| *(activity)* `com.szchoiceway.btsuite/.BTMainActivity` | — | String `GotoPageNum` → `DialPage`, `CallRecordPage`, `PhoneBookPage`, `SetPage` (only when `BTTypeUtil.isDoubleBluetooth()`), `BTMusic` | `BTMainActivity.java:92-131`, `bean/DisplayPageId.java` **[confirmed]** |
 
 > CarPlay / phone-link bridge (`com.zjinnova.zlink.*`), HiCar (`com.huawei.hicar`),
 > Android Auto, DVR (`com.szchoiceway.usbdvr.*`), and 3rd-party 360 (`com.sjs.vehicleinfo.*`,
@@ -258,6 +262,20 @@ customized-app package/class slots, etc. Grep `SysProviderOpt.java` for the full
 
 ---
 
+### 2.4 btsuite call history — `CallListProvider`
+
+- **Authority:** `com.szchoiceway.btsuite.CallListProvider`, path `query` only
+  (`CallListProvider.java:33-35,49-55`). Exported, **no `android:permission`**
+  (`btsuite/AndroidManifest.xml:89-93`) **[confirmed]**; a read from a normal uid is
+  **[UNVERIFIED]** on the car.
+- **Selector:** `projection[0]` = call type as a decimal string: 2 received, 3 dialed, 4 missed,
+  5 all (`CallRecManager.java:142-161`, tab buttons `CallHistoryUIControllerLandscape.java:271-276`,
+  icons `cklh/adapter/ListAdapter.java:49-54`). Newest first, 50 rows per type / 150 for all.
+  Selection, args and sort order are ignored; a null or empty projection returns null.
+- **Columns** (`CallRecManager.java:261`): `_id`, `name`, `num`, `date` (`%d-%02d-%02d`),
+  `time` (`%02d:%02d:%02d`), `calltype`, `timeDetail` (sort key).
+- Read-only: `insert` / `update` / `delete` are no-ops. Launcher wrapper: `carlib/VendorCallLog.kt`.
+
 ## 3. Services / AIDL / bound interfaces
 
 ### 3.1 `EventService` (the control service)
@@ -351,6 +369,18 @@ Three coexisting paths — a custom launcher should listen to **all three** to b
 3. **Injected Android KeyEvents** — for standard media keys the gateway calls `sendKeyDownUpSync(...)`
    (e.g. power=26 at `EventService.java:3428`), so ordinary `onKeyDown` handling in your Activity
    catches some wheel keys too.
+
+**RAV4 (Hiworld TYF2) wheel keys are CAN, not resistive.** They ride frame `0x11` (Basic Status,
+`MCU_MSG_CAN_ALL_INFO`): `bArr[4]` = key id, `bArr[5]` = 1 on every frame while held, 0 on release
+(`HiworldCanParseToyota.java:831-891`, `OnHandleCanKeyCmd`; launcher payload offsets p[2]/p[3]).
+Ids: 1 VOL+, 2 VOL−, 3 MUTE, 4 VOICE, 5 TALK (HANGUP during a call), 6 HANGUP, 8 and 13 PREV,
+9 and 14 NEXT, 12 MODE, 15 PLAY/PAUSE, 16 RETURN. The CAN app emits the MCU key **once, on the
+release frame** (`:853-885` → `sendMCUKey`, `:888`); VOL± instead repeat once per frame after 5
+held frames (`:838-848`). `sendMCUKey` is `ZXW_CAN_KEY_EVT` (`CanDataParseBase.java:1078,
+1518-1536`) → `EvtModel.java:492-511` → `EventService.ProcessCanKey` (`:13021-13110`): 2/3/6 →
+injected KeyEvent 87/88/85, 85 → KeyEvent 4, 16 → `switchMode()`, 17 → `sendSystemKey(12)`,
+116 → `startVoice()`, 23 → CarPlay/BT. Hold duration never leaves the CAN app; the launcher
+decodes it from the frames itself (`carlib/WheelGestures.kt`). Frame period **UNVERIFIED**.
 
 **SWC/panel keycode constants** (`EventUtils.java`), the values you receive/emit:
 

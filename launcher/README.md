@@ -219,6 +219,18 @@ claims the tuner as the cabin's audio source the way the vendor radio app does
 (`CarService.claimRadio`); AM / FM send the MCU's direct band keys (30 / 31) and re-poll until
 the tuner reports the class. The `sendRadioKey` value table is in CAR_API §3.2.
 
+**PhoneScreen** (RAV4-50) — `ui/PhoneScreen.kt`, reached by the wheel's PHONE / TALK key or the
+status-bar phone icon. The head unit's phone Bluetooth is owned by the vendor app
+`com.szchoiceway.btsuite`, which holds the serial protocol to the BT module and cannot be
+replaced, so the screen drives it: state (device name, HFP state, caller, in-call timer) comes
+from its `HBCP_EVT_*` broadcasts, and Answer / Hang up / dial go back as its own control
+broadcasts (`carlib/VendorBt.kt`, CAR_API §1.3 / §1.4). Recent calls are read from its
+`CallListProvider` (CAR_API §2.4); when that yields nothing the vendor call-record page is
+offered instead, and Contacts / Bluetooth settings always open btsuite's own pages
+(`GotoPageNum`). The dial pad and the call list are parked-only; Answer, Hang up and the vendor
+page buttons stay available while moving. **UNVERIFIED on the car**: every control broadcast,
+whether the provider answers a normal uid, and the speaking-time payload shape.
+
 ### What the firmware does not have
 
 Two things §3.3/§3.4 planned turned out not to exist, so they are not built:
@@ -248,6 +260,25 @@ Both screens poll rather than subscribe. `setRadioCallback` exists, but the `ICa
 signature was never recovered, so registering it would be a guess. Blocking AIDL reads stay off
 the composition body — doing them inline once spun a main-thread IPC recomposition loop while
 seeking.
+
+### CarPlay deep links (RAV4-52)
+
+The Zlink receiver (`com.zjinnova.zlink`) is driven by intent, never bundled. `carlib/Zlink.kt`
+holds the contract recovered from the gateway's `ZlinkManage.java`. `CarEvents.carplayState`
+folds the receiver's `com.zjinnova.zlink` status broadcasts (CONNECTED or MAIN_AUDIO_START
+until DISCONNECT, PHONE_CALL_ON / OFF, `phoneMode`) and the gateway's telephone event into one
+flow. While a phone is projected, the quick-launch CarPlay tile becomes a row of five
+shortcuts: Siri, Maps, Music, Now playing, Home. Each is one `REQ_SPEC_FUNC_CMD` broadcast
+with the gateway's own code (1500 / 1504 / 1506 / 1507 / 1508). The two lowest fill tiles
+drop for the duration. The media card and MediaScreen source labels open CarPlay through
+`ZLINK_MAIN`, and the status bar shows a "CarPlay wireless" / "CarPlay call" chip. Idle, the
+tile launches the receiver as before. Nothing here writes `SYS_LAUNCHER_APP_HIDE_KEY` or
+starts `DaemonService`; both make the gateway kill or re-gate Zlink.
+
+UNVERIFIED (car offline): the status vocabulary is the gateway's side of the bridge, not a
+capture from Zlink 5.4.62, whose DEX is packed; whether that build honours a
+`REQ_SPEC_FUNC_CMD` from a sender other than the gateway; and the `page` / `feature` values of
+`ZLINK_MAIN` (nothing in the estate calls it, so `main` / `carplay` are guesses).
 
 ## SWC completeness & radar truth (v2.8)
 
@@ -627,6 +658,43 @@ approximation; a sunset calculation would be wrong exactly when it matters.
   which package; whether `cmd notification allow_listener` grants the third listener as reliably
   as the first two; how much of the shelf survives the vendor's own notification handling; and
   whether the extracted keyboard's key sizes still read well on the real 240dpi panel.
+
+## Wheel gestures
+
+The RAV4's wheel keys reach the head unit as CAN frame `0x11` (`bArr[4]` = key id, `bArr[5]`
+= 1 on every frame while held, 0 on release), and the vendor CAN app throws the duration away:
+it emits one MCU key on the release frame whatever the hold
+(`HiworldCanParseToyota.java:831-891`). The launcher already receives those raw frames
+(`MCU_MSG_CAN_ALL_INFO`, the steering decode), so `carlib/WheelGestures.kt` reads the key byte off
+the same decode and turns the run of frames into one of **Press**, **LongPress** (held 600 ms,
+emitted while still held) or **DoublePress** (second press within 400 ms of a release). A gap of
+more than 300 ms with no frame is read as a release. VOL± are ignored: the CAN app owns their
+auto-repeat. Ids 8/13 and 9/14 both mean PREV/NEXT and are folded.
+
+Settings ▸ Wheel gestures binds a hold and a double press per key (NEXT, PREV, MODE, PLAY/PAUSE,
+TALK, RETURN, MUTE, VOICE) to one of: seek ±30/10 s, next/prev track, play/pause, open
+Media/Radio/Home, radio seek up/down, next preset, claim radio, hand audio back to Android, Siri
+(Zlink 1500), navigation (Zlink Maps 1504 while CarPlay reports connected, else the Nav card's
+app), mute toggle, the vendor voice assistant (`ZXW_CAN_KEY_EVT` 116, the CAN app's own path).
+Media actions go through the active `MediaController`; seek is `seekTo(position ± delta)`
+clamped to the track. Defaults: NEXT hold = +30 s, PREV hold = −10 s, PLAY/PAUSE hold = mute,
+RETURN hold = Home; MODE and TALK holds ship unbound (their plain action runs inside the gateway
+and cannot be swallowed, so binding them means "source switch AND …"); **every double press =
+nothing**.
+
+**The collateral rule.** The vendor reports the key on release, so by the time a second press can
+be recognised the first press has already done its plain job (skipped a track, switched source). A
+double-press action always lands on top of that, which is why none are bound by default. A hold
+has no such collateral on the launcher's own screens: after a LongPress the vendor's key for the
+same button, arriving within 1.5 s as an injected `KeyEvent` (NEXT/PREV/PLAY/RETURN) or as
+`MCU_KEY_INFOR`, is dropped (`carlib/WheelKeySwallow.kt`, one drop per path per hold). Two limits:
+with a third-party app in front (Spotify, CarPlay) the injected key goes to *that* window and
+lands there; and MODE (gateway `switchMode()`), MUTE (`sendSystemKey(12)`), TALK and VOICE act
+inside the gateway, so a hold on those always carries the vendor's short action too.
+
+Nothing above is verified on the car. The ~100 ms frame period behind the 300 ms gap is inferred
+from the CAN app's per-frame counter; the settings screen's "Last gesture" line is the on-car
+check.
 
 ## Known TODOs
 

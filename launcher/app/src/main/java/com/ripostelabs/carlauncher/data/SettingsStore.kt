@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.ripostelabs.carlauncher.carlib.WheelKey
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -102,6 +103,8 @@ data class LauncherSettings(
     val readNowPlaying: Boolean = false,
     /** v0.4.2 — speak newly-arrived shelf notifications aloud (TTS). Off by default. */
     val readNotifications: Boolean = false,
+    /** Hold / double-press actions for the wheel keys; on by default, see [WheelGestureBindings]. */
+    val wheelGestures: WheelGestureBindings = WheelGestureBindings(),
     /**
      * Hide a Choiceway app from the drawer once our replacement is installed ([OemApps]).
      * On by default: it only ever hides an app whose stand-in is present, so a unit with no
@@ -192,6 +195,13 @@ class SettingsStore(context: Context) {
                     reverseGuideLines = prefs[REVERSE_GUIDE_LINES_KEY] ?: true, // v0.4.7.1
                     readNowPlaying = prefs[READ_NOW_PLAYING_KEY] ?: false, // v0.4.2
                     readNotifications = prefs[READ_NOTIFICATIONS_KEY] ?: false, // v0.4.2
+                    wheelGestures = WheelGestureBindings(
+                        enabled = prefs[WHEEL_GESTURES_KEY] ?: true,
+                        long = WheelGestureBindings.decode(
+                            prefs[WHEEL_LONG_KEY], WheelGestureBindings.DEFAULT_LONG,
+                        ),
+                        double = WheelGestureBindings.decode(prefs[WHEEL_DOUBLE_KEY], emptyMap()),
+                    ),
                     hideReplacedOemApps = prefs[HIDE_REPLACED_OEM_KEY] ?: true,
                     hideOemSettings = prefs[HIDE_OEM_SETTINGS_KEY] ?: false,
                 )
@@ -272,6 +282,20 @@ class SettingsStore(context: Context) {
         ds.edit { it[READ_NOTIFICATIONS_KEY] = enabled }
     }
 
+    /** Master switch for the wheel hold / double-press layer. */
+    fun setWheelGesturesEnabled(enabled: Boolean) = scope.launch {
+        ds.edit { it[WHEEL_GESTURES_KEY] = enabled }
+    }
+
+    /** Bind [key]'s hold to [action]; the whole map is re-encoded from the current snapshot. */
+    fun setWheelLong(key: WheelKey, action: WheelGestureAction) = scope.launch {
+        val next = settings.value.wheelGestures.long + (key to action)
+        ds.edit { it[WHEEL_LONG_KEY] = WheelGestureBindings.encode(next) }
+    }
+
+    fun setWheelDouble(key: WheelKey, action: WheelGestureAction) = scope.launch {
+        val next = settings.value.wheelGestures.double + (key to action)
+        ds.edit { it[WHEEL_DOUBLE_KEY] = WheelGestureBindings.encode(next) }
     /** Shadow the replaced OEM apps ([OemApps]) in the drawer, or show them again. */
     fun setHideReplacedOemApps(enabled: Boolean) = scope.launch {
         ds.edit { it[HIDE_REPLACED_OEM_KEY] = enabled }
@@ -303,6 +327,9 @@ class SettingsStore(context: Context) {
         val REVERSE_GUIDE_LINES_KEY = booleanPreferencesKey("reverse_guide_lines") // v0.4.7.1
         val READ_NOW_PLAYING_KEY = booleanPreferencesKey("read_now_playing") // v0.4.2 TTS
         val READ_NOTIFICATIONS_KEY = booleanPreferencesKey("read_notifications") // v0.4.2 TTS
+        val WHEEL_GESTURES_KEY = booleanPreferencesKey("wheel_gestures_enabled")
+        val WHEEL_LONG_KEY = stringPreferencesKey("wheel_gestures_long")
+        val WHEEL_DOUBLE_KEY = stringPreferencesKey("wheel_gestures_double")
         val HIDE_REPLACED_OEM_KEY = booleanPreferencesKey("hide_replaced_oem_apps") // OemApps shadow
         val HIDE_OEM_SETTINGS_KEY = booleanPreferencesKey("hide_oem_settings") // OemApps shadow
     }

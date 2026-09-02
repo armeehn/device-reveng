@@ -82,6 +82,8 @@ fun MediaScreen(
     onSelectSource: (String) -> Unit,
     onBack: () -> Unit,
     vendorSource: String? = null,
+    // RAV4-52: non-null while the phone is the source; makes the header label a deep link.
+    onOpenCarPlay: (() -> Unit)? = null,
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
         // Blurred art wash, as on the card, so the screen reads as the same surface enlarged.
@@ -103,7 +105,7 @@ fun MediaScreen(
         }
 
         Column(modifier = Modifier.fillMaxSize()) {
-            MediaHeader(vendorSource = vendorSource, onBack = onBack)
+            MediaHeader(vendorSource = vendorSource, onBack = onBack, onOpenCarPlay = onOpenCarPlay)
 
             Row(
                 modifier = Modifier
@@ -146,7 +148,7 @@ fun MediaScreen(
 }
 
 @Composable
-private fun MediaHeader(vendorSource: String?, onBack: () -> Unit) {
+private fun MediaHeader(vendorSource: String?, onBack: () -> Unit, onOpenCarPlay: (() -> Unit)?) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -171,13 +173,19 @@ private fun MediaHeader(vendorSource: String?, onBack: () -> Unit) {
             color = MaterialTheme.colorScheme.onBackground,
         )
         // The vendor's own source (Bluetooth / USB / built-in). Read-only: see
-        // CarService.getValidModeTitle for why we don't offer to switch it.
-        if (!vendorSource.isNullOrBlank()) {
+        // CarService.getValidModeTitle for why we don't offer to switch it. RAV4-52: the one
+        // exception is the phone, where the label opens CarPlay (ZLINK_MAIN).
+        if (!vendorSource.isNullOrBlank() || onOpenCarPlay != null) {
             Spacer(Modifier.weight(1f))
+            val open = onOpenCarPlay?.let { withTapFeedback(it) }
             AutoSizeText(
-                text = "Car source: $vendorSource",
+                text = "Car source: ${vendorSource?.takeIf { it.isNotBlank() } ?: "CarPlay"}",
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .clip(carShape(12.dp))
+                    .then(if (open != null) Modifier.focusRing().clickable(onClick = open) else Modifier)
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
             )
         }
     }
