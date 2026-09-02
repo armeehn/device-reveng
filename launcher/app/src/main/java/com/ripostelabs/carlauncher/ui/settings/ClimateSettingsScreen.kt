@@ -18,7 +18,7 @@ import com.ripostelabs.carlauncher.data.SettingKeys
 
 /**
  * v1.6 — Climate. Mirrors the vendor A/C configuration, reskinned, plus a live HVAC readout
- * from [CarEvents.climate] (best-effort decode of the `carairstruct` broadcast). Config values
+ * from [CarEvents.climate] (the `carairstruct` broadcast's `CarAirState`). Config values
  * are SysVar-backed (CAR_API §2.3). The readout degrades to a placeholder when no valid frame
  * has arrived, so a guessed byte layout never fabricates numbers.
  */
@@ -56,7 +56,7 @@ fun ClimateSettingsScreen(
                         append(if (cs.acOn) "A/C on" else "A/C off")
                         if (cs.autoOn) append(" · Auto")
                         if (cs.dualOn) append(" · Dual")
-                        if (cs.rearAirOn) append(" · Rear")
+                        if (cs.rearDefrost) append(" · Rear defrost")
                     },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

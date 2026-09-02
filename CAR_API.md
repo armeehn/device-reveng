@@ -412,10 +412,16 @@ the gateway. Confirmed facts from code:
   AC=8, AC_MAX=9, DUAL=10, REAR=11, INNER_LOOP=12, OUT_LOOP=13, AQS=14, FRONT_DEFROST=15,
   REAR_DEFROST=16, L_SEAT_COLD=17, L_SEAT_HOT=18, R_SEAT_COLD=19, R_SEAT_HOT=20, MODE=21,
   FAN_UP=22, FAN_MID=23, FAN_DOWN=24, …, ESP=35, DOOR_LOCK=36, WHEEL_HOT=37, NONE=-1`.
-- **Climate state struct** the gateway builds and broadcasts: `com.szchoiceway.canbus.CarAirState`
-  (Parcelable) — booleans/ints like `bAcOn, bAirOn, bAutoOn2, bDualOn, byAirMode, byFunStrength,
-  bLeftSeatHotLevel, bRightSeatHotLevel, bWheelHeat, bRearAirOn, byLeftColdLevel…`
-  (`canbus/CarAirState.java:8-67+`).
+- **Climate state struct** the CAN app builds and broadcasts: `com.szchoiceway.canbus.CarAirState`
+  (Parcelable, canbus2 `CanDataParseBase.java:473-486`). Of its ~170 fields only 36 are parcelled
+  (`canbus/CarAirState.java` `writeToParcel`): `bAirOn, bAcOn, bOutCircleOn, bBigAutoOn,
+  bSmallAutoOn, bDualOn, bMaxFrontOn, bRearOn, bFunDirectHead/Level/Foot, bAcMax, byFunStrength,
+  m_byLeftTemp, m_byRighTemp` (Strings: "22.5℃"/"LO"/"HI"), `m_byTempUnit, bRearLock, …,
+  byLeftColdLevel, byRightColdLevel, bLeftSeatHotLevel, bRightSeatHotLevel, byMaxFunStrengthStall…`.
+  `bECOOn`, `bRearAirOn`, `bWheelHeat`, `m_OutSideTemp` are NOT parcelled. The launcher's carlib
+  ships a same-name mirror so the extra unparcels. `getAirData()` is a stub returning null
+  (`EventService.java:1369-1371`). HVAC buttons: broadcast `CAR_AIR_KEY_KEY` with int extra
+  `car_key_value` = `CanUtils.CAR_AIR_KEY_*` (`CarAirClickWithVoice.java:432,462`) **[unverified on car]**.
 - **5AA5 (Raise/CANBOX) framing & inner `0x0D 0x0A|len|payload|cksum`:** the concrete byte framer was
   not isolated in the files reviewed (parsing is spread across native/serial glue and the CAN-box
   apps). The task's own summary of those frames stands; use the `onCmd*` handler set above as the
@@ -455,7 +461,7 @@ UIMODE + day/night backlight broadcasts to theme itself.
 |---|---|---|
 | **Media / now-playing** | `ZXW_MUSIC_PLAY_SONG/ARTIST/ALBUM/PLAYFILE_EVT` broadcasts, or AIDL `getValidMode*Infor()` / `getValidPlayState()` | §1.3, §3.2 |
 | **Radio** | `ZXW_RADIO_INFO_EVT` / `com.szchoiceway.radio.frequency`, or AIDL `getRadioFreq/Band/Num()`, control via `sendRadioKey/sendUserFreq` | §1.3, §3.2 |
-| **Climate / A/C** | `com.szchoiceway.canbus.carairstruct` → Parcelable `CarAirState`, or AIDL `getAirData(int,byte[])` | §1.3, §5 |
+| **Climate / A/C** | `com.choiceway.canbus.carairstruct` → Parcelable `CarAirState` (AIDL `getAirData` is a null stub) | §1.3, §5 |
 | **Reverse / radar** | `ACTION_BACKCAR_START/END` + `MCU_CAR_CAN_RADAR_INFO` (byte[]) + `ZXW_CAN_WHEEL_TRACK_EVT` (angle) | §1.3 |
 | **Navigation** | configured nav pkg/class in SysVar (`Set_NavPackageName`/`Set_NavClassName`), nav-sound broadcasts (`ACTION_NAVI_START/STOP_PLAY_SOUND`) | SysVar + consts |
 | **Day/night theming** | `ACTION_DAY_BACKLIGHT_CHAGNED` / `ACTION_NIGHT_BACKLIGHT_CHAGNED`, `Sys_Day_Night_Mode` | §1.3, §2.3 |

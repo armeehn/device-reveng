@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
 import android.util.Log
+import com.szchoiceway.canbus.CarAirState
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -169,21 +170,15 @@ class CarEvents(private val appContext: Context) {
 
         // ---- Climate (CAR_API §1.3) — unprotected ---------------------------
         const val CAR_AIR_STATE_ACTION = "com.szchoiceway.canbus.carairstruct"
-        /** Parcelable com.szchoiceway.canbus.CarAirState (class not bundled — TODO). */
+        /** Parcelable [CarAirState], mirrored in carlib (canbus2 `CanDataParseBase.java:473-486`). */
         const val EXTRA_CAR_AIR_STATE = "com.choiceway.canbus.carairstruct.airstate"
-        /** Candidate byte[] extra keys the gateway may also attach (CAR_API §5). GUESSED. */
-        private val AIR_BYTE_EXTRA_KEYS = arrayOf(
-            "EventUtils.CAR_AIR_DATA",
-            "CAR_AIR_DATA",
-            "EventUtils.CAR_CAN_DATA",
-        )
 
         // ---- v3.0: cockpit signals (CAR_API §1.3) — unprotected --------------
         /**
          * Outside temperature. The *action* is confirmed (`EvtModel.java:512-517`); the exact
          * extra key strings are not quoted in the decompile, only described as `..._EVT_EXTRA`
-         * (int) and `..._EVT_EXTRA_STR` (String), so the candidates below are GUESSED the same
-         * way [AIR_BYTE_EXTRA_KEYS] is. The String form is preferred when present because it
+         * (int) and `..._EVT_EXTRA_STR` (String), so the candidates below are GUESSED. The
+         * String form is preferred when present because it
          * arrives already formatted with the car's own unit, so we don't have to guess whether
          * the int is °C, °F, or tenths.
          */
@@ -394,10 +389,9 @@ class CarEvents(private val appContext: Context) {
 
     private val _climate = MutableStateFlow<ClimateState?>(null)
     /**
-     * Latest HVAC snapshot decoded from the `carairstruct` broadcast, or null if none has
-     * been decoded. The vendor Parcelable class isn't bundled, so this is only populated when
-     * the gateway also attaches a raw byte[] frame (best-effort); otherwise consumers fall
-     * back to AIDL `getAirData()`.
+     * Latest HVAC snapshot from the `carairstruct` broadcast, or null until the CAN app sends
+     * one. Unparcelled through the mirrored [CarAirState]; there is no other read path
+     * (`getAirData()` is a stub, see [ClimateState]).
      */
     val climate: StateFlow<ClimateState?> = _climate.asStateFlow()
 
@@ -553,8 +547,8 @@ class CarEvents(private val appContext: Context) {
          *
          * An exception out of `onReceive` is fatal: ActivityManager kills the process, and for the
          * HOME app that is a black screen in a moving car. The gateway attaches vendor Parcelables
-         * (e.g. `com.szchoiceway.canbus.CarAirState`) to `CAN_CAR_TIRP_INFO` / `MCU_CAR_CAN_INFO`,
-         * and those classes are deliberately not bundled into this APK, so the lazy
+         * to `CAN_CAR_TIRP_INFO` / `MCU_CAR_CAN_INFO`, and apart from the mirrored
+         * [CarAirState] those classes are deliberately not bundled into this APK, so the lazy
          * `Bundle.unparcel()` that reading the extras forces throws `BadParcelableException`
          * (ClassNotFoundException underneath). Those frames arrive continuously with the engine
          * running, so an unguarded throw is a crash loop, not a one-off.
@@ -710,17 +704,10 @@ class CarEvents(private val appContext: Context) {
                 }
 
                 CAR_AIR_STATE_ACTION -> {
-                    // The primary extra is a Parcelable CarAirState we can't deserialize
-                    // (class not bundled). Best-effort: pick up a raw byte[] frame if the
-                    // gateway also attached one, and decode it. Otherwise leave the flow as-is
-                    // so consumers fall back to AIDL getAirData().
-                    val bytes = AIR_BYTE_EXTRA_KEYS.firstNotNullOfOrNull { key ->
-                        runCatching { intent.getByteArrayExtra(key) }.getOrNull()
-                    }
-                    if (bytes != null) {
-                        val cs = ClimateState.fromAirData(bytes)
-                        if (cs.valid) _climate.value = cs
-                    }
+                    // The extra unparcels into our CarAirState mirror because the class name
+                    // and field order match the vendor's. A missing extra leaves the flow as-is.
+                    intent.getParcelableExtra(EXTRA_CAR_AIR_STATE, CarAirState::class.java)
+                        ?.let { _climate.value = ClimateState.from(it) }
                 }
 
                 else -> Log.d(TAG, "unhandled action: ${intent?.action}")
