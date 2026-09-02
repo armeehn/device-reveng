@@ -7,10 +7,10 @@ import org.junit.Test
  * [Reachability] decides which side of a 1920px screen every interactive control lands on, so a
  * wrong answer is not cosmetic: it moves the thumb column out of reach while the car is moving.
  *
- * The AUTO branch is deliberately inert. `Sys_CarType`'s value domain was never recovered, so the
- * known-RHD table is empty and AUTO must answer LEFT for every input. These tests pin that
- * emptiness down — adding a guessed car type to the table breaks [autoIsLeftForAnyCarType], which
- * is the point.
+ * The AUTO branch is deliberately inert. `Sys_CarType` is a model index (RAV4 = 2), not a market,
+ * and the steering side never leaves the CAN box, so the known-RHD table is empty and AUTO must
+ * answer LEFT for every input. These tests pin that emptiness down — adding a car type to the
+ * table breaks [autoIsLeftForAnyCarType], which is the point.
  */
 class ReachabilityTest {
 
@@ -25,7 +25,7 @@ class ReachabilityTest {
 
     @Test
     fun autoIsLeftForAnyCarType() {
-        listOf("0", "1", "42", "RHD", "rhd", "  7  ", "Sys_CarType").forEach { carType ->
+        listOf("0", "1", "2", "42", "RHD", "rhd", "  7  ", "Sys_CarType").forEach { carType ->
             assertEquals(
                 "AUTO resolved RIGHT for car type '$carType' — the known-RHD table is meant to be empty",
                 DriverSide.LEFT,

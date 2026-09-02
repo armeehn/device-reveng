@@ -63,7 +63,7 @@ data class LauncherSettings(
     val replaceSystemBars: Boolean = false, // v2.5 suppress vendor status bar + shade (root)
     /**
      * v2.8 — reachability mirror (LAUNCHER_DESIGN §2.5). AUTO defers to [Reachability], which has
-     * no confirmed `Sys_CarType` mapping yet and therefore always answers LHD; LHD/RHD pin it.
+     * cannot resolve RHD on this platform and therefore always answers LHD; LHD/RHD pin it.
      */
     val driverSideMode: DriverSideMode = DriverSideMode.AUTO,
     /**

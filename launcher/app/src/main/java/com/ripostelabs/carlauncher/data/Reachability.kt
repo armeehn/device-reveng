@@ -16,23 +16,22 @@ enum class DriverSideMode { AUTO, LHD, RHD }
 /**
  * Resolves [DriverSideMode] against the vendor's car profile.
  *
- * **`Sys_CarType` does not tell us this, and we do not pretend otherwise.** CAR_API §2.3 documents
- * the key as "Car model/type profile id" and nothing more: the value domain was never recovered,
- * because the vendor settings APK that holds the enum tables is not in the decompile (see the note
- * in [SettingKeys]). A profile id is a *model* selector — an id could plausibly imply a market and
- * therefore a steering side, but that inference has no evidence behind it and getting it wrong
- * moves every interactive control to the wrong side of a 1920px screen while the car is moving.
+ * **`Sys_CarType` cannot tell us this.** It is the model index within `Sys_Vehicle_deries`
+ * (canbus2 `CanConstantInfo.java:497-543,645`: Toyota = 1; Camry 1, RAV4 2, Corolla 5,
+ * Highlander 7, C-HR 10), so a RAV4 reads `1 / 2` on every market. Steering side is not a SysVar
+ * at all: the Hiworld Toyota CAN box reports left/right rudder in its car-settings frame (0x62,
+ * byte 6 bit 2, `HiworldCanParseToyota.java:672`) and canbus2 keeps it only in an in-process map
+ * for its console page. Nothing on this platform exposes it to another app.
  *
- * So [KNOWN_RHD_CAR_TYPES] is **empty on purpose**. AUTO resolves to [DriverSide.LEFT] until a
- * value is confirmed on a real head unit, and the settings screen shows the live raw `Sys_CarType`
- * next to the override so the user can read theirs off and report it. Any entry added here is
- * GUESSED until it is confirmed against a car that is actually RHD.
+ * So [KNOWN_RHD_CAR_TYPES] is **empty on purpose** and must stay so: no car-type value can ever
+ * mean RHD. AUTO resolves to [DriverSide.LEFT]; the settings screen says plainly that Auto cannot
+ * resolve the side here and shows the raw values so a user can confirm the profile is right.
  */
 object Reachability {
 
     /**
-     * Confirmed RHD `Sys_CarType` values. EMPTY — see the class KDoc. Adding a value here on a
-     * hunch is the one change that must not be made without a device.
+     * EMPTY by design — see the class KDoc. `Sys_CarType` is a model index, not a market, so no
+     * value belongs here.
      */
     private val KNOWN_RHD_CAR_TYPES = emptySet<String>()
 

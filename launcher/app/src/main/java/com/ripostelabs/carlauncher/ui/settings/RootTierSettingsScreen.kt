@@ -10,6 +10,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import android.os.SystemClock
 import com.ripostelabs.carlauncher.carlib.CarEvents
+import com.ripostelabs.carlauncher.carlib.VendorChrome
 import com.ripostelabs.carlauncher.carlib.VendorLauncher
 import com.ripostelabs.carlauncher.data.CarSettingsController
 import com.ripostelabs.carlauncher.data.RootTierController
@@ -20,9 +21,12 @@ import kotlinx.coroutines.delay
  * unobtainable and the "install as a platform-signed system app" tier is off the table for good.
  *
  * The screen leads with what is *actually* working rather than with the switches. Every control
- * here depends on root, two of them write keys whose meaning is GUESSED, and one can wedge the
- * unit's vendor UI — so "is capture live", "do these keys exist on this unit" and "how do I get
- * back" are the facts a user needs before they touch anything, not after.
+ * here depends on root or a bound gateway, and one can wedge the unit's vendor UI — so "is
+ * capture live", "can this unit act on the key" and "how do I get back" are the facts a user
+ * needs before they touch anything, not after.
+ *
+ * The nav-bar toggle writes `Sys_Customer_NaviBar_Height_Key` (see [VendorChrome]). The status
+ * bar has no SysVar switch and is not offered.
  */
 @Composable
 fun RootTierSettingsScreen(
@@ -34,7 +38,7 @@ fun RootTierSettingsScreen(
     val rootAvailable by controller.rootAvailable.collectAsStateWithLifecycle()
     val rootCapture by carEvents.rootCapture.collectAsStateWithLifecycle()
     val chromeHidden by rootTier.chromeHidden.collectAsStateWithLifecycle()
-    val chromeKeys by rootTier.chromeKeysPresent.collectAsStateWithLifecycle()
+    val chromeSupport by rootTier.chromeSupport.collectAsStateWithLifecycle()
     val vendorState by rootTier.vendorLauncher.collectAsStateWithLifecycle()
     val rollbackDeadline by rootTier.rollbackDeadline.collectAsStateWithLifecycle()
 
@@ -73,14 +77,15 @@ fun RootTierSettingsScreen(
             InfoRow("Vendor launcher", vendorLauncherLabel(vendorState))
         }
 
-        SettingsSection(title = "Vendor status & nav bar") {
+        SettingsSection(title = "Vendor nav bar") {
             ToggleSetting(
-                label = "Hide vendor bars",
-                description = chromeDescription(chromeKeys),
+                label = "Hide vendor nav bar",
+                description = chromeDescription(chromeSupport),
                 checked = chromeHidden,
-                enabled = rooted && chromeKeys?.isNotEmpty() == true,
+                enabled = rooted && chromeSupport == VendorChrome.Support.READY,
                 onChange = { rootTier.setChromeHidden(it) },
             )
+            InfoRow("Status bar", "No vendor key hides it; the gateway always enables it")
         }
 
         SettingsSection(title = "Sole-HOME mode") {
@@ -149,11 +154,15 @@ private fun vendorLauncherLabel(state: VendorLauncher.State): String = when (sta
     VendorLauncher.State.UNKNOWN -> "Unknown"
 }
 
-/** Both keynames are GUESSED, so say which ones this unit actually has rather than implying both. */
-private fun chromeDescription(present: List<String>?): String = when {
-    present == null -> "Checking which vendor keys this unit has…"
-    present.isEmpty() -> "Neither vendor key exists on this unit — nothing to hide"
-    else -> "Writes ${present.joinToString(", ")}; restores the original value when off"
+/** Say why the toggle is inert rather than letting it look broken. */
+private fun chromeDescription(support: VendorChrome.Support?): String = when (support) {
+    null -> "Checking whether this unit honours the key…"
+    VendorChrome.Support.KEY_ABSENT ->
+        "${VendorChrome.KEY_NAVIBAR_HEIGHT} does not exist on this unit — nothing to hide"
+    VendorChrome.Support.NOT_LANDSCAPE ->
+        "The gateway only honours the key with ${VendorChrome.KEY_LANDSCAPE} = 1; this unit is not"
+    VendorChrome.Support.READY ->
+        "Sets ${VendorChrome.KEY_NAVIBAR_HEIGHT} to 0; restores the original height when off"
 }
 
 /** The one instruction that gets a user out of trouble. Repeated verbatim in launcher/README.md. */
