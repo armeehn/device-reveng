@@ -16,6 +16,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import com.ripostelabs.carlauncher.ui.theme.carShape
+import androidx.compose.material.icons.Icons // RAV4-52
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.PlayCircleFilled
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -31,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.focusGroup
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector // RAV4-52
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -39,7 +47,9 @@ import com.ripostelabs.carlauncher.AppInfo
 import com.ripostelabs.carlauncher.AppRepository
 import com.ripostelabs.carlauncher.R
 import com.ripostelabs.carlauncher.carlib.CarEvents
+import com.ripostelabs.carlauncher.carlib.CarPlayState // RAV4-52
 import com.ripostelabs.carlauncher.carlib.CarService
+import com.ripostelabs.carlauncher.carlib.Zlink // RAV4-52
 import com.ripostelabs.carlauncher.data.AppDirectoryStore // v0.4.2 custom app directory
 import com.ripostelabs.carlauncher.data.DriverSide // v2.8
 import com.ripostelabs.carlauncher.data.LauncherSettings // v0.6
@@ -54,6 +64,7 @@ import com.ripostelabs.carlauncher.media.JellyfinApp // v2.7
 import com.ripostelabs.carlauncher.media.MiniScreenController // v4.1
 import com.ripostelabs.carlauncher.media.MiniScreenState // v4.1
 import com.ripostelabs.carlauncher.media.NowPlayingRepository
+import com.ripostelabs.carlauncher.media.SourceLabels // RAV4-52
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -104,6 +115,7 @@ fun HomeScreen(
     val reverse by carEvents.reverse.collectAsStateSafe(initial = false)
     val media by nowPlaying.state.collectAsStateSafe(initial = null)
     val radar by carEvents.radar.collectAsStateSafe(initial = null) // v0.7 parking sensors
+    val carPlay by carEvents.carplayState.collectAsStateSafe(initial = CarPlayState()) // RAV4-52
     // v0.6: observe launcher settings (null store -> defaults, keeps previews working).
     val settings by (settingsStore?.settings?.collectAsStateSafe(initial = LauncherSettings())
         ?: remember { mutableStateOf(LauncherSettings()) })
@@ -149,13 +161,29 @@ fun HomeScreen(
             .filterNot { it.packageName in pinned }
         (quickPins + fill).take(QUICK_LAUNCH_SLOTS)
     }
+    // RAV4-52: while a phone is projected the CarPlay tile reflows into a shortcut row.
+    val quick = remember(quickApps, carPlay.connected) {
+        quickLayout(
+            apps = quickApps,
+            columns = QUICK_LAUNCH_COLUMNS,
+            maxRows = QUICK_LAUNCH_SLOTS / QUICK_LAUNCH_COLUMNS,
+            projection = if (carPlay.connected) Projection.PROJECTED else Projection.IDLE,
+            isCarPlay = { SourceLabels.isCarPlay(it.packageName) },
+        )
+    }
+    val runQuick: (QuickSlot<AppInfo>) -> Unit = { slot ->
+        when (slot) {
+            is QuickSlot.App -> appRepository.launch(slot.app)
+            is QuickSlot.Action -> slot.action.intent().broadcast(appContext)
+        }
+    }
     SideEffect {
         // Keep the focus model's view of the layout in sync so navigation skips hidden regions.
         focus.showMedia = settings.showMedia
         focus.showClimate = settings.showClimate
         focus.showRadio = settings.showRadio
         focus.showNav = settings.showNav
-        focus.quickCount = quickApps.size
+        focus.quickCount = quick.slots.size
         // CENTER activation for the focused region (grid tiles launch via GridFocus).
         focus.onActivate = { target ->
             when (target) {
@@ -164,7 +192,7 @@ fun HomeScreen(
                 is FocusTarget.Media -> onOpenMedia()
                 is FocusTarget.Radio -> onOpenRadio()
                 is FocusTarget.Grid -> focus.grid.launch(target.index)
-                is FocusTarget.Quick -> quickApps.getOrNull(target.index)?.let(appRepository::launch)
+                is FocusTarget.Quick -> quick.slots.getOrNull(target.index)?.let(runQuick)
                 else -> {} // Climate / Nav are glanceable, no primary action
             }
         }
@@ -278,6 +306,12 @@ fun HomeScreen(
                                     onPrev = nowPlaying::prev,
                                     onSeek = nowPlaying::seekTo,
                                     onCycleSource = nowPlaying::cycleSession,
+                                    // RAV4-52: the CarPlay chip deep-links into the receiver.
+                                    onOpenSource = if (SourceLabels.isCarPlay(media?.sourcePackage)) {
+                                        { Zlink.open().start(appContext) }
+                                    } else {
+                                        null
+                                    },
                                     modifier = Modifier.fillMaxSize(),
                                 )
                             }
@@ -356,8 +390,8 @@ fun HomeScreen(
                         .focusGroup(),
                 ) {
                     QuickLaunchGrid(
-                        apps = quickApps,
-                        onLaunch = appRepository::launch,
+                        rows = quick.rows,
+                        onSlot = runQuick,
                         focus = focus, // v0.8
                         modifier = Modifier
                             .fillMaxWidth()
@@ -441,11 +475,14 @@ private const val QUICK_LAUNCH_COLUMNS = 3
  *
  * SWC focus order is row-major: the existing linear Quick ring in SwcNavigator steps through
  * tiles in reading order, so every tile stays reachable with no navigator changes.
+ *
+ * RAV4-52: [rows] come from [quickLayout]; a projected phone turns the first row into five
+ * [CarPlayActionTile]s, which the same ring reaches at indices 0..4.
  */
 @Composable
 private fun QuickLaunchGrid(
-    apps: List<AppInfo>,
-    onLaunch: (AppInfo) -> Unit,
+    rows: List<List<QuickSlot<AppInfo>>>,
+    onSlot: (QuickSlot<AppInfo>) -> Unit,
     modifier: Modifier = Modifier,
     focus: LauncherFocus? = null, // v0.8: draw the focus ring on the focused tile
 ) {
@@ -465,23 +502,36 @@ private fun QuickLaunchGrid(
                 .weight(1f),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            apps.chunked(QUICK_LAUNCH_COLUMNS).forEachIndexed { rowIndex, row ->
+            // Focus index runs row-major over whatever each row holds (a shortcut row is 5 wide).
+            var index = 0
+            rows.forEach { row ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    row.forEachIndexed { colIndex, app ->
-                        val index = rowIndex * QUICK_LAUNCH_COLUMNS + colIndex
+                    row.forEach { slot ->
+                        val slotIndex = index++
                         val tileModifier = if (focus != null) {
                             Modifier
                                 .weight(1f)
-                                .launcherFocusTarget(focus, FocusTarget.Quick(index), cornerRadiusDp = 15)
+                                .launcherFocusTarget(focus, FocusTarget.Quick(slotIndex), cornerRadiusDp = 15)
                         } else {
                             Modifier.weight(1f)
                         }
-                        QuickLaunchTile(app = app, onClick = { onLaunch(app) }, modifier = tileModifier)
+                        when (slot) {
+                            is QuickSlot.App -> QuickLaunchTile(
+                                app = slot.app,
+                                onClick = { onSlot(slot) },
+                                modifier = tileModifier,
+                            )
+                            is QuickSlot.Action -> CarPlayActionTile(
+                                action = slot.action,
+                                onClick = { onSlot(slot) },
+                                modifier = tileModifier,
+                            )
+                        }
                     }
                     // Pad a short last row so its tiles keep the same width as full rows.
                     repeat(QUICK_LAUNCH_COLUMNS - row.size) { Spacer(Modifier.weight(1f)) }
@@ -511,4 +561,47 @@ private fun QuickLaunchTile(app: AppInfo, onClick: () -> Unit, modifier: Modifie
         val iconSize = (min(maxWidth, maxHeight) * 0.62f).coerceIn(48.dp, 88.dp)
         AppIcon(app = app, size = iconSize)
     }
+}
+
+/** Glyph size of a [CarPlayActionTile]; leaves room for the label under it in an 86 dp row. */
+private const val ACTION_ICON_DP = 36
+
+/**
+ * RAV4-52: one projected-phone shortcut, icon over label, in the [QuickLaunchTile] chrome.
+ * Five share the row, so each is ~66 dp wide on the 1280 dp canvas — under the 76 dp driving
+ * minimum (LAUNCHER_DESIGN §1.2); the full row height carries the target. No parked gate:
+ * these are single presses that exist on the wheel anyway.
+ */
+@Composable
+private fun CarPlayActionTile(action: CarPlayAction, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val press = withTapFeedback(onClick)
+    Column(
+        modifier = modifier
+            .fillMaxHeight()
+            .clip(carShape(15.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+            .clickable(onClick = press),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Icon(
+            imageVector = actionIcon(action),
+            contentDescription = action.label,
+            tint = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.size(ACTION_ICON_DP.dp),
+        )
+        AutoSizeText(
+            text = action.label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+    }
+}
+
+private fun actionIcon(action: CarPlayAction): ImageVector = when (action) {
+    CarPlayAction.SIRI -> Icons.Filled.Mic
+    CarPlayAction.MAPS -> Icons.Filled.Map
+    CarPlayAction.MUSIC -> Icons.Filled.MusicNote
+    CarPlayAction.NOW_PLAYING -> Icons.Filled.PlayCircleFilled
+    CarPlayAction.HOME -> Icons.Filled.Home
 }

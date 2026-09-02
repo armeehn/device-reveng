@@ -231,6 +231,25 @@ signature was never recovered, so registering it would be a guess. Blocking AIDL
 the composition body — doing them inline once spun a main-thread IPC recomposition loop while
 seeking.
 
+### CarPlay deep links (RAV4-52)
+
+The Zlink receiver (`com.zjinnova.zlink`) is driven by intent, never bundled. `carlib/Zlink.kt`
+holds the contract recovered from the gateway's `ZlinkManage.java`. `CarEvents.carplayState`
+folds the receiver's `com.zjinnova.zlink` status broadcasts (CONNECTED or MAIN_AUDIO_START
+until DISCONNECT, PHONE_CALL_ON / OFF, `phoneMode`) and the gateway's telephone event into one
+flow. While a phone is projected, the quick-launch CarPlay tile becomes a row of five
+shortcuts: Siri, Maps, Music, Now playing, Home. Each is one `REQ_SPEC_FUNC_CMD` broadcast
+with the gateway's own code (1500 / 1504 / 1506 / 1507 / 1508). The two lowest fill tiles
+drop for the duration. The media card and MediaScreen source labels open CarPlay through
+`ZLINK_MAIN`, and the status bar shows a "CarPlay wireless" / "CarPlay call" chip. Idle, the
+tile launches the receiver as before. Nothing here writes `SYS_LAUNCHER_APP_HIDE_KEY` or
+starts `DaemonService`; both make the gateway kill or re-gate Zlink.
+
+UNVERIFIED (car offline): the status vocabulary is the gateway's side of the bridge, not a
+capture from Zlink 5.4.62, whose DEX is packed; whether that build honours a
+`REQ_SPEC_FUNC_CMD` from a sender other than the gateway; and the `page` / `feature` values of
+`ZLINK_MAIN` (nothing in the estate calls it, so `main` / `carplay` are guesses).
+
 ## SWC completeness & radar truth (v2.8)
 
 ### The whole app is drivable from the wheel
