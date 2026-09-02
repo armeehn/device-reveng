@@ -196,15 +196,12 @@ class CarEvents(private val appContext: Context) {
 
         /**
          * Steering angle, the signal the vendor uses to bend its reverse trajectory lines
-         * (`EvtModel.java:534-538`, confirmed). Units and sign convention are NOT documented —
-         * see [steeringAngle].
+         * (`EvtModel.java:534-538`, confirmed). Its extra keys are undocumented and the guessed
+         * ones never matched on the car (RAV4-38), so it is only sniffed now; [steeringAngle]
+         * comes from the CAN bulk frame instead.
          */
         const val ZXW_CAN_WHEEL_TRACK_EVT =
             "com.choiceway.eventcenter.EventUtils.ZXW_CAN_WHEEL_TRACK_EVT"
-        private val WHEEL_TRACK_EXTRA_KEYS = arrayOf(
-            "ZXW_CAN_WHEEL_TRACK_EVT_EXTRA",
-            "EventUtils.ZXW_CAN_WHEEL_TRACK_EVT_EXTRA",
-        )
 
         /** Sentinel for a cockpit signal the car has not sent us yet. */
         const val VALUE_UNKNOWN = Int.MIN_VALUE
@@ -481,17 +478,15 @@ class CarEvents(private val appContext: Context) {
      */
     val outsideTemp: StateFlow<String?> = _outsideTemp.asStateFlow()
 
-    private val _steeringAngle = MutableStateFlow(VALUE_UNKNOWN)
+    private val _steeringAngle = MutableStateFlow<SteeringReading?>(null)
     /**
-     * Raw steering angle from `ZXW_CAN_WHEEL_TRACK_EVT`, or [VALUE_UNKNOWN].
-     *
-     * ⚠ Units and sign are GUESSED: the decompile confirms the extra is an int the vendor feeds
-     * into its reverse trajectory, but never says whether it is degrees, tenths of a degree, or
-     * a raw CAN count, nor which way positive turns. The dashboard therefore draws it as a
-     * *relative* indicator centred on the value seen while travelling straight, and never claims
-     * a number of degrees. Confirm on-device by turning lock to lock and reading the extremes.
+     * Steering angle decoded from the 0x11 Basic Status frame of the CAN bulk broadcast, or null
+     * until one arrives. The same decode the capture screen shows (RAV4-38: the vendor
+     * `ZXW_CAN_WHEEL_TRACK_EVT` path never delivered). Degrees on the OEM scale; sign convention
+     * unconfirmed — turn lock to lock on-device to settle it. Consumers must apply
+     * [SteeringReading.isStale] so a dead feed never reads as a held wheel.
      */
-    val steeringAngle: StateFlow<Int> = _steeringAngle.asStateFlow()
+    val steeringAngle: StateFlow<SteeringReading?> = _steeringAngle.asStateFlow()
 
     /**
      * v2.5 — GPS speed. Owned here so [speedKmh] has one front door regardless of which
@@ -617,14 +612,6 @@ class CarEvents(private val appContext: Context) {
                     if (value != null) _outsideTemp.value = value
                 }
 
-                // v3.0: steering angle (raw; see the KDoc on steeringAngle).
-                ZXW_CAN_WHEEL_TRACK_EVT -> {
-                    val angle = WHEEL_TRACK_EXTRA_KEYS
-                        .map { key -> intent.getIntExtra(key, VALUE_UNKNOWN) }
-                        .firstOrNull { it != VALUE_UNKNOWN }
-                    if (angle != null) _steeringAngle.value = angle
-                }
-
                 // v2.9: the protected set. Still filtered for here, because a privileged/system
                 // install DOES receive them directly and must not need the root helper. On an
                 // install where both paths deliver, the same event arrives twice and a duplicate
@@ -684,7 +671,14 @@ class CarEvents(private val appContext: Context) {
 
                 // v0.4.3: bulk CAN frame — capture every extra + any byte[] payload, undecoded.
                 MCU_CAR_CAN_INFO, MCU_MSG_CAN_ALL_INFO, CAN_BASIC_EVT -> {
-                    _canRaw.value = CanFrame.from(intent, System.currentTimeMillis())
+                    val frame = CanFrame.from(intent, System.currentTimeMillis())
+                    _canRaw.value = frame
+
+                    // RAV4-38: the dashboard's steering is this frame's 0x11 decode, the one
+                    // the capture screen already shows. Other opcodes leave it untouched.
+                    frame.bytes
+                        ?.let { SteeringReading.fromFrame(it, frame.atMs) }
+                        ?.let { _steeringAngle.value = it }
                 }
 
                 // v0.4.3: radio info sniff - capture every extra of either radio broadcast.
