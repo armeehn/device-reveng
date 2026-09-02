@@ -30,7 +30,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.ripostelabs.carlauncher.notif.ShelfNotification
 import com.ripostelabs.carlauncher.ui.theme.carShape
@@ -85,7 +84,7 @@ fun NotificationShelfScreen(
                     color = MaterialTheme.colorScheme.onBackground,
                     fontWeight = FontWeight.SemiBold,
                 )
-                Text(
+                AutoSizeText(
                     text = subtitleFor(visible.size, items.size, listenerEnabled),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -164,13 +163,13 @@ private fun NotificationRow(item: ShelfNotification, onOpen: () -> Unit, onDismi
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
+                AutoSizeText(
                     text = item.appLabel,
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary,
                 )
                 Spacer(Modifier.width(10.dp))
-                Text(
+                AutoSizeText(
                     text = relativeTime(item.postedAtMs),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -185,13 +184,12 @@ private fun NotificationRow(item: ShelfNotification, onOpen: () -> Unit, onDismi
                 )
             }
             if (item.text.isNotEmpty()) {
-                Text(
+                AutoSizeText(
                     text = item.text,
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     // Two lines is the glance budget. A long message is read stopped, in the app.
                     maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }
@@ -257,11 +255,12 @@ private fun EmptyShelf(listenerEnabled: Boolean, hasMutedAll: Boolean) {
         else -> "Nothing new."
     }
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text(
+        AutoSizeText(
             text = message,
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 40.dp),
+            maxLines = 2,
         )
     }
 }

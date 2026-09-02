@@ -108,6 +108,7 @@ object ThemeSnapshotStore {
     private const val KEY_CORNER_SCALE = "corner_scale"
     private const val KEY_MONO_TYPE = "mono_type"
     private const val KEY_HARD_EDGE = "hard_edge"
+    private const val KEY_THEMED_ICONS = "themed_icons"
 
     private fun prefs(context: Context) =
         context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -135,6 +136,7 @@ object ThemeSnapshotStore {
             .putFloat(KEY_CORNER_SCALE, theme.style.cornerScale)
             .putBoolean(KEY_MONO_TYPE, theme.style.monoType)
             .putBoolean(KEY_HARD_EDGE, theme.style.hardEdge)
+            .putBoolean(KEY_THEMED_ICONS, theme.style.themedIcons)
             .apply()
 
         val authority = ThemeContract.authorityFor(BuildConfig.APPLICATION_ID)
@@ -166,6 +168,7 @@ object ThemeSnapshotStore {
                 cornerScale = p.getFloat(KEY_CORNER_SCALE, 1f),
                 monoType = p.getBoolean(KEY_MONO_TYPE, false),
                 hardEdge = p.getBoolean(KEY_HARD_EDGE, false),
+                themedIcons = p.getBoolean(KEY_THEMED_ICONS, false),
             ),
         )
     }

@@ -146,6 +146,7 @@ internal fun CarTheme.toJson(): JSONObject = JSONObject().apply {
         put("cornerScale", style.cornerScale.toDouble())
         put("monoType", style.monoType)
         put("hardEdge", style.hardEdge)
+        put("themedIcons", style.themedIcons)
     })
 }
 
@@ -161,6 +162,7 @@ internal fun themeFromJson(o: JSONObject): CarTheme = CarTheme(
             cornerScale = it.optDouble("cornerScale", 1.0).toFloat(),
             monoType = it.optBoolean("monoType", false),
             hardEdge = it.optBoolean("hardEdge", false),
+            themedIcons = it.optBoolean("themedIcons", false),
         )
     } ?: ThemeStyle(),
 )

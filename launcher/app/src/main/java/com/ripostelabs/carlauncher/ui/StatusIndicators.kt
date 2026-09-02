@@ -630,7 +630,7 @@ private fun StatusChip(
             modifier = Modifier.size(22.dp),
         )
         if (text != null) {
-            Text(
+            AutoSizeText(
                 text = text,
                 style = MaterialTheme.typography.labelLarge,
                 color = tint,

@@ -47,7 +47,6 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ripostelabs.carlauncher.media.MediaSource
@@ -175,7 +174,7 @@ private fun MediaHeader(vendorSource: String?, onBack: () -> Unit) {
         // CarService.getValidModeTitle for why we don't offer to switch it.
         if (!vendorSource.isNullOrBlank()) {
             Spacer(Modifier.weight(1f))
-            Text(
+            AutoSizeText(
                 text = "Car source: $vendorSource",
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -219,14 +218,13 @@ private fun AlbumArt(now: NowPlaying?, modifier: Modifier = Modifier) {
 @Composable
 private fun TrackTitle(now: NowPlaying?) {
     Column {
-        Text(
+        AutoSizeText(
             text = now?.title ?: "Nothing playing",
             fontSize = TITLE_SP.sp,
             lineHeight = (TITLE_SP * 1.15f).sp,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onBackground,
             maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
         )
         Spacer(Modifier.height(6.dp))
         AutoSizeText(
@@ -333,12 +331,12 @@ private fun Progress(now: NowPlaying, onSeek: (Long) -> Unit) {
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Text(
+            AutoSizeText(
                 text = formatDuration(displayMs),
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Text(
+            AutoSizeText(
                 text = formatDuration(now.durationMs),
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

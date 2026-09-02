@@ -33,14 +33,23 @@ import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material.icons.rounded.WbSunny
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.Dp
 import com.ripostelabs.carlauncher.AppInfo
+import com.ripostelabs.carlauncher.ui.icons.IconLook
+import com.ripostelabs.carlauncher.ui.icons.IconSource
+import com.ripostelabs.carlauncher.ui.icons.LocalIconLook
+import com.ripostelabs.carlauncher.ui.icons.ThemedIcons
+import com.ripostelabs.carlauncher.ui.theme.LocalCarStyle
 import com.ripostelabs.carlauncher.ui.theme.carShape
 
 /**
@@ -93,6 +102,13 @@ private fun rewrittenIconFor(packageName: String): RewrittenIcon? {
  */
 @Composable
 internal fun AppIcon(app: AppInfo, size: Dp, modifier: Modifier = Modifier) {
+    // Themed icons (Riposte): the app's monochrome layer or a letter, in the palette.
+    // CarPlay and the vendor apps keep their real icon and fall through.
+    if (LocalCarStyle.current.themedIcons && ThemedIcons.source(app) != IconSource.REAL) {
+        ThemedAppIcon(app, size, LocalIconLook.current, modifier)
+        return
+    }
+
     val custom = rewrittenIconFor(app.packageName)
     if (custom != null) {
         Box(
@@ -117,4 +133,20 @@ internal fun AppIcon(app: AppInfo, size: Dp, modifier: Modifier = Modifier) {
             modifier = modifier.size(size),
         )
     }
+}
+
+/** One cached bitmap per (component, size, look); see [ThemedIcons]. */
+@Composable
+private fun ThemedAppIcon(app: AppInfo, size: Dp, look: IconLook, modifier: Modifier) {
+    val context = LocalContext.current
+    val density = LocalDensity.current
+    val sizePx = with(density) { size.roundToPx() }
+    val bitmap = remember(app.packageName, app.activityName, look, sizePx) {
+        ThemedIcons.bitmap(context, app, look, sizePx, density.density)
+    }
+    Image(
+        painter = BitmapPainter(bitmap),
+        contentDescription = app.label,
+        modifier = modifier.size(size),
+    )
 }

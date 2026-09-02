@@ -24,6 +24,14 @@ object RiposteSuite {
     /** Shared by every suite package — and by the launcher, which is why it never classifies. */
     const val PACKAGE_PREFIX = "com.ripostelabs."
 
+    /**
+     * The prefix the suite shipped under before the rename (2026-08-30). A package left over
+     * from that era queries a theme authority this launcher no longer publishes, so it keeps
+     * its built-in look under every theme — while carrying the same label and icon as the
+     * rewrite installed beside it. Nothing on the device tells the two apart.
+     */
+    const val RETIRED_PREFIX = "com.reveng."
+
     /** One member of the suite. [label] is the app's own `app_name`, used when it is absent. */
     data class SuiteApp(val packageName: String, val label: String)
 
@@ -72,4 +80,21 @@ object RiposteSuite {
     /** The suite members absent from [installedPackages], in registry order. */
     fun missing(installedPackages: Set<String>): List<SuiteApp> =
         APPS.filterNot { it.packageName in installedPackages }
+
+    /**
+     * Retired `com.reveng.*` packages in [installedPackages] whose rewrite is installed too.
+     * Only those: with no rewrite present the retired package is still the owner's only copy.
+     */
+    fun retiredTwins(installedPackages: Set<String>): List<String> =
+        APPS.map { RETIRED_PREFIX + it.packageName.removePrefix(PACKAGE_PREFIX) }
+            .filter { it in installedPackages && liveTwin(it) in installedPackages }
+
+    /** The rewrite a retired package was renamed to; any other package unchanged. */
+    fun liveTwin(packageName: String): String {
+        if (!packageName.startsWith(RETIRED_PREFIX)) {
+            return packageName
+        }
+        val live = PACKAGE_PREFIX + packageName.removePrefix(RETIRED_PREFIX)
+        return if (live in byPackage) live else packageName
+    }
 }

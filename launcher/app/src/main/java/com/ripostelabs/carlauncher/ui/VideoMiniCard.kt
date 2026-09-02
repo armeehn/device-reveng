@@ -89,13 +89,14 @@ fun VideoMiniCard(
                     },
                 contentAlignment = Alignment.Center,
             ) {
-                Text(
+                AutoSizeText(
                     text = when (state) {
                         is MiniScreenState.Failed -> state.reason
                         else -> stringResource(R.string.video_mini_opening)
                     },
                     style = MaterialTheme.typography.bodyLarge,
                     color = Color.White.copy(alpha = 0.7f),
+                    maxLines = 2,
                 )
             }
 

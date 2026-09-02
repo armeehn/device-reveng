@@ -280,12 +280,12 @@ private fun SeekBar(now: NowPlaying, onSeek: (Long) -> Unit) {
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Text(
+            AutoSizeText(
                 text = formatTime(displayMs),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Text(
+            AutoSizeText(
                 text = formatTime(now.durationMs),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

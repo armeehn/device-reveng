@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.content.pm.ResolveInfo
 import android.graphics.drawable.Drawable
 import android.util.Log
+import com.ripostelabs.carlauncher.data.RiposteSuite
 
 /** A launchable app resolved from the system (PackageManager). */
 data class AppInfo(
@@ -94,11 +95,18 @@ class AppRepository(private val context: Context) {
         }
 
         val self = context.packageName
+
+        // A retired com.reveng.* suite package beside its rewrite is a second "Clock" with the
+        // same icon that never follows the theme. Shadow it; SetupDoctor names it for removal.
+        val present = resolved.mapNotNullTo(mutableSetOf()) { it.activityInfo?.packageName }
+        val shadowed = RiposteSuite.retiredTwins(present)
+
         return resolved.asSequence()
             .mapNotNull { ri ->
                 val ai = ri.activityInfo ?: return@mapNotNull null
                 if (ai.packageName == self) return@mapNotNull null
                 if (hiddenFromUiPrefixes.any { ai.packageName.startsWith(it) }) return@mapNotNull null
+                if (ai.packageName in shadowed) return@mapNotNull null
                 AppInfo(
                     label = ri.loadLabel(pm).toString(),
                     packageName = ai.packageName,
