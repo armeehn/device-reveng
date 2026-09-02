@@ -133,12 +133,11 @@ private fun NavLive(nav: NavState) {
         )
         Spacer(Modifier.width(12.dp))
         if (nav.distance.isNotEmpty()) {
-            Text(
+            AutoSizeText(
                 text = nav.distance,
                 fontSize = DISTANCE_SP.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.primary,
-                maxLines = 1,
             )
             Spacer(Modifier.width(12.dp))
         }
@@ -182,7 +181,7 @@ private fun DrivingInfo(speedKmh: Int) {
             modifier = Modifier.size(18.dp),
         )
         Spacer(Modifier.width(6.dp))
-        Text(
+        AutoSizeText(
             text = "$speedKmh km/h",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Medium,
