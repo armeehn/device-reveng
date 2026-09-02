@@ -352,6 +352,18 @@ Three coexisting paths — a custom launcher should listen to **all three** to b
    (e.g. power=26 at `EventService.java:3428`), so ordinary `onKeyDown` handling in your Activity
    catches some wheel keys too.
 
+**RAV4 (Hiworld TYF2) wheel keys are CAN, not resistive.** They ride frame `0x11` (Basic Status,
+`MCU_MSG_CAN_ALL_INFO`): `bArr[4]` = key id, `bArr[5]` = 1 on every frame while held, 0 on release
+(`HiworldCanParseToyota.java:831-891`, `OnHandleCanKeyCmd`; launcher payload offsets p[2]/p[3]).
+Ids: 1 VOL+, 2 VOL−, 3 MUTE, 4 VOICE, 5 TALK (HANGUP during a call), 6 HANGUP, 8 and 13 PREV,
+9 and 14 NEXT, 12 MODE, 15 PLAY/PAUSE, 16 RETURN. The CAN app emits the MCU key **once, on the
+release frame** (`:853-885` → `sendMCUKey`, `:888`); VOL± instead repeat once per frame after 5
+held frames (`:838-848`). `sendMCUKey` is `ZXW_CAN_KEY_EVT` (`CanDataParseBase.java:1078,
+1518-1536`) → `EvtModel.java:492-511` → `EventService.ProcessCanKey` (`:13021-13110`): 2/3/6 →
+injected KeyEvent 87/88/85, 85 → KeyEvent 4, 16 → `switchMode()`, 17 → `sendSystemKey(12)`,
+116 → `startVoice()`, 23 → CarPlay/BT. Hold duration never leaves the CAN app; the launcher
+decodes it from the frames itself (`carlib/WheelGestures.kt`). Frame period **UNVERIFIED**.
+
 **SWC/panel keycode constants** (`EventUtils.java`), the values you receive/emit:
 
 `CAR_KEY_*` (`:1000-1014`): `POWER=1, HOME=2, FAV=3, PREV=4, NEXT=5, MENU=6, PHONE=7, MEDIA=8,
