@@ -292,7 +292,6 @@ fun HomeScreen(
                                 .launcherFocusTarget(focus, FocusTarget.Climate),
                         ) {
                             ClimateReadout(
-                                carService = carService,
                                 carEvents = carEvents,
                                 modifier = Modifier.fillMaxSize(),
                             )
