@@ -29,9 +29,10 @@ import kotlinx.coroutines.withContext
  * The **Screen backlight** slider now actually changes the display: it drives the Android
  * framework brightness (`Settings.System.SCREEN_BRIGHTNESS`) through [BrightnessController],
  * which works without root once WRITE_SETTINGS is granted (a one-tap prompt is shown otherwise),
- * and also pushes the level to the MCU over the vendor AIDL. The vendor illumination SysVars
- * (day/night targets, panel & ambient lighting) are kept under their own section — those still
- * need root/a privileged install to take effect, which the hub already warns about.
+ * and also pushes the level to the MCU over the vendor AIDL. The vendor illumination section
+ * below is the persistent path: `Set_Day_Light` / `Set_Night_Light` (0..20) written through the
+ * gateway and pushed with `sendBacklight(day, night)` ([CarSettingsController.setBacklight]).
+ * Without a bound gateway those writes need root, which the hub already warns about.
  */
 @Composable
 fun DisplaySettingsScreen(
@@ -112,46 +113,46 @@ fun DisplaySettingsScreen(
         SettingsSection(title = "Day / night source") {
             PickerSetting(
                 label = "Day/night mode source",
-                current = controller.getInt(SettingKeys.DAY_NIGHT_MODE, 0),
+                current = controller.getInt(SettingKeys.DAY_NIGHT_MODE, DAY_NIGHT_BY_TIME),
                 options = listOf(
-                    0 to "Auto (illumination)",
-                    1 to "Always day",
-                    2 to "Always night",
+                    DAY_NIGHT_HEADLAMPS to "Follow headlamps",
+                    DAY_NIGHT_DAY to "Always day",
+                    DAY_NIGHT_NIGHT to "Always night",
+                    DAY_NIGHT_BY_TIME to "By time (sunrise/sunset)",
                 ),
                 onSelect = { controller.setInt(SettingKeys.DAY_NIGHT_MODE, it) },
-                description = "How the head unit decides day vs night",
+                description = "How the head unit decides day vs night (vendor default: by time)",
             )
         }
 
         SettingsSection(title = "Vendor illumination") {
             Text(
-                text = "These write the vendor's illumination store and take effect only with " +
-                    "root / a privileged install.",
+                text = "These write the vendor's illumination store through the gateway and push " +
+                    "the MCU backlight; without the gateway they need root.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            val backlight = controller.backlight()
             SliderSetting(
-                label = "Vendor backlight level",
-                value = controller.getInt(SettingKeys.LIGHT_LEVEL_SET, 60),
-                range = 0..100,
-                onChange = { controller.setInt(SettingKeys.LIGHT_LEVEL_SET, it) },
-                format = { "$it%" },
+                label = "Daytime backlight",
+                description = "MCU target when the headlamps are off (0..${CarService.BACKLIGHT_MAX})",
+                value = backlight.day,
+                range = 0..CarService.BACKLIGHT_MAX,
+                onChange = { controller.setBacklight(day = it, night = backlight.night) },
             )
             SliderSetting(
-                label = "Daytime brightness",
-                description = "Target level when illumination is day",
-                value = controller.getInt(SettingKeys.SET_DAY_LIGHT, 80),
-                range = 0..100,
-                onChange = { controller.setInt(SettingKeys.SET_DAY_LIGHT, it) },
-                format = { "$it%" },
+                label = "Night backlight",
+                description = "MCU target when the headlamps are on (0..${CarService.BACKLIGHT_MAX})",
+                value = backlight.night,
+                range = 0..CarService.BACKLIGHT_MAX,
+                onChange = { controller.setBacklight(day = backlight.day, night = it) },
             )
-            SliderSetting(
-                label = "Night brightness",
-                description = "Target level when illumination is night",
-                value = controller.getInt(SettingKeys.SET_NIGHT_LIGHT, 40),
-                range = 0..100,
-                onChange = { controller.setInt(SettingKeys.SET_NIGHT_LIGHT, it) },
-                format = { "$it%" },
+            PickerSetting(
+                label = "SystemUI dim level",
+                description = "Sys_Light_Level_set: a 0..3 level sent to SystemUI, not the backlight",
+                current = controller.getInt(SettingKeys.LIGHT_LEVEL_SET, LIGHT_LEVEL_DEFAULT),
+                options = LIGHT_LEVELS.map { it to it.toString() },
+                onSelect = { controller.setInt(SettingKeys.LIGHT_LEVEL_SET, it) },
             )
             SliderSetting(
                 label = "Contrast",
@@ -189,3 +190,13 @@ fun DisplaySettingsScreen(
         }
     }
 }
+
+/** `Sys_Day_Night_Mode` values (`ItemTextRightCheckBoxView.java:503-525`; default `EventService.java:6621`). */
+private const val DAY_NIGHT_HEADLAMPS = 0
+private const val DAY_NIGHT_DAY = 1
+private const val DAY_NIGHT_NIGHT = 2
+private const val DAY_NIGHT_BY_TIME = 3
+
+/** `Sys_Light_Level_set` domain and gateway default (`EventService.updateLightLevel`). */
+private val LIGHT_LEVELS = 0..3
+private const val LIGHT_LEVEL_DEFAULT = 3

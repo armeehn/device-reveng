@@ -199,9 +199,12 @@ Values are device-specific enums; ranges below are **[inferred]** from naming un
 
 | Key constant | keyname string | Meaning |
 |---|---|---|
-| `SYS_CAR_TYPE_KEY` | `Sys_CarType` | Car model/type profile id |
-| `SYS_CAR_VEHICLE_DERIES_KEY` | `Sys_Vehicle_deries` | Vehicle series |
-| `SYS_CUSTOMER_TYPE_KEY` | `Sys_CustomerType` | Customer/OEM UI variant |
+| `SYS_CAR_TYPE_KEY` | `Sys_CarType` | Model index within `Sys_Vehicle_deries` (Toyota: Camry 1, RAV4 2, Corolla 5, Highlander 7, C-HR 10; `canbus2 CanConstantInfo.java:497-543`). No RHD flag: steering side lives only in the CAN box console map |
+| `SYS_CAR_VEHICLE_DERIES_KEY` | `Sys_Vehicle_deries` | Make: 0 none, 1 Toyota, 2 Ford, 7 Honda, 8 VW (`CanConstantInfo.java:602-650`) |
+| `SYS_CARINFOR_ID` | `Sys_CarInfor_ID` | Year/trim index inside the model (`YearType.java:1017-1034`) |
+| `SYS_CAMRY_AIR_SUPPLIER_KEY` | `Sys_camry_air_Supplier_id` | CAN box vendor 1..18 (4 Raise, 6 Hiworld) |
+| `SYS_CUSTOMER_TYPE_KEY` | `Sys_CustomerType` | OEM/customer id, default 88. 53 = OEM build with gateway status bar + USB multi-camera, 58 = original-car amplifier relay, 13 = instrument-panel animation (`EventService.java:332,7108,8843,14247`) |
+| `SYS_UI_NUMBER_KEY` | `Sys_UINumber` | Skin id, 0 = common (`SysProviderOpt.java:458`; NOT `uiNumberKey`, that is the helper method) |
 | `SYS_BACKCAR_TYPE` | `SYS_BACKCAR_TYPE` | Reverse camera type |
 | `SYS_BACKCAR_VIDEO_TYPE` | `Sys_backcar_Video_Type` | Reverse **video input** type (CVBS/AHD/…) |
 | `SYS_BACKCAR_6752_VIDEO_TYPE` | `Sys_6752_Backcar_Video_Type` | Reverse video type for TW6752 decoder |
@@ -215,17 +218,24 @@ Values are device-specific enums; ranges below are **[inferred]** from naming un
 | `SYS_RADAR_TYPE_KEY` / `SYS_RADAR_TONE_KEY` / `SYS_RADAR_TONE_TYPE` | `Sys_RadarTypeEnable` / `Sys_RadarToneEnable` / `Sys_RadarToneType` | Parking radar type + beep |
 | `SYS_MCU_PANEL_LIGHT_KEY` | `Sys_MCU_Panel_Light_Key` | Panel button illumination |
 | `SYS_MCU_SOFT_LIGHT_CONTROL_SET` | `Sys_Mcu_soft_light_control_Set` | Soft (CAN) illumination control |
-| `SYS_LIGHT_LEVEL_SET` | `Sys_Light_Level_set` | Backlight/dimming level |
-| `SET_DAY_LIGHT_KEY` / `SET_NIGHT_LIGHT_KEY` | `Set_Day_Light` / `Set_Night_Light` | Day/night brightness targets |
-| `SYS_DAY_NIGHT_MODE` | `Sys_Day_Night_Mode` | Day/night UI mode source |
+| `SYS_LIGHT_LEVEL_SET` | `Sys_Light_Level_set` | 0..3 dim level forwarded to SystemUI (`EventService.java:13882-13898`), NOT the backlight |
+| `SET_DAY_LIGHT_KEY` / `SET_NIGHT_LIGHT_KEY` | `Set_Day_Light` / `Set_Night_Light` | MCU backlight 0..20, defaults 18 / 8. Reaches the MCU only via `sendBacklight(day, night)` (frame `2E day night 80 200 00`); a provider write alone only broadcasts (`EventService.java:4847-4854,9643-9648`) |
+| `SYS_DAY_NIGHT_MODE` | `Sys_Day_Night_Mode` | 0 follow headlamps, 1 day, 2 night, 3 by sunrise/sunset; default 3 (`ItemTextRightCheckBoxView.java:503-525`, `EventService.java:6621`) |
 | `SYS_CAR_AMBIENT_LIGHT_KEY` / `SYS_MULTICOLOR_KEY_LIGHT` | `sys_car_ambient_light_key` / `sys_multicolor_key_light` | Ambient / multicolour key light |
 | `SYS_AIR_PANNEL_TYPE_KEY` | `Sys_Air_Pannel_type` | A/C panel protocol type |
 | `SYS_AIR_CONDITIONING_BAUD_RATE` | `Sys_Air_conditioning_baud_rate` | A/C board serial baud |
 | `SYS_REAR_AIR` / `SYS_BAR_AIR_SHOW_SET` | `Sys_rear_air` / `Sys_BarAirShow_Set` | Rear A/C present / show A/C bar |
 | `SYS_CAR_SPEED_UNIT` | `Sys_Car_Speed_Unit` | 0=km/h 1=mph (`EventService.java:5001-5007`) |
 | `SET_SHOW_CAR_SPEED_KEY` | `Set_ShowCarSpeed` | Show speed overlay |
-| `SYS_ACC_DELAY` / `ACC_OFF_DELAY` / `SET_ACC_ON_DELAY` | `Sys_Acc_Delay` / … | ACC power on/off delays |
-| `SYS_SLEEP_SWITCH` / `SYS_SLEEP_TIME` / `SYS_POWER_OFF_DELAY` | `Sys_Sleep_Switch` / `SYS_SLEEP_TIME` / `Sys_Power_Off_Delay` | Sleep behaviour |
+| `SET_ACC_ON_DELAY` | `SET_ACC_ON_DELAY` | Seconds 0..7, packed `& 7` into MCU frame 0x10 (`ItemTextRightCheckBoxView.java:450-486`, `EventService.java:9976`) |
+| `SYS_ACC_DELAY` | `Sys_Acc_Delay` | Seconds, sent as MCU `49 17 mm ss` (`EventService.java:3169-3172`); no vendor UI writes it |
+| `ACC_OFF_DELAY` | `ACC_OFF_DELAY` | Never read; a change only re-sends the factory MCU set |
+| `SYS_POWER_OFF_DELAY` | `Sys_Power_Off_Delay` | 0/1 factory "ACC off delay", bit1 of factory MCU byte 8 (`EventService.java:10186`) |
+| `SYS_SLEEP_SWITCH` | `Sys_Sleep_Switch` | 0/1 factory flag, bit4 of factory MCU byte 10 (`:10228`) |
+| `SYS_SLEEP_TIME` | `SYS_SLEEP_TIME` | Enum 1/2/3 -> MCU 960/1440/2880 (else 480), default 2; unit of the MCU value UNVERIFIED (`EventService.java:9361-9371,6540`) |
+| `SYS_SCREEN_OFF_WHEN_ACC_CHANGE` | `Sys_Screen_Off_When_Acc_Change` | 0/1, default 1 (`:10033`) |
+| `SYS_AUTO_START_SCREENSAVER_TIME` / `SYS_AUTO_START_CLOSE_SCREEN_TIME` | same | Seconds in {0, 60, 300, 600, 1800}; close-screen acts only on customer 69 (`ItemTextRightCheckBoxView.java:644-692`, `EventService.java:14380-14394`) |
+| `SYS_CUSTOMER_NAVIBAR_HEIGHT_KEY` / `SYS_LANDSCAPE_KEY` | `Sys_Customer_NaviBar_Height_Key` / `Sys_Landscape` | Bottom bar height px, 0 = no bar (factory 170/212/220/270), honoured only with `Sys_Landscape` = 1; re-applied live on `changeSetup` (`utils/SystemUtils.java:90-132`, `EventService.java:5125,5172`). No key hides the status bar |
 | `SYS_MCU_VERSION` / `SYS_UPGRADE_CANBOX_VERSION` | `Sys_McuVersion` / `Sys_Upgrade_Canbox_Version` | MCU / CANBOX firmware ver |
 | `SYS_CAN_BAUD_RATE` / `SYS_MCU_COM_BAUDRATE_KEY` | `Sys_Can_baud_rate` / `Sys_MCUComBaudRate` | CAN / MCU UART baud |
 | Radio favorites | `Rdo_MyFavorite0..5` (`RDO_MyFavorite0_KEY…`) | Stored radio presets |
