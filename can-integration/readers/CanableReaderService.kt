@@ -1,4 +1,4 @@
-package com.reveng.carlauncher.carlib
+package com.ripostelabs.carlauncher.carlib
 
 import android.util.Log
 import kotlinx.coroutines.CoroutineScope

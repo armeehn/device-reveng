@@ -1,0 +1,39 @@
+name: Hardware / variant report
+description: Report whether this works on a unit that is not a GT6-EAU
+labels: ["hardware"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Compatibility beyond the GT6-EAU is unknown. Reports either way are useful —
+        including "it did not work", which is what stops the next person bricking a unit.
+  - type: input
+    id: unit
+    attributes:
+      label: Unit and MCU
+      placeholder: "GT6-SE, MCU AT01_GT6SE"
+    validations:
+      required: true
+  - type: input
+    id: soc
+    attributes:
+      label: SoC / Android version
+      description: "adb shell getprop | grep -E 'ro.board.platform|ro.build.version.release'"
+      placeholder: "QCM6125 / Android 13"
+    validations:
+      required: true
+  - type: checkboxes
+    id: works
+    attributes:
+      label: What works
+      options:
+        - label: Launcher installs and draws
+        - label: Set as HOME
+        - label: Reverse / day-night / steering-wheel events
+        - label: Radio and media
+        - label: Climate readout
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Anything that differed from the README.

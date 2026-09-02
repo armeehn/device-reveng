@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "com.reveng.carlauncher.carlib"
+    namespace = "com.ripostelabs.carlauncher.carlib"
     compileSdk = 34
 
     defaultConfig {

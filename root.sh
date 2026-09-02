@@ -5,13 +5,27 @@
 # TWRP is booted in RAM only (fastboot boot, NOT flash) -> nothing permanent until Magisk installs.
 set -uo pipefail
 
-ROOT=/home/sasha/rav4-headunit
+# Workspace holding the TWRP image and Magisk zip (see README "Getting the vendor files").
+# Override with: RAV4_HOME=/path ./root.sh
+ROOT="${RAV4_HOME:-$HOME/rav4-headunit}"
 TWRP="$ROOT/run/recovery_ADB.img"      # USB-device/ADB variant
 MAGISK_ZIP="$ROOT/run/Magisk.zip"
 ADB_TARGET="${1:-}"                    # optional: pass ip:port of the wifi-adb connection
 
 SUDO=""; [ "$(id -u)" -ne 0 ] && SUDO="sudo"   # fastboot USB needs root on Linux
 FB="$SUDO fastboot"
+
+# Preflight: refuse to start a root flow with a missing image. Step 1 pushes
+# Magisk and step 3 boots TWRP; discovering either is absent mid-flow leaves the
+# unit sitting in the bootloader.
+for req in "$TWRP:TWRP recovery_ADB.img" "$MAGISK_ZIP:Magisk.zip"; do
+  path="${req%%:*}"; what="${req#*:}"
+  [ -e "$path" ] && continue
+  echo "!! missing $what"
+  echo "   expected at: $path"
+  echo "   See README section 'Getting the vendor files'. Set RAV4_HOME to relocate."
+  exit 1
+done
 
 echo "=== 0. confirm we have an adb device (wifi) ==="
 adb devices

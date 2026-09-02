@@ -1,6 +1,6 @@
 # Findings & Action Plan (synthesized)
 
-Consolidated results of a 15-worker static-analysis pass over the decompiled vendor
+Consolidated results of a static-analysis pass over the decompiled vendor
 apps, the stock firmware, and the on-device recon. Device-specific identifiers are
 omitted. Confidence is marked **[confirmed]** (from decompiled code) vs **[inferred]**.
 
@@ -39,7 +39,7 @@ check, so it ran `stopDetection→closeCamera→reset("r")→reconfigure→start
 = perpetual black-flash. **Fix that worked:** pin the rear format via
 **Factory Settings → rear camera signal type → AHD 720p/30Hz** (setting `Sys_backcar_Video_Type`
 in `content://com.szchoiceway.eventcenter.SysVarProvider/SysVar`). After pinning: one `start_stream`,
-`camera_status` stable at 7, **zero resets** across a ~9 s reverse hold. Owner confirmed "seems better."
+`camera_status` stable at 7, **zero resets** across a ~9 s reverse hold.
 Note: ~0.6 s initial black at startup is normal signal-lock. If any residual issues, the Feb-2026
 firmware ("improves rear camera performance") is the deeper demod-level fix.
 
