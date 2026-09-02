@@ -49,6 +49,7 @@ enum class NavKey {
     MEDIA_NEXT, MEDIA_PREV, MEDIA_PLAY_PAUSE,
     // v2.6: the wheel's source keys open the full Media / Radio screens (§3.3, §3.4).
     OPEN_MEDIA, OPEN_RADIO,
+    OPEN_PHONE, // the PHONE / TALK key opens the Phone screen; btsuite still answers on it
 }
 
 /** A focusable region of the Home screen (the app grid is addressed by tile index). */
@@ -357,7 +358,8 @@ object SwcNavigator {
         CarEvents.CAR_KEY_L_TUNE_R -> NavKey.RIGHT
         CarEvents.CAR_KEY_R_TUNE_L -> NavKey.UP
         CarEvents.CAR_KEY_R_TUNE_R -> NavKey.DOWN
-        else -> null // POWER / PHONE — left to their own handlers
+        CarEvents.CAR_KEY_PHONE -> NavKey.OPEN_PHONE
+        else -> null // POWER — left to its own handler
     }
 
     /**
@@ -373,7 +375,8 @@ object SwcNavigator {
         WheelFunction.HOME -> NavKey.HOME
         WheelFunction.BACK -> NavKey.BACK
         WheelFunction.OK -> NavKey.CENTER
-        else -> null // volume, phone, voice, cameras… — the gateway's business
+        WheelFunction.TALK -> NavKey.OPEN_PHONE
+        else -> null // volume, voice, cameras… — the gateway's business
     }
 
     /**

@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle // v3.0
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Movie // v2.7
 import androidx.compose.material.icons.filled.Notifications // v2.7
@@ -62,6 +63,7 @@ fun StatusBar(
     // v3.0: cockpit dashboard + driver-profile switcher.
     onOpenDashboard: () -> Unit = {},
     onOpenProfiles: () -> Unit = {},
+    onOpenPhone: () -> Unit = {}, // RAV4-50: the Phone screen
     // v2.7: the two parked-only shelves. Optional so previews and any un-wired caller still
     // compose; a null callback simply hides its icon rather than putting a dead one on screen.
     onOpenNotifications: (() -> Unit)? = null,
@@ -221,6 +223,16 @@ fun StatusBar(
                 modifier = Modifier
                     .size(STRIP_TARGET_DP.dp)
                     .clickable(onClick = withTapFeedback(onOpenProfiles))
+                    .padding(STRIP_ICON_PAD_DP.dp),
+            )
+            // RAV4-50: the Phone screen, so answering a call is one tap from Home.
+            Icon(
+                imageVector = Icons.Filled.Phone,
+                contentDescription = "Phone",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .size(STRIP_TARGET_DP.dp)
+                    .clickable(onClick = withTapFeedback(onOpenPhone))
                     .padding(STRIP_ICON_PAD_DP.dp),
             )
             // v0.6: Settings gear -> SettingsScreen.

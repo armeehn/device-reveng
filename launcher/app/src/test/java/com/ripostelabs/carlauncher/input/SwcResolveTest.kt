@@ -60,5 +60,8 @@ class SwcResolveTest {
         assertEquals(NavKey.CENTER, SwcNavigator.fromWheel(WheelFunction.OK))
         assertNull(SwcNavigator.fromWheel(WheelFunction.HANG_UP))
         assertNull(SwcNavigator.fromWheel(WheelFunction.VOICE))
+        // RAV4-50: TALK / the panel PHONE key open the Phone screen.
+        assertEquals(NavKey.OPEN_PHONE, SwcNavigator.fromWheel(WheelFunction.TALK))
+        assertEquals(NavKey.OPEN_PHONE, SwcNavigator.fromCarKey(CarEvents.CAR_KEY_PHONE))
     }
 }

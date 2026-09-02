@@ -96,6 +96,7 @@ fun HomeScreen(
     // v2.6: the glance cards deep-link into their full screens (§3.3, §3.4).
     onOpenMedia: () -> Unit = {},
     onOpenRadio: () -> Unit = {},
+    onOpenPhone: () -> Unit = {}, // RAV4-50: the status-bar phone icon
     // v3.0: cockpit dashboard + driver profiles, reached from the status bar.
     onOpenDashboard: () -> Unit = {},
     onOpenProfiles: () -> Unit = {},
@@ -221,6 +222,7 @@ fun HomeScreen(
                 onOpenPowerSettings = onOpenPowerSettings,
                 onOpenDashboard = onOpenDashboard, // v3.0
                 onOpenProfiles = onOpenProfiles, // v3.0
+                onOpenPhone = onOpenPhone, // RAV4-50
                 onOpenNotifications = onOpenNotifications, // v2.7
                 onOpenContinueWatching = onOpenContinueWatching, // v2.7
             )

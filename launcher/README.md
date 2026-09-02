@@ -201,6 +201,18 @@ claims the tuner as the cabin's audio source the way the vendor radio app does
 (`CarService.claimRadio`); AM / FM send the MCU's direct band keys (30 / 31) and re-poll until
 the tuner reports the class. The `sendRadioKey` value table is in CAR_API §3.2.
 
+**PhoneScreen** (RAV4-50) — `ui/PhoneScreen.kt`, reached by the wheel's PHONE / TALK key or the
+status-bar phone icon. The head unit's phone Bluetooth is owned by the vendor app
+`com.szchoiceway.btsuite`, which holds the serial protocol to the BT module and cannot be
+replaced, so the screen drives it: state (device name, HFP state, caller, in-call timer) comes
+from its `HBCP_EVT_*` broadcasts, and Answer / Hang up / dial go back as its own control
+broadcasts (`carlib/VendorBt.kt`, CAR_API §1.3 / §1.4). Recent calls are read from its
+`CallListProvider` (CAR_API §2.4); when that yields nothing the vendor call-record page is
+offered instead, and Contacts / Bluetooth settings always open btsuite's own pages
+(`GotoPageNum`). The dial pad and the call list are parked-only; Answer, Hang up and the vendor
+page buttons stay available while moving. **UNVERIFIED on the car**: every control broadcast,
+whether the provider answers a normal uid, and the speaking-time payload shape.
+
 ### What the firmware does not have
 
 Two things §3.3/§3.4 planned turned out not to exist, so they are not built:
