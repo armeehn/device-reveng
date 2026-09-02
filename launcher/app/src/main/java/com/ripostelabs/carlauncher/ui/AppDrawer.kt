@@ -61,6 +61,7 @@ import androidx.core.graphics.drawable.toBitmap
 import com.ripostelabs.carlauncher.AppInfo
 import com.ripostelabs.carlauncher.data.AppOrderStore
 import com.ripostelabs.carlauncher.data.FavoritesStore
+import com.ripostelabs.carlauncher.data.RiposteSuite
 import com.ripostelabs.carlauncher.input.GridFocus // v0.8 SWC navigation
 import kotlinx.coroutines.launch
 import kotlin.math.hypot
@@ -114,7 +115,9 @@ fun AppDrawer(
             compareBy({ rank[it.packageName] ?: Int.MAX_VALUE }, { it.label.lowercase() }),
         )
     }
-    val favoriteApps = orderedApps.filter { it.packageName in favorites }
+    // Favourites pinned before the rename are keyed com.reveng.*; follow them to the rewrite.
+    val liveFavorites = favorites.mapTo(mutableSetOf(), RiposteSuite::liveTwin)
+    val favoriteApps = orderedApps.filter { it.packageName in liveFavorites }
 
     val toggleFavorite: (AppInfo) -> Unit = { app -> scope.launch { favStore.toggle(app.packageName) } }
 

@@ -49,4 +49,31 @@ class RiposteSuiteTest {
         assertEquals(RiposteSuite.APPS.size, RiposteSuite.missing(emptySet()).size)
         assertTrue(RiposteSuite.installed(emptySet()).isEmpty())
     }
+
+    /**
+     * The suite shipped once as `com.reveng.*`. Those packages query a theme authority the
+     * launcher no longer publishes, so they keep their built-in look no matter which theme is
+     * active — and they carry the same label and icon as the live rewrite beside them. A
+     * retired twin is only shadowed once its `com.ripostelabs.*` replacement is installed;
+     * with no replacement it is still the only Clock the owner has.
+     */
+    @Test
+    fun `a retired twin is shadowed only by its installed replacement`() {
+        val present = setOf("com.reveng.clock", "com.ripostelabs.clock", "com.reveng.weather")
+        assertEquals(listOf("com.reveng.clock"), RiposteSuite.retiredTwins(present))
+    }
+
+    @Test
+    fun `retired twins are registry members only`() {
+        val present = setOf("com.reveng.other", "com.ripostelabs.other", "com.reveng.carlauncher")
+        assertTrue(RiposteSuite.retiredTwins(present).isEmpty())
+    }
+
+    @Test
+    fun `liveTwin maps a retired package onto the rewrite and leaves the rest alone`() {
+        assertEquals("com.ripostelabs.clock", RiposteSuite.liveTwin("com.reveng.clock"))
+        assertEquals("com.ripostelabs.clock", RiposteSuite.liveTwin("com.ripostelabs.clock"))
+        assertEquals("com.reveng.other", RiposteSuite.liveTwin("com.reveng.other"))
+        assertEquals("com.android.chrome", RiposteSuite.liveTwin("com.android.chrome"))
+    }
 }

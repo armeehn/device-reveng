@@ -157,21 +157,39 @@ class SetupDoctor(
      * with none of them, so a partial suite is reported, not treated as a fault to repair.
      */
     private fun suiteCheck(): DoctorCheck {
-        val installed = RiposteSuite.installed(installedPackages())
-        val missing = RiposteSuite.missing(installedPackages())
-        val detail = if (missing.isEmpty()) {
-            "All ${RiposteSuite.APPS.size} rewritten apps are installed."
+        val packages = installedPackages()
+        val installed = RiposteSuite.installed(packages)
+        val missing = RiposteSuite.missing(packages)
+        val retired = RiposteSuite.retiredTwins(packages)
+        val detail = buildString {
+            if (missing.isEmpty()) {
+                append("All ${RiposteSuite.APPS.size} rewritten apps are installed.")
+            } else {
+                append("Missing: " + missing.joinToString { it.label })
+            }
+            // A retired copy beside its rewrite is hidden from the drawer, but it still
+            // owns the old favourites and any shortcut taken before the rename — and it
+            // never follows the theme. Only an uninstall ends that.
+            if (retired.isNotEmpty()) {
+                append(if (missing.isEmpty()) " " else ". ")
+                append("Retired ${RiposteSuite.RETIRED_PREFIX}* copies still installed: ")
+                append(retired.joinToString { it.removePrefix(RiposteSuite.RETIRED_PREFIX) })
+                append(". Uninstall them; they ignore the theme.")
+            }
+        }
+        val adbCommand = if (retired.isEmpty()) {
+            // The suite ships as a set of ordinary APKs; there is no single command that
+            // installs them, so this points at the directory they are published from.
+            "adb install-multiple <rav4-apps>/apps/*/app-debug.apk"
         } else {
-            "Missing: " + missing.joinToString { it.label }
+            retired.joinToString(" && ") { "adb uninstall $it" }
         }
         return DoctorCheck(
             id = "riposte_suite",
             title = "Rewritten app suite (${installed.size}/${RiposteSuite.APPS.size})",
             detail = detail,
-            ok = missing.isEmpty(),
-            // The suite ships as a set of ordinary APKs; there is no single command that
-            // installs them, so this points at the directory they are published from.
-            adbCommand = "adb install-multiple <rav4-apps>/apps/*/app-debug.apk",
+            ok = missing.isEmpty() && retired.isEmpty(),
+            adbCommand = adbCommand,
             rootCommand = null,
         )
     }
