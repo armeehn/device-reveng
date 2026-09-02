@@ -296,6 +296,8 @@ class SettingsStore(context: Context) {
     fun setWheelDouble(key: WheelKey, action: WheelGestureAction) = scope.launch {
         val next = settings.value.wheelGestures.double + (key to action)
         ds.edit { it[WHEEL_DOUBLE_KEY] = WheelGestureBindings.encode(next) }
+    }
+
     /** Shadow the replaced OEM apps ([OemApps]) in the drawer, or show them again. */
     fun setHideReplacedOemApps(enabled: Boolean) = scope.launch {
         ds.edit { it[HIDE_REPLACED_OEM_KEY] = enabled }
@@ -305,7 +307,6 @@ class SettingsStore(context: Context) {
     fun setHideOemSettings(enabled: Boolean) = scope.launch {
         ds.edit { it[HIDE_OEM_SETTINGS_KEY] = enabled }
     }
-
 
     private companion object {
         val GRID_COLUMNS_KEY = intPreferencesKey("grid_columns")
