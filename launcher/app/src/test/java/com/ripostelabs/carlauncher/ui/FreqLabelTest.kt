@@ -9,11 +9,8 @@ import org.junit.Test
 /**
  * [formatFreqLabel] is shared by the home RadioCard and the radio settings screen precisely so the
  * same raw `getRadioFreq()` value cannot render two different ways on two screens — the bug that
- * put it in one place. These tests hold that line: they assert the label for every raw encoding
- * the heuristic claims to cover, and assert that the encodings of one station all agree.
- *
- * The units themselves are GUESSED (CAR_API §3.2). When a live capture settles them, the wrong
- * branches here become dead and can go; the agreement and non-positive cases stay.
+ * put it in one place. The units are the vendor's (CAR_API §3.2): FM in 10 kHz units, AM in
+ * kHz — the vendor radio formats the same raw value as "%d.%02d MHZ" / "%d KHZ".
  */
 class FreqLabelTest {
 
@@ -55,40 +52,17 @@ class FreqLabelTest {
     }
 
     @Test
-    fun fmInKhzUnits() {
-        assertEquals("87.5 MHz", formatFreqLabel(fm, 87500))
-        assertEquals("95.0 MHz", formatFreqLabel(fm, 95000))
-        assertEquals("108.0 MHz", formatFreqLabel(fm, 108000))
-    }
-
-    @Test
-    fun fmInHundredKhzUnits() {
-        // The small-value fallback: 875 is 87.5 MHz in 100 kHz steps.
-        assertEquals("87.5 MHz", formatFreqLabel(fm, 875))
-        assertEquals("108.0 MHz", formatFreqLabel(fm, 1080))
-    }
-
-    @Test
-    fun everyFmEncodingAgrees() {
-        // The whole point of the shared helper. One station, three plausible raw encodings, one
-        // label — if a screen ever re-implements this, this is the assertion that catches it.
-        val labels = listOf(875, 8750, 87500).map { formatFreqLabel(fm, it) }.distinct()
-
-        assertEquals(listOf("87.5 MHz"), labels)
+    fun fmIsNotRescaledByMagnitude() {
+        // The old magnitude heuristic read 875 as 87.5 MHz; the tuner never sends that. A raw
+        // value is 10 kHz units, full stop: 875 is 8.75 MHz and prints as such.
+        assertEquals("8.8 MHz", formatFreqLabel(fm, 875))
+        assertEquals("875.0 MHz", formatFreqLabel(fm, 87500))
     }
 
     @Test
     fun amInKhzUnits() {
         assertEquals("530 kHz", formatFreqLabel(am, 530))
         assertEquals("1710 kHz", formatFreqLabel(am, 1710))
-    }
-
-    @Test
-    fun amInHzUnits() {
-        // Above 30000 an AM raw is read as Hz and divided down; 1710 kHz must not print as
-        // "1710000 kHz".
-        assertEquals("1710 kHz", formatFreqLabel(am, 1710000))
-        assertEquals("530 kHz", formatFreqLabel(am, 530000))
     }
 
     @Test
