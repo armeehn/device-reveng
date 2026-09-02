@@ -81,6 +81,7 @@ class BuiltInThemesTest {
         assertEquals(1f, style.cornerScale, 0f)
         assertFalse(style.monoType)
         assertFalse(style.hardEdge)
+        assertFalse(style.themedIcons)
     }
 
     @Test
@@ -92,6 +93,8 @@ class BuiltInThemesTest {
         assertEquals(0f, style.cornerScale, 0f)
         assertTrue(style.monoType)
         assertTrue(style.hardEdge)
+        // Themed icons are part of the brand look: every tile in the palette, none full-colour.
+        assertTrue(style.themedIcons)
     }
 
     @Test

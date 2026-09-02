@@ -7,6 +7,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
+import com.ripostelabs.carlauncher.ui.icons.LocalIconLook
+import com.ripostelabs.carlauncher.ui.icons.ThemedIcons
 
 /**
  * Applies a [CarTheme] as the Compose [MaterialTheme]. The day or night [ThemeColors]
@@ -33,7 +35,12 @@ fun CarLauncherTheme(
     // v2.4: themes carry a ThemeStyle (corner scale / brand mono type / hard-edge cards).
     // It is provided as LocalCarStyle for carShape()/carCard(), and drives the Material
     // typography + component shapes so styles apply app-wide with no per-screen changes.
-    CompositionLocalProvider(LocalCarStyle provides theme.style) {
+    // The icon look is taken from the un-animated target: a bitmap per crossfade frame
+    // is exactly what the icon cache exists to avoid.
+    CompositionLocalProvider(
+        LocalCarStyle provides theme.style,
+        LocalIconLook provides ThemedIcons.lookFor(target, theme.style),
+    ) {
         MaterialTheme(
             colorScheme = animatedColorScheme(target),
             typography = if (theme.style.monoType) MonoTypography else CarTypography,

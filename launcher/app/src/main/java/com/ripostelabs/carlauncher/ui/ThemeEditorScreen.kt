@@ -356,6 +356,7 @@ private fun StyleEditor(style: ThemeStyle, onChange: (ThemeStyle) -> Unit) {
         }
         StyleSwitch("Mono type", style.monoType) { onChange(style.copy(monoType = it)) }
         StyleSwitch("Hard edges", style.hardEdge) { onChange(style.copy(hardEdge = it)) }
+        StyleSwitch("Themed icons", style.themedIcons) { onChange(style.copy(themedIcons = it)) }
     }
 }
 
