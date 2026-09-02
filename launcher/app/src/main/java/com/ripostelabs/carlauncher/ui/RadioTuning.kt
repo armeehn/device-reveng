@@ -63,33 +63,17 @@ internal object RadioTuning {
         preset.freq == tunerFreq && sameBandClass(preset.band, tunerBand)
 
     /**
-     * The scrub range for [band], in the raw units the tuner is reporting [sampleFreq] in.
-     *
-     * The raw unit is GUESSED (CAR_API §3.2), so it is inferred from the magnitude of the live
-     * reading with the same thresholds [formatFreqLabel] uses — one heuristic, not two that can
-     * disagree. Limits are the North American dial (FM 87.5–108.0 MHz by 100 kHz, AM 530–1710 kHz
-     * by 10 kHz). A reading outside them widens the range rather than being clamped: the slider
-     * must never show a station the tuner is not on.
+     * The scrub range for [band], in the tuner's raw units: FM in 10 kHz units (9630 = 96.30 MHz),
+     * AM in kHz — the vendor radio formats `getRadioFreq()` as `%d.%02d MHZ` / `%d KHZ`. Limits
+     * are the vendor's zone 1 (North America): FM 87.5–107.9 MHz by 100 kHz, AM 530–1710 kHz by
+     * 10 kHz. A reading outside them ([sampleFreq], e.g. another zone's dial) widens the range
+     * rather than being clamped: the slider must never show a station the tuner is not on.
      */
     fun tuneRange(band: Int, sampleFreq: Int): TuneRange {
         val range = if (CarService.isAmBand(band)) {
-            val unitsPerKhz = if (sampleFreq > RAW_HZ_THRESHOLD) 1000 else 1
-            TuneRange(
-                min = AM_MIN_KHZ * unitsPerKhz,
-                max = AM_MAX_KHZ * unitsPerKhz,
-                step = AM_STEP_KHZ * unitsPerKhz,
-            )
+            TuneRange(min = AM_MIN_KHZ, max = AM_MAX_KHZ, step = AM_STEP_KHZ)
         } else {
-            val unitsPerMhz = when {
-                sampleFreq > RAW_HZ_THRESHOLD -> 1000 // kHz
-                sampleFreq > RAW_TEN_KHZ_THRESHOLD -> 100 // 10 kHz
-                else -> 10 // 100 kHz
-            }
-            TuneRange(
-                min = FM_MIN_100KHZ * unitsPerMhz / 10,
-                max = FM_MAX_100KHZ * unitsPerMhz / 10,
-                step = FM_STEP_100KHZ * unitsPerMhz / 10,
-            )
+            TuneRange(min = FM_MIN_10KHZ, max = FM_MAX_10KHZ, step = FM_STEP_10KHZ)
         }
 
         if (sampleFreq <= 0) {
@@ -166,17 +150,39 @@ internal object RadioTuning {
         tune(preset.freq)
     }
 
-    /** Raw-unit thresholds shared with [formatFreqLabel]: above 30000 is Hz/kHz, above 3000 is 10 kHz. */
-    private const val RAW_HZ_THRESHOLD = 30_000
-    private const val RAW_TEN_KHZ_THRESHOLD = 3_000
+    /**
+     * A vendor favourite (`Rdo_MyFavorite0..5`, CAR_API §2.3) decoded. The vendor radio stores
+     * the decimal string of `freq | (am ? 0x10000 : 0)`; 0 or blank is an empty slot. The slot
+     * carries no FM1/FM2 distinction, so an AM value maps to band 3 and FM to band 0.
+     */
+    fun decodeVendorFavorite(raw: String): RadioPreset? {
+        val value = raw.trim().toIntOrNull() ?: return null
+        val freq = value and VENDOR_FREQ_MASK
+        if (freq == 0) {
+            return null
+        }
+        val am = value and VENDOR_AM_FLAG != 0
+        return RadioPreset(band = if (am) VENDOR_AM_BAND else VENDOR_FM_BAND, freq = freq)
+    }
 
-    /** North American FM dial, in 100 kHz units. */
-    private const val FM_MIN_100KHZ = 875
-    private const val FM_MAX_100KHZ = 1080
-    private const val FM_STEP_100KHZ = 1
+    /** The inverse of [decodeVendorFavorite], for writing a slot the vendor radio can read. */
+    fun encodeVendorFavorite(preset: RadioPreset): String {
+        val flag = if (CarService.isAmBand(preset.band)) VENDOR_AM_FLAG else 0
+        return ((preset.freq and VENDOR_FREQ_MASK) or flag).toString()
+    }
 
-    /** North American AM dial, in kHz. */
+    /** Vendor zone 1 (North America) FM dial, in the tuner's 10 kHz units. */
+    private const val FM_MIN_10KHZ = 8750
+    private const val FM_MAX_10KHZ = 10790
+    private const val FM_STEP_10KHZ = 10
+
+    /** Vendor zone 1 AM dial, in kHz. */
     private const val AM_MIN_KHZ = 530
     private const val AM_MAX_KHZ = 1710
     private const val AM_STEP_KHZ = 10
+
+    private const val VENDOR_FREQ_MASK = 0xFFFF
+    private const val VENDOR_AM_FLAG = 0x10000
+    private const val VENDOR_FM_BAND = 0
+    private const val VENDOR_AM_BAND = 3
 }

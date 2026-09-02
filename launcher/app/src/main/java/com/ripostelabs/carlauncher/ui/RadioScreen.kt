@@ -64,14 +64,12 @@ import kotlinx.coroutines.withContext
  *  * **Scan is a key, not a method.** `sendRadioKey(13)` starts a preset scan and 18 an
  *    auto-store (the vendor app's SCAN / hold-SCAN); the AIDL getters only *report* them.
  *    Neither is on this screen yet — seek is the control surface, as §3.4 asked.
- *  * **No radio text.** There is no PS (station name) or RT (radio text) getter anywhere.
- *    `getRadioPTYName` returns the programme *genre* ("Pop Music"), not a station. So this
- *    screen shows the indicator set that genuinely exists — RDS / TA / AF / TP / stereo plus
- *    the PTY genre — instead of an empty scroller pretending to be RDS text.
+ *  * **Station name, no radio text.** `getRadioPTYName` is misnamed: the gateway stores the
+ *    MCU's RDS PS frame and returns it there, so the station name IS available and this screen
+ *    shows it. The genre is `getRadioPTYNum`. There is no RT (radio text) anywhere.
  *
- * **No NET.** The vendor radio app had an AM / FM / NET tab row. NET was its internet-radio
- * *source*, not a tuner band: `getRadioBand()` never reports one and no AIDL method selects it,
- * so the band toggle here is AM / FM only.
+ * **No NET.** `getRadioBand()` reports 0..2 FM1..3 and 3..6 AM, nothing else, and no AIDL method
+ * selects another tuner source, so the band toggle here is AM / FM only.
  *
  * Reading the tuner is polled, not pushed: `CarService.claimRadio` registers the callback the
  * gateway wants, but the screen keeps its poll rather than trusting opaque event ids. Blocking
@@ -120,6 +118,13 @@ fun RadioScreen(
         refresh++
     }
 
+    // The gateway pushes tuner events (freq, band, PS name…) through the radio callback;
+    // re-poll on each so the readout follows a seek within a frame rather than the 3 s timer.
+    val radioEvents by carService.radioEvents.collectAsStateSafe(initial = 0L)
+    LaunchedEffect(radioEvents) {
+        if (radioEvents > 0L) refresh++
+    }
+
     // A committed scrub holds the readout at its target until the re-poll after `sendUserFreq`
     // has landed, instead of snapping back to the pre-drag station for one frame.
     var tuneHold by remember { mutableStateOf<Int?>(null) }
@@ -166,9 +171,15 @@ fun RadioScreen(
         ) {
             FrequencyReadout(band = tuner.band, freq = tuneHold ?: tuner.freq)
 
+            StationName(tuner.stationName)
+
             TuneSlider(tuner = tuner, hold = tuneHold, onTune = ::tuneTo)
 
-            IndicatorRow(tuner = tuner)
+            IndicatorRow(
+                tuner = tuner,
+                onToggleTa = { control { carService.radioToggleTa() } },
+                onToggleAf = { control { carService.radioToggleAf() } },
+            )
 
             PresetRow(
                 presets = presets.take(PRESET_SLOTS),
@@ -203,7 +214,19 @@ fun RadioScreen(
                 onSeekUp = { control { carService.radioSeekUp() } },
             )
 
-            VendorPresetLine(values = vendorPresets)
+            VendorPresetLine(
+                presets = vendorPresets.mapNotNull(RadioTuning::decodeVendorFavorite),
+                onRecall = { preset ->
+                    control {
+                        RadioTuning.recallPreset(
+                            readBand = { carService.getRadioBand() },
+                            selectBand = { RadioTuning.selectBand(carService, it) },
+                            tune = { carService.sendUserFreq(it, !CarService.isAmBand(preset.band)) },
+                            preset = preset,
+                        )
+                    }
+                },
+            )
         }
     }
 }
@@ -365,30 +388,34 @@ private fun FrequencyReadout(band: Int, freq: Int) {
     )
 }
 
+/** The RDS station name, when the tuner has decoded one; nothing otherwise, not a placeholder. */
+@Composable
+private fun StationName(name: String?) {
+    if (name.isNullOrBlank()) {
+        return
+    }
+    AutoSizeText(
+        text = name.trim(),
+        style = MaterialTheme.typography.headlineSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
 /**
- * The tuner status flags that actually exist. Every one is read-only: the AIDL exposes no radio
- * setter beyond seek/band/tune, so these report the tuner rather than controlling it.
+ * The tuner status flags. TA and AF are toggles (sendRadioKey 23 / 21, like the vendor radio's
+ * buttons); RDS, TP and stereo only report.
  */
 @Composable
-private fun IndicatorRow(tuner: TunerState) {
+private fun IndicatorRow(tuner: TunerState, onToggleTa: () -> Unit, onToggleAf: () -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Indicator(label = "RDS", on = tuner.rds)
-        Indicator(label = "TA", on = tuner.ta)
-        Indicator(label = "AF", on = tuner.af)
+        Indicator(label = "TA", on = tuner.ta, onToggle = onToggleTa)
+        Indicator(label = "AF", on = tuner.af, onToggle = onToggleAf)
         Indicator(label = "TP", on = tuner.tp)
         Indicator(label = "ST", on = tuner.stereo)
-
-        if (!tuner.ptyName.isNullOrBlank()) {
-            Spacer(Modifier.width(8.dp))
-            AutoSizeText(
-                text = tuner.ptyName,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
     }
 }
 
@@ -398,7 +425,7 @@ private fun IndicatorRow(tuner: TunerState) {
  * like a deliberate setting.
  */
 @Composable
-private fun Indicator(label: String, on: Boolean?) {
+private fun Indicator(label: String, on: Boolean?, onToggle: (() -> Unit)? = null) {
     val bg = when (on) {
         true -> MaterialTheme.colorScheme.primary
         false -> MaterialTheme.colorScheme.surfaceVariant
@@ -409,6 +436,11 @@ private fun Indicator(label: String, on: Boolean?) {
         false -> MaterialTheme.colorScheme.onSurfaceVariant
         null -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = UNKNOWN_ALPHA)
     }
+    val tappable = if (onToggle == null) {
+        Modifier
+    } else {
+        Modifier.focusRing(cornerRadiusDp = 10).clickable(onClick = withTapFeedback(onToggle))
+    }
     AutoSizeText(
         text = label,
         style = MaterialTheme.typography.titleMedium,
@@ -416,6 +448,7 @@ private fun Indicator(label: String, on: Boolean?) {
         modifier = Modifier
             .clip(carShape(10.dp))
             .background(bg)
+            .then(tappable)
             .padding(horizontal = 16.dp, vertical = 8.dp),
     )
 }
@@ -571,24 +604,38 @@ private fun TunerButton(
 }
 
 /**
- * The vendor's own presets, shown raw and read-only.
- *
- * The roadmap wanted our presets to *sync* with `Rdo_MyFavorite0..5`. We deliberately do not
- * write them: the encoding of those SysVar values is documented nowhere in the decompile, and
- * writing a guessed format would corrupt the presets in the vendor radio app with no way to
- * tell what was there before. Displaying the raw strings is the useful half — it is exactly the
- * capture needed to work the format out on-device, after which two-way sync becomes safe.
+ * The vendor radio's own favourites (`Rdo_MyFavorite0..5`), decoded by
+ * [RadioTuning.decodeVendorFavorite] and recallable. Still not written back: two-way sync is
+ * a separate decision now that the encoding is known.
  */
 @Composable
-private fun VendorPresetLine(values: List<String>) {
-    if (values.isEmpty()) {
+private fun VendorPresetLine(presets: List<RadioPreset>, onRecall: (RadioPreset) -> Unit) {
+    if (presets.isEmpty()) {
         return
     }
-    AutoSizeText(
-        text = "Vendor presets (raw, read-only): " + values.joinToString(" · "),
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        AutoSizeText(
+            text = "Vendor",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        presets.forEach { preset ->
+            AutoSizeText(
+                text = formatFreqLabel(preset.band, preset.freq),
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .clip(carShape(10.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .focusRing(cornerRadiusDp = 10)
+                    .clickable(onClick = withTapFeedback { onRecall(preset) })
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+            )
+        }
+    }
 }
 
 @Composable
@@ -618,7 +665,7 @@ private data class TunerState(
     val af: Boolean? = null,
     val tp: Boolean? = null,
     val stereo: Boolean? = null,
-    val ptyName: String? = null,
+    val stationName: String? = null,
 ) {
     companion object {
         val UNKNOWN = TunerState(available = false, band = 0, freq = 0)
@@ -641,7 +688,7 @@ private fun readTuner(carService: CarService): TunerState {
             af = carService.getRadioAf(),
             tp = carService.getRadioTp(),
             stereo = carService.getRadioStereo(),
-            ptyName = carService.getRadioPtyName(),
+            stationName = carService.getRadioStationName(),
         )
     }.getOrDefault(TunerState.UNKNOWN)
 }
@@ -652,7 +699,7 @@ private const val FREQUENCY_SP = 48f
 private const val TRANSPORT_TARGET_DP = 96
 private const val PRESET_HEIGHT_DP = 64
 
-/** Matches RadioCard's cadence: the tuner changes slowly and each read is an IPC round-trip. */
+/** Safety net behind the pushed events: a missed callback costs at most this. */
 private const val POLL_INTERVAL_MS = 3_000L
 
 /** How long a committed scrub holds the readout — long enough for the post-tune re-poll to land. */

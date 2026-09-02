@@ -287,6 +287,17 @@ fm ? 0 : 1}`, freq in the units `getRadioFreq()` reports. Claiming tuner audio i
 `setCurModeCallback(1, cb)` + `setRadioCallback(cb)` + `sendMode(1, false)` ×2
 (`eSrcMode.SRC_RADIO` = 1); note `sendMode` calls `kill3rdAPK()` unless
 `Sys_SoundManager_Type` is set, force-stopping non-system foreground tasks.
+Also 21 AF toggle, 22 PTY seek (after `sendSetup(3, ptyIndex)`), 23 TA toggle, 24 band
+cycle, 25 next, 26 previous. Units: `getRadioFreq()` is FM in 10 kHz units (9630 = 96.30 MHz),
+AM in kHz. `getRadioBand()`: 0..2 = FM1..FM3, 3..6 = AM. `getRadioPTYName()` returns the **RDS
+PS station name** (the gateway's `mRadioPSName`); the genre is `getRadioPTYNum()`. The radio
+callback delivers `notifyEvt(what, …)` with what = 0 status bits (arg2 packed: RDS 1, PTY 2,
+AF 4, TA 8, ST 16, LOC 32, AMS 64, APS 128), 1 band, 2 tune slot, 3 freq (arg2), 5 PTY num,
+6 PS name (`str`); the mode callback delivers 4097 mode change (arg2 = new mode) and 4098 MCU
+key (arg2). `ZXW_RADIO_INFO_EVT` (`com.choiceway.eventcenter.EventUtils.ZXW_RADIO_INFO_EVT`)
+carries int extras `RadioBndNum`, `RadioTuneNum`, `RadioCurFreq`. `Rdo_MyFavorite0..5` hold
+the decimal string of `freq | (am ? 0x10000 : 0)` (0 = empty).
+
 
 ### 3.3 Secondary channel: LocalSocket
 
