@@ -9,9 +9,9 @@ import java.util.Calendar
 /**
  * v2.7 — the clock-based day/night fallback.
  *
- * The car tells us about illumination over ACTION_DAY/NIGHT_BACKLIGHT_CHANGED, which is
- * permission-gated and on a normal install simply never fires (CAR_API §1.1). The unit then sits in
- * day colours at midnight, which is the one situation a head-unit theme genuinely must not be in.
+ * The car tells us about illumination over LAMP_STATUS, which the gateway only sends when the
+ * headlamps actually toggle, so a session can pass without one. The unit then sits in day
+ * colours at midnight, which is the one situation a head-unit theme genuinely must not be in.
  *
  * This is the crude answer, and crude on purpose: two hours, no solar maths. Real civil twilight
  * needs a date and a position, and the launcher's position comes from the same GPS that the v2.5

@@ -64,13 +64,9 @@ fun VehicleDataCaptureScreen(
     }
 }
 
+// Only the two broadcasts canbus2 really sends. TPMS, seat, fuel, trip and console constants
+// exist in EventUtils but nothing broadcasts them; that data stays inside canbus2.
 private val EVENTS: List<Pair<String, String>> = listOf(
-    CarEvents.CAN_CAR_TIRP_INFO to "Trip computer",
-    CarEvents.CAN_FUEL_CONSUMPTION_INFOR to "Fuel consumption",
-    CarEvents.CAN_TPMS_DATA_EVT to "Tyre pressure (TPMS)",
-    CarEvents.CAN_SEAT_DATA_EVT to "Seat",
-    CarEvents.CAN_CENTER_CONSOLE_INFOR to "Centre console",
-    CarEvents.CAN_SLS_DATA_EVT to "SLS",
     CarEvents.CAN_CAR_OUT_SIDE_TEMP_EVT to "Outside temperature",
     CarEvents.ZXW_CAN_WHEEL_TRACK_EVT to "Steering angle",
 )

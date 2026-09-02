@@ -81,6 +81,9 @@ class CarService(private val appContext: Context) {
         /** Clamp a backlight target into the MCU's 0..[BACKLIGHT_MAX] band. */
         fun clampBacklight(level: Int): Int = level.coerceIn(0, BACKLIGHT_MAX)
 
+        /** sendMode's boolean: block until the MCU acknowledges the mode byte. */
+        private const val WAIT_FOR_MCU_ACK = true
+
         /**
          * Main-volume range for QuickControls. No longer a guess: the vendor's own volume UI
          * (EventCenter `BackcarEvent`, decompiled in mcu-analysis/eventcenter-src) sizes its
@@ -247,20 +250,22 @@ class CarService(private val appContext: Context) {
 
     /**
      * Route tuner audio to the amp, the way the vendor radio app does it
-     * (RadioService.sendRadioMode): own SRC_RADIO, take the radio callback, then sendMode —
-     * twice, because the vendor sends it twice. Without this the tuner answers every getter
-     * and accepts every key while the cabin stays on whatever source was last selected: a
-     * radio screen that seeks but never plays.
+     * (RadioService.sendRadioMode): own SRC_RADIO, take the radio callback, then sendMode.
+     * Without this the tuner answers every getter and accepts every key while the cabin stays
+     * on whatever source was last selected: a radio screen that seeks but never plays.
      *
-     * ⚠ EventService.sendMode() runs kill3rdAPK() unless the Sys_SoundManager_Type SysVar
-     * is set: on a stock unit a source switch force-stops third-party tasks. Opening the
-     * vendor radio app trips the same path, so this adds no new exposure — verify on-device.
+     * sendMode's boolean means "wait for the MCU's ACK (frame 0x70) before returning"
+     * (`EventService.java:3933-3958`). The vendor passes false and sends twice; one call with
+     * true is the same outcome without the guess.
+     *
+     * kill3rdAPK() on this path is gated by SysVar Sys_SoundManager_Type, which DEFAULTS to
+     * "1" = Android-standard audio = no kill (`EventService.java:6581,6750,8294`). Only a unit
+     * where it was set to 0 force-stops third-party tasks here.
      */
     fun claimRadio() {
         call { setCurModeCallback(SRC_RADIO, radioCallback) }
         call { setRadioCallback(radioCallback) }
-        call { sendMode(SRC_RADIO, false) }
-        call { sendMode(SRC_RADIO, false) }
+        call { sendMode(SRC_RADIO, WAIT_FOR_MCU_ACK) }
         takeRadioFocus()
     }
 

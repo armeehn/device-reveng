@@ -3,9 +3,9 @@ package com.ripostelabs.carlauncher.carlib
 /**
  * v2.8 — the raw side of the parking-radar frame, for the on-device capture view.
  *
- * [RadarState] decodes `MCU_CAR_CAN_RADAR_INFO` with a byte layout that is **GUESSED** and has
- * never been checked against a car. This file exists to make that check possible: it keeps the
- * bytes as they arrived, and accumulates which of them actually move.
+ * [RadarState] decodes `MCU_CAR_CAN_RADAR_INFO` with a bank layout read off the decompile, but
+ * the left→right sensor order within a bank is UNVERIFIED. This file exists to make that check
+ * possible: it keeps the bytes as they arrived, and accumulates which of them actually move.
  *
  * Deliberately a plain class, not a `data class`: [StateFlow] conflates by `equals`, and
  * `ByteArray.equals` is identity — but a data class's generated `equals` would compare the
