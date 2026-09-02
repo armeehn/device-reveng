@@ -1,7 +1,7 @@
 # RAV4 (XA50) climate LIN bus → launcher integration
 
 How the **LIN climate path** fits alongside the existing CAN path in `carlib`
-(`com.reveng.carlauncher.carlib`), and everything you need to bring the hardware up.
+(`com.ripostelabs.carlauncher.carlib`), and everything you need to bring the hardware up.
 
 Ground truth: the bitzero.tech / ufnalski RAV4 XA50 climate reverse-engineering notes. **Passive
 listen only** — nothing here ever transmits on the LIN bus.

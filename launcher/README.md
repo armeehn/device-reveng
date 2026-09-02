@@ -1,4 +1,4 @@
-# Car Launcher (`com.reveng.carlauncher`)
+# Car Launcher (`com.ripostelabs.carlauncher`)
 
 A custom **companion HOME launcher** for the Choiceway GT6-EAU head unit
 (Android 13 / API 33, 1920x720 landscape @240dpi, **rooted**). It integrates with the
@@ -21,7 +21,7 @@ launcher/
 ├── gradle/wrapper/…             # Gradle 8.9 wrapper
 │
 ├── carlib/                      # Android library — the car integration layer
-│   ├── build.gradle.kts         # namespace com.reveng.carlauncher.carlib, aidl=true, libsu dep
+│   ├── build.gradle.kts         # namespace com.ripostelabs.carlauncher.carlib, aidl=true, libsu dep
 │   ├── consumer-rules.pro       # keep vendor AIDL/Parcelable names
 │   └── src/main/
 │       ├── AndroidManifest.xml  # <uses-permission com.szchoiceway.permission.broadcast>
@@ -29,19 +29,19 @@ launcher/
 │       │   ├── ICommunication.aidl   # gateway → app callback (notifyMessage/checkIsActive)
 │       │   ├── ICallbackfn.aidl      # radio/EQ/CAN setter callback (signature = TODO)
 │       │   └── IEventService.aidl    # bound control service (SUBSET; ordinals = TODO)
-│       └── java/com/reveng/carlauncher/carlib/
+│       └── java/com/ripostelabs/carlauncher/carlib/
 │           ├── CarEvents.kt     # BroadcastReceiver → Flows/callbacks (reverse, ACC, SWC, day/night)
 │           ├── SysVar.kt        # ContentResolver read + root `content` write of SysVarProvider
 │           ├── RootShell.kt     # `su -c` via libsu (reflective) or ProcessBuilder fallback
 │           └── CarService.kt    # binds vendor EventService via IEventService AIDL
 │
 └── app/                         # Android application — the launcher UI
-    ├── build.gradle.kts         # applicationId com.reveng.carlauncher, compose, targetSdk 33
+    ├── build.gradle.kts         # applicationId com.ripostelabs.carlauncher, compose, targetSdk 33
     ├── proguard-rules.pro
     └── src/main/
         ├── AndroidManifest.xml  # HOME activity, singleTask, landscape, QUERY_ALL_PACKAGES
         ├── res/…                # dark car theme, strings, adaptive launcher icon
-        └── java/com/reveng/carlauncher/
+        └── java/com/ripostelabs/carlauncher/
             ├── MainActivity.kt      # ComponentActivity + setContent; wires CarEvents/CarService
             ├── AppRepository.kt     # queryIntentActivities(MAIN/LAUNCHER) + launch
             └── ui/
@@ -56,14 +56,17 @@ launcher/
 
 ## Build
 
-The Android SDK / JDK live under `/home/sasha/android-tools/`. Source the env first, then
-assemble the debug APK:
+Requires **JDK 17** and an **Android SDK** with platform 34 and build-tools. Point
+`JAVA_HOME` and `ANDROID_HOME` at them (Android Studio's bundled copies work), then:
 
 ```bash
-source /home/sasha/android-tools/env.sh   # sets ANDROID_HOME / JAVA_HOME / PATH
-cd /home/sasha/projects/device-reveng/launcher
+cd launcher
 ./gradlew :app:assembleDebug
 ```
+
+The Gradle wrapper pins Gradle 8.9, so no system Gradle is needed. The version is
+derived from git history, so build from a **full clone** — a shallow clone fails the
+build with an explicit message rather than producing a wrong versionCode.
 
 Output APK: `app/build/outputs/apk/debug/app-debug.apk`.
 
@@ -87,14 +90,16 @@ is **confirmed unobtainable** — `../CUSTOM_ANDROID.md` §2b, `../LAUNCHER_DESI
 ### Which APK is in the car
 
 Every green build of `main` is tagged `v<versionName>+<versionCode>.g<short-sha>` (e.g.
-`v0.4.106+106.g1a2b3c4`) and the release APK from that same CI run is published as a
+`v0.7+146.g91dd836`) and the release APK from that same CI run is published as a
 GitHub Release against the tag, with the APK's SHA-256 in the release body.
 
 Both version fields are derived from git at build time (`app/build.gradle.kts`):
 `versionCode` is the commit count at the merge-base with `origin/main`, so every merge
-to `main` raises it by exactly one, and `versionName` is `0.4.<versionCode>`. Nobody
-bumps a version by hand, and no PR touches a version line. The commit SHA stays in the
-tag as the belt-and-braces identity. Historical note: before versionCode 71 the fields
+to `main` raises it by exactly one, and `versionName` is the bare base (`0.7`). Nobody
+bumps a version by hand, and no PR touches a version line. Because every build on a
+line shares its versionName, a build is always named with the code beside it —
+`0.7 (146)` in the app, `+146` in the tag — and the commit SHA stays in the tag as the
+belt-and-braces identity. Historical note: before versionCode 71 the fields
 were hand-claimed per PR; they repeat in that range (two merges both shipped `61`), so
 only the SHA separates those builds.
 
@@ -162,7 +167,7 @@ which look identical from the outside.
 Grant the permission with:
 
 ```sh
-adb shell pm grant com.reveng.carlauncher android.permission.ACCESS_FINE_LOCATION
+adb shell pm grant com.ripostelabs.carlauncher android.permission.ACCESS_FINE_LOCATION
 ```
 
 ### Motion budget
@@ -189,13 +194,18 @@ is a sustained, eyes-on gesture, so while moving the same progress renders as a 
 Transport stays available while moving — skip and play/pause are single forgiving presses that
 exist on the wheel anyway, and withholding them would push the driver to their phone.
 
-**RadioScreen** — 48 sp frequency, band toggle, seek, six preset slots with save / recall /
-delete, and the tuner's status flags.
+**RadioScreen** — 48 sp frequency, an AM / FM band toggle, a tune slider across the dial
+(parked-only, like media scrubbing; it snaps to the 100 kHz / 10 kHz step on release), seek,
+six preset slots with save / recall / delete, and the tuner's status flags. The AIDL only has
+a band *cycle* key, so selecting AM or FM toggles until the tuner reports that class.
 
 ### What the firmware does not have
 
 Two things §3.3/§3.4 planned turned out not to exist, so they are not built:
 
+- **No NET.** The vendor radio app's AM / FM / NET row had a third tab for its internet-radio
+  source. `getRadioBand()` never reports it and no `IEventService` method selects it, so the
+  band toggle is AM / FM only.
 - **No RDS text.** The 144-method AIDL has no PS (station name) or RT (radio text) getter.
   `getRadioPTYName` (ordinal 19) returns the programme *genre* — "Pop Music" — not a station.
   So the screen shows the indicators that do exist (RDS / TA / AF / TP / stereo + PTY genre)
@@ -527,7 +537,7 @@ A row does two things: open the source app, or dismiss.
 Parked-only, and the listener needs the same grant as the other two:
 
 ```sh
-adb shell cmd notification allow_listener com.reveng.carlauncher/com.reveng.carlauncher.notif.ShelfListenerService
+adb shell cmd notification allow_listener com.ripostelabs.carlauncher/com.ripostelabs.carlauncher.notif.ShelfListenerService
 ```
 
 ### The keyboard, everywhere
@@ -555,8 +565,8 @@ construction rather than by remembering to wrap each one.
 persists with, so a file and a stored theme cannot drift — into the app's external files directory:
 
 ```sh
-adb pull /sdcard/Android/data/com.reveng.carlauncher/files/themes/
-adb push mytheme.json /sdcard/Android/data/com.reveng.carlauncher/files/themes/
+adb pull /sdcard/Android/data/com.ripostelabs.carlauncher/files/themes/
+adb push mytheme.json /sdcard/Android/data/com.ripostelabs.carlauncher/files/themes/
 ```
 
 That path needs no runtime permission on API 33. `Downloads` was rejected (scoped storage makes a

@@ -7,7 +7,7 @@
         errorLine1="                        adapter.getProfileConnectionState(it) == BluetoothProfile.STATE_CONNECTED"
         errorLine2="                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/reveng/carlauncher/ui/StatusIndicators.kt"
+            file="src/main/java/com/ripostelabs/carlauncher/ui/StatusIndicators.kt"
             line="352"
             column="25"/>
     </issue>
@@ -29,7 +29,7 @@
         errorLine1="                        adapter.getProfileConnectionState(it) == BluetoothProfile.STATE_CONNECTED"
         errorLine2="                                                                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/reveng/carlauncher/ui/StatusIndicators.kt"
+            file="src/main/java/com/ripostelabs/carlauncher/ui/StatusIndicators.kt"
             line="352"
             column="66"/>
     </issue>
@@ -150,7 +150,7 @@
         errorLine1="    override fun dispatchKeyEvent(event: KeyEvent): Boolean {"
         errorLine2="                 ~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/reveng/carlauncher/MainActivity.kt"
+            file="src/main/java/com/ripostelabs/carlauncher/MainActivity.kt"
             line="673"
             column="18"/>
     </issue>
@@ -161,7 +161,7 @@
         errorLine1="        val nav = SwcNavigator.fromKeyEvent(event.keyCode) ?: return super.dispatchKeyEvent(event)"
         errorLine2="                                                                           ~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/reveng/carlauncher/MainActivity.kt"
+            file="src/main/java/com/ripostelabs/carlauncher/MainActivity.kt"
             line="674"
             column="76"/>
     </issue>
@@ -172,7 +172,7 @@
         errorLine1="        val nav = SwcNavigator.fromKeyEvent(event.keyCode) ?: return super.dispatchKeyEvent(event)"
         errorLine2="                                                                                            ~~~~~">
         <location
-            file="src/main/java/com/reveng/carlauncher/MainActivity.kt"
+            file="src/main/java/com/ripostelabs/carlauncher/MainActivity.kt"
             line="674"
             column="93"/>
     </issue>
@@ -183,7 +183,7 @@
         errorLine1="            else -> return super.dispatchKeyEvent(event)"
         errorLine2="                                 ~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/reveng/carlauncher/MainActivity.kt"
+            file="src/main/java/com/ripostelabs/carlauncher/MainActivity.kt"
             line="679"
             column="34"/>
     </issue>
@@ -194,7 +194,7 @@
         errorLine1="            else -> return super.dispatchKeyEvent(event)"
         errorLine2="                                                  ~~~~~">
         <location
-            file="src/main/java/com/reveng/carlauncher/MainActivity.kt"
+            file="src/main/java/com/ripostelabs/carlauncher/MainActivity.kt"
             line="679"
             column="51"/>
     </issue>
@@ -205,7 +205,7 @@
         errorLine1="    modifier: Modifier = Modifier,"
         errorLine2="    ~~~~~~~~">
         <location
-            file="src/main/java/com/reveng/carlauncher/ui/AppDrawer.kt"
+            file="src/main/java/com/ripostelabs/carlauncher/ui/AppDrawer.kt"
             line="192"
             column="5"/>
     </issue>
@@ -238,7 +238,7 @@
         errorLine1="        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {"
         errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/reveng/carlauncher/HomeRole.kt"
+            file="src/main/java/com/ripostelabs/carlauncher/HomeRole.kt"
             line="59"
             column="13"/>
     </issue>
@@ -256,7 +256,7 @@
         errorLine1="    var draggingIndex by remember { mutableStateOf(-1) }"
         errorLine2="                                    ~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/reveng/carlauncher/ui/AppDrawer.kt"
+            file="src/main/java/com/ripostelabs/carlauncher/ui/AppDrawer.kt"
             line="198"
             column="37"/>
     </issue>
@@ -267,7 +267,7 @@
         errorLine1="    var suppressTapUntil by remember { mutableStateOf(0L) }"
         errorLine2="                                       ~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/reveng/carlauncher/ui/AppDrawer.kt"
+            file="src/main/java/com/ripostelabs/carlauncher/ui/AppDrawer.kt"
             line="205"
             column="40"/>
     </issue>
@@ -278,7 +278,7 @@
         errorLine1="    var homeProbe by remember { mutableStateOf(0) }"
         errorLine2="                                ~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/reveng/carlauncher/ui/settings/LauncherPrefsScreen.kt"
+            file="src/main/java/com/ripostelabs/carlauncher/ui/settings/LauncherPrefsScreen.kt"
             line="75"
             column="33"/>
     </issue>
@@ -289,7 +289,7 @@
         errorLine1="    var homeProbe by remember { mutableStateOf(0) }"
         errorLine2="                                ~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/reveng/carlauncher/ui/OnboardingScreen.kt"
+            file="src/main/java/com/ripostelabs/carlauncher/ui/OnboardingScreen.kt"
             line="112"
             column="33"/>
     </issue>
@@ -300,7 +300,7 @@
         errorLine1="    var step by remember { mutableStateOf(0) }"
         errorLine2="                           ~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/reveng/carlauncher/ui/OnboardingScreen.kt"
+            file="src/main/java/com/ripostelabs/carlauncher/ui/OnboardingScreen.kt"
             line="125"
             column="28"/>
     </issue>
@@ -311,7 +311,7 @@
         errorLine1="    var volume by remember { mutableStateOf(0f) }"
         errorLine2="                             ~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/reveng/carlauncher/ui/QuickControls.kt"
+            file="src/main/java/com/ripostelabs/carlauncher/ui/QuickControls.kt"
             line="195"
             column="30"/>
     </issue>
@@ -322,7 +322,7 @@
         errorLine1="    var position by mutableStateOf(initial)"
         errorLine2="                    ~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/reveng/carlauncher/ui/settings/SettingsComponents.kt"
+            file="src/main/java/com/ripostelabs/carlauncher/ui/settings/SettingsComponents.kt"
             line="603"
             column="21"/>
     </issue>

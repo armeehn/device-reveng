@@ -23,8 +23,8 @@
 
 # ---- NotificationListenerServices ---------------------------------------------------
 # Instantiated and bound by the framework from the manifest name — must not be renamed/removed.
--keep class com.reveng.carlauncher.media.MediaListenerService { *; }
--keep class com.reveng.carlauncher.nav.NavListenerService { *; }
+-keep class com.ripostelabs.carlauncher.media.MediaListenerService { *; }
+-keep class com.ripostelabs.carlauncher.nav.NavListenerService { *; }
 -keep class * extends android.service.notification.NotificationListenerService { *; }
 
 # ---- libsu / RootShell (reflection) -------------------------------------------------
@@ -48,7 +48,7 @@
 -dontwarn kotlinx.coroutines.**
 
 # ---- App enums (persisted by .name(), e.g. DayNightMode) -----------------------------
--keepclassmembers enum com.reveng.carlauncher.** {
+-keepclassmembers enum com.ripostelabs.carlauncher.** {
     public static **[] values();
     public static ** valueOf(java.lang.String);
 }

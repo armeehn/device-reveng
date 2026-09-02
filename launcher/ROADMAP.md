@@ -11,7 +11,8 @@ builds are meant to go on-device as the home launcher. CI builds every PR.
 
 Both fields are derived from git in `app/build.gradle.kts` at build time: `versionCode` is
 the commit count at the merge-base with `origin/main` (each squash-merge raises it by one,
-so it is monotonic by construction), `versionName` is `0.4.<versionCode>`. `1.0.0` is
+so it is monotonic by construction), `versionName` is the bare base (`0.7`, shown as
+`0.7 (<versionCode>)` wherever a build is identified). `1.0.0` is
 reserved for the polished public release; only a deliberate milestone commit changes the
 base. **No PR touches a version line** — hand-claimed versionCodes made every squash-merge
 conflict every open sibling PR, and duplicates got claimed anyway.
@@ -163,20 +164,20 @@ reader into re-deriving settled decisions.
 ## 0.5 — the suite lands
 
 The 0.4 window was corrections. 0.5 is the release that makes the *rest* of the unit ours: the
-twenty-six standalone rewrites in `armeehn/rav4-apps` (`com.reveng.clock`, `…browser`,
+twenty-six standalone rewrites in `armeehn/rav4-apps` (`com.ripostelabs.clock`, `…browser`,
 `…weather`, …) stop being a separate project that happens to be installed, and become apps the
 launcher knows about and styles.
 
 Shipped in this milestone:
 
 - **The launcher publishes its active palette.** `ThemeProvider` serves the resolved day/night
-  variant as a one-row cursor on `content://com.reveng.carlauncher.theme/active`. Pull-based so
+  variant as a one-row cursor on `content://com.ripostelabs.carlauncher.theme/active`. Pull-based so
   a cold-started app is themed before its first frame rather than flashing a fallback;
   no runtime grant, so a freshly installed app is themed without a trip to the car; observable,
   so an app on screen re-paints on a theme switch or a night crossing. Read-only — a suite app
   that could write the palette could restyle the home screen of a moving car.
-- **`RevengSuite`, the registry of what the suite is.** Nothing on the device marks the
-  twenty-six as one family, and a `com.reveng.` prefix match would swallow the launcher itself
+- **`RiposteSuite`, the registry of what the suite is.** Nothing on the device marks the
+  twenty-six as one family, and a `com.ripostelabs.` prefix match would swallow the launcher itself
   and its `.debug` sibling. Membership is an explicit list, so an app that failed to install is
   reported missing instead of silently leaving the family.
 - **Setup Doctor counts the suite.** `Rewritten app suite (n/26)`, naming what is absent. It
@@ -197,7 +198,7 @@ between. That is deliberate, and recorded here because a reader comparing tags w
 assume a release went missing.
 
 **The base names the project's milestone, not this module's changes.** From 0.5 the launcher and
-the standalone `com.reveng.*` suite (`armeehn/rav4-apps`) are one product: the launcher publishes
+the standalone `com.ripostelabs.*` suite (`armeehn/rav4-apps`) are one product: the launcher publishes
 the palette and the session registry, the suite consumes them, and a milestone is only real when
 both sides of the boundary work. 0.6 and 0.7 were entirely on the suite's side of it:
 
