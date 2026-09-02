@@ -23,7 +23,7 @@ Cross-reference: [`CAR_API.md`](CAR_API.md) (the car-integration API).
 >    inflated *by name* from another process — the same by-name inflation the gateway uses for the
 >    status bar and side window (§2, §3).
 > 3. **It's a giant multi-OEM launcher.** ~55 launcher skins (Benz/BMW/Audi/Porsche/Lexus/Toyota/BYD/
->    Wrangler/…) selected at runtime by an integer SysVar **`uiNumberKey`**. Our unit uses the
+>    Wrangler/…) selected at runtime by an integer SysVar **`Sys_UINumber`**. Our unit uses the
 >    **default** skin (§2). The `zxw` resources the gateway inflates by name are that default.
 > 4. customerui declares **no custom permissions at all** — not even
 >    `com.szchoiceway.permission.broadcast`. It receives protected broadcasts purely via
@@ -103,11 +103,11 @@ it is inflated from **another process** (the gateway, via `createPackageContext(
 exactly the mechanism the notes already documented for the side window and status bar (§3). This is
 why MainActivity can finish immediately: the launcher content lives in a system window, not an activity.
 
-**Skin selection.** `LauncherView` reads integer SysVar **`uiNumberKey`**
-(`SystemPropertiesHelps.I.uiNumberKey`) and inflates one of ~55 per-OEM roots
+**Skin selection.** `LauncherView` reads integer SysVar **`Sys_UINumber`**
+(via the helper `SystemPropertiesHelps.I.uiNumberKey`) and inflates one of ~55 per-OEM roots
 (`LauncherView.java:40-188` **[confirmed]**). Mapping excerpt:
 
-| `uiNumberKey` | root layout | skin |
+| `Sys_UINumber` | root layout | skin |
 |---|---|---|
 | **default (else)** | **`launcher_common_land`** → `com.szchoiceway.view.LauncherLandView` | **the plain "zxw" launcher — our unit** |
 | 1200 / 1201 / 1202 | `bba_benz` / `bba_bwm` / `bba_audi` | Benz / BMW / Audi (force night) |
@@ -119,11 +119,11 @@ why MainActivity can finish immediately: the launcher content lives in a system 
 | 10008 / 10009 / 10001 / 10007 | bentley / mazda_axela / vertical_default / vertical_benz | misc |
 | 1051 / 1052 / 1500 / 1600 / 1900 | byd_ts / tanke_300 / hrui / trda / yimi | misc |
 
-Because our device shows the plain grid, its `uiNumberKey` is the default bucket, and the gateway's
+Because our device shows the plain grid, its `Sys_UINumber` is the default bucket, and the gateway's
 by-name inflation of `layout_status_bar_zxw` / `layout_left_side_window_view_zxw` (the **`_zxw`** =
 default resources) matches. **To confirm the exact number on the device:**
 `content query --uri content://com.szchoiceway.eventcenter.SysVarProvider/SysVar` and look for the
-`uiNumberKey` row (a.k.a. `sys_ui_number_key`).
+`Sys_UINumber` row (`SysProviderOpt.SYS_UI_NUMBER_KEY`; `uiNumberKey` is only the helper method's name).
 
 For **our** launcher: since customerui is not a HOME app, "taking over HOME" the Android way is a
 non-issue — but there is also no HOME app to fall back on. The practical replacement path is to draw
@@ -281,7 +281,7 @@ keyword prefixes `BlackScreen / DIM / Power / TaskList / StatusBar / Setting`. c
 unchanged. **[inferred — gateway side]**
 
 **Customer/OEM variant** now has a customerui-side counterpart: the `Customer*` profile classes
-(`customerui/customer/*`) + the integer **`uiNumberKey`** SysVar (§2) select skin/behavior; the
+(`customerui/customer/*`) + the integer **`Sys_UINumber`** SysVar (§2) select skin/behavior; the
 gateway's `Sys_CustomerType` still gates "more settings". **[refined]**
 
 ---
@@ -358,7 +358,7 @@ at runtime; but the launcher's own numbers are now known:
 
 **Default home (skin = default), from the confirmed resources above:**
 
-- **Skin selector**: SysVar `uiNumberKey`; default bucket → `LauncherLandView` (§2).
+- **Skin selector**: SysVar `Sys_UINumber`; default bucket → `LauncherLandView` (§2).
 - **Grid**: **2 rows × 6 columns = 12 icons/page**, horizontal paging, auto-sized cells
   (`ItemAppListView.java:139-162,119-126`). Page insets **40 dp L/R, 45 dp T/B**; page indicator
   dots **25×5 dp**, 5 dp gap, `marginBottom 30dp`, selected `#0096ff` (`item_launcher_recycler_view.xml`).
