@@ -37,6 +37,7 @@ import androidx.compose.foundation.Canvas
 import com.ripostelabs.carlauncher.carlib.CarEvents
 import com.ripostelabs.carlauncher.carlib.GpsSpeedSource
 import com.ripostelabs.carlauncher.carlib.RadarState
+import com.ripostelabs.carlauncher.carlib.SteeringReading
 import com.ripostelabs.carlauncher.data.IgnitionSession
 import com.ripostelabs.carlauncher.ui.theme.carShape
 import com.ripostelabs.carlauncher.ui.theme.carCard
@@ -51,7 +52,8 @@ import kotlinx.coroutines.delay
  * Every tile states its own provenance, because these signals are not equally trustworthy and
  * a dashboard that renders a guess identically to a confirmed reading is worse than no
  * dashboard. Speed is GPS-derived (v2.5); outside temp arrives preformatted from the car;
- * steering angle and radar are decoded from layouts that are still guesses, and say so.
+ * steering is the OEM-scaled 0x11 CAN decode with an unconfirmed sign; radar is decoded from a
+ * layout that is still a guess, and says so.
  */
 @Composable
 fun DashboardScreen(
@@ -64,7 +66,7 @@ fun DashboardScreen(
     val speed by carEvents.speedKmh.collectAsStateSafe(initial = GpsSpeedSource.SPEED_UNKNOWN)
     val motion by carEvents.motion.collectAsStateSafe(initial = CarEvents.Motion.UNKNOWN)
     val outsideTemp by carEvents.outsideTemp.collectAsStateSafe(initial = null)
-    val steering by carEvents.steeringAngle.collectAsStateSafe(initial = CarEvents.VALUE_UNKNOWN)
+    val steering by carEvents.steeringAngle.collectAsStateSafe(initial = null)
     val accOn by carEvents.accOn.collectAsStateSafe(initial = true)
     val radar by carEvents.radar.collectAsStateSafe(initial = null)
     val sessionStartMs by (ignitionSession?.startedAt?.collectAsStateSafe(initial = null)
@@ -124,7 +126,7 @@ fun DashboardScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 SteeringTile(
-                    angle = steering,
+                    reading = steering,
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f),
@@ -232,13 +234,27 @@ private fun TripTile(sessionStartMs: Long?, modifier: Modifier = Modifier) {
 /**
  * Steering angle, drawn relative to centre.
  *
- * No number is shown, deliberately. The extra's units and sign are undocumented (see
- * [CarEvents.steeringAngle]), so printing "42°" would invent a precision we do not have. A bar
- * that leans the way the wheel leans is exactly as much as the signal supports.
+ * RAV4-38: fed by the 0x11 CAN decode ([CarEvents.steeringAngle]), the same value the capture
+ * screen prints, so the degrees are shown on the OEM scale. The sign is still unconfirmed, and
+ * the bar's travel assumes a lock-to-lock range — both said in the provenance line.
+ *
+ * Staleness is judged here, on a one-second tick, because a StateFlow only moves when a frame
+ * arrives: with no tick a dead feed would sit as a frozen number for the rest of the drive.
  */
 @Composable
-private fun SteeringTile(angle: Int, modifier: Modifier = Modifier) {
-    val known = angle != CarEvents.VALUE_UNKNOWN
+private fun SteeringTile(reading: SteeringReading?, modifier: Modifier = Modifier) {
+    var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(reading) {
+        if (reading == null) {
+            return@LaunchedEffect
+        }
+        while (true) {
+            nowMs = System.currentTimeMillis()
+            delay(STALE_TICK_MS)
+        }
+    }
+
+    val known = reading != null && !reading.isStale(nowMs)
     val accent = MaterialTheme.colorScheme.primary
     val track = MaterialTheme.colorScheme.surfaceVariant
 
@@ -247,6 +263,13 @@ private fun SteeringTile(angle: Int, modifier: Modifier = Modifier) {
             text = "Steering",
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(4.dp))
+        AutoSizeText(
+            text = steeringValue(reading, nowMs),
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
         )
         Spacer(Modifier.height(8.dp))
         Canvas(
@@ -265,9 +288,9 @@ private fun SteeringTile(angle: Int, modifier: Modifier = Modifier) {
             if (!known) {
                 return@Canvas
             }
-            // Clamp to the widest plausible raw excursion; the true range is unknown, so this
-            // saturates rather than mis-scaling if the car reports a larger count.
-            val ratio = (angle.toFloat() / STEERING_ASSUMED_RANGE).coerceIn(-1f, 1f)
+            // Clamp to the widest plausible excursion; lock-to-lock is unconfirmed, so this
+            // saturates rather than mis-scaling if the car reports a larger angle.
+            val ratio = (reading!!.degrees.toFloat() / STEERING_ASSUMED_RANGE).coerceIn(-1f, 1f)
             val x = midX + ratio * midX
             drawLine(
                 color = accent,
@@ -278,10 +301,29 @@ private fun SteeringTile(angle: Int, modifier: Modifier = Modifier) {
             drawCircle(color = accent, radius = STEERING_KNOB_PX, center = Offset(x, midY))
         }
         Spacer(Modifier.height(8.dp))
-        TileNote(
-            if (known) "raw $angle · units unconfirmed" else "no reading yet",
-        )
+        TileNote(steeringNote(reading, nowMs))
     }
+}
+
+/**
+ * The tile's headline: degrees while the feed is live, a dash otherwise. Split out with
+ * [steeringNote] so the stale rule is unit-testable without composing the tile.
+ */
+internal fun steeringValue(reading: SteeringReading?, nowMs: Long): String {
+    if (reading == null || reading.isStale(nowMs)) {
+        return "—"
+    }
+    return "%.1f°".format(reading.degrees)
+}
+
+/** The steering tile's provenance line; a stale reading says so, never a frozen number. */
+internal fun steeringNote(reading: SteeringReading?, nowMs: Long): String = when {
+    reading == null -> "no reading yet"
+    reading.isStale(nowMs) -> {
+        val silentSec = (nowMs - reading.atMs) / 1000
+        "stale · no CAN frame for ${silentSec}s"
+    }
+    else -> "CAN 0x11 · OEM scale · sign unconfirmed"
 }
 
 /**
@@ -384,11 +426,14 @@ private const val STEERING_TRACK_PX = 6f
 private const val STEERING_KNOB_PX = 14f
 
 /**
- * ⚠ GUESSED. Assumes the raw extra spans roughly ±540 (three turns lock to lock in degrees, the
- * most common convention). Only affects how far the indicator travels, never a displayed number,
- * and saturates rather than overflowing if the real range is wider. Confirm lock to lock.
+ * ⚠ GUESSED. Assumes roughly ±540° (three turns lock to lock, the most common convention). Only
+ * affects how far the indicator travels, never the displayed number, and saturates rather than
+ * overflowing if the real range is wider. Confirm lock to lock.
  */
 private const val STEERING_ASSUMED_RANGE = 540f
+
+/** Re-judges staleness once a second; the reading itself only moves when a frame arrives. */
+private const val STALE_TICK_MS = 1_000L
 
 /** A second is plenty for a session timer, and keeps the surface static between ticks. */
 private const val TRIP_TICK_MS = 1_000L
