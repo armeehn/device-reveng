@@ -1,0 +1,28 @@
+# Regeneration path for ClaudeCar.xcodeproj (`xcodegen generate`). The project
+# file is committed, so this is only needed if it ever gets mangled — keep the
+# two in step when either changes.
+name: ClaudeCar
+options:
+  bundleIdPrefix: com.ripostelabs
+  deploymentTarget:
+    iOS: "17.0"
+configFiles:
+  Debug: Config.xcconfig
+  Release: Config.xcconfig
+targets:
+  ClaudeCar:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources: [ClaudeCar]
+    # No `info:` block — the committed Info.plist is used as is, not generated.
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.ripostelabs.claudecar
+        MARKETING_VERSION: 0.1.0
+        CURRENT_PROJECT_VERSION: 1
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: ClaudeCar/Info.plist
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SWIFT_VERSION: "5.0"
+        CODE_SIGN_STYLE: Automatic

@@ -1,0 +1,4 @@
+// Copy to Local.xcconfig (gitignored) and fill in.
+
+// Your Apple Developer team id, for on-device signing.
+DEVELOPMENT_TEAM = XXXXXXXXXX
