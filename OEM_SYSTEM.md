@@ -67,7 +67,7 @@ Three facts decide what "replace" can mean here:
 | `com.choiceway.weather` | Weather | Seniverse (China) API client | Remove | — | suite `weather`, own source |
 | `com.zjinnova.zlink` | ZLINK5 | CarPlay / AA / HiCar / mirror receiver, `SRC_CARPLAY` 32, packed DEX | **Never** (proprietary) | drive by intent: `ZLINK_MAIN`, `REQ_SPEC_FUNC_CMD`, status broadcasts | helper in progress; never put its class names in `SYS_LAUNCHER_APP_HIDE_KEY` |
 | `com.mmbox.xbrowser` | XBrowser | Chinese browser, not system uid | Remove | — | suite `browser` |
-| `com.android.atslcarconsole` | Console | unknown, 21 MB, gateway-bound | Investigate | — | decompile pending |
+| `com.android.atslcarconsole` | Console (中控) | Cadillac ATS-L original-car console: CAN car settings, plate number, greeting screen; claims `SRC_ATSL_AIRCONSOLE`/`SRC_CAR_AUX`, writes raw CAN frames via `ACTION_MCU_CMD_EVENT` | Remove (wrong car; a CAN writer) | — | decompiled, nothing to keep |
 
 Not yet pulled from the unit (named in `debloat-plan.md`, absent from the local APK stock):
 `customerui`, `auxcamera`, `com.choiceway.dsp`, `canoriginalcarmedia`, `ambient.light`,
