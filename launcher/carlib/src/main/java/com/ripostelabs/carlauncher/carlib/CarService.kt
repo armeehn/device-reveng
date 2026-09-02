@@ -203,9 +203,6 @@ class CarService(private val appContext: Context) {
     /** Vendor factory reset (sendFactorySet, ordinal 76). ⚠ Destructive — confirm before calling. */
     fun factoryReset() { call { sendFactorySet() } }
 
-    /** Read the raw HVAC frame (CAR_API §5). ⚠ Param semantics GUESSED (0 = query). */
-    fun getAirData(): ByteArray? = call { getAirData(0, ByteArray(64)) }
-
     fun sendMode(mode: Int, flag: Boolean) { call { sendMode(mode, flag) } }
     fun sendWheelKey(key: Int) { call { sendWheelKey(key) } }
     fun setMute(mute: Boolean) { call { sendMuteState(mute) } }
