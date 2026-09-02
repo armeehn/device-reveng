@@ -115,12 +115,62 @@ class VendorBtDecodeTest {
     }
 
     @Test
-    fun speakingTimeIntArrayIsNotMisreadAsAnInt() {
+    fun speakingTimeIsMinutesAndSeconds() {
         val next = VendorBtDecode.apply(
             start, action(VendorBtDecode.EVT_SPEAKING_TIME),
             mapOf(VendorBtDecode.EXTRA_INT to intArrayOf(1, 30)), 9L,
         )
-        assertEquals(start.copy(lastEventMs = 9L), next)
+        assertEquals(start.copy(lastEventMs = 9L, speakingSec = 90), next)
+    }
+
+    @Test
+    fun speakingTimeOfAnotherShapeIsIgnored() {
+        val short = VendorBtDecode.apply(
+            start, action(VendorBtDecode.EVT_SPEAKING_TIME),
+            mapOf(VendorBtDecode.EXTRA_INT to intArrayOf(7)), 9L,
+        )
+        assertEquals(start.copy(lastEventMs = 9L), short)
+        val int = VendorBtDecode.apply(start, action(VendorBtDecode.EVT_SPEAKING_TIME), ints(90), 9L)
+        assertEquals(start.copy(lastEventMs = 9L), int)
+    }
+
+    @Test
+    fun contactEventsCarryTheParty() {
+        val num = VendorBtDecode.apply(
+            start, action(VendorBtDecode.EVT_CONTACT_NUM),
+            mapOf(VendorBtDecode.EXTRA_STR to "+16041234567"), 1L,
+        )
+        assertEquals("+16041234567", num.callerNumber)
+        val named = VendorBtDecode.apply(
+            num, action(VendorBtDecode.EVT_CONTACT_NAME),
+            mapOf(VendorBtDecode.EXTRA_STR to "Alice"), 2L,
+        )
+        assertEquals("Alice", named.callerName)
+        assertEquals("+16041234567", named.callerNumber)
+    }
+
+    @Test
+    fun callEndClearsPartyAndTimer() {
+        val live = hshf(VendorBtDecode.HSHF_ACTIVE_CALL)
+            .copy(callerNumber = "1", callerName = "A", speakingSec = 12)
+        val stillLive = hshf(VendorBtDecode.HSHF_ACTIVE_CALL, prev = live)
+        assertEquals("1", stillLive.callerNumber)
+        assertEquals(12, stillLive.speakingSec)
+
+        val ended = hshf(VendorBtDecode.HSHF_CONNECTED, prev = live)
+        assertNull(ended.callerNumber)
+        assertNull(ended.callerName)
+        assertNull(ended.speakingSec)
+    }
+
+    @Test
+    fun hfpNamesTheHshfCode() {
+        assertEquals(HfpState.INCOMING_CALL, hshf(VendorBtDecode.HSHF_INCOMING_CALL).hfp)
+        assertNull(start.hfp)
+        assertNull(HfpState.of(7))
+        for (state in HfpState.entries) {
+            assertEquals(state, HfpState.of(state.code))
+        }
     }
 
     @Test

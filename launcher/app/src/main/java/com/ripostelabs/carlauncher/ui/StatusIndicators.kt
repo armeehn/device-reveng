@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.BluetoothDisabled
 import androidx.compose.material.icons.filled.BrightnessMedium
 import androidx.compose.material.icons.filled.Call // RAV4-52 CarPlay chip
 import androidx.compose.material.icons.filled.NetworkWifi1Bar
+import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.NetworkWifi2Bar
 import androidx.compose.material.icons.filled.NetworkWifi3Bar
 import androidx.compose.material.icons.filled.SignalWifi0Bar
@@ -119,6 +120,7 @@ internal object StatusIndicatorTags {
     const val BRIGHTNESS = "statusIndicator.brightness"
     /** RAV4-52: the phone-projection chip. Not in the v3.1 invariant set; present only while connected. */
     const val CARPLAY = "statusIndicator.carplay"
+    const val CALL = "statusIndicator.call"
 }
 
 @Composable
@@ -132,6 +134,10 @@ fun StatusIndicators(
 ) {
     val context = LocalContext.current.applicationContext
 
+    // RAV4-50: a call in progress per the vendor bt module (HSHF > 3), party and timer.
+    val vendor by (carEvents?.vendorBt?.collectAsStateSafe(initial = VendorBtState())
+        ?: remember { mutableStateOf(VendorBtState()) })
+
     StatusIndicatorsRow(
         wifi = rememberWifiStatus(context),
         bt = rememberBluetoothStatus(context, carEvents),
@@ -140,6 +146,7 @@ fun StatusIndicators(
         modifier = modifier,
         onOpen = onOpen,
         carPlay = rememberCarPlayStatus(carEvents),
+        call = PhoneLogic.callChip(vendor),
     )
 }
 
@@ -160,6 +167,8 @@ internal fun StatusIndicatorsRow(
     onOpen: (() -> Unit)? = null,
     // RAV4-52: the projected phone. The default is "no session", i.e. no chip.
     carPlay: CarPlayState = CarPlayState(),
+    // RAV4-50: "Incoming · Alice" / "02:15 · Alice" while a call is up; null = no chip.
+    call: String? = null,
 ) {
     Row(
         horizontalArrangement = Arrangement.spacedBy(14.dp),
@@ -198,6 +207,15 @@ internal fun StatusIndicatorsRow(
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 text = "$brightnessPercent%",
                 tag = StatusIndicatorTags.BRIGHTNESS,
+            )
+        }
+        if (call != null) {
+            StatusChip(
+                icon = Icons.Filled.Phone,
+                description = "Call $call",
+                tint = MaterialTheme.colorScheme.primary,
+                text = call,
+                tag = StatusIndicatorTags.CALL,
             )
         }
     }
