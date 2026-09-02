@@ -355,13 +355,15 @@ stack treat us as *the* launcher. It deliberately does **not** drive our theming
 local broadcast, *not* from this pair, so reading it as a day/night source would be reading a
 channel the vendor does not actually theme from.
 
-### HVAC write controls — not shipped
+### HVAC write controls — sender only, no UI
 
 The roadmap gated these on STATUS goal #3 proving RAV4 climate is CAN-writable. That test has not
 been run, and STATUS still reads *"Investigating whether RAV4 climate is CAN-controllable or
-display-only (likely display-only)."* So climate stays read-only. The Climate settings screen
-continues to write only vendor *configuration* SysVars (panel type, bus baud, seat heat, units) —
-never a live temperature or fan command.
+display-only (likely display-only)."* carlib now carries `ClimateControl`, which sends the CAN
+app's own `CAR_AIR_KEY_KEY` button broadcast (`CanUtils.CAR_AIR_KEY_*` values, decompile
+`CarAirClickWithVoice.java:432,462`), but nothing in the UI calls it and it is unverified on the
+car. The Climate settings screen continues to write only vendor *configuration* SysVars (panel
+type, bus baud, seat heat, units) — never a live temperature or fan command.
 
 ### Stability bar — not claimable
 
@@ -622,7 +624,7 @@ approximation; a sunset calculation would be wrong exactly when it matters.
   making: it is available at power-on and indoors, where GPS is not.
 - **Reverse camera feed** — `ReverseOverlay` is a black placeholder; embed a `SurfaceView`
   bound to the reverse video input, or host `com.szchoiceway.view.BackCarActivity`.
-- **Climate widget** — placeholder only; wire `CarAirState`.
+- **Climate widget** — reads the mirrored `CarAirState` parcel; unverified on the car.
 - **`Rdo_MyFavorite0..5` write-back** — the encoding is known (`freq | (am ? 0x10000 : 0)`,
   `RadioTuning.encodeVendorFavorite`) and the slots are recallable from RadioScreen; writing our
   presets into them is a product decision, not a research item any more.

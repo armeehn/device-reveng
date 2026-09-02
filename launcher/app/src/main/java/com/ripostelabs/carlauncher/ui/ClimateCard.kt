@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -24,52 +23,30 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ripostelabs.carlauncher.carlib.CarEvents
-import com.ripostelabs.carlauncher.carlib.CarService
 import com.ripostelabs.carlauncher.carlib.ClimateState
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
 
 /**
  * ClimateReadout — compact, **display-only** HVAC summary for the LEFT column
  * (CAR_API §3.5 / §5). No write path in the companion build (§6.4).
  *
- * Data source, in preference order:
- *  1. the `com.szchoiceway.canbus.carairstruct` broadcast surfaced by [CarEvents.climate]
- *     (when a decodable frame is delivered), then
- *  2. AIDL `getAirData()` via [CarService], polled on a slow timer.
- *
- * Both are best-effort: the vendor `CarAirState` Parcelable class isn't bundled and the
- * `getAirData()` byte layout is GUESSED ([ClimateState] KDoc). When neither yields a valid
- * frame the card shows a **"Climate unavailable"** placeholder rather than fabricating values.
+ * Data source: the `com.choiceway.canbus.carairstruct` broadcast surfaced by
+ * [CarEvents.climate], unparcelled through the mirrored `CarAirState`. Until the CAN app has
+ * sent one the card shows a **"Climate unavailable"** placeholder rather than fabricating values.
  */
 @Composable
 fun ClimateReadout(
-    carService: CarService,
     carEvents: CarEvents,
     modifier: Modifier = Modifier,
 ) {
     val broadcast by carEvents.climate.collectAsStateSafe(initial = null)
 
-    val polled by produceState(initialValue = ClimateState(valid = false)) {
-        while (true) {
-            value = withContext(Dispatchers.IO) {
-                runCatching { ClimateState.fromAirData(carService.getAirData()) }
-                    .getOrDefault(ClimateState(valid = false))
-            }
-            delay(5_000)
-        }
-    }
-
-    val state: ClimateState? = broadcast?.takeIf { it.valid } ?: polled.takeIf { it.valid }
+    val state: ClimateState? = broadcast?.takeIf { it.valid }
 
     Card(
         modifier = modifier.carCard(accent = MaterialTheme.colorScheme.tertiary), // marigold in rotation
@@ -83,7 +60,7 @@ fun ClimateReadout(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                // Left set-temp — the primary glance value.
+                // Left set-temp — the primary glance value ("Off" while the HVAC is off).
                 Column {
                     AutoSizeText(
                         text = state.leftTempLabel(),
@@ -107,6 +84,7 @@ fun ClimateReadout(
                 ) {
                     ClimateGlyph(Icons.Filled.AcUnit, "A/C", state.acOn)
                     ClimateGlyph(Icons.Filled.Autorenew, "AUTO", state.autoOn)
+                    ClimateGlyph(Icons.Filled.Thermostat, "DEF", state.frontDefrost || state.rearDefrost)
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
                             imageVector = Icons.Filled.Air,
@@ -116,7 +94,7 @@ fun ClimateReadout(
                         )
                         Spacer(Modifier.width(6.dp))
                         AutoSizeText(
-                            text = state.fanLevel.toString(),
+                            text = "${state.fanLevel}/${state.fanMax}",
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurface,
                         )
