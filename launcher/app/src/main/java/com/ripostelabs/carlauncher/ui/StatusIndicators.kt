@@ -80,18 +80,20 @@ import kotlinx.coroutines.withContext
  *   Wi-Fi       push  — ConnectivityManager.NetworkCallback (signal via onCapabilitiesChanged)
  *   Bluetooth   push  — adapter state + connection-state broadcasts
  *   brightness  push  — ContentObserver on Settings.System.SCREEN_BRIGHTNESS
- *   volume      poll  — no volume event exists to ride; the search is written up on
- *                       [rememberVolumeStatus]. Binder death is still a push, so the chip
- *                       goes the moment the service dies rather than a poll period later.
+ *   volume      push  — the gateway's MCU_MSG_MAIL_VOL broadcast ([CarEvents.volume]); the
+ *                       AIDL getter is polled only as a fallback, see [rememberVolumeStatus].
+ *                       Binder death is still a push, so the chip goes the moment the service
+ *                       dies rather than a poll period later.
  */
 
 private const val VOLUME_POLL_MS = 5_000L
 
 /**
- * Gateway status line that *may* announce a main-volume change. It is a constant of the vendor's
- * LocalSocket text protocol (CAR_API §3.3), and whether it is also pushed over the
- * `addMessageListener(ICommunication)` channel we are already registered on is UNCONFIRMED — so it
- * only nudges a re-read of the confirmed getter. The number on the chip is never parsed out of it.
+ * Gateway status line that *may* announce a main-volume change (`showVolState`,
+ * `EventService.java:13899`). It rides the `ZXW_MESSAGE_TO_ICCOMMUNICATION` broadcast as a
+ * String, not the `addMessageListener(ICommunication)` channel we are registered on — nothing in
+ * the gateway ever calls those listeners — so this match is inert today and only nudges a re-read
+ * of the confirmed getter. The number on the chip is never parsed out of it.
  */
 private const val VOLUME_MESSAGE_PREFIX = "SYSTEM_VOLUME"
 
@@ -128,7 +130,7 @@ fun StatusIndicators(
     StatusIndicatorsRow(
         wifi = rememberWifiStatus(context),
         bt = rememberBluetoothStatus(context, carEvents),
-        volume = rememberVolumeStatus(carService, refreshKey),
+        volume = rememberVolumeStatus(carService, carEvents, refreshKey),
         brightnessPercent = rememberBrightnessPercent(context, refreshKey),
         modifier = modifier,
         onOpen = onOpen,
@@ -496,29 +498,45 @@ private fun VolumeChip(volume: VolumeStatus) {
 }
 
 /**
- * The chip's value still comes from a poll, because **the vendor AIDL exposes no volume event**.
- * What was checked, so the next reader does not repeat it:
+ * The chip's value is pushed: the gateway broadcasts `MCU_MSG_MAIL_VOL` on every MCU volume or
+ * mute report (`EventService.java:3105-3125`), decoded by [CarEvents.volume]. The AIDL poll below
+ * is kept only as a fallback for the first frames and for a `carEvents`-less caller.
  *
- *  - Every `ICallbackfn` registrar in the 144-method interface: `setRadioCallback` (29),
- *    `setCurModeCallback` (30), `setCamAuxCallback` (66), `setCanA6DataCallback` (131),
- *    `setCanA5DataCallback` (132), `setDashBoardCallback` (143), `setUpgradeCallback` (144).
- *    None is audio- or volume-scoped, and none takes an event-id selector that AIDL_ORDINALS.md
- *    maps to volume. `ICallbackfn.aidl` is additionally a *placeholder* — its real method
- *    signature was never recovered — so registering any of them would be a guessed transaction
- *    into the vendor service, which is how PR #29 bricked the top bar.
+ * Why the poll was the only path until now, so the next reader does not repeat the search:
+ *
+ *  - `ICallbackfn` IS recovered (`{ notifyEvt(what, arg1, arg2, byte[], String); checkIsActive() }`,
+ *    `ICallbackfn.java:28-30`), but no registrar delivers volume: `setRadioCallback` (29) is
+ *    tuner state, `setCurModeCallback` (30) / `setCamAuxCallback` (66) are the mode/key stream,
+ *    and the CanA5/CanA6 callbacks are never fired. Registering as a mode callback is also a
+ *    mode CLAIM, which is how PR #29 bricked the top bar.
  *  - The audio surface itself: `getMainVolval` (103), `IsMuteOn` (104), `sendVolState` (77),
  *    `sendMuteState` (8), `getSndSWVol` (58). All getters and setters, no subscription.
- *  - The broadcast API (`CarEvents`, from the decompiled `EventUtils` constant table): it carries
- *    reverse, ACC, day/night backlight, SWC, CAN and radio actions. There is no volume action.
- *  - `SYSTEM_VOLUME` exists only as a *LocalSocket* text-protocol marker (CAR_API §3.3), a channel
- *    the spec says is there for the stock UI apps.
+ *  - There is no LocalSocket: `LocalSocketServer` is never instantiated, and the
+ *    `addMessageListener(ICommunication)` listeners are stored but never called. The
+ *    `SYSTEM_VOLUME:` text line rides the `ZXW_MESSAGE_TO_ICCOMMUNICATION` broadcast instead.
  *
- * So the poll stays, and the two things that would make it lie are handled as pushes instead:
- * a dead binder and an unbind both take the chip away immediately.
+ * The two things that would make either path lie are still handled as pushes: a dead binder
+ * and an unbind both take the chip away immediately.
  */
 @Composable
-private fun rememberVolumeStatus(carService: CarService?, refreshKey: Int): VolumeStatus {
+private fun rememberVolumeStatus(
+    carService: CarService?,
+    carEvents: CarEvents?,
+    refreshKey: Int,
+): VolumeStatus {
     var status by remember { mutableStateOf(VOLUME_UNAVAILABLE) }
+    // Once a push has landed the poll stands down: re-reading the getter every few seconds
+    // would only race the broadcast with a value it already delivered.
+    var pushed by remember { mutableStateOf(false) }
+
+    LaunchedEffect(carEvents) {
+        carEvents?.volume?.collect { reading ->
+            if (reading != null) {
+                pushed = true
+                status = VolumeStatus(available = true, level = reading.level, muted = reading.muted)
+            }
+        }
+    }
 
     LaunchedEffect(carService, refreshKey) {
         if (carService == null) {
@@ -557,8 +575,11 @@ private fun rememberVolumeStatus(carService: CarService?, refreshKey: Int): Volu
             }
         }
 
+        // Fallback poll: only until the first MCU_MSG_MAIL_VOL arrives.
         while (true) {
-            status = read()
+            if (!pushed) {
+                status = read()
+            }
             delay(VOLUME_POLL_MS)
         }
     }

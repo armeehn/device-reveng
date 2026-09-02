@@ -5,12 +5,10 @@ import android.content.Intent
 /**
  * v0.4.3 — the raw CAN bulk-frame broadcast, for the on-device capture view.
  *
- * The gateway broadcasts a bulk CAN state frame on `CAN_BASIC_EVT` / `MCU_CAR_CAN_INFO` (CAR_API
- * §1.3; the `CAN_BASIC_EVT` receiver is **confirmed** in `EvtModel.java`) — the route to a real
- * speed reading that GPS cannot give indoors or at power-on. Unlike the radar frame, the *extra
- * key* carrying the payload is **not** documented, so this snapshots EVERY extra of the broadcast
- * (name → readable value) plus the first `byte[]` payload found, so an on-device capture discovers
- * both the key name and the byte layout at once.
+ * The gateway broadcasts the raw MCU 0xA5 passthrough on `MCU_MSG_CAN_ALL_INFO` and canbus2 its
+ * 3-byte speed/RPM digest on `MCU_CAR_CAN_INFO` (CAR_API §1.3; `CAN_BASIC_EVT` is never sent).
+ * This snapshots EVERY extra of the broadcast (name → readable value) plus the first `byte[]`
+ * payload found, so an on-device capture can re-check both.
  *
  * Plain class, not `data class`: same `StateFlow` conflation / `ByteArray.equals`-is-identity
  * reasoning as [RadarFrame].

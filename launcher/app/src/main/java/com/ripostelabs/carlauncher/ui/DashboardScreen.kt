@@ -64,6 +64,7 @@ fun DashboardScreen(
     ignitionSession: IgnitionSession? = null,
 ) {
     val speed by carEvents.speedKmh.collectAsStateSafe(initial = GpsSpeedSource.SPEED_UNKNOWN)
+    val speedSource by carEvents.speedSource.collectAsStateSafe(initial = CarEvents.SpeedSource.NONE)
     val motion by carEvents.motion.collectAsStateSafe(initial = CarEvents.Motion.UNKNOWN)
     val outsideTemp by carEvents.outsideTemp.collectAsStateSafe(initial = null)
     val steering by carEvents.steeringAngle.collectAsStateSafe(initial = null)
@@ -84,6 +85,7 @@ fun DashboardScreen(
             SpeedTile(
                 speed = speed,
                 motion = motion,
+                source = speedSource,
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight(),
@@ -171,11 +173,22 @@ private fun DashboardHeader(onBack: () -> Unit) {
 
 /** The one number worth reading at a glance, so it gets its own column. */
 @Composable
-private fun SpeedTile(speed: Int, motion: CarEvents.Motion, modifier: Modifier = Modifier) {
+private fun SpeedTile(
+    speed: Int,
+    motion: CarEvents.Motion,
+    source: CarEvents.SpeedSource,
+    modifier: Modifier = Modifier,
+) {
+    // Provenance: the value may come from the CAN digest or GPS (CarEvents.pickSpeed).
+    val origin = when (source) {
+        CarEvents.SpeedSource.CAN -> "CAN"
+        CarEvents.SpeedSource.GPS -> "GPS"
+        CarEvents.SpeedSource.NONE -> "no source"
+    }
     val note = when (motion) {
-        CarEvents.Motion.MOVING -> "moving · GPS"
-        CarEvents.Motion.PARKED -> "parked · GPS"
-        CarEvents.Motion.UNKNOWN -> "no GPS fix"
+        CarEvents.Motion.MOVING -> "moving · $origin"
+        CarEvents.Motion.PARKED -> "parked · $origin"
+        CarEvents.Motion.UNKNOWN -> "no speed reading"
     }
     Tile(modifier = modifier) {
         AutoSizeText(

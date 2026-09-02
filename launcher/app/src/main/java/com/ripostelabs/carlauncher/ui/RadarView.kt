@@ -31,7 +31,8 @@ import com.ripostelabs.carlauncher.carlib.RadarState
  * Renders only when a real frame is present ([state] non-null & valid) — the frame typically
  * only arrives while reversing / at low speed. When there's no data it shows a compact
  * placeholder (or nothing, if [showPlaceholder] is false, e.g. embedded in the reverse
- * overlay). The sensor layout & polarity are GUESSED in [RadarState] — verify on-device.
+ * overlay). Bank layout and scale are from the decompile; the left→right order within a bank
+ * is UNVERIFIED (see [RadarState]).
  */
 @Composable
 fun RadarView(

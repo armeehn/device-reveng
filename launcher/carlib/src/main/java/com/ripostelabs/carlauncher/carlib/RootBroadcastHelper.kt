@@ -69,8 +69,6 @@ object RootBroadcastHelper {
     private val CAPTURED: Map<String, Array<String>> = mapOf(
         CarEvents.ACTION_BACKCAR_START to emptyArray(),
         CarEvents.ACTION_BACKCAR_END to emptyArray(),
-        CarEvents.ACTION_DAY_BACKLIGHT_CHANGED to emptyArray(),
-        CarEvents.ACTION_NIGHT_BACKLIGHT_CHANGED to emptyArray(),
         CarEvents.STEER_WHEEL_INFOR to arrayOf(
             CarEvents.EXTRA_SWC_LPARAM,
             CarEvents.EXTRA_SWC_WPARAM,

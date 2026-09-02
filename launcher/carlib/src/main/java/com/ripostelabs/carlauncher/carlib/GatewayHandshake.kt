@@ -11,72 +11,76 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * v3.0 — the launcher ↔ gateway UI-mode handshake (CAR_API §6.2).
+ * The launcher ↔ gateway UI-mode exchange (CAR_API §6.2).
  *
- * The vendor gateway and the stock launcher exchange UI mode over a pair of broadcasts
- * (`EventUtils.java:66,76`). Announcing ourselves on the launcher→gateway half is what makes the
- * vendor stack treat *us* as the launcher rather than a third-party app that happens to be
- * showing: it is the difference between the gateway routing launcher-directed events to us and
- * routing them into the void.
+ * Not a handshake. The gateway delegates its day/night decision to the launcher: our broadcast
+ * carries ONE int extra, [EXTRA_DAY_NIGHT_UIMODE], holding a `Sys_Day_Night_Mode` value, and the
+ * gateway applies it verbatim (`EvtModel.java:1076` → `EventService.setDayNightMode(int)`,
+ * `EventService.java:14043`). Anything that is not 1/2/3 — including the 0 a missing or wrongly
+ * typed extra decodes to — means "follow the headlamps", which is how the old boolean payload
+ * silently overrode the user's setting.
  *
- * **What this is not.** It does not drive our theming. `CUSTOMERUI_NOTES.md` records that the
- * vendor launcher themes itself from `SystemPropertiesX.setUiModeNight/Day` plus a local
- * `uiModeNightChanged` broadcast — *not* from this pair — so treating the gateway's half as a
- * day/night source would be reading a channel the vendor does not actually theme from. Day/night
- * stays on [CarEvents.dayNight] and the `Sys_Day_Night_Mode` SysVar.
+ * The gateway→launcher half is a *request*, not an acknowledgement: the gateway sends the mode it
+ * wants applied and expects the same int echoed back; if nothing comes within 2 s it applies the
+ * value itself (`EventService.java:14856-14862`). It is sent only on a `Sys_Day_Night_Mode` change
+ * or a headlamp change, so it proves nothing about liveness.
  *
- * **Payload is unverified.** The two action strings are confirmed; the extras the gateway expects
- * are not recovered anywhere in the decompile. We therefore send the action with a night flag
- * under several candidate keys — extra keys a receiver does not read are ignored by Android, so
- * a wrong guess is inert rather than harmful. Nothing here writes to the vehicle.
+ * Theming does not read this class: day/night stays on [CarEvents.dayNight].
  */
 class GatewayHandshake(context: Context) {
+
+    /** `Sys_Day_Night_Mode` values (`SysProviderOpt.java:288`, `EventService.java:14043-14087`). */
+    enum class UiMode(val code: Int) {
+        /** Follow the headlamps. Also what the gateway reads for any unknown code. */
+        HEADLAMPS(0),
+        DAY(1),
+        NIGHT(2),
+        /** Sunrise/sunset, computed by the gateway. */
+        BY_TIME(3);
+
+        companion object {
+            /** Same fallthrough as the gateway's own switch: an unknown code is [HEADLAMPS]. */
+            fun fromCode(code: Int): UiMode = entries.firstOrNull { it.code == code } ?: HEADLAMPS
+        }
+    }
 
     companion object {
         private const val TAG = "GatewayHandshake"
 
-        /** gateway → launcher (CAR_API §6.2). */
+        /** gateway → launcher (`EventUtils.java:66`). */
         const val ACTION_EVENTCENTER_TO_LAUNCHER_UIMODE =
             "com.szchoiceway.eventcenter.EventUtils.ACTION_EVENTCENTER_TO_LAUNCHER_UIMODE_EVENT"
 
-        /** launcher → gateway (CAR_API §6.2). */
+        /** launcher → gateway (`EventUtils.java:76`). */
         const val ACTION_LAUNCHER_TO_EVENTCENTER_UIMODE =
             "com.szchoiceway.eventcenter.EventUtils.ACTION_LAUNCHER_TO_EVENTCENTER_UIMODE_EVENT"
 
-        /** The vendor gateway package, so the announcement is explicit rather than a shout. */
-        private const val GATEWAY_PACKAGE = "com.szchoiceway.eventcenter"
+        /** The one extra both halves carry, int (`EventUtils.java:1235`). */
+        const val EXTRA_DAY_NIGHT_UIMODE = "Extra_Day_Night_UiMode"
 
-        /** ⚠ GUESSED extra keys — see the class KDoc. Unread extras are harmless. */
-        private val UIMODE_EXTRA_KEYS = arrayOf(
-            "uiMode",
-            "UIMODE",
-            "EventUtils.UIMODE",
-            "uiModeNight",
-        )
+        /** The vendor gateway package, so the broadcast is explicit rather than a shout. */
+        private const val GATEWAY_PACKAGE = "com.szchoiceway.eventcenter"
     }
 
     private val appContext = context.applicationContext
 
-    private val _gatewayAcknowledged = MutableStateFlow(false)
-    /**
-     * True once the gateway has sent us its half of the pair.
-     *
-     * This is the only evidence available that the handshake means anything on this unit: we
-     * cannot tell whether our announcement was received, but a gateway→launcher broadcast
-     * arriving is proof the channel is live. Surfaced so the settings screen can report it
-     * instead of claiming success it cannot see.
-     */
-    val gatewayAcknowledged: StateFlow<Boolean> = _gatewayAcknowledged.asStateFlow()
+    private val _requested = MutableStateFlow<UiMode?>(null)
+    /** The last mode the gateway asked us to echo, or null until it asks. Diagnostic only. */
+    val requested: StateFlow<UiMode?> = _requested.asStateFlow()
 
     private var registered = false
 
+    // The gateway's request: echo the same value back so it applies at once instead of after
+    // its 2 s fallback. The value is the gateway's decision, so echoing cannot change it.
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action != ACTION_EVENTCENTER_TO_LAUNCHER_UIMODE) {
                 return
             }
-            _gatewayAcknowledged.value = true
-            Log.i(TAG, "gateway acknowledged the launcher UIMODE channel")
+            val mode = UiMode.fromCode(intent.getIntExtra(EXTRA_DAY_NIGHT_UIMODE, UiMode.HEADLAMPS.code))
+            _requested.value = mode
+            Log.i(TAG, "gateway requested UI mode $mode")
+            sendUiMode(mode)
         }
     }
 
@@ -103,15 +107,16 @@ class GatewayHandshake(context: Context) {
     }
 
     /**
-     * Announce our current UI mode to the gateway. Safe to call on every day/night change and on
-     * resume — it is a fire-and-forget broadcast, and re-announcing costs nothing.
+     * Tell the gateway which day/night mode to apply. Fire-and-forget; safe to repeat. Every call
+     * cancels the gateway's own pending day/night timers (`EventService.java:14046-14047`), so send
+     * on change, not on a clock.
      */
-    fun announceUiMode(night: Boolean) {
+    fun sendUiMode(mode: UiMode) {
         val intent = Intent(ACTION_LAUNCHER_TO_EVENTCENTER_UIMODE).apply {
             setPackage(GATEWAY_PACKAGE)
-            UIMODE_EXTRA_KEYS.forEach { key -> putExtra(key, night) }
+            putExtra(EXTRA_DAY_NIGHT_UIMODE, mode.code)
         }
         runCatching { appContext.sendBroadcast(intent) }
-            .onFailure { Log.w(TAG, "UIMODE announce failed", it) }
+            .onFailure { Log.w(TAG, "UIMODE send failed", it) }
     }
 }

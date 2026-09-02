@@ -37,12 +37,12 @@ import com.ripostelabs.carlauncher.ui.theme.carShape
 /**
  * v2.8 — the raw `MCU_CAR_CAN_RADAR_INFO` frame, byte by byte.
  *
- * **This screen exists because the radar decode cannot be verified from a desk.** The byte layout
- * in [RadarState] was never recovered from the decompile — CAR_API §1.3 says only "byte[] raw radar
- * frame, per-sensor distances" — so every offset and the level polarity are guesses. No amount of
- * reading the vendor code closes that; only a car does. So rather than ship a prettier guess, this
- * ships the instrument: the payload as it arrived, which offsets have moved since the last reset,
- * and what our guess makes of it, side by side on one screen.
+ * **This screen exists because one part of the radar decode cannot be verified from a desk.**
+ * The bank layout and distance scale in [RadarState] are read off the vendor decompile, but the
+ * left→right order of the sensors within a bank is not: the parser copies the CAN box's index
+ * order untouched and nothing names a side. Only a car closes that. So this ships the instrument:
+ * the payload as it arrived, which offsets have moved since the last reset, and what the decode
+ * makes of it, side by side on one screen.
  *
  * The capture the user performs (also written up in launcher/README.md):
  *
@@ -56,8 +56,8 @@ import com.ripostelabs.carlauncher.ui.theme.carShape
  * hex values at 10 Hz, but a byte that has held one value all session is visibly dimmed and a byte
  * with a hundred changes is not.
  *
- * Polarity comes out of the same capture: if the number *falls* as the obstacle approaches, the
- * MCU is sending distance, not a bar count, and [RadarState.proximity] needs inverting.
+ * The raw byte should *fall* as the obstacle approaches (30 is the closest code, A0 clear); a
+ * byte that climbs instead means the CAN box on this car is not the Hiworld parser assumed.
  *
  * Not gated parked-only. It is a diagnostic that is only useful while the car is stationary with
  * reverse engaged, and the parked-only gate rests on GPS — which does not have a fix in the garage
@@ -89,10 +89,10 @@ fun RadarCaptureScreen(
                     "Marked CONFIRMED. The decode below is trusted and the maneuvering " +
                         "side-strips are allowed to draw."
                 } else {
-                    "UNCONFIRMED. The byte offsets and the level polarity are guesses that have " +
-                        "never been checked against a car, so the maneuvering side-strips stay " +
-                        "hidden. The bars elsewhere in Settings still show what arrived — they " +
-                        "report the frame, not its meaning."
+                    "UNCONFIRMED. The bank layout and distance scale come from the vendor " +
+                        "decompile, but the left-to-right order within a bank does not, so the " +
+                        "maneuvering side-strips stay hidden. The bars elsewhere in Settings " +
+                        "still show what arrived — they report the frame, not which corner."
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = if (settings.radarLayoutConfirmed) {
@@ -249,9 +249,10 @@ private fun DecodeReadout(bytes: ByteArray?) {
     DecodeLine(label = "Rear (bytes 5–8)", levels = decoded.rear)
     Spacer(Modifier.height(10.dp))
     Text(
-        text = "Both rows assume 0 = clear and a higher level = closer, capped at " +
-            "${RadarState.LEVEL_MAX}. If the walk makes the numbers fall as the obstacle nears, " +
-            "the MCU is sending distance and the ramp needs inverting.",
+        text = "Raw bytes are distance codes: 30 closest … 150 farthest, A0 clear. Each row " +
+            "shows the decoded band, 0 = clear up to ${RadarState.LEVEL_MAX} = closest. What " +
+            "the walk settles is which byte is which corner: the first byte of a bank is " +
+            "assumed left.",
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
