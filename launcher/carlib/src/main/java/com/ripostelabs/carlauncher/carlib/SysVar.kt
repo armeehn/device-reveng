@@ -50,6 +50,11 @@ class SysVar(private val context: Context) {
         const val KEY_SCREEN_WIDTH = "Sys_Screen_Width"
         const val KEY_SCREEN_HEIGHT = "Sys_Screen_Height"
         const val KEY_SCREEN_DENSITY = "Sys_Screen_Density"
+        /**
+         * READ-ONLY for us. The gateway derives `rw.zlink.disable.features` from this string
+         * and kills Zlink (`ZlinkManage.java:568-584`): naming a Zlink activity or
+         * `com.szchoiceway.btsuite` here disables CarPlay / phone protocols. Never write it.
+         */
         const val KEY_LAUNCHER_APP_HIDE = "SYS_LAUNCHER_APP_HIDE_KEY"
         const val KEY_HOME_PAGE_DISPLAY = "Sys_Home_Page_Display"
         // v0.4.9: the vendor-configured navigation app (CAR_API §6.3, CUSTOMERUI_NOTES §3e).
