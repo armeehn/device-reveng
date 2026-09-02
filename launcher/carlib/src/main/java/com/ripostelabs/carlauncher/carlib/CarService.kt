@@ -75,6 +75,12 @@ class CarService(private val appContext: Context) {
         /** The tuner as an audio source: EventUtils.eSrcMode.SRC_RADIO, the int sendMode takes. */
         const val SRC_RADIO = 1
 
+        /** Top of the vendor backlight slider; `Set_Day_Light` / `Set_Night_Light` are 0..20. */
+        const val BACKLIGHT_MAX = 20
+
+        /** Clamp a backlight target into the MCU's 0..[BACKLIGHT_MAX] band. */
+        fun clampBacklight(level: Int): Int = level.coerceIn(0, BACKLIGHT_MAX)
+
         /**
          * Main-volume range for QuickControls. No longer a guess: the vendor's own volume UI
          * (EventCenter `BackcarEvent`, decompiled in mcu-analysis/eventcenter-src) sizes its
@@ -377,16 +383,25 @@ class CarService(private val appContext: Context) {
 
     // ---- Backlight / brightness (CAR_API §3.2) -----------------------------
     /**
-     * Push a backlight level to the MCU (sendBacklight, ordinal 60). Param semantics are
-     * GUESSED as (level, mode) — many of these units take (0..255 level, 0=day/1=night). Sent
-     * as a best-effort second path alongside the Android system brightness; guarded, so a wrong
-     * shape is a no-op. Verify on-device.
+     * Push both backlight targets to the MCU (sendBacklight, ordinal 60). The gateway builds
+     * frame `{0x2E, day, night, fineLow, fineHi, 0}` (`EventService.java:9643-9648`); which one
+     * the panel shows follows its headlamp input. Each is 0..[BACKLIGHT_MAX], the range of the
+     * vendor slider (`DataManage.java:256`). Pass the current `Set_Day_Light` / `Set_Night_Light`
+     * values for the side you are not changing: a provider write of those keys alone only fires a
+     * broadcast and never reaches the MCU (`EventService.java:4847-4854`).
      */
-    fun sendBacklight(level: Int, mode: Int = 0) {
-        call { sendBacklight(level.coerceIn(0, 255).toByte(), mode.toByte()) }
+    fun sendBacklight(day: Int, night: Int) {
+        call { sendBacklight(clampBacklight(day).toByte(), clampBacklight(night).toByte()) }
     }
-    /** Ask the gateway to (re)apply the system brightness it holds (setSystemBrightness, ord 68). */
-    fun applySystemBrightness() { call { setSystemBrightness() } }
+
+    /**
+     * Write a SysVar the way the vendor settings app does (changeSetup, ordinal 78): the gateway
+     * persists the row and reacts to it (`EventService.java:4635`, e.g. re-running the nav-bar
+     * geometry for `Sys_Customer_NaviBar_Height_Key`). Returns false when unbound or on a binder
+     * failure, so the caller can fall back to the provider.
+     */
+    fun changeSetup(key: String, value: String): Boolean =
+        call { changeSetup(key, value); true } ?: false
 
     /** Typed SysVar passthrough (alternative to the ContentResolver in [SysVar]). */
     fun getSettingString(key: String, def: String): String? =

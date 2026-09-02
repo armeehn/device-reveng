@@ -7,14 +7,15 @@ import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ripostelabs.carlauncher.carlib.CarEvents
 import com.ripostelabs.carlauncher.data.CarSettingsController
+import com.ripostelabs.carlauncher.data.PowerOptions
 import com.ripostelabs.carlauncher.data.SettingKeys
 
 /**
  * v1.9 — Power & sleep. Mirrors the vendor ACC/sleep timing page, reskinned, with a live ACC
- * status readout from [CarEvents.accOn]. Timing values are SysVar-backed (CAR_API §2.3).
+ * status readout from [CarEvents.accOn]. Values are SysVar-backed (CAR_API §2.3); their domains
+ * come from the decompiled vendor settings app and live in [PowerOptions].
  *
- * ⚠ Delay/sleep ranges are inferred from key naming; the vendor stores raw seconds/minutes.
- * Verify the units on-device and adjust the slider bounds if needed.
+ * The ACC-off delay key (`ACC_OFF_DELAY`) is deliberately absent: the gateway never reads it.
  */
 @Composable
 fun PowerSettingsScreen(
@@ -25,6 +26,8 @@ fun PowerSettingsScreen(
     val snap by controller.snapshot.collectAsStateWithLifecycle()
     snap
     val accOn by carEvents.accOn.collectAsStateWithLifecycle()
+    val closeScreenActive =
+        controller.getInt(SettingKeys.CUSTOMER_TYPE) == PowerOptions.CLOSE_SCREEN_CUSTOMER_TYPE
 
     SettingsScaffold(title = "Power & sleep", onBack = onBack) {
         SettingsSection(title = "Status") {
@@ -32,32 +35,35 @@ fun PowerSettingsScreen(
         }
 
         SettingsSection(title = "ACC power delays") {
-            GuessedRangeSlider(
+            RangeSetting(
                 controller = controller,
                 label = "Power-on delay",
                 description = "Wait before the unit wakes after ACC on",
                 key = SettingKeys.ACC_ON_DELAY,
-                default = 0,
-                range = 0..30,
+                default = PowerOptions.ACC_ON_DELAY_SECONDS.first,
+                range = PowerOptions.ACC_ON_DELAY_SECONDS,
                 format = { "${it}s" },
             )
-            GuessedRangeSlider(
+            RangeSetting(
                 controller = controller,
-                label = "Power-off delay",
-                description = "Keep running after ACC off",
-                key = SettingKeys.ACC_OFF_DELAY,
-                default = 0,
-                range = 0..30,
-                format = { "${it}s" },
+                label = "ACC delay",
+                description = "Sent to the MCU as minutes:seconds; the ceiling is ours, not the vendor's",
+                key = SettingKeys.ACC_DELAY,
+                default = PowerOptions.ACC_DELAY_SECONDS.first,
+                range = PowerOptions.ACC_DELAY_SECONDS,
+                format = PowerOptions::minutesSeconds,
             )
-            GuessedRangeSlider(
-                controller = controller,
-                label = "Full power-off delay",
-                description = "Delay before a full shutdown",
-                key = SettingKeys.POWER_OFF_DELAY,
-                default = 0,
-                range = 0..60,
-                format = { "${it}s" },
+            ToggleSetting(
+                label = "ACC off delay",
+                description = "Factory flag: keep running briefly after ACC off",
+                checked = controller.getBoolean(SettingKeys.POWER_OFF_DELAY, false),
+                onChange = { controller.setBoolean(SettingKeys.POWER_OFF_DELAY, it) },
+            )
+            ToggleSetting(
+                label = "Screen off with ACC",
+                description = "Blank the screen when ACC changes",
+                checked = controller.getBoolean(SettingKeys.SCREEN_OFF_WHEN_ACC_CHANGE, true),
+                onChange = { controller.setBoolean(SettingKeys.SCREEN_OFF_WHEN_ACC_CHANGE, it) },
             )
         }
 
@@ -68,21 +74,44 @@ fun PowerSettingsScreen(
                 checked = controller.getBoolean(SettingKeys.SLEEP_SWITCH, false),
                 onChange = { controller.setBoolean(SettingKeys.SLEEP_SWITCH, it) },
             )
-            GuessedRangeSlider(
+            OptionSetting(
                 controller = controller,
-                label = "Sleep after",
-                description = "Idle time before sleeping",
+                label = "Sleep duration",
+                description = "Vendor option 1/2/3; the MCU's unit for these is unverified",
                 key = SettingKeys.SLEEP_TIME,
-                default = 10,
-                range = 1..60,
+                default = PowerOptions.SLEEP_TIME_DEFAULT,
+                options = PowerOptions.SLEEP_TIME,
                 enabled = controller.getBoolean(SettingKeys.SLEEP_SWITCH, false),
-                format = { "${it} min" },
+            )
+        }
+
+        SettingsSection(title = "Screen timeouts") {
+            OptionSetting(
+                controller = controller,
+                label = "Screensaver after",
+                description = "Idle time before the vendor screensaver starts",
+                key = SettingKeys.AUTO_SCREENSAVER_TIME,
+                default = PowerOptions.SCREEN_TIMEOUT_NEVER,
+                options = PowerOptions.SCREEN_TIMEOUT,
+            )
+            OptionSetting(
+                controller = controller,
+                label = "Screen off after",
+                description = if (closeScreenActive) {
+                    "Idle time before the screen is switched off"
+                } else {
+                    "The gateway only honours this on customer type " +
+                        "${PowerOptions.CLOSE_SCREEN_CUSTOMER_TYPE}; this unit is not"
+                },
+                key = SettingKeys.AUTO_CLOSE_SCREEN_TIME,
+                default = PowerOptions.SCREEN_TIMEOUT_NEVER,
+                options = PowerOptions.SCREEN_TIMEOUT,
             )
         }
 
         Text(
-            text = "Timing units are inferred from the vendor firmware; confirm seconds vs " +
-                "minutes on-device.",
+            text = "Domains are transcribed from the vendor settings app. A stored value outside " +
+                "them is shown raw and left alone.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -90,14 +119,12 @@ fun PowerSettingsScreen(
 }
 
 /**
- * A slider over a SysVar whose range is a guess (see the header ⚠). A vendor value outside the
- * declared range proves the guess wrong for this unit — a plain slider would coerce it into
- * range and commit the coerced value on the first touch, destroying the original. Such a value
- * is rendered read-only, raw, until the range is confirmed on-device. A missing key falls back
- * to [default] and stays adjustable.
+ * A slider over a SysVar with a known integer range. A stored value outside it is rendered
+ * read-only, raw: a plain slider would coerce it and commit the coerced value on the first
+ * touch, destroying the original. A missing key falls back to [default] and stays adjustable.
  */
 @Composable
-private fun GuessedRangeSlider(
+private fun RangeSetting(
     controller: CarSettingsController,
     label: String,
     description: String,
@@ -105,13 +132,12 @@ private fun GuessedRangeSlider(
     default: Int,
     range: IntRange,
     format: (Int) -> String,
-    enabled: Boolean = true,
 ) {
     val raw = controller.getString(key)
-    val value = if (raw.isBlank()) default else raw.trim().toIntOrNull()
+    val value = if (raw.isBlank()) default else PowerOptions.rawOrNull(raw, range)
 
-    if (value == null || value !in range) {
-        InfoRow(label = label, value = "$raw — read-only, outside the expected range")
+    if (value == null) {
+        InfoRow(label = label, value = "$raw — read-only, outside $range")
         return
     }
 
@@ -121,7 +147,35 @@ private fun GuessedRangeSlider(
         value = value,
         range = range,
         onChange = { controller.setInt(key, it) },
-        enabled = enabled,
         format = format,
+    )
+}
+
+/** The enum counterpart of [RangeSetting]: a picker over `raw -> label` options, same guard. */
+@Composable
+private fun OptionSetting(
+    controller: CarSettingsController,
+    label: String,
+    description: String,
+    key: String,
+    default: Int,
+    options: List<Pair<Int, String>>,
+    enabled: Boolean = true,
+) {
+    val raw = controller.getString(key)
+    val value = if (raw.isBlank()) default else PowerOptions.rawOrNull(raw, options)
+
+    if (value == null) {
+        InfoRow(label = label, value = "$raw — read-only, not a vendor option")
+        return
+    }
+
+    PickerSetting(
+        label = label,
+        description = description,
+        current = value,
+        options = options,
+        onSelect = { controller.setInt(key, it) },
+        enabled = enabled,
     )
 }
