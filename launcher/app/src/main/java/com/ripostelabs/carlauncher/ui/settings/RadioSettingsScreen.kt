@@ -33,6 +33,7 @@ import com.ripostelabs.carlauncher.carlib.CarService
 import com.ripostelabs.carlauncher.data.CarSettingsController
 import com.ripostelabs.carlauncher.data.RadioPreset
 import com.ripostelabs.carlauncher.data.RadioPresetsStore
+import com.ripostelabs.carlauncher.ui.RadioTuning
 import com.ripostelabs.carlauncher.ui.formatFreqLabel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -104,7 +105,9 @@ fun RadioSettingsScreen(
         SettingsSection(title = "Controls") {
             ActionRow(
                 label = "Toggle band (FM/AM)",
-                onClick = { control { carService.radioBandToggle() } },
+                onClick = {
+                    control { RadioTuning.selectBand(carService, RadioTuning.otherBandClass(band)) }
+                },
                 enabled = connected,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -125,7 +128,12 @@ fun RadioSettingsScreen(
                     PresetRow(
                         label = formatFreqLabel(preset.band, preset.freq) +
                             "  ·  " + bandLabel(preset.band, carService),
-                        onRecall = { control { carService.sendUserFreq(preset.freq, direct = true) } },
+                        onRecall = {
+                            control {
+                                RadioTuning.selectBand(carService, RadioTuning.bandClassOf(preset.band))
+                                carService.sendUserFreq(preset.freq, !CarService.isAmBand(preset.band))
+                            }
+                        },
                         onDelete = { scope.launch { radioPresetsStore.remove(preset) } },
                         enabled = connected,
                     )

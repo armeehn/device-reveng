@@ -88,11 +88,11 @@ class RadioTuneRangeTest {
     private class FakeTuner(bands: List<Int?>) {
         private val sequence = bands.toMutableList()
         var band: Int? = sequence.removeAt(0)
-        var toggles = 0
+        var sent = 0
 
         fun read(): Int? = band
-        fun toggle() {
-            toggles++
+        fun select(@Suppress("UNUSED_PARAMETER") target: BandClass) {
+            sent++
             if (sequence.isNotEmpty()) band = sequence.removeAt(0)
         }
     }
@@ -100,34 +100,34 @@ class RadioTuneRangeTest {
     private fun switch(tuner: FakeTuner, target: BandClass) = runBlocking {
         RadioTuning.switchBandClass(
             readBand = tuner::read,
-            toggleBand = tuner::toggle,
+            selectBand = tuner::select,
             target = target,
             settle = {},
         )
     }
 
     @Test
-    fun selectingTheActiveClassDoesNotToggle() {
+    fun selectingTheActiveClassSendsNothing() {
         val tuner = FakeTuner(listOf(fm2))
 
         assertTrue(switch(tuner, BandClass.FM))
-        assertEquals(0, tuner.toggles)
+        assertEquals(0, tuner.sent)
     }
 
     @Test
-    fun selectingAmCyclesPastFm2() {
-        val tuner = FakeTuner(listOf(fm, fm2, am))
+    fun selectingAmLandsInOneKey() {
+        val tuner = FakeTuner(listOf(fm, am))
 
         assertTrue(switch(tuner, BandClass.AM))
-        assertEquals(2, tuner.toggles)
+        assertEquals(1, tuner.sent)
     }
 
     @Test
-    fun cycleThatNeverLandsGivesUp() {
+    fun keyThatNeverLandsGivesUp() {
         val tuner = FakeTuner(listOf(fm, fm, fm, fm, fm, fm, fm))
 
         assertFalse(switch(tuner, BandClass.AM))
-        assertEquals(RadioTuning.MAX_BAND_TOGGLES, tuner.toggles)
+        assertEquals(RadioTuning.MAX_BAND_ATTEMPTS, tuner.sent)
     }
 
     @Test
