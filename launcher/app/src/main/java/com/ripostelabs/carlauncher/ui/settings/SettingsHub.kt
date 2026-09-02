@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.Security // v2.9
 import androidx.compose.material.icons.filled.SettingsRemote
+import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.SystemUpdate // v0.7 auto-updater
 import androidx.compose.material.icons.filled.Thermostat
 import androidx.compose.material.icons.filled.Tune
@@ -101,6 +102,12 @@ fun SettingsHub(
                 title = "Steering wheel",
                 subtitle = "Learn & map wheel keys, live key monitor",
                 onClick = { onOpen(SettingsRoute.SteeringWheel) },
+            )
+            SettingsCategoryCard(
+                icon = Icons.Filled.TouchApp,
+                title = "Wheel gestures",
+                subtitle = "Hold and double-press actions for the wheel keys",
+                onClick = { onOpen(SettingsRoute.WheelGestures) },
             )
             SettingsCategoryCard(
                 icon = Icons.Filled.PowerSettingsNew,
