@@ -610,6 +610,41 @@ approximation; a sunset calculation would be wrong exactly when it matters.
   as the first two; how much of the shelf survives the vendor's own notification handling; and
   whether the extracted keyboard's key sizes still read well on the real 240dpi panel.
 
+## Wheel gestures
+
+The RAV4's wheel keys reach the head unit as CAN frame `0x11` (`bArr[4]` = key id, `bArr[5]`
+= 1 on every frame while held, 0 on release), and the vendor CAN app throws the duration away:
+it emits one MCU key on the release frame whatever the hold
+(`HiworldCanParseToyota.java:831-891`). The launcher already receives those raw frames
+(`MCU_MSG_CAN_ALL_INFO`, the steering decode), so `carlib/WheelGestures.kt` reads the key byte off
+the same decode and turns the run of frames into one of **Press**, **LongPress** (held 600 ms,
+emitted while still held) or **DoublePress** (second press within 400 ms of a release). A gap of
+more than 300 ms with no frame is read as a release. VOL± are ignored: the CAN app owns their
+auto-repeat. Ids 8/13 and 9/14 both mean PREV/NEXT and are folded.
+
+Settings ▸ Wheel gestures binds a hold and a double press per key (NEXT, PREV, MODE, PLAY/PAUSE,
+TALK, RETURN, MUTE, VOICE) to one of: seek ±30/10 s, next/prev track, play/pause, open
+Media/Radio/Home, radio seek up/down, next preset, claim radio, hand audio back to Android, Siri
+(Zlink 1500), navigation (Zlink Maps 1504 while CarPlay reports connected, else the Nav card's
+app), mute toggle, the vendor voice assistant (`ZXW_CAN_KEY_EVT` 116, the CAN app's own path).
+Media actions go through the active `MediaController`; seek is `seekTo(position ± delta)`
+clamped to the track. Defaults: NEXT hold = +30 s, PREV hold = −10 s, MODE hold = open Media,
+PLAY/PAUSE hold = mute, TALK hold = Siri, RETURN hold = Home; **every double press = nothing**.
+
+**The collateral rule.** The vendor reports the key on release, so by the time a second press can
+be recognised the first press has already done its plain job (skipped a track, switched source). A
+double-press action always lands on top of that, which is why none are bound by default. A hold
+has no such collateral on the launcher's own screens: after a LongPress the vendor's key for the
+same button, arriving within 1.5 s as an injected `KeyEvent` (NEXT/PREV/PLAY/RETURN) or as
+`MCU_KEY_INFOR`, is dropped (`carlib/WheelKeySwallow.kt`, one drop per path per hold). Two limits:
+with a third-party app in front (Spotify, CarPlay) the injected key goes to *that* window and
+lands there; and MODE (gateway `switchMode()`), MUTE (`sendSystemKey(12)`), TALK and VOICE act
+inside the gateway, so a hold on those always carries the vendor's short action too.
+
+Nothing above is verified on the car. The ~100 ms frame period behind the 300 ms gap is inferred
+from the CAN app's per-frame counter; the settings screen's "Last gesture" line is the on-car
+check.
+
 ## Known TODOs
 
 - **`IEventService.aidl`** declares only a subset of methods and its transaction

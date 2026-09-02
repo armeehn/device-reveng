@@ -32,7 +32,9 @@ import com.ripostelabs.carlauncher.carlib.CarService
 import com.ripostelabs.carlauncher.carlib.GatewayHandshake // v3.0
 import com.ripostelabs.carlauncher.carlib.RootShell
 import com.ripostelabs.carlauncher.carlib.SysVar // v0.4.9 vendor hidden-apps list
+import com.ripostelabs.carlauncher.carlib.WheelKey
 import com.ripostelabs.carlauncher.carlib.WheelKeyMap
+import com.ripostelabs.carlauncher.carlib.WheelKeySwallow
 import com.ripostelabs.carlauncher.data.CarSettingsController // v1.1 settings suite
 import com.ripostelabs.carlauncher.data.parseVendorHidden // v0.4.9
 import com.ripostelabs.carlauncher.data.CrashLog // v0.4.3.7
@@ -61,6 +63,7 @@ import com.ripostelabs.carlauncher.input.LocalLauncherFocus // v0.8
 import com.ripostelabs.carlauncher.input.NavEvent // v2.8
 import com.ripostelabs.carlauncher.input.NavKey // v0.8
 import com.ripostelabs.carlauncher.input.SwcNavigator // v0.8
+import com.ripostelabs.carlauncher.input.WheelGestureDispatcher
 import com.ripostelabs.carlauncher.media.ContinueWatchingRepository // v2.7
 import com.ripostelabs.carlauncher.media.MiniScreenController // v4.1
 import com.ripostelabs.carlauncher.media.NowPlayingRepository
@@ -153,6 +156,9 @@ class MainActivity : ComponentActivity() {
     // carries a decoded key into Compose's focus system on every screen that is not Home.
     private lateinit var keyPump: KeyPump
     private val keyBridge by lazy { KeyBridge(window) }
+
+    // Hold / double-press actions decoded from the raw CAN frames (CarEvents.wheelGestures).
+    private lateinit var wheelGestures: WheelGestureDispatcher
 
     /**
      * v2.5: the location grant that lets [com.ripostelabs.carlauncher.carlib.GpsSpeedSource] read road
@@ -284,6 +290,27 @@ class MainActivity : ComponentActivity() {
             carEvents.swcKeys.collect { key ->
                 val nav = SwcNavigator.resolve(key, wheelMap) ?: return@collect
                 if (key.down) keyPump.down(nav) else keyPump.up(nav)
+            }
+        }
+
+        // Wheel holds / double presses. The bindings are read per gesture so a change on the
+        // settings screen applies at once; a plain press maps to NONE and stays the vendor's.
+        wheelGestures = WheelGestureDispatcher(
+            context = applicationContext,
+            scope = lifecycleScope,
+            nowPlaying = nowPlaying,
+            carService = carService,
+            radioPresets = radioPresetsStore,
+            zlinkConnected = { carEvents.zlinkConnected.value },
+            openMedia = { screenState.value = Screen.Media },
+            openRadio = { screenState.value = Screen.Radio },
+            openHome = { screenState.value = Screen.Home; launcherFocus.reset() },
+        )
+        lifecycleScope.launch {
+            carEvents.wheelGestures.collect { gesture ->
+                val bindings = settingsStore.settings.value.wheelGestures
+                if (!bindings.enabled) return@collect
+                if (wheelGestures.run(bindings.actionFor(gesture))) carFeedback.tap()
             }
         }
 
@@ -743,6 +770,12 @@ class MainActivity : ComponentActivity() {
      * [onNavEvent] when no screen wanted it.
      */
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        // The gateway injects the wheel key on release (EventService.sendKeyDownUpSync); after
+        // a hold we already acted on, that pair is the echo and is dropped (WheelKeySwallow).
+        if (swallowWheelEcho(event)) {
+            return true
+        }
+
         val nav = SwcNavigator.fromKeyEvent(event.keyCode) ?: return super.dispatchKeyEvent(event)
 
         when (event.action) {
@@ -755,6 +788,25 @@ class MainActivity : ComponentActivity() {
             else -> return super.dispatchKeyEvent(event)
         }
         return true
+    }
+
+    private fun swallowWheelEcho(event: KeyEvent): Boolean {
+        val key = wheelKeyOf(event.keyCode) ?: return false
+        val edge = when (event.action) {
+            KeyEvent.ACTION_DOWN -> WheelKeySwallow.Edge.DOWN
+            KeyEvent.ACTION_UP -> WheelKeySwallow.Edge.UP
+            else -> return false
+        }
+        return carEvents.swallowKeyEvent(key, edge)
+    }
+
+    /** The keycodes `ProcessCanKey` injects for a wheel key (`EventService.java:13060-13092`). */
+    private fun wheelKeyOf(keyCode: Int): WheelKey? = when (keyCode) {
+        KeyEvent.KEYCODE_MEDIA_NEXT -> WheelKey.NEXT
+        KeyEvent.KEYCODE_MEDIA_PREVIOUS -> WheelKey.PREV
+        KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> WheelKey.PLAY_PAUSE
+        KeyEvent.KEYCODE_BACK -> WheelKey.RETURN
+        else -> null
     }
 
     /**
