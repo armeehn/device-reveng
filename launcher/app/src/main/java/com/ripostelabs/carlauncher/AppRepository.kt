@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.content.pm.ResolveInfo
 import android.graphics.drawable.Drawable
 import android.util.Log
+import com.ripostelabs.carlauncher.data.OemApps
 import com.ripostelabs.carlauncher.data.RiposteSuite
 
 /** A launchable app resolved from the system (PackageManager). */
@@ -83,8 +84,11 @@ class AppRepository(private val context: Context) {
         return sys != 0
     }
 
-    /** All MAIN/LAUNCHER activities, sorted by label, minus ourselves, tagged user/system. */
-    fun loadApps(): List<AppInfo> {
+    /**
+     * All MAIN/LAUNCHER activities, sorted by label, minus ourselves, tagged user/system.
+     * [shadow] decides which replaced OEM apps are dropped as well ([OemApps]).
+     */
+    fun loadApps(shadow: OemApps.ShadowPolicy = OemApps.ShadowPolicy.DEFAULT): List<AppInfo> {
         val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
         val flags = PackageManager.ResolveInfoFlags.of(0L)
         val resolved: List<ResolveInfo> = try {
@@ -99,7 +103,9 @@ class AppRepository(private val context: Context) {
         // A retired com.reveng.* suite package beside its rewrite is a second "Clock" with the
         // same icon that never follows the theme. Shadow it; SetupDoctor names it for removal.
         val present = resolved.mapNotNullTo(mutableSetOf()) { it.activityInfo?.packageName }
-        val shadowed = RiposteSuite.retiredTwins(present)
+        // Same idea for the Choiceway originals: hidden only once ours is present (or, for the
+        // REMOVE class, always). A missing replacement leaves the OEM app in the drawer.
+        val shadowed = RiposteSuite.retiredTwins(present).toSet() + OemApps.shadowed(present, shadow)
 
         return resolved.asSequence()
             .mapNotNull { ri ->
