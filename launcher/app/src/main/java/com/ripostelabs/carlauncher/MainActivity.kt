@@ -32,6 +32,7 @@ import com.ripostelabs.carlauncher.carlib.CarService
 import com.ripostelabs.carlauncher.carlib.GatewayHandshake // v3.0
 import com.ripostelabs.carlauncher.carlib.RootShell
 import com.ripostelabs.carlauncher.carlib.SysVar // v0.4.9 vendor hidden-apps list
+import com.ripostelabs.carlauncher.carlib.WheelKeyMap
 import com.ripostelabs.carlauncher.data.CarSettingsController // v1.1 settings suite
 import com.ripostelabs.carlauncher.data.parseVendorHidden // v0.4.9
 import com.ripostelabs.carlauncher.data.CrashLog // v0.4.3.7
@@ -81,6 +82,7 @@ import com.ripostelabs.carlauncher.ui.rememberClockNight // v2.7
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay // v2.6
 import kotlinx.coroutines.flow.combine // v0.4.7.1 muted-aware TTS
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -114,6 +116,10 @@ class MainActivity : ComponentActivity() {
     private lateinit var speechController: com.ripostelabs.carlauncher.media.SpeechController // v0.4.2 TTS
     private lateinit var radioPresetsStore: RadioPresetsStore // v0.9
     private lateinit var carSettingsController: CarSettingsController // v1.1 settings suite
+
+    // What each learned wheel slot means, from SysVar `wheel_key_learn_custom`. Held as a
+    // field because the SWC collector runs per press and must not re-parse JSON each time.
+    private var wheelMap: WheelKeyMap = WheelKeyMap.EMPTY
     private lateinit var rootTierController: RootTierController // v2.9
     private lateinit var updateController: UpdateController // v0.7 auto-updater
 
@@ -261,12 +267,22 @@ class MainActivity : ComponentActivity() {
 
         keyPump = KeyPump(lifecycleScope, ::onNavEvent) // v2.8
 
-        // v0.8: input source (a) — vendor STEER_WHEEL_INFOR broadcasts as CAR_KEY_* codes.
+        // The resistive wheel reports learned SLOTS; the vendor learn app's JSON says what
+        // each one means. Follow the SysVar so a re-learn in the vendor app takes effect live.
+        lifecycleScope.launch {
+            carSettingsController.snapshot
+                .map { it[SettingKeys.WHEEL_KEY_LEARN_CUSTOM] }
+                .distinctUntilChanged()
+                .collect { wheelMap = WheelKeyMap.parse(it) }
+        }
+
+        // v0.8: input source (a) — vendor STEER_WHEEL_INFOR broadcasts, resolved by
+        // SwcNavigator.resolve (learned slot → function, or CAR_KEY on the panel fallbacks).
         // v2.8: the broadcast carries the press state, so feed the pump both edges rather than
         // dropping the release — held-repeat and long-press both need to know when it ended.
         lifecycleScope.launch {
             carEvents.swcKeys.collect { key ->
-                val nav = SwcNavigator.fromCarKey(key.keyIndex) ?: return@collect
+                val nav = SwcNavigator.resolve(key, wheelMap) ?: return@collect
                 if (key.down) keyPump.down(nav) else keyPump.up(nav)
             }
         }

@@ -20,6 +20,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import androidx.compose.material3.MaterialTheme
 import com.ripostelabs.carlauncher.carlib.CarEvents
+import com.ripostelabs.carlauncher.carlib.WheelFunction
+import com.ripostelabs.carlauncher.carlib.WheelKeyMap
 
 /**
  * v0.8 — Steering-Wheel-Control (SWC) key navigation.
@@ -356,6 +358,39 @@ object SwcNavigator {
         CarEvents.CAR_KEY_R_TUNE_L -> NavKey.UP
         CarEvents.CAR_KEY_R_TUNE_R -> NavKey.DOWN
         else -> null // POWER / PHONE — left to their own handlers
+    }
+
+    /**
+     * Learned wheel function → NavKey, the resistive-wheel twin of [fromCarKey]. The vendor
+     * learn app lets a button mean any of ~30 functions; only the ones this launcher owns map.
+     * MODE is the vendor's source selector, so it lands where CAR_KEY_MEDIA does.
+     */
+    fun fromWheel(function: WheelFunction): NavKey? = when (function) {
+        WheelFunction.PREV -> NavKey.MEDIA_PREV
+        WheelFunction.NEXT -> NavKey.MEDIA_NEXT
+        WheelFunction.MODE, WheelFunction.MUSIC -> NavKey.OPEN_MEDIA
+        WheelFunction.FM -> NavKey.OPEN_RADIO
+        WheelFunction.HOME -> NavKey.HOME
+        WheelFunction.BACK -> NavKey.BACK
+        WheelFunction.OK -> NavKey.CENTER
+        else -> null // volume, phone, voice, cameras… — the gateway's business
+    }
+
+    /**
+     * Resolve one [CarEvents.SwcKey] against the learned map. A `STEER_WHEEL_INFOR` LPARAM
+     * is a slot + 1, not a CAR_KEY code: with a learned map, only its functions fire; with
+     * none (never learned, or unparseable) the legacy CAR_KEY reading is all there is, so it
+     * stays as the fallback rather than going dark. Panel-fallback keys are CAR_KEY codes.
+     */
+    fun resolve(key: CarEvents.SwcKey, wheel: WheelKeyMap): NavKey? {
+        if (key.space == CarEvents.KeySpace.CAR_KEY) {
+            return fromCarKey(key.keyIndex)
+        }
+        if (wheel.isEmpty) {
+            return fromCarKey(key.keyIndex)
+        }
+        val function = wheel.functionOf(WheelKeyMap.slotOfLparam(key.keyIndex)) ?: return null
+        return fromWheel(function)
     }
 
     /** Real Android [KeyEvent] keycode → NavKey. */
