@@ -25,6 +25,14 @@ class RadioOpcodeTest {
     fun bandKeysAreDirectNotACycle() {
         assertEquals(30, CarService.RADIO_KEY_BAND_FM)
         assertEquals(31, CarService.RADIO_KEY_BAND_AM)
+        assertEquals(24, CarService.RADIO_KEY_BAND_CYCLE)
+    }
+
+    @Test
+    fun rdsTogglesAreKeys() {
+        assertEquals(21, CarService.RADIO_KEY_AF)
+        assertEquals(22, CarService.RADIO_KEY_PTY_SEEK)
+        assertEquals(23, CarService.RADIO_KEY_TA)
     }
 
     @Test
