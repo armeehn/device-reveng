@@ -450,6 +450,13 @@ class CarEvents(private val appContext: Context) {
      */
     val vendorBt: StateFlow<VendorBtState> = _vendorBt.asStateFlow()
 
+    private val _carPlay = MutableStateFlow(CarPlayState())
+    /**
+     * RAV4-52 — the Zlink phone-projection session (contract in [CarPlayState]). Starts
+     * disconnected; consumers gate on [CarPlayState.lastEventMs] so silence shows nothing.
+     */
+    val carplayState: StateFlow<CarPlayState> = _carPlay.asStateFlow()
+
     private val _climate = MutableStateFlow<ClimateState?>(null)
     /**
      * Latest HVAC snapshot from the `carairstruct` broadcast, or null until the CAN app sends
@@ -883,6 +890,25 @@ class CarEvents(private val appContext: Context) {
                         ?.let { _climate.value = ClimateState.from(it) }
                 }
 
+                // RAV4-52: Zlink session status. The same action also carries gateway → zlink
+                // commands (no `status` extra, our own REQ_SPEC_FUNC_CMD included): skipped.
+                Zlink.ACTION_MESSAGE -> {
+                    val status = intent.getStringExtra(Zlink.EXTRA_STATUS) ?: return
+                    _carPlay.value = CarPlayDecode.applyStatus(
+                        _carPlay.value,
+                        status,
+                        intent.getStringExtra(Zlink.EXTRA_PHONE_MODE),
+                        System.currentTimeMillis(),
+                    )
+                }
+
+                Zlink.ACTION_TELEPHONE_STATUS -> {
+                    val raw = intExtra(intent, Zlink.EXTRA_TELEPHONE_STATUS) ?: return
+                    _carPlay.value = CarPlayDecode.applyTelephone(
+                        _carPlay.value, raw, System.currentTimeMillis(),
+                    )
+                }
+
                 else -> Log.d(TAG, "unhandled action: ${intent?.action}")
             }
         }
@@ -1042,6 +1068,8 @@ class CarEvents(private val appContext: Context) {
             addAction(ZXW_ACTION_LAUNCHER_ALLAPPS_START_EVT) // v0.4.9 drawer request
             addAction(Zlink.ACTION_MESSAGE) // CarPlay session status (wheel NAV gesture)
             HBCP_ACTIONS.forEach { addAction(it) } // vendor BT status
+            addAction(Zlink.ACTION_MESSAGE) // RAV4-52 CarPlay session status
+            addAction(Zlink.ACTION_TELEPHONE_STATUS)
         }
         // Vendor gateway is a separate app -> this is not an app-internal broadcast,
         // so it must be exported on API 33+ (RECEIVER_EXPORTED).

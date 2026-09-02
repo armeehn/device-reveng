@@ -30,12 +30,14 @@ import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.BluetoothConnected
 import androidx.compose.material.icons.filled.BluetoothDisabled
 import androidx.compose.material.icons.filled.BrightnessMedium
+import androidx.compose.material.icons.filled.Call // RAV4-52 CarPlay chip
 import androidx.compose.material.icons.filled.NetworkWifi1Bar
 import androidx.compose.material.icons.filled.NetworkWifi2Bar
 import androidx.compose.material.icons.filled.NetworkWifi3Bar
 import androidx.compose.material.icons.filled.SignalWifi0Bar
 import androidx.compose.material.icons.filled.SignalWifi4Bar
 import androidx.compose.material.icons.filled.SignalWifiOff
+import androidx.compose.material.icons.filled.Smartphone // RAV4-52 CarPlay chip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import com.ripostelabs.carlauncher.ui.theme.DISABLED_ALPHA
@@ -56,6 +58,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.ripostelabs.carlauncher.carlib.CarEvents // v0.4.9 vendor BT status
+import com.ripostelabs.carlauncher.carlib.CarPlayState // RAV4-52
 import com.ripostelabs.carlauncher.carlib.CarService
 import com.ripostelabs.carlauncher.carlib.VendorBtState // v0.4.9
 import com.ripostelabs.carlauncher.data.BrightnessController
@@ -114,6 +117,8 @@ internal object StatusIndicatorTags {
     const val BLUETOOTH = "statusIndicator.bluetooth"
     const val VOLUME = "statusIndicator.volume"
     const val BRIGHTNESS = "statusIndicator.brightness"
+    /** RAV4-52: the phone-projection chip. Not in the v3.1 invariant set; present only while connected. */
+    const val CARPLAY = "statusIndicator.carplay"
 }
 
 @Composable
@@ -134,6 +139,7 @@ fun StatusIndicators(
         brightnessPercent = rememberBrightnessPercent(context, refreshKey),
         modifier = modifier,
         onOpen = onOpen,
+        carPlay = rememberCarPlayStatus(carEvents),
     )
 }
 
@@ -152,6 +158,8 @@ internal fun StatusIndicatorsRow(
     brightnessPercent: Int?,
     modifier: Modifier = Modifier,
     onOpen: (() -> Unit)? = null,
+    // RAV4-52: the projected phone. The default is "no session", i.e. no chip.
+    carPlay: CarPlayState = CarPlayState(),
 ) {
     Row(
         horizontalArrangement = Arrangement.spacedBy(14.dp),
@@ -170,6 +178,16 @@ internal fun StatusIndicatorsRow(
         }
         if (volume.available) {
             VolumeChip(volume)
+        }
+        // RAV4-52: shown only while Zlink reports a live session; silence = no chip.
+        if (carPlay.connected) {
+            StatusChip(
+                icon = if (carPlay.inCall) Icons.Filled.Call else Icons.Filled.Smartphone,
+                description = "Phone projection",
+                tint = MaterialTheme.colorScheme.primary,
+                text = carPlayChipText(carPlay),
+                tag = StatusIndicatorTags.CARPLAY,
+            )
         }
         // null = brightness unreadable (no WRITE_SETTINGS, no MCU backlight): the chip goes,
         // rather than parking on a stale percentage.
@@ -625,6 +643,38 @@ private fun rememberBrightnessPercent(context: Context, refreshKey: Int): Int? {
         onDispose { runCatching { context.contentResolver.unregisterContentObserver(observer) } }
     }
     return percent
+}
+
+// ---- CarPlay (RAV4-52) -----------------------------------------------------
+
+private const val CARPLAY_NAME = "CarPlay"
+private const val CALL_WORD = "call"
+
+/** `phoneMode` prefix → driver-facing name (the values `ZlinkManage.java:232-248` stores). */
+private val PROJECTION_NAMES = linkedMapOf(
+    "carplay_" to CARPLAY_NAME,
+    "auto_" to "Android Auto",
+    "hicar_" to "HiCar",
+    "airplay_" to "AirPlay",
+    "android_mirror_" to "Mirror",
+    "dlna_" to "DLNA",
+)
+
+/** "<protocol> <link>", e.g. "CarPlay wireless"; a live call replaces the link word. */
+internal fun carPlayChipText(state: CarPlayState): String {
+    val mode = state.phoneMode.orEmpty()
+    val protocol = PROJECTION_NAMES.entries.firstOrNull { mode.startsWith(it.key) }?.value
+        ?: CARPLAY_NAME
+    val detail = if (state.inCall) CALL_WORD else state.link?.name?.lowercase()
+
+    return listOfNotNull(protocol, detail).joinToString(" ")
+}
+
+@Composable
+private fun rememberCarPlayStatus(carEvents: CarEvents?): CarPlayState {
+    val state by (carEvents?.carplayState?.collectAsStateSafe(initial = CarPlayState())
+        ?: remember { mutableStateOf(CarPlayState()) })
+    return state
 }
 
 // ---- Shared chip -----------------------------------------------------------

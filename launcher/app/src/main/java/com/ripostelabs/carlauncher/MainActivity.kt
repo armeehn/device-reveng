@@ -35,6 +35,7 @@ import com.ripostelabs.carlauncher.carlib.SysVar // v0.4.9 vendor hidden-apps li
 import com.ripostelabs.carlauncher.carlib.WheelKey
 import com.ripostelabs.carlauncher.carlib.WheelKeyMap
 import com.ripostelabs.carlauncher.carlib.WheelKeySwallow
+import com.ripostelabs.carlauncher.carlib.Zlink // RAV4-52 CarPlay deep link
 import com.ripostelabs.carlauncher.data.CarSettingsController // v1.1 settings suite
 import com.ripostelabs.carlauncher.data.parseVendorHidden // v0.4.9
 import com.ripostelabs.carlauncher.data.CrashLog // v0.4.3.7
@@ -67,6 +68,7 @@ import com.ripostelabs.carlauncher.input.WheelGestureDispatcher
 import com.ripostelabs.carlauncher.media.ContinueWatchingRepository // v2.7
 import com.ripostelabs.carlauncher.media.MiniScreenController // v4.1
 import com.ripostelabs.carlauncher.media.NowPlayingRepository
+import com.ripostelabs.carlauncher.media.SourceLabels // RAV4-52
 import com.ripostelabs.carlauncher.notif.NotificationRepository // v2.7
 import com.ripostelabs.carlauncher.ui.CarFeedback // v2.5
 import com.ripostelabs.carlauncher.ui.DashboardScreen // v3.0
@@ -557,6 +559,14 @@ class MainActivity : ComponentActivity() {
                                     onSelectSource = nowPlaying::selectSession,
                                     onBack = { screen = Screen.Home },
                                     vendorSource = vendorSource,
+                                    // RAV4-52: the source label deep-links into CarPlay.
+                                    onOpenCarPlay = if (SourceLabels.isCarPlay(now?.sourcePackage) ||
+                                        SourceLabels.isProjection(vendorSource)
+                                    ) {
+                                        { Zlink.open().start(applicationContext) }
+                                    } else {
+                                        null
+                                    },
                                 )
                             }
 
