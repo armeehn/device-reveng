@@ -27,7 +27,7 @@ launcher/
 │       ├── AndroidManifest.xml  # <uses-permission com.szchoiceway.permission.broadcast>
 │       ├── aidl/com/szchoiceway/eventcenter/
 │       │   ├── ICommunication.aidl   # gateway → app callback (notifyMessage/checkIsActive)
-│       │   ├── ICallbackfn.aidl      # radio/EQ/CAN setter callback (signature = TODO)
+│       │   ├── ICallbackfn.aidl      # radio/EQ/CAN setter callback (notifyEvt / checkIsActive)
 │       │   └── IEventService.aidl    # bound control service (SUBSET; ordinals = TODO)
 │       └── java/com/ripostelabs/carlauncher/carlib/
 │           ├── CarEvents.kt     # BroadcastReceiver → Flows/callbacks (reverse, ACC, SWC, day/night)
@@ -196,8 +196,10 @@ exist on the wheel anyway, and withholding them would push the driver to their p
 
 **RadioScreen** — 48 sp frequency, an AM / FM band toggle, a tune slider across the dial
 (parked-only, like media scrubbing; it snaps to the 100 kHz / 10 kHz step on release), seek,
-six preset slots with save / recall / delete, and the tuner's status flags. The AIDL only has
-a band *cycle* key, so selecting AM or FM toggles until the tuner reports that class.
+six preset slots with save / recall / delete, and the tuner's status flags. Opening the screen
+claims the tuner as the cabin's audio source the way the vendor radio app does
+(`CarService.claimRadio`); AM / FM send the MCU's direct band keys (30 / 31) and re-poll until
+the tuner reports the class. The `sendRadioKey` value table is in CAR_API §3.2.
 
 ### What the firmware does not have
 
@@ -211,8 +213,8 @@ Two things §3.3/§3.4 planned turned out not to exist, so they are not built:
   So the screen shows the indicators that do exist (RDS / TA / AF / TP / stereo + PTY genre)
   rather than an empty scroller. `ZXW_RADIO_INFO_EVT` may carry more, but only its action
   string was recovered: no sender was traced and no payload extra is named.
-- **No scan.** `getRadioAMSState` / `getRadioAPSState` report whether an auto-store or
-  auto-preset-scan is *running*; nothing starts one. Seek is the whole control surface.
+- **Scan is a key.** `getRadioAMSState` / `getRadioAPSState` only report; `sendRadioKey(13)`
+  starts a preset scan and 18 an auto-store. Neither is wired to a control yet.
 
 Preset sync with the vendor's `Rdo_MyFavorite0..5` is **read-only** for the same reason: the
 encoding of those SysVar values is documented nowhere, and writing a guessed format would

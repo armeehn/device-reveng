@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.ServiceConnection
 import android.os.IBinder
 import android.util.Log
+import com.szchoiceway.eventcenter.ICallbackfn
 import com.szchoiceway.eventcenter.ICommunication
 import com.szchoiceway.eventcenter.IEventService
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -38,13 +39,24 @@ class CarService(private val appContext: Context) {
         const val BIND_PACKAGE = "com.szchoiceway.eventcenter"
 
         // ---- Radio key codes for sendRadioKey(int) --------------------------
-        // ⚠ GUESSED: the concrete CAR_RADIO_KEY_* opcodes were NOT recovered from the
-        // decompile (CAR_API §3.2 lists sendRadioKey(int) but not its value table). These
-        // are best-effort guesses following the common vendor convention
-        // (0=band toggle, 1=seek-down, 2=seek-up). Verify on-device.
-        const val RADIO_KEY_BAND = 0
-        const val RADIO_KEY_SEEK_DOWN = 1
-        const val RADIO_KEY_SEEK_UP = 2
+        // Recovered from the vendor radio app (decompiled com.szchoiceway.radio,
+        // MainActivity.OnKeyEvent and the preset handlers). The gateway forwards the value
+        // untouched as MCU frame {0x02, key}, so these are the MCU's own opcodes.
+        // 1..6 recall preset N, 7..12 store preset N; the transport keys are below.
+        // The old guesses 0 / 1 / 2 meant nothing / preset 1 / preset 2 (CAR_API §3.2).
+        const val RADIO_KEY_SCAN = 13
+        const val RADIO_KEY_STEP_DOWN = 14
+        const val RADIO_KEY_STEP_UP = 15
+        const val RADIO_KEY_SEEK_DOWN = 16
+        const val RADIO_KEY_SEEK_UP = 17
+        const val RADIO_KEY_AUTO_STORE = 18
+        const val RADIO_KEY_ST_MONO = 19
+        const val RADIO_KEY_DX_LOC = 20
+        const val RADIO_KEY_BAND_FM = 30
+        const val RADIO_KEY_BAND_AM = 31
+
+        /** The tuner as an audio source: EventUtils.eSrcMode.SRC_RADIO, the int sendMode takes. */
+        const val SRC_RADIO = 1
 
         /**
          * Main-volume range for QuickControls. No longer a guess: the vendor's own volume UI
@@ -196,13 +208,47 @@ class CarService(private val appContext: Context) {
         call { sendVolState(muted, clamped) }
     }
 
-    // ---- Radio control (CAR_API §3.2). All guarded; ⚠ key codes GUESSED. -----
+    // ---- Radio control (CAR_API §3.2). All guarded. ---------------------------
     fun sendRadioKey(key: Int) { call { sendRadioKey(key) } }
-    /** Tune to an absolute frequency value (units are the same as getRadioFreq()). */
-    fun sendUserFreq(freq: Int, direct: Boolean = true) { call { sendUserFreq(freq, direct) } }
-    fun radioBandToggle() = sendRadioKey(RADIO_KEY_BAND)
+
+    /**
+     * Tune to an absolute frequency in the units getRadioFreq() reports. [fm] is the band
+     * class: the gateway packs the call as MCU frame {0x0C, hi, lo, fm ? 0 : 1}, so an AM
+     * value sent with [fm] = true lands in the FM band at whatever that number means there.
+     */
+    fun sendUserFreq(freq: Int, fm: Boolean) { call { sendUserFreq(freq, fm) } }
+
+    fun radioSelectFm() = sendRadioKey(RADIO_KEY_BAND_FM)
+    fun radioSelectAm() = sendRadioKey(RADIO_KEY_BAND_AM)
     fun radioSeekDown() = sendRadioKey(RADIO_KEY_SEEK_DOWN)
     fun radioSeekUp() = sendRadioKey(RADIO_KEY_SEEK_UP)
+
+    /**
+     * Route tuner audio to the amp, the way the vendor radio app does it
+     * (RadioService.sendRadioMode): own SRC_RADIO, take the radio callback, then sendMode —
+     * twice, because the vendor sends it twice. Without this the tuner answers every getter
+     * and accepts every key while the cabin stays on whatever source was last selected: a
+     * radio screen that seeks but never plays.
+     *
+     * ⚠ EventService.sendMode() runs kill3rdAPK() unless the Sys_SoundManager_Type SysVar
+     * is set: on a stock unit a source switch force-stops third-party tasks. Opening the
+     * vendor radio app trips the same path, so this adds no new exposure — verify on-device.
+     */
+    fun claimRadio() {
+        call { setCurModeCallback(SRC_RADIO, radioCallback) }
+        call { setRadioCallback(radioCallback) }
+        call { sendMode(SRC_RADIO, false) }
+        call { sendMode(SRC_RADIO, false) }
+    }
+
+    /** Answers like the vendor's stubs; the screens poll, so events are only logged. */
+    private val radioCallback = object : ICallbackfn.Stub() {
+        override fun notifyEvt(what: Int, arg1: Int, arg2: Int, data: ByteArray?, str: String?) {
+            Log.d(TAG, "radio event $what ($arg1, $arg2)")
+        }
+
+        override fun checkIsActive(): Boolean = false
+    }
 
     // v1.7 — RDS/TA status getters (AIDL ordinals 16 / 21). Read-only: no AIDL setter exists.
     fun getRadioRds(): Boolean? = call { getRadioRDSState() }

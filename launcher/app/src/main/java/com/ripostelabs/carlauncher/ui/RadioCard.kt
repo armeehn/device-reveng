@@ -175,8 +175,8 @@ fun RadioCard(
                             control {
                                 RadioTuning.recallPreset(
                                     readBand = { carService.getRadioBand() },
-                                    toggleBand = { carService.radioBandToggle() },
-                                    tune = { carService.sendUserFreq(it) },
+                                    selectBand = { RadioTuning.selectBand(carService, it) },
+                                    tune = { carService.sendUserFreq(it, !CarService.isAmBand(p.band)) },
                                     preset = p,
                                 )
                             }
@@ -198,7 +198,11 @@ fun RadioCard(
                     TransportButton(
                         icon = Icons.Filled.SwapHoriz,
                         contentDescription = "Band",
-                        onClick = { control { carService.radioBandToggle() } },
+                        onClick = {
+                            control {
+                                RadioTuning.selectBand(carService, RadioTuning.otherBandClass(info.band))
+                            }
+                        },
                         modifier = Modifier.weight(1f),
                         emphasized = true,
                     )

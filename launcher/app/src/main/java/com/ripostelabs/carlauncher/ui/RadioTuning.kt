@@ -8,17 +8,18 @@ import kotlinx.coroutines.delay
 /**
  * Preset ↔ tuner band logic shared by [RadioScreen] and [RadioCard].
  *
- * A preset stores the band it was saved on, but `sendUserFreq()` tunes within the *current*
- * band — the freq units differ between AM (kHz) and FM (10 kHz units), so replaying an AM
- * value while on FM mistunes. Recall therefore switches band first, and the active-slot
- * highlight compares band as well as freq (AM 8750 must not light while tuned FM 87.5).
+ * A preset stores the band it was saved on, and the freq units differ between AM (kHz) and
+ * FM (10 kHz units): `sendUserFreq()` carries a band flag, but the MCU still has to be *on*
+ * that band for the tune to be audible, and the tuner reports the band it is really on.
+ * Recall therefore switches band first, and the active-slot highlight compares band as well
+ * as freq (AM 8750 must not light while tuned FM 87.5).
  */
 internal object RadioTuning {
 
-    /** Band toggling cycles a small set (AM/FM1/FM2/…); more toggles than this is a loop. */
-    const val MAX_BAND_TOGGLES = 4
+    /** How many times a band key is sent before a tuner that never reports it is given up on. */
+    const val MAX_BAND_ATTEMPTS = 4
 
-    /** How long one band toggle gets to land before the band is re-polled. */
+    /** How long one band key gets to land before the band is re-polled. */
     const val BAND_SETTLE_MS = 300L
 
     /**
@@ -40,6 +41,18 @@ internal object RadioTuning {
 
     fun bandClassOf(band: Int): BandClass =
         if (CarService.isAmBand(band)) BandClass.AM else BandClass.FM
+
+    /** The class a band button toggles *to* from the tuner's current band. */
+    fun otherBandClass(band: Int): BandClass =
+        if (CarService.isAmBand(band)) BandClass.FM else BandClass.AM
+
+    /** Send the MCU's direct band key for [target] (no cycling: FM is 30, AM is 31). */
+    fun selectBand(carService: CarService, target: BandClass) {
+        when (target) {
+            BandClass.AM -> carService.radioSelectAm()
+            BandClass.FM -> carService.radioSelectFm()
+        }
+    }
 
     /** AM and FM freq encodings are incompatible; FM1 vs FM2 at the same freq is the same tune. */
     fun sameBandClass(a: Int, b: Int): Boolean =
@@ -95,27 +108,27 @@ internal object RadioTuning {
     }
 
     /**
-     * Toggle the band until its class is [target] (bounded retries, re-polled after each
-     * toggle). Returns true once the tuner reports the target class; false when the band is
-     * unreadable or the cycle never reaches it — the AIDL only has a *cycle* key, no "set band".
+     * Put the tuner on [target] and wait for it to say so: send the band key, settle, re-poll,
+     * bounded. Returns true once the tuner reports the target class; false when the band is
+     * unreadable or never lands. A tuner already on [target] gets no key at all.
      *
      * Blocking AIDL calls — run on Dispatchers.IO. [settle] is injectable for tests.
      */
     suspend fun switchBandClass(
         readBand: () -> Int?,
-        toggleBand: () -> Unit,
+        selectBand: (BandClass) -> Unit,
         target: BandClass,
         settle: suspend () -> Unit = { delay(BAND_SETTLE_MS) },
     ): Boolean {
         var band = readBand() ?: return false
 
-        var toggles = 0
+        var attempts = 0
         while (bandClassOf(band) != target) {
-            if (toggles >= MAX_BAND_TOGGLES) {
+            if (attempts >= MAX_BAND_ATTEMPTS) {
                 return false
             }
-            toggleBand()
-            toggles++
+            selectBand(target)
+            attempts++
             settle()
             band = readBand() ?: return false
         }
@@ -135,7 +148,7 @@ internal object RadioTuning {
      */
     suspend fun recallPreset(
         readBand: () -> Int?,
-        toggleBand: () -> Unit,
+        selectBand: (BandClass) -> Unit,
         tune: (Int) -> Unit,
         preset: RadioPreset,
         settle: suspend () -> Unit = { delay(BAND_SETTLE_MS) },
@@ -145,7 +158,7 @@ internal object RadioTuning {
             return
         }
 
-        val landed = switchBandClass(readBand, toggleBand, bandClassOf(preset.band), settle)
+        val landed = switchBandClass(readBand, selectBand, bandClassOf(preset.band), settle)
         if (!landed) {
             return
         }

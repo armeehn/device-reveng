@@ -279,6 +279,15 @@ bindService(i, conn, BIND_AUTO_CREATE);
 | **Power / system** | `sendSoftWareReboot()`, `sendSystemReset()`, `setSystemBrightness()`, `openTVout(int,boolean)`, camera/upgrade APIs |
 | **Listener** | `addMessageListener(ICommunication)` |
 
+**`sendRadioKey(int)` values** (from the vendor radio app's key handlers; the gateway sends
+the int untouched as MCU frame `{0x02, key}`): 1–6 recall preset N, 7–12 store preset N,
+13 preset scan, 14/15 step down/up, 16/17 seek down/up, 18 auto-store (AMS), 19 stereo/mono,
+20 DX/LOC, 30 band FM, 31 band AM. `sendUserFreq(int freq, boolean fm)` → `{0x0C, hi, lo,
+fm ? 0 : 1}`, freq in the units `getRadioFreq()` reports. Claiming tuner audio is
+`setCurModeCallback(1, cb)` + `setRadioCallback(cb)` + `sendMode(1, false)` ×2
+(`eSrcMode.SRC_RADIO` = 1); note `sendMode` calls `kill3rdAPK()` unless
+`Sys_SoundManager_Type` is set, force-stopping non-system foreground tasks.
+
 ### 3.3 Secondary channel: LocalSocket
 
 `LocalSocketServer.java` / `SocketUtils.java` expose a text protocol (`CURRENT_MODE_INFO:`,
