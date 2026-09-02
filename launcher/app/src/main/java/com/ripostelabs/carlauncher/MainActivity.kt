@@ -82,6 +82,7 @@ import com.ripostelabs.carlauncher.ui.ProfilesScreen // v3.0
 import com.ripostelabs.carlauncher.ui.ProvideParkedOnlyLock // v2.5
 import com.ripostelabs.carlauncher.ui.ShadeOverlay // v2.5 shade
 import com.ripostelabs.carlauncher.ui.RadarSideStrip // v2.8
+import com.ripostelabs.carlauncher.ui.PhoneScreen // RAV4-50
 import com.ripostelabs.carlauncher.ui.RadioScreen // v2.6
 import com.ripostelabs.carlauncher.ui.rememberClockNight // v2.7
 import kotlinx.coroutines.Dispatchers
@@ -537,6 +538,7 @@ class MainActivity : ComponentActivity() {
                                     onOpenDashboard = { screen = Screen.Dashboard },
                                     onOpenProfiles = { screen = Screen.Profiles },
                                     onOpenRadio = { screen = Screen.Radio },
+                                    onOpenPhone = { screen = Screen.Phone },
                                     driverSide = driverSide, // v2.8 reachability mirror
                                     // v2.7 shelves
                                     onOpenNotifications = { screen = Screen.Notifications },
@@ -576,6 +578,12 @@ class MainActivity : ComponentActivity() {
                                 presetsStore = radioPresetsStore,
                                 onBack = { screen = Screen.Home },
                                 vendorPresets = vendorPresets,
+                            )
+
+                            // RAV4-50: the phone screen, driven through the vendor bt app.
+                            Screen.Phone -> PhoneScreen(
+                                carEvents = carEvents,
+                                onBack = { screen = Screen.Home },
                             )
 
                             // v3.0: the cockpit dashboard.
@@ -892,6 +900,7 @@ class MainActivity : ComponentActivity() {
             true
         }
         NavKey.OPEN_RADIO -> { screenState.value = Screen.Radio; true }
+        NavKey.OPEN_PHONE -> { screenState.value = Screen.Phone; true }
         NavKey.HOME -> {
             screenState.value = Screen.Home
             launcherFocus.reset()
@@ -980,6 +989,7 @@ class MainActivity : ComponentActivity() {
         data class Settings(val initialRoute: SettingsRoute? = null) : Screen
         data object Media : Screen // v2.6 full media player (§3.3)
         data object Radio : Screen // v2.6 full tuner (§3.4)
+        data object Phone : Screen // RAV4-50 phone over btsuite
         data object Dashboard : Screen // v3.0 cockpit
         data object Profiles : Screen // v3.0 driver profiles
         data object Notifications : Screen // v2.7
