@@ -139,6 +139,67 @@ class UpdateFeedTest {
         assertEquals(132, release.versionCode)
     }
 
+    // ---- Picking the newest out of the release list --------------------------
+
+    /** A `GET /releases` array, in the order given. */
+    private fun listJson(vararg objects: String) = objects.joinToString(",", "[", "]")
+
+    private fun listedRelease(
+        tag: String,
+        draft: Boolean = false,
+        prerelease: Boolean = false,
+    ) = releaseJson(tag = tag, assetName = "carlauncher-$tag.apk")
+        .trimEnd()
+        .removeSuffix("}")
+        .plus(""", "draft": $draft, "prerelease": $prerelease }""")
+
+    @Test
+    fun theNewestIsTheHighestVersionCodeNotTheFirstListed() {
+        // The regression this replaced: GitHub's /releases/latest answered vc152 while vc154
+        // and vc155 were both published, because every mirrored release shares a created_at
+        // and the tie-break is arbitrary. Ordering is now ours, so array order cannot cap it.
+        val json = listJson(
+            listedRelease("v0.7.152+152.ge54e245"),
+            listedRelease("v0.7+155.g30e1b60"),
+            listedRelease("v0.7+154.gdb83160"),
+        )
+        val newest = UpdateFeed.parseNewest(json)!!
+        assertEquals(155, newest.versionCode)
+        assertEquals("v0.7+155.g30e1b60", newest.tag)
+        assertEquals("carlauncher-v0.7+155.g30e1b60.apk", newest.apkName)
+    }
+
+    @Test
+    fun draftsAndPrereleasesAreSkipped() {
+        // A token with push rights sees drafts; a half-published release must not reach HOME.
+        val json = listJson(
+            listedRelease("v0.7+158.gaaaaaaa", draft = true),
+            listedRelease("v0.7+157.gbbbbbbb", prerelease = true),
+            listedRelease("v0.7+152.gccccccc"),
+        )
+        assertEquals(152, UpdateFeed.parseNewest(json)!!.versionCode)
+    }
+
+    @Test
+    fun handMadeReleasesAreIgnoredButDoNotHideRealOnes() {
+        // One unparseable tag in the page must not sink the whole check.
+        val json = listJson(
+            listedRelease("v1.0.0"),
+            listedRelease("v0.7+153.gdddddddd"),
+        )
+        assertEquals(153, UpdateFeed.parseNewest(json)!!.versionCode)
+    }
+
+    @Test
+    fun anEmptyOrGarbageListIsNullNotACrash() {
+        assertNull(UpdateFeed.parseNewest("[]"))
+        assertNull(UpdateFeed.parseNewest("not json"))
+        // A single object is not a list — the endpoint changed shape, so refuse rather than guess.
+        assertNull(UpdateFeed.parseNewest(releaseJson()))
+        // A page containing only hand-made releases has nothing to offer.
+        assertNull(UpdateFeed.parseNewest(listJson(listedRelease("v1.0.0"))))
+    }
+
     // ---- Self-update guard --------------------------------------------------
 
     @Test
