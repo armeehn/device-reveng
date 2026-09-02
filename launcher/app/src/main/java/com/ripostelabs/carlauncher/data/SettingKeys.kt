@@ -141,6 +141,9 @@ object SettingKeys {
     const val SCREEN_DENSITY = "Sys_Screen_Density"
     /** Skin id (`SysProviderOpt.SYS_UI_NUMBER_KEY`); 0 = common. Was wrongly "uiNumberKey". */
     const val UI_NUMBER_KEY = "Sys_UINumber"
+    // Setup Doctor diagnostics, read-only (decompiled eventcenter SysProviderOpt.java:335/426/458).
+    /** "1" (the default) = `kill3rdAPK` is a no-op on `sendMode` (EventService.java:6581/8294). */
+    const val SOUND_MANAGER_TYPE = "Sys_SoundManager_Type"
     const val LANGUAGE = "Set_Language_Select"
     const val TIME_FORMAT = "Sys_Time_12_24_Format" // inferred 0=24h 1=12h
     const val APP_VERSION = "Sys_AppVersion"
