@@ -85,14 +85,14 @@ fun ClimateReadout(
             ) {
                 // Left set-temp — the primary glance value.
                 Column {
-                    Text(
+                    AutoSizeText(
                         text = state.leftTempLabel(),
                         fontSize = 40.sp,
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
                     if (state.dualOn) {
-                        Text(
+                        AutoSizeText(
                             text = "Dual ${state.rightTempLabel()}",
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -115,7 +115,7 @@ fun ClimateReadout(
                             modifier = Modifier.size(28.dp),
                         )
                         Spacer(Modifier.width(6.dp))
-                        Text(
+                        AutoSizeText(
                             text = state.fanLevel.toString(),
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurface,
@@ -140,7 +140,7 @@ private fun ClimateGlyph(
     }
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Icon(imageVector = icon, contentDescription = label, tint = tint, modifier = Modifier.size(28.dp))
-        Text(text = label, style = MaterialTheme.typography.labelMedium, color = tint)
+        AutoSizeText(text = label, style = MaterialTheme.typography.labelMedium, color = tint)
     }
 }
 

@@ -232,7 +232,7 @@ private fun BandChip(label: String) {
                 modifier = Modifier.size(18.dp),
             )
             Spacer(Modifier.width(6.dp))
-            Text(text = label, style = MaterialTheme.typography.labelLarge)
+            AutoSizeText(text = label, style = MaterialTheme.typography.labelLarge)
         }
     }
 }

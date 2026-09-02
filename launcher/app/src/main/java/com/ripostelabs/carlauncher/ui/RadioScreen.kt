@@ -42,7 +42,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ripostelabs.carlauncher.carlib.CarService
@@ -256,7 +255,7 @@ private fun BandToggle(
             val selected = band == active
             val bg = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
             val fg = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
-            Text(
+            AutoSizeText(
                 text = band.name,
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.SemiBold,
@@ -338,7 +337,7 @@ private fun TuneSlider(tuner: TunerState, hold: Int?, onTune: (Int) -> Unit) {
 
 @Composable
 private fun DialEnd(band: Int, freq: Int) {
-    Text(
+    AutoSizeText(
         text = formatFreqLabel(band, freq),
         style = MaterialTheme.typography.titleMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -400,7 +399,7 @@ private fun Indicator(label: String, on: Boolean?) {
         false -> MaterialTheme.colorScheme.onSurfaceVariant
         null -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = UNKNOWN_ALPHA)
     }
-    Text(
+    AutoSizeText(
         text = label,
         style = MaterialTheme.typography.titleMedium,
         color = fg,
@@ -575,12 +574,10 @@ private fun VendorPresetLine(values: List<String>) {
     if (values.isEmpty()) {
         return
     }
-    Text(
+    AutoSizeText(
         text = "Vendor presets (raw, read-only): " + values.joinToString(" · "),
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
     )
 }
 

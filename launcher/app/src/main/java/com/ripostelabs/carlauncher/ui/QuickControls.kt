@@ -390,7 +390,7 @@ private fun ControlRow(
                     .then(if (onIconClick != null) Modifier.clickable(onClick = onIconClick) else Modifier),
             )
             Spacer(Modifier.width(12.dp))
-            Text(
+            AutoSizeText(
                 text = title,
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurface,
@@ -424,7 +424,7 @@ private fun ShortcutChip(
             modifier = Modifier.size(22.dp),
         )
         Spacer(Modifier.width(10.dp))
-        Text(
+        AutoSizeText(
             text = label,
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurface,
@@ -456,7 +456,7 @@ private fun SegmentChip(
             Icon(imageVector = icon, contentDescription = label, tint = fg, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(6.dp))
         }
-        Text(text = label, style = MaterialTheme.typography.labelLarge, color = fg)
+        AutoSizeText(text = label, style = MaterialTheme.typography.labelLarge, color = fg)
     }
 }
 

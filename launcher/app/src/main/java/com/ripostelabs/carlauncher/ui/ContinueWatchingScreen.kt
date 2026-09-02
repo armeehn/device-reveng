@@ -153,7 +153,7 @@ private fun WatchRow(entry: WatchEntry, onOpen: () -> Unit, onForget: () -> Unit
             if (progress != null) {
                 ProgressBar(fraction = progress)
                 Spacer(Modifier.height(4.dp))
-                Text(
+                AutoSizeText(
                     text = "${clockOf(entry.positionMs)} of ${clockOf(entry.durationMs)}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -218,7 +218,7 @@ private fun OpenAppButton(label: String, onClick: () -> Unit) {
             .clickable(onClick = press)
             .padding(horizontal = 24.dp, vertical = 12.dp),
     ) {
-        Text(
+        AutoSizeText(
             text = label,
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onPrimary,
@@ -237,11 +237,12 @@ private fun EmptyShelf(jellyfinLabel: String?) {
             "from what this unit plays, so it cannot show what you started on another device."
     }
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text(
+        AutoSizeText(
             text = message,
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 80.dp),
+            maxLines = 2,
         )
     }
 }
