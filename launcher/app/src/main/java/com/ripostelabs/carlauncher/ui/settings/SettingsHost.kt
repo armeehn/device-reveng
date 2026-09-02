@@ -128,6 +128,8 @@ fun SettingsHost(
             SettingsRoute.SetupDoctor -> SetupDoctorScreen(
                 controller = controller,
                 onBack = ::pop,
+                settingsStore = settingsStore,
+                carService = carService,
             )
 
             // v0.4.2: back up / restore the whole launcher state (DataStore file snapshot).

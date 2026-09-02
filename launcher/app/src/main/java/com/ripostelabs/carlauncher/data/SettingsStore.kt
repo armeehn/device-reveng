@@ -105,6 +105,17 @@ data class LauncherSettings(
     val readNotifications: Boolean = false,
     /** Hold / double-press actions for the wheel keys; on by default, see [WheelGestureBindings]. */
     val wheelGestures: WheelGestureBindings = WheelGestureBindings(),
+    /**
+     * Hide a Choiceway app from the drawer once our replacement is installed ([OemApps]).
+     * On by default: it only ever hides an app whose stand-in is present, so a unit with no
+     * suite keeps every OEM app. Off puts the twins back for a side-by-side comparison.
+     */
+    val hideReplacedOemApps: Boolean = true,
+    /**
+     * Also hide the OEM System settings app. Off by default: it still hosts the factory menu,
+     * which the launcher's settings do not reproduce.
+     */
+    val hideOemSettings: Boolean = false,
 ) {
     companion object {
         /** 0 = adaptive/auto sizing; otherwise a fixed column count. */
@@ -191,6 +202,8 @@ class SettingsStore(context: Context) {
                         ),
                         double = WheelGestureBindings.decode(prefs[WHEEL_DOUBLE_KEY], emptyMap()),
                     ),
+                    hideReplacedOemApps = prefs[HIDE_REPLACED_OEM_KEY] ?: true,
+                    hideOemSettings = prefs[HIDE_OEM_SETTINGS_KEY] ?: false,
                 )
             }
             .stateIn(scope, SharingStarted.Eagerly, LauncherSettings())
@@ -283,6 +296,14 @@ class SettingsStore(context: Context) {
     fun setWheelDouble(key: WheelKey, action: WheelGestureAction) = scope.launch {
         val next = settings.value.wheelGestures.double + (key to action)
         ds.edit { it[WHEEL_DOUBLE_KEY] = WheelGestureBindings.encode(next) }
+    /** Shadow the replaced OEM apps ([OemApps]) in the drawer, or show them again. */
+    fun setHideReplacedOemApps(enabled: Boolean) = scope.launch {
+        ds.edit { it[HIDE_REPLACED_OEM_KEY] = enabled }
+    }
+
+    /** Opt in to hiding the OEM System settings app as well. */
+    fun setHideOemSettings(enabled: Boolean) = scope.launch {
+        ds.edit { it[HIDE_OEM_SETTINGS_KEY] = enabled }
     }
 
 
@@ -309,5 +330,7 @@ class SettingsStore(context: Context) {
         val WHEEL_GESTURES_KEY = booleanPreferencesKey("wheel_gestures_enabled")
         val WHEEL_LONG_KEY = stringPreferencesKey("wheel_gestures_long")
         val WHEEL_DOUBLE_KEY = stringPreferencesKey("wheel_gestures_double")
+        val HIDE_REPLACED_OEM_KEY = booleanPreferencesKey("hide_replaced_oem_apps") // OemApps shadow
+        val HIDE_OEM_SETTINGS_KEY = booleanPreferencesKey("hide_oem_settings") // OemApps shadow
     }
 }

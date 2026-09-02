@@ -137,6 +137,24 @@ writes), `data/SettingKeys` (curated key catalog), `ui/settings/*` (the reskinne
 firmware naming (the vendor settings APK that holds the value tables isn't in the decompile),
 so each guessed mapping is annotated in-code and the Advanced browser shows the true strings.
 
+### Vendor apps shadow
+
+The drawer hides a Choiceway app once ours stands in for it, the way it already shadows the
+retired `com.reveng.*` twins of the suite. `data/OemApps` is the single table: REMOVE
+(photoreader, apkinstall, weather, xbrowser, atslcarconsole: hidden always), REPLACED (radio,
+musicplayer, videoplayer, gps: hidden only while the `com.ripostelabs.*` rewrite is installed;
+the OEM System settings app only on an explicit opt-in, since it still hosts the factory menu;
+the camera viewer never, there is no replacement) and KEEP (gateway, canbus2, btsuite, zlink,
+the factory tools: never hidden). An OEM app whose replacement is missing stays visible, so a
+unit without the suite keeps working. Two toggles under Settings ▸ Launcher ▸ Vendor apps
+un-shadow either class. Setup doctor's "Vendor apps" section lists what is hidden, what is still
+visible and why, the exact `pm uninstall -k --user 0 <pkg>` line per REMOVE package (copy it;
+nothing is uninstalled from the launcher) and a warning for any KEEP package missing or
+disabled; its "Gateway state" rows show `getValidMode()` by `eSrcMode` name
+(`data/SrcModeNames`) and the `Sys_SoundManager_Type` / `Sys_UINumber` / `Sys_Landscape` /
+`Sys_CustomerType` / `Sys_CarType` / `Sys_Vehicle_deries` SysVars, read-only. The matrix itself
+and every citation behind it is `OEM_SYSTEM.md` §1.
+
 ## Motion awareness (v2.5)
 
 `CarEvents.speedKmh` is real. The gateway broadcasts no numeric speed
@@ -703,8 +721,8 @@ check.
   flag. Until then the maneuvering side-strips never draw.
 - **Steering side** — not recoverable from SysVar (`Sys_CarType` is a model index). The
   reachability mirror's Auto mode stays LHD; only a CAN-box console read could ever feed it.
-- **Vendor `sendMode` value table** — needed before MediaScreen can switch the car between
-  Bluetooth / USB / the built-in player.
+- **Vendor `sendMode` value table** — recovered (`OEM_SYSTEM.md` §3.8, `data/SrcModeNames`);
+  MediaScreen does not yet use it to switch the car between Bluetooth / USB / the built-in player.
 - **Steering angle units** — turn lock to lock with the dashboard open and read the extremes off
   the raw value; the indicator currently assumes ±540 and saturates.
 - **Trip computer** — `CAN_CAR_TIRP_INFO` is never broadcast; canbus2 keeps frame 0x13 (range,
