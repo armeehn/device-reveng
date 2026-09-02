@@ -3,6 +3,7 @@ package com.ripostelabs.carlauncher.ui
 import com.ripostelabs.carlauncher.ui.RadioTuning.BandClass
 import com.ripostelabs.carlauncher.ui.RadioTuning.TuneRange
 import kotlinx.coroutines.runBlocking
+import com.ripostelabs.carlauncher.data.RadioPreset
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -23,26 +24,23 @@ class RadioTuneRangeTest {
     private val am = 3
 
     @Test
-    fun fmRangeFollowsTheRawUnit() {
-        assertEquals(TuneRange(875, 1080, 1), RadioTuning.tuneRange(fm, 1015))
-        assertEquals(TuneRange(8750, 10800, 10), RadioTuning.tuneRange(fm, 10150))
-        assertEquals(TuneRange(87500, 108000, 100), RadioTuning.tuneRange(fm, 101500))
+    fun fmDialIsTenKilohertzUnits() {
+        // The vendor formats getRadioFreq() as "%d.%02d MHZ": 9630 is 96.30 MHz.
+        assertEquals(TuneRange(8750, 10790, 10), RadioTuning.tuneRange(fm, 9630))
+        assertEquals("96.3 MHz", formatFreqLabel(fm, 9630))
     }
 
     @Test
-    fun amRangeFollowsTheRawUnit() {
+    fun amDialIsKilohertz() {
         assertEquals(TuneRange(530, 1710, 10), RadioTuning.tuneRange(am, 1010))
-        assertEquals(TuneRange(530_000, 1_710_000, 10_000), RadioTuning.tuneRange(am, 1_010_000))
+        assertEquals("1010 kHz", formatFreqLabel(am, 1010))
     }
 
     @Test
     fun rangeEndsRenderAsTheDialLimits() {
-        // One heuristic, not two: whatever unit the range picks, the label agrees with it.
-        for (sample in listOf(1015, 10150, 101500)) {
-            val range = RadioTuning.tuneRange(fm, sample)
-            assertEquals("87.5 MHz", formatFreqLabel(fm, range.min))
-            assertEquals("108.0 MHz", formatFreqLabel(fm, range.max))
-        }
+        val range = RadioTuning.tuneRange(fm, 9630)
+        assertEquals("87.5 MHz", formatFreqLabel(fm, range.min))
+        assertEquals("107.9 MHz", formatFreqLabel(fm, range.max))
     }
 
     @Test
@@ -51,7 +49,26 @@ class RadioTuneRangeTest {
         val range = RadioTuning.tuneRange(fm, 0)
 
         assertTrue(range.span > 0)
-        assertEquals(875, range.min)
+        assertEquals(8750, range.min)
+    }
+
+    @Test
+    fun vendorFavouriteDecodesFreqAndBandFlag() {
+        // Rdo_MyFavoriteN = freq | (am ? 0x10000 : 0), as the vendor radio writes it.
+        assertEquals(RadioPreset(band = fm, freq = 9630), RadioTuning.decodeVendorFavorite("9630"))
+        assertEquals(RadioPreset(band = am, freq = 1010), RadioTuning.decodeVendorFavorite("66546"))
+        assertEquals(null, RadioTuning.decodeVendorFavorite("0"))
+        assertEquals(null, RadioTuning.decodeVendorFavorite(""))
+        assertEquals(null, RadioTuning.decodeVendorFavorite("FM_96.30"))
+    }
+
+    @Test
+    fun vendorFavouriteRoundTrips() {
+        for (preset in listOf(RadioPreset(fm, 9630), RadioPreset(fm2, 8750), RadioPreset(am, 1710))) {
+            val back = RadioTuning.decodeVendorFavorite(RadioTuning.encodeVendorFavorite(preset))!!
+            assertEquals(preset.freq, back.freq)
+            assertTrue(RadioTuning.sameBandClass(preset.band, back.band))
+        }
     }
 
     @Test
