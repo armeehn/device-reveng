@@ -47,7 +47,7 @@ class ThemeCodecTest {
             onSurfaceMuted = 0xFF5B6672,
             error = 0xFFB71C1C,
         ),
-        style = ThemeStyle(cornerScale = 0.5f, monoType = true, hardEdge = true),
+        style = ThemeStyle(cornerScale = 0.5f, monoType = true, hardEdge = true, themedIcons = true),
     )
 
     @Test
