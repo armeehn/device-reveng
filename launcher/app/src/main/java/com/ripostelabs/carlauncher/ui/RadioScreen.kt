@@ -61,9 +61,9 @@ import kotlinx.coroutines.withContext
  * **What the roadmap asked for versus what the firmware has.** §3.4 planned "seek/scan" and an
  * "RDS text" line. Neither exists:
  *
- *  * **No scan.** The 144-method AIDL has `sendRadioKey`, `sendUserFreq` and a pile of *status*
- *    getters. `getRadioAMSState` / `getRadioAPSState` report whether an auto-store or
- *    auto-preset-scan is running, but nothing *starts* one. Seek is all we can drive.
+ *  * **Scan is a key, not a method.** `sendRadioKey(13)` starts a preset scan and 18 an
+ *    auto-store (the vendor app's SCAN / hold-SCAN); the AIDL getters only *report* them.
+ *    Neither is on this screen yet — seek is the control surface, as §3.4 asked.
  *  * **No radio text.** There is no PS (station name) or RT (radio text) getter anywhere.
  *    `getRadioPTYName` returns the programme *genre* ("Pop Music"), not a station. So this
  *    screen shows the indicator set that genuinely exists — RDS / TA / AF / TP / stereo plus
@@ -73,10 +73,14 @@ import kotlinx.coroutines.withContext
  * *source*, not a tuner band: `getRadioBand()` never reports one and no AIDL method selects it,
  * so the band toggle here is AM / FM only.
  *
- * Reading the tuner is polled, not pushed: `setRadioCallback` exists but its `ICallbackfn`
- * signature was never recovered, so registering it would be a guess. Blocking AIDL reads stay
- * off the composition body — doing them inline once spun a main-thread IPC recomposition loop
- * while seeking (see the incident note in `RadioSettingsScreen`).
+ * Reading the tuner is polled, not pushed: `CarService.claimRadio` registers the callback the
+ * gateway wants, but the screen keeps its poll rather than trusting opaque event ids. Blocking
+ * AIDL reads stay off the composition body — doing them inline once spun a main-thread IPC
+ * recomposition loop while seeking (see the incident note in `RadioSettingsScreen`).
+ *
+ * Every key and tune lands on the MCU whether or not the cabin is listening to the tuner, so
+ * the screen claims the radio source on entry — the same three calls the vendor radio app
+ * makes — and leaves it claimed on the way out, the way a car radio keeps playing.
  */
 @Composable
 fun RadioScreen(
@@ -110,6 +114,12 @@ fun RadioScreen(
         }
     }
 
+    // Own the audio path once per visit; a re-poll follows so the header reflects the mode.
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) { runCatching { carService.claimRadio() } }
+        refresh++
+    }
+
     // A committed scrub holds the readout at its target until the re-poll after `sendUserFreq`
     // has landed, instead of snapping back to the pre-drag station for one frame.
     var tuneHold by remember { mutableStateOf<Int?>(null) }
@@ -118,8 +128,9 @@ fun RadioScreen(
     fun tuneTo(freq: Int) {
         tuneHold = freq
         feedback?.tap()
+        val fm = RadioTuning.bandClassOf(tuner.band) == RadioTuning.BandClass.FM
         scope.launch {
-            withContext(Dispatchers.IO) { runCatching { carService.sendUserFreq(freq) } }
+            withContext(Dispatchers.IO) { runCatching { carService.sendUserFreq(freq, fm) } }
             refresh++
             delay(TUNE_HOLD_MS)
             tuneHold = null
@@ -130,7 +141,7 @@ fun RadioScreen(
         control {
             RadioTuning.switchBandClass(
                 readBand = { carService.getRadioBand() },
-                toggleBand = { carService.radioBandToggle() },
+                selectBand = { RadioTuning.selectBand(carService, it) },
                 target = target,
             )
         }
@@ -169,8 +180,8 @@ fun RadioScreen(
                     control {
                         RadioTuning.recallPreset(
                             readBand = { carService.getRadioBand() },
-                            toggleBand = { carService.radioBandToggle() },
-                            tune = { carService.sendUserFreq(it) },
+                            selectBand = { RadioTuning.selectBand(carService, it) },
+                            tune = { carService.sendUserFreq(it, !CarService.isAmBand(preset.band)) },
                             preset = preset,
                         )
                     }
@@ -188,7 +199,7 @@ fun RadioScreen(
 
             TunerControls(
                 onSeekDown = { control { carService.radioSeekDown() } },
-                onBand = { control { carService.radioBandToggle() } },
+                onBand = { switchBand(RadioTuning.otherBandClass(tuner.band)) },
                 onSeekUp = { control { carService.radioSeekUp() } },
             )
 
@@ -236,9 +247,8 @@ private fun RadioHeader(
 }
 
 /**
- * AM | FM segmented toggle. The AIDL only has a *cycle* key (FM1 → FM2 → … → AM), so selecting
- * a class toggles until the tuner reports it — bounded, re-polled, off the main thread. Tapping
- * the active class is a no-op rather than a cycle, so a driver who misses cannot land on FM2.
+ * AM | FM segmented toggle. Selecting a class sends its direct band key and re-polls until the
+ * tuner reports it — bounded, off the main thread. Tapping the active class is a no-op.
  */
 @Composable
 private fun BandToggle(

@@ -1,16 +1,14 @@
 // ICallbackfn.aidl
 //
-// Reconstructed callback interface referenced by the radio/EQ/CAN setter methods
-// in IEventService (CAR_API §3.2, e.g. setRadioCallback(ICallbackfn),
-// setCanA5DataCallback(ICallbackfn), setCurModeCallback(int, ICallbackfn)).
+// The gateway's generic callback, as decompiled from
+// com.szchoiceway.eventcenter.ICallbackfn (rav4-apps/decompiled). Registered through
+// setRadioCallback, setCurModeCallback(int, …) and the CAN data callbacks.
 //
-// TODO: the exact method signature(s) of ICallbackfn were NOT transcribed in
-// CAR_API.md — the real shape lives in the decompiled ICallbackfn.java. The single
-// callback below is a best-guess placeholder that is enough for the interface to
-// compile and for read-only binding. Verify against the device before relying on it.
+// Transaction ordinals are declaration order: notifyEvt = 1, checkIsActive = 2.
+// The vendor radio app's own stubs answer checkIsActive() with false.
 package com.szchoiceway.eventcenter;
 
 interface ICallbackfn {
-    // Placeholder: gateway delivers an event id + payload. Adjust to the real signature.
-    void onCallback(int what, in byte[] data);
+    void notifyEvt(int what, int arg1, int arg2, in byte[] data, String str);
+    boolean checkIsActive();
 }
