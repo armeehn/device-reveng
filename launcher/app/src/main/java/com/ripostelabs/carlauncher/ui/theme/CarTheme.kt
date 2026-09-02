@@ -87,11 +87,14 @@ private fun Color.compositeOverOpaque(bg: Color): Color {
  * @param cornerScale multiplier applied to every corner radius (0 = sharp corners).
  * @param monoType    use the JetBrains Mono brand type scale instead of the system sans.
  * @param hardEdge    cards get a 2dp structural border + hard 4dp offset shadow (no blur).
+ * @param themedIcons app icons are redrawn in the palette: the app's monochrome layer, or
+ *                    its first letter, on a plate (see ui/icons). Off = real icons.
  */
 data class ThemeStyle(
     val cornerScale: Float = 1f,
     val monoType: Boolean = false,
     val hardEdge: Boolean = false,
+    val themedIcons: Boolean = false,
 )
 
 /**
@@ -405,7 +408,7 @@ object BuiltInThemes {
         id = "builtin.riposte",
         name = "Riposte",
         isBuiltIn = true,
-        style = ThemeStyle(cornerScale = 0f, monoType = true, hardEdge = true),
+        style = ThemeStyle(cornerScale = 0f, monoType = true, hardEdge = true, themedIcons = true),
         day = ThemeColors(
             background = 0xFFF6F1E7, // Bone
             surface = 0xFFF6F1E7, // cards are bone too — the 2dp ink border separates

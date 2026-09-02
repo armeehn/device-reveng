@@ -103,7 +103,7 @@ fun StatusBar(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
+        AutoSizeText(
             text = time,
             // §2.1 asks for a 40 sp clock; 36 sp is the most the strip fits without growing
             // into the content band below (documented deviation).

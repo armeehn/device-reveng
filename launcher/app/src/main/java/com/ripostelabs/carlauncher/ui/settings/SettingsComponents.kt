@@ -1,5 +1,6 @@
 package com.ripostelabs.carlauncher.ui.settings
 
+import com.ripostelabs.carlauncher.ui.AutoSizeText
 import com.ripostelabs.carlauncher.ui.theme.carCard
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -75,7 +76,7 @@ fun SettingsScaffold(
             SettingsIconTile(icon = Icons.AutoMirrored.Filled.ArrowBack, label = "Back", onClick = onBack)
             Spacer(Modifier.width(16.dp))
             Column {
-                Text(
+                AutoSizeText(
                     text = title,
                     style = MaterialTheme.typography.headlineMedium,
                     color = MaterialTheme.colorScheme.onBackground,
@@ -139,7 +140,7 @@ fun SettingsSection(title: String? = null, content: @Composable () -> Unit) {
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         if (title != null) {
-            Text(
+            AutoSizeText(
                 text = title,
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurface,
@@ -187,7 +188,7 @@ fun SettingsCategoryCard(
         }
         Spacer(Modifier.width(16.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(
+            AutoSizeText(
                 text = title,
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurface,
@@ -238,7 +239,7 @@ fun SettingRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(
+            AutoSizeText(
                 text = label,
                 style = MaterialTheme.typography.bodyLarge,
                 color = if (enabled) MaterialTheme.colorScheme.onSurface
@@ -312,7 +313,7 @@ fun SliderSetting(
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(
+                AutoSizeText(
                     text = label,
                     style = MaterialTheme.typography.bodyLarge,
                     color = if (enabled) MaterialTheme.colorScheme.onSurface
@@ -366,7 +367,7 @@ fun <T> PickerSetting(
         onClick = { if (enabled) open = true },
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
+            AutoSizeText(
                 text = currentLabel,
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.primary,
@@ -396,7 +397,7 @@ fun <T> PickerSetting(
 @Composable
 fun InfoRow(label: String, value: String) {
     SettingRow(label = label) {
-        Text(
+        AutoSizeText(
             text = value,
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -425,7 +426,7 @@ fun ActionRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(
+            AutoSizeText(
                 text = label,
                 style = MaterialTheme.typography.bodyLarge,
                 color = if (enabled) tint else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -487,7 +488,7 @@ fun VolumeSlider(
                 )
             }
             Spacer(Modifier.width(12.dp))
-            Text(
+            AutoSizeText(
                 text = label,
                 style = MaterialTheme.typography.bodyLarge,
                 color = if (enabled) MaterialTheme.colorScheme.onSurface
@@ -564,7 +565,7 @@ fun DialogTextButton(
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(text = label, style = MaterialTheme.typography.titleMedium, color = fg)
+        AutoSizeText(text = label, style = MaterialTheme.typography.titleMedium, color = fg)
     }
 }
 
@@ -577,7 +578,7 @@ fun ValueBadge(text: String) {
             .background(MaterialTheme.colorScheme.surfaceVariant)
             .padding(horizontal = 12.dp, vertical = 6.dp),
     ) {
-        Text(
+        AutoSizeText(
             text = text,
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.onSurface,

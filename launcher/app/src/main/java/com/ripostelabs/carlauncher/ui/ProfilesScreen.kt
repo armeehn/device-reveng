@@ -125,7 +125,7 @@ fun ProfilesScreen(
 private fun ParkedOnlySaveButton(onCapture: () -> Unit) {
     val locked = LocalParkedOnlyLock.current
     val alpha = if (locked) DISABLED_ALPHA else 1f
-    Text(
+    AutoSizeText(
         text = if (locked) "Save — when parked" else "Save current setup",
         style = MaterialTheme.typography.titleMedium,
         color = MaterialTheme.colorScheme.onPrimary.copy(alpha = alpha),
@@ -197,7 +197,7 @@ private fun ProfileRow(
                 fontWeight = FontWeight.SemiBold,
                 color = fg,
             )
-            Text(
+            AutoSizeText(
                 text = "${profile.favorites.size} favourites · ${profile.driverSide.name.lowercase()}",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
