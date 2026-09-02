@@ -13,6 +13,18 @@ object SourceLabels {
 
     private val byPackage = mapOf(ZLINK to CARPLAY)
 
+    /**
+     * RAV4-52: what the gateway titles the source while a phone is projected
+     * (`ZlinkManage.setCarPlayValidModeInfor`, `:591-605`). Its `getValidModeTitle` answer.
+     */
+    private val projectionTitles = setOf("Carplay", "Android Auto", "HUAWEI HiCar", "Airplay", "DLNA")
+
     /** The friendly label for [pkg], or null to fall back to the package's own label. */
     fun of(pkg: String): String? = byPackage[pkg]
+
+    /** The session belongs to the Zlink receiver. */
+    fun isCarPlay(pkg: String?): Boolean = pkg == ZLINK
+
+    /** The vendor's current source title names a projected phone. */
+    fun isProjection(vendorTitle: String?): Boolean = vendorTitle in projectionTitles
 }
