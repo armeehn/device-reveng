@@ -37,7 +37,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ripostelabs.carlauncher.carlib.CarService
@@ -187,7 +186,7 @@ private fun RadioHeader(tuner: TunerState, onBack: () -> Unit) {
             color = MaterialTheme.colorScheme.onBackground,
         )
         Spacer(Modifier.weight(1f))
-        Text(
+        AutoSizeText(
             text = tuner.bandLabel(),
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.SemiBold,
@@ -255,7 +254,7 @@ private fun Indicator(label: String, on: Boolean?) {
         false -> MaterialTheme.colorScheme.onSurfaceVariant
         null -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = UNKNOWN_ALPHA)
     }
-    Text(
+    AutoSizeText(
         text = label,
         style = MaterialTheme.typography.titleMedium,
         color = fg,
@@ -430,12 +429,10 @@ private fun VendorPresetLine(values: List<String>) {
     if (values.isEmpty()) {
         return
     }
-    Text(
+    AutoSizeText(
         text = "Vendor presets (raw, read-only): " + values.joinToString(" · "),
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
     )
 }
 
