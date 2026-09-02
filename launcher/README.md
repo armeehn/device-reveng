@@ -208,11 +208,11 @@ Two things §3.3/§3.4 planned turned out not to exist, so they are not built:
 - **No NET.** The vendor radio app's AM / FM / NET row had a third tab for its internet-radio
   source. `getRadioBand()` never reports it and no `IEventService` method selects it, so the
   band toggle is AM / FM only.
-- **No RDS text.** The 144-method AIDL has no PS (station name) or RT (radio text) getter.
-  `getRadioPTYName` (ordinal 19) returns the programme *genre* — "Pop Music" — not a station.
-  So the screen shows the indicators that do exist (RDS / TA / AF / TP / stereo + PTY genre)
-  rather than an empty scroller. `ZXW_RADIO_INFO_EVT` may carry more, but only its action
-  string was recovered: no sender was traced and no payload extra is named.
+- **Station name yes, radio text no.** `getRadioPTYName` (ordinal 19) is misnamed: the gateway
+  stores the MCU's RDS PS frame in `mRadioPSName` and returns it there, so the screen shows the
+  station name. The genre is `getRadioPTYNum` (index into a 32-entry PTY table). There is no RT
+  getter. `ZXW_RADIO_INFO_EVT` is sent by the gateway on band/frequency change with int extras
+  `RadioBndNum`, `RadioTuneNum`, `RadioCurFreq` — nothing the getters do not already say.
 - **Scan is a key.** `getRadioAMSState` / `getRadioAPSState` only report; `sendRadioKey(13)`
   starts a preset scan and 18 an auto-store. Neither is wired to a control yet.
 
@@ -311,13 +311,12 @@ thumb column (quick launch + radio) so the interactive set stays under the drive
 (LAUNCHER_DESIGN §2.5). The focus ring mirrors with it, so a LEFT press still walks toward whatever
 is now on the left. The centre column is symmetric and never moves.
 
-**Auto cannot actually infer this, and does not pretend to.** `Sys_CarType` is documented in
-CAR_API §2.3 as a "car model/type profile id" and nothing more; its value domain was never
-recovered, because the vendor settings APK holding the enum tables is not in the decompile. So
-`data/Reachability.kt` ships an **empty** RHD table, Auto always resolves to LHD, and the settings
-screen prints the live raw `Sys_CarType` next to the override so a user in an RHD car can report
-theirs. Any value added to that table is GUESSED until it is checked against a car that is actually
-right-hand drive.
+**Auto cannot infer this on this platform, and says so.** `Sys_CarType` is the model index
+within `Sys_Vehicle_deries` (RAV4 = 2 under Toyota = 1, CAR_API §2.3), the same on every market,
+and the steering side is a CAN-box car setting that canbus2 keeps in an in-process map for its
+console page — no SysVar, no broadcast. So `data/Reachability.kt` ships an **empty** RHD table
+that must stay empty, Auto always resolves to LHD, and the settings screen prints the raw
+`Sys_CarType` next to the override so a user can confirm the vehicle profile.
 
 ## The cockpit release (v3.0)
 
@@ -410,18 +409,18 @@ command containing a newline would split into two root commands on a stdin chann
 a command is refused and falls back to `su -c`, where a newline is safely inside one argv
 entry.
 
-### Vendor status & nav bar
+### Vendor nav bar
 
-Settings ▸ Root tier ▸ **Hide vendor bars** writes the SysVar keys
-`Sys_Statusbar_Icon_Config_Key` and `SYS_SHOW_TOOL_NAVI_BAR_WND` (CAR_API §6.3) — the
-*persistent* config the vendor stack reads for itself, so it survives a reboot.
+Settings ▸ Root tier ▸ **Hide vendor nav bar** sets the SysVar `Sys_Customer_NaviBar_Height_Key`
+to 0 (the factory page's own "No bottom bar" option) — the *persistent* config the gateway reads
+for itself at boot and re-applies live on `changeSetup`, so it survives a reboot. The gateway
+honours the key only with `Sys_Landscape` = 1, and the toggle says so when that is not the case.
 
-Both are **GUESSED** and the toggle is opt-in for that reason: the first key is an icon
-*list*, not a flag, and the second is quoted in CAR_API in the vendor's constant-name form,
-whose stored keyname usually differs. Three things keep that safe — the toggle only writes a
-key that **already exists** in the live table (a wrong guess changes nothing rather than
-inserting junk into the vehicle's config store), it records each key's original value before
-the first hide, and turning it off writes those originals back verbatim.
+The two earlier keys were wrong: `SYS_SHOW_TOOL_NAVI_BAR_WND` is a system property the gateway
+writes as a mirror for skins 108/126/127 and nobody reads, and `Sys_Statusbar_Icon_Config_Key`
+has no reader in any vendor package. **No SysVar hides the status bar**; the gateway forces it on
+in every branch. The safeties stay: the toggle only writes a key that **already exists** in the
+live table, records the original height before the first hide, and writes it back verbatim off.
 
 ### Sole-HOME mode, and how to get back
 
@@ -624,17 +623,14 @@ approximation; a sunset calculation would be wrong exactly when it matters.
 - **Reverse camera feed** — `ReverseOverlay` is a black placeholder; embed a `SurfaceView`
   bound to the reverse video input, or host `com.szchoiceway.view.BackCarActivity`.
 - **Climate widget** — placeholder only; wire `CarAirState`.
-- **`ZXW_RADIO_INFO_EVT`** — the action string is known but its payload is not, and no sender
-  was traced. Capturing it on-device would replace RadioScreen's 3 s poll with a push, and may
-  be the only route to a station name (see v2.6 above).
-- **`Rdo_MyFavorite0..5` encoding** — capture the raw values (RadioScreen shows them) to make
-  two-way preset sync with the vendor radio safe.
+- **`Rdo_MyFavorite0..5` write-back** — the encoding is known (`freq | (am ? 0x10000 : 0)`,
+  `RadioTuning.encodeVendorFavorite`) and the slots are recallable from RadioScreen; writing our
+  presets into them is a product decision, not a research item any more.
 - **Radar byte layout** — still **UNCONFIRMED** (v2.8 above). Run the capture, then either fix the
   offsets in `RadarState` or set the layout-confirmed flag. Until then the maneuvering side-strips
   never draw.
-- **`Sys_CarType` value domain** — needed before the reachability mirror's Auto mode can mean
-  anything. `Reachability.KNOWN_RHD_CAR_TYPES` is empty and must stay empty until a value is read
-  off a real RHD car.
+- **Steering side** — not recoverable from SysVar (`Sys_CarType` is a model index). The
+  reachability mirror's Auto mode stays LHD; only a CAN-box console read could ever feed it.
 - **Vendor `sendMode` value table** — needed before MediaScreen can switch the car between
   Bluetooth / USB / the built-in player.
 - **`CAN_CAR_OUT_SIDE_TEMP_EVT` / `ZXW_CAN_WHEEL_TRACK_EVT` extra keys** — the actions are

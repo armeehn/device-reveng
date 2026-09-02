@@ -2,6 +2,7 @@ package com.ripostelabs.carlauncher.data
 
 import android.content.Context
 import android.os.SystemClock
+import com.ripostelabs.carlauncher.carlib.CarService
 import com.ripostelabs.carlauncher.carlib.VendorChrome
 import com.ripostelabs.carlauncher.carlib.VendorLauncher
 import kotlinx.coroutines.CoroutineScope
@@ -26,21 +27,21 @@ import kotlinx.coroutines.withContext
 class RootTierController(
     context: Context,
     private val scope: CoroutineScope,
+    carService: CarService? = null,
 ) {
     private val appContext = context.applicationContext
-    private val chrome = VendorChrome(appContext)
+    private val chrome = VendorChrome(appContext, carService)
 
     private val _chromeHidden = MutableStateFlow(chrome.isHidden())
-    /** True while we are suppressing the vendor status/nav bar. */
+    /** True while we are suppressing the vendor nav bar. */
     val chromeHidden: StateFlow<Boolean> = _chromeHidden.asStateFlow()
 
-    private val _chromeKeysPresent = MutableStateFlow<List<String>?>(null)
+    private val _chromeSupport = MutableStateFlow<VendorChrome.Support?>(null)
     /**
-     * Which of the two vendor chrome keys this unit actually has; null until probed, empty when
-     * neither exists. Surfaced because both keynames are GUESSED (see [VendorChrome]) and "the
-     * toggle did nothing" should be visible, not mysterious.
+     * Whether this unit can act on the nav-bar toggle; null until probed. Surfaced so "the toggle
+     * did nothing" is visible, not mysterious (see [VendorChrome.Support]).
      */
-    val chromeKeysPresent: StateFlow<List<String>?> = _chromeKeysPresent.asStateFlow()
+    val chromeSupport: StateFlow<VendorChrome.Support?> = _chromeSupport.asStateFlow()
 
     private val _vendorLauncher = MutableStateFlow(VendorLauncher.State.UNKNOWN)
     /** UNKNOWN until [refresh] has probed — which is also how the UI already reads "no control". */
@@ -68,7 +69,7 @@ class RootTierController(
         // SysVar sweep rather than on the launcher's cold-start path.
         scope.launch {
             withContext(Dispatchers.IO) {
-                _chromeKeysPresent.value = chrome.presentKeys()
+                _chromeSupport.value = chrome.support()
                 _vendorLauncher.value = VendorLauncher.state(appContext)
             }
         }

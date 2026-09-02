@@ -11,12 +11,16 @@ import com.ripostelabs.carlauncher.carlib.CarService
  * BrightnessController — makes the Display screen's backlight slider actually change the
  * screen, without root.
  *
- * The vendor illumination SysVars (`Sys_Light_Level_set`, `Set_Day_Light`, …) only take effect
- * when written as root/system, so on a plain install the slider moved but nothing happened. This
- * drives the **Android framework** backlight instead — `Settings.System.SCREEN_BRIGHTNESS`
- * (0–255) plus manual mode — which a normal app can write once it holds the special-access
- * `WRITE_SETTINGS` permission ([canWrite] / [requestPermission]). As a best-effort second path it
- * also pushes the level to the MCU over the vendor AIDL ([CarService.sendBacklight]).
+ * The vendor backlight is `Set_Day_Light` / `Set_Night_Light` (0..20) and reaches the MCU only
+ * through `IEventService.sendBacklight(day, night)`; a SysVar write alone fires a broadcast and
+ * nothing else (`EventService.java:4847-4854`). `Sys_Light_Level_set` is a 0..3 SystemUI dim
+ * level, not the backlight. Those need root or a bound gateway, so on a plain install the slider
+ * used to move and nothing happened. This drives the **Android framework** backlight instead —
+ * `Settings.System.SCREEN_BRIGHTNESS` (0–255) plus manual mode — which a normal app can write
+ * once it holds the special-access `WRITE_SETTINGS` permission ([canWrite] / [requestPermission]).
+ * As a best-effort second path it also pushes the same level to the MCU as both day and night
+ * targets ([CarService.sendBacklight]), without persisting the vendor rows: the persistent vendor
+ * path is [CarSettingsController.setBacklight] on the Display screen.
  *
  * Percent (0–100) is the UI unit; the framework value is 0–255.
  */
@@ -45,6 +49,15 @@ object BrightnessController {
         val p = percent.coerceIn(0, 100) / 100.0
         val raw = MIN_APPLY + (USABLE_MAX - MIN_APPLY) * p
         return Math.round(raw).toInt().coerceIn(MIN_APPLY, USABLE_MAX)
+    }
+
+    /**
+     * slider 0–100 % → MCU backlight target, linear over 0..[CarService.BACKLIGHT_MAX]. The framework
+     * band above happens to top out at the same number; the two scales are otherwise unrelated.
+     */
+    internal fun percentToBacklight(percent: Int): Int {
+        val p = percent.coerceIn(0, 100) / 100.0
+        return CarService.clampBacklight(Math.round(CarService.BACKLIGHT_MAX * p).toInt())
     }
 
     /** raw backlight value → slider 0–100 % (inverse; values above the band read as 100 %). */
@@ -106,8 +119,10 @@ object BrightnessController {
      */
     fun setPercent(context: Context, percent: Int, carService: CarService?): Boolean {
         val value = percentToRaw(percent)
-        // Best-effort MCU path regardless of WRITE_SETTINGS (guarded, no-op if unbound).
-        runCatching { carService?.sendBacklight(value) }
+        // Best-effort MCU path regardless of WRITE_SETTINGS (guarded, no-op if unbound). Both
+        // targets get the level so the push is right whichever side the panel is showing.
+        val mcu = percentToBacklight(percent)
+        runCatching { carService?.sendBacklight(mcu, mcu) }
 
         if (!canWrite(context)) return false
         return runCatching {

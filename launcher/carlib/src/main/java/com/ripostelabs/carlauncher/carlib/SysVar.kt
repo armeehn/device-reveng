@@ -42,8 +42,8 @@ class SysVar(private val context: Context) {
         const val KEY_BACKCAR_DISPLAY_RADAR = "Sys_BackCar_Display_Radar_Key"
         const val KEY_REVERSE_ASSIST_LINE = "Sys_Reverse_Assist_Line_Key"
         const val KEY_TRACK_LINE_TYPE = "Sys_TrackLineType"
-        const val KEY_LIGHT_LEVEL_SET = "Sys_Light_Level_set"
-        const val KEY_DAY_NIGHT_MODE = "Sys_Day_Night_Mode"
+        const val KEY_LIGHT_LEVEL_SET = "Sys_Light_Level_set" // 0..3 SystemUI dim level, not backlight
+        const val KEY_DAY_NIGHT_MODE = "Sys_Day_Night_Mode" // 0 headlamps, 1 day, 2 night, 3 by time
         const val KEY_CAR_SPEED_UNIT = "Sys_Car_Speed_Unit" // 0=km/h 1=mph
         const val KEY_SHOW_CAR_SPEED = "Set_ShowCarSpeed"
         const val KEY_MCU_VERSION = "Sys_McuVersion"
