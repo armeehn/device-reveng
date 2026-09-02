@@ -61,13 +61,23 @@ class SetupDoctor(
     private val _repairing = MutableStateFlow(false)
     val repairing: StateFlow<Boolean> = _repairing.asStateFlow()
 
+    /** The "Vendor apps" section: what [OemApps] hides, what may go, what must not be missing. */
+    private val _vendorApps = MutableStateFlow<OemApps.Report?>(null)
+    val vendorApps: StateFlow<OemApps.Report?> = _vendorApps.asStateFlow()
+
+    @Volatile
+    private var shadowPolicy = OemApps.ShadowPolicy.DEFAULT
+
     init {
         refresh()
     }
 
-    fun refresh() {
+    /** Re-probe everything. [policy] is the driver's current OEM-shadow choice, remembered. */
+    fun refresh(policy: OemApps.ShadowPolicy = shadowPolicy) {
+        shadowPolicy = policy
         scope.launch {
             _checks.value = withContext(Dispatchers.IO) { probe() }
+            _vendorApps.value = withContext(Dispatchers.IO) { probeVendorApps() }
         }
     }
 
@@ -192,6 +202,27 @@ class SetupDoctor(
             adbCommand = adbCommand,
             rootCommand = null,
         )
+    }
+
+    /**
+     * The OEM matrix against the unit. Reports only; the uninstall lines it carries are for a
+     * human at an adb or root shell, never run from here — a wrong `pm uninstall` on a KEEP
+     * package takes the gateway with it.
+     */
+    private fun probeVendorApps(): OemApps.Report {
+        val installed = installedPackages()
+        // getInstalledPackages lists disabled packages too; a disabled gateway is as gone as
+        // an uninstalled one, so the KEEP warning keys off the enabled subset.
+        val enabled = runCatching {
+            appContext.packageManager
+                .getInstalledPackages(0)
+                .filter { it.applicationInfo?.enabled != false }
+                .mapTo(mutableSetOf()) { it.packageName }
+        }.getOrElse {
+            Log.w(TAG, "package enumeration failed", it)
+            installed
+        }
+        return OemApps.report(installed, enabled, shadowPolicy)
     }
 
     /** Installed package names, empty if PackageManager refuses the query. */
