@@ -4,6 +4,9 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
 import android.os.IBinder
 import android.util.Log
 import com.szchoiceway.eventcenter.ICallbackfn
@@ -12,6 +15,7 @@ import com.szchoiceway.eventcenter.IEventService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import java.util.concurrent.Executors
 
 /**
@@ -52,8 +56,21 @@ class CarService(private val appContext: Context) {
         const val RADIO_KEY_AUTO_STORE = 18
         const val RADIO_KEY_ST_MONO = 19
         const val RADIO_KEY_DX_LOC = 20
+        const val RADIO_KEY_AF = 21
+        const val RADIO_KEY_PTY_SEEK = 22
+        const val RADIO_KEY_TA = 23
+        const val RADIO_KEY_BAND_CYCLE = 24
+        const val RADIO_KEY_NEXT = 25
+        const val RADIO_KEY_PREV = 26
         const val RADIO_KEY_BAND_FM = 30
         const val RADIO_KEY_BAND_AM = 31
+
+        /** Mode-callback event: the gateway's valid mode changed; arg2 is the new eSrcMode int. */
+        const val EVT_MODE_CHANGE = 4097
+        /** Mode-callback event: a panel/wheel key while we own the mode; arg2 is the MCU key. */
+        const val EVT_MODE_KEY = 4098
+        /** eSrcMode.SRC_CARPLAY — the one other mode the vendor radio tolerates without exiting. */
+        const val SRC_CARPLAY = 32
 
         /** The tuner as an audio source: EventUtils.eSrcMode.SRC_RADIO, the int sendMode takes. */
         const val SRC_RADIO = 1
@@ -222,6 +239,8 @@ class CarService(private val appContext: Context) {
     fun radioSelectAm() = sendRadioKey(RADIO_KEY_BAND_AM)
     fun radioSeekDown() = sendRadioKey(RADIO_KEY_SEEK_DOWN)
     fun radioSeekUp() = sendRadioKey(RADIO_KEY_SEEK_UP)
+    fun radioToggleTa() = sendRadioKey(RADIO_KEY_TA)
+    fun radioToggleAf() = sendRadioKey(RADIO_KEY_AF)
 
     /**
      * Route tuner audio to the amp, the way the vendor radio app does it
@@ -239,15 +258,62 @@ class CarService(private val appContext: Context) {
         call { setRadioCallback(radioCallback) }
         call { sendMode(SRC_RADIO, false) }
         call { sendMode(SRC_RADIO, false) }
+        takeRadioFocus()
     }
 
-    /** Answers like the vendor's stubs; the screens poll, so events are only logged. */
+    /**
+     * Hand the tuner source back (exitCurMode; a no-op in the gateway unless we hold it). The
+     * vendor radio does this when another source wins or its audio focus is lost for good.
+     */
+    fun releaseRadio() {
+        call { exitCurMode(SRC_RADIO) }
+        radioFocus?.let { appContext.getSystemService(AudioManager::class.java)?.abandonAudioFocusRequest(it) }
+    }
+
+    /**
+     * Bumps on every tuner event the gateway pushes (band, tune slot, frequency, PS name, the
+     * status bits) and on mode changes, so a screen can re-poll when something happened instead
+     * of on a timer. The events' ids: 0 status bits, 1 band, 2 slot, 3 freq, 5 PTY, 6 PS name.
+     */
+    private val _radioEvents = MutableStateFlow(0L)
+    val radioEvents: StateFlow<Long> = _radioEvents.asStateFlow()
+
+    /** Answers like the vendor's stubs (checkIsActive = false). */
     private val radioCallback = object : ICallbackfn.Stub() {
         override fun notifyEvt(what: Int, arg1: Int, arg2: Int, data: ByteArray?, str: String?) {
-            Log.d(TAG, "radio event $what ($arg1, $arg2)")
+            if (what == EVT_MODE_CHANGE && arg2 != SRC_RADIO && arg2 != SRC_CARPLAY) {
+                Log.i(TAG, "radio: mode moved to $arg2")
+            }
+            _radioEvents.update { it + 1 }
         }
 
         override fun checkIsActive(): Boolean = false
+    }
+
+    // Android-side audio focus, like the vendor radio: whatever was playing pauses, and a
+    // permanent loss (another media app started) hands the MCU source back too.
+    private var radioFocus: AudioFocusRequest? = null
+
+    private val radioFocusListener = AudioManager.OnAudioFocusChangeListener { change ->
+        if (change == AudioManager.AUDIOFOCUS_LOSS) {
+            Log.i(TAG, "radio: audio focus lost, releasing the source")
+            releaseRadio()
+        }
+    }
+
+    private fun takeRadioFocus() {
+        val audio = appContext.getSystemService(AudioManager::class.java) ?: return
+        val request = radioFocus ?: AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                    .build(),
+            )
+            .setOnAudioFocusChangeListener(radioFocusListener)
+            .build()
+            .also { radioFocus = it }
+        audio.requestAudioFocus(request)
     }
 
     // v1.7 — RDS/TA status getters (AIDL ordinals 16 / 21). Read-only: no AIDL setter exists.
@@ -271,8 +337,12 @@ class CarService(private val appContext: Context) {
     fun getRadioTp(): Boolean? = call { getRadioTPIconState() }
     /** Stereo icon state (getRadioSteroIconState, ordinal 26 — vendor's spelling). */
     fun getRadioStereo(): Boolean? = call { getRadioSteroIconState() }
-    /** Programme-type *genre* name (getRadioPTYName, ordinal 19). Not the station name. */
-    fun getRadioPtyName(): String? = call { getRadioPTYName() }
+    /**
+     * The RDS PS station name (getRadioPTYName, ordinal 19 — misnamed by the vendor: the gateway
+     * stores the MCU's PS frame in `mRadioPSName` and returns it here). The genre is
+     * `getRadioPTYNum()`, an index into the vendor's 32-entry PTY table. No radio text (RT) exists.
+     */
+    fun getRadioStationName(): String? = call { getRadioPTYName() }
 
     // ---- v1.5: Audio / EQ (CAR_API §3.2; ordinals confirmed in AIDL_ORDINALS.md) --------
     /** Current EQ preset index (getEQMode, ordinal 55). */
