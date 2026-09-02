@@ -5,6 +5,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import com.szchoiceway.canbus.CarAirState
 import kotlinx.coroutines.channels.awaitClose
@@ -54,13 +56,15 @@ class CarEvents(private val appContext: Context) {
         const val MCU_MSG_BACKCAR_START = "com.choiceway.eventcenter.EventUtils.MCU_MSG_BACKCAR_START"
         const val MCU_MSG_BACKCAR_END = "com.choiceway.eventcenter.EventUtils.MCU_MSG_BACKCAR_END"
 
-        // ---- ACC power (CAR_API §1.3) — unprotected -------------------------
+        // ---- ACC power (CAR_API §1.3) — unprotected (EventUtils.java:42,44) -----
         const val ACTION_ACC_OPEN_CLOSE_EVT =
-            "com.choiceway.eventcenter.EventUtils.ACTION_ACC_OPEN_CLOSE_EVT"
+            "com.szchoiceway.eventcenter.EventUtils.ACTION_ACC_OPEN_CLOSE_EVT"
         const val ACTION_ACC_SLEEP_STATUS_EVT =
-            "com.choiceway.eventcenter.EventUtils.ACTION_ACC_SLEEP_STATUS_EVT"
-        /** int extra: 1 = ACC on, 0 = off. */
+            "com.szchoiceway.eventcenter.EventUtils.ACTION_ACC_SLEEP_STATUS_EVT"
+        /** int extra: 1 = ACC on / awake, 0 = off / entering sleep. */
         const val EXTRA_ACC_STATUS = "ACC_Status"
+        const val ACC_STATUS_ON = 1
+        const val ACC_STATUS_SLEEP = 0
 
         // ---- Steering-wheel keys (CAR_API §4) — protected -------------------
         const val STEER_WHEEL_INFOR = "com.choiceway.eventcenter.EventUtils.STEER_WHEEL_INFOR"
@@ -74,24 +78,19 @@ class CarEvents(private val appContext: Context) {
         /** int: raw resistive-key ADC voltage. */
         const val EXTRA_SWC_VOLTAGE = "EventUtils.STEER_WHEEL_INFOR_VOLTAGE"
 
-        /** Secondary host/panel key path (unprotected). */
-        const val ACTION_HOST_MCU_BUTTON_KEY =
-            "com.choiceway.eventcenter.EventUtils.ACTION_HOST_MCU_BUTTON_KEY"
-        const val EXTRA_HOST_KEY = "HostKeyWord"
-        const val EXTRA_HOST_STATUS_KEY = "HostKeyStatus"
-
-        /** Tertiary panel key path (unprotected). */
-        const val MCU_KEY_INFOR_ACTION = "com.choiceway.eventcenter.EventUtils.MCU_KEY_INFOR"
+        /**
+         * Every MCU-reported key, unprotected (EventUtils.java:1521,1633; sent :2147-2154).
+         * The int is an `MCU_KEY_*` code, one broadcast per press — see [SwcFallback].
+         */
+        const val MCU_KEY_INFOR_ACTION = "com.szchoiceway.eventcenter.EventUtils.MCU_KEY_INFOR"
         const val EXTRA_MCU_KEY_VALUE = "EventUtils.MCU_KEY_VALUE"
 
         // ---- v0.4.9: vendor "open the app drawer" broadcast (CUSTOMERUI_NOTES §6) ----
         // The gateway broadcasts this (unprotected) to make the launcher open its in-process
-        // drawer; customerui registers exactly this action. Only the const NAME and the extra
-        // are quoted in the decompile, so the fully-qualified action string follows the
-        // EventUtils.* convention and is GUESSED at that prefix (same status as CAN_BASIC_EVT).
-        const val ZXW_ACTION_LAUNCHER_ALLAPPS_START_EVT =
-            "com.choiceway.eventcenter.EventUtils.ZXW_ACTION_LAUNCHER_ALLAPPS_START_EVT"
-        const val EXTRA_LAUNCHER = "LAUNCHER_EXTRA"
+        // drawer. The action is the BARE constant name, not an EventUtils.* string
+        // (EventUtils.java:74), and the extra is "zxw_Launcher" (:1406, sent EventService.java:8225).
+        const val ZXW_ACTION_LAUNCHER_ALLAPPS_START_EVT = "ZXW_ACTION_LAUNCHER_ALLAPPS_START_EVT"
+        const val EXTRA_LAUNCHER = "zxw_Launcher"
         const val LAUNCHER_EXTRA_APPLIST = "AppList"
 
         // ---- Vendor BT module status (btsuite/BTUtils.java:88-105) -----------
@@ -118,29 +117,50 @@ class CarEvents(private val appContext: Context) {
         const val SHOW_CAR_SPEED_EVENT =
             "com.choiceway.eventcenter.EventUtils.SHOW_CAR_SPEED_EVENT"
 
-        // ---- Day / night backlight (CAR_API §1.3) — protected ---------------
-        const val ACTION_DAY_BACKLIGHT_CHANGED = "com.szchoiceway.ACTION_DAY_BACKLIGHT_CHAGNED"
-        const val ACTION_NIGHT_BACKLIGHT_CHANGED = "com.szchoiceway.ACTION_NIGHT_BACKLIGHT_CHAGNED"
+        // ---- Day / night (CAR_API §1.3) — unprotected ----------------------------
+        // ACTION_DAY/NIGHT_BACKLIGHT_CHAGNED are NOT illumination: they fire when the brightness
+        // targets Set_Day_Light / Set_Night_Light change (EventService.java:4847-4853). The car's
+        // headlamp state is LAMP_STATUS (no extras, :802) with the value in SysVar
+        // Sys_LAMP_STAUS_CHECK "1"/"0" written just before (:2340). The gateway also announces
+        // the system night mode it applied on uiModeNightChanged, boolean "mode" (:14089-14093).
+        const val LAMP_STATUS = "com.szchoiceway.eventcenter.LAMP_STATUS"
+        /** SysVar holding the headlamp state (SysProviderOpt.java:334). */
+        private const val SYSVAR_LAMP_STATUS = "Sys_LAMP_STAUS_CHECK"
+        private const val LAMP_ON = "1"
+        const val UI_MODE_NIGHT_CHANGED = "com.szchoiceway.uiModeNightChanged"
+        /** boolean extra of [UI_MODE_NIGHT_CHANGED]: true = night. */
+        const val EXTRA_UI_MODE_NIGHT = "mode"
 
-        // ---- Radar (CAR_API §1.3) — unprotected -----------------------------
+        // ---- Radar (CAR_API §1.3) — unprotected (CanUtils.java:195) --------------
         const val MCU_CAR_CAN_RADAR_INFO =
-            "com.choiceway.eventcenter.EventUtils.MCU_CAR_CAN_RADAR_INFO"
+            "com.szchoiceway.eventcenter.EventUtils.MCU_CAR_CAN_RADAR_INFO"
         const val EXTRA_CAR_CAN_DATA = "EventUtils.CAR_CAN_DATA"
 
-        // ---- v0.4.3: CAN bulk-frame capture (CAR_API §1.3) — unprotected -----
-        // Bulk CAN state frame — the route to a real speed reading (CAR_API line 109; the
-        // CAN_BASIC_EVT receiver is confirmed in EvtModel.java). The fully-qualified action
-        // strings follow the vendor's EventUtils.* convention but are GUESSED at that prefix;
-        // the CanCaptureScreen exists precisely to confirm which action + extra actually arrive.
-        // CONFIRMED on GT6-CAR (dumpsys broadcasts, engine on): the bulk frame rides
-        // MCU_MSG_CAN_ALL_INFO (com.choiceway prefix) and MCU_CAR_CAN_INFO (com.SZchoiceway
-        // prefix - note the different vendor prefix). CAN_BASIC_EVT was not observed.
+        // ---- v0.4.3: CAN frames (CAR_API §1.3) — unprotected ----------------------
+        // Two different things. MCU_MSG_CAN_ALL_INFO is the gateway's raw MCU 0xA5 passthrough
+        // (EventService.java:2060-2067) — the framed CANBOX stream HiworldCanDecoder reads.
+        // MCU_CAR_CAN_INFO is canbus2's 3-byte digest [speed km/h, rpmH, rpmL]
+        // (CanDataParseBase.java:1205-1208), under EXTRA_CAR_CAN_DATA. CAN_BASIC_EVT is never
+        // sent by anyone (its receiver at EvtModel.java:522 is an empty return).
         const val MCU_MSG_CAN_ALL_INFO =
             "com.choiceway.eventcenter.EventUtils.MCU_MSG_CAN_ALL_INFO"
         const val MCU_CAR_CAN_INFO =
             "com.szchoiceway.eventcenter.EventUtils.MCU_CAR_CAN_INFO"
-        const val CAN_BASIC_EVT =
-            "com.choiceway.eventcenter.EventUtils.CAN_BASIC_EVT"
+        /** Length of the MCU_CAR_CAN_INFO digest; byte[0] is the speed. */
+        private const val CAN_INFO_LEN = 3
+        private const val CAN_INFO_SPEED = 0
+
+        // ---- Doors (CanDataParseBase.java:453-460) — unprotected ---------------------
+        const val ACCORD_DOOR_INFO = "com.szchoiceway.eventcenter.EventUtils.ACCORD_DOOR_INFO"
+        /** byte extra; bit layout in [DoorState]. */
+        const val EXTRA_CAR_DOOR_DATA = "EventUtils.CAR_DOOR_DATA"
+
+        // ---- Volume push (EventService.java:3105-3125) — unprotected -----------------
+        const val MCU_MSG_MAIL_VOL = "com.choiceway.eventcenter.EventUtils.MCU_MSG_MAIL_VOL"
+        /** int: (mute ? 0x80 : 0) | volume — see [VolumeReading]. */
+        const val EXTRA_MAIL_VOL_VAL = "com.choiceway.eventcenter.EventUtils.MCU_MSG_MAIL_VOL_VAL"
+        /** boolean: the vendor would show its volume window for this change. */
+        const val EXTRA_SHOW_VOL_WND = "com.choiceway.eventcenter.EventUtils.MCU_MSG_SHOW_VOL_WND"
 
         // ---- v0.4.3: radio info sniffer (CAR_API line 113) — unprotected ----
         // Both radio broadcasts, captured raw. Actions are CONFIRMED consts; only the
@@ -151,22 +171,12 @@ class CarEvents(private val appContext: Context) {
             "com.choiceway.eventcenter.EventUtils.ZXW_RADIO_INFO_EVT"
         const val RADIO_FREQUENCY_EVENT = "com.szchoiceway.radio.frequency"
 
-        // ---- v0.4.3: vehicle data sniffer (CAR_API line 111) — unprotected --
-        // A cluster of CONFIRMED-const CAN events whose payloads were never decoded. One
-        // generic sniffer captures every extra of each: to pin the key names v3.0 guesses
-        // (outside temp, steering) and to open the ones with no reader at all (TPMS, seat,
-        // fuel, trip computer, centre console). FQ strings follow the EventUtils.* convention.
-        const val CAN_TPMS_DATA_EVT = "com.choiceway.eventcenter.EventUtils.CAN_TPMS_DATA_EVT"
-        const val CAN_SEAT_DATA_EVT = "com.choiceway.eventcenter.EventUtils.CAN_SEAT_DATA_EVT"
-        const val CAN_SLS_DATA_EVT = "com.choiceway.eventcenter.EventUtils.CAN_SLS_DATA_EVT"
-        const val CAN_FUEL_CONSUMPTION_INFOR = "com.choiceway.eventcenter.EventUtils.CAN_FUEL_CONSUMPTION_INFOR"
-        const val CAN_CENTER_CONSOLE_INFOR = "com.choiceway.eventcenter.EventUtils.CAN_CENTER_CONSOLE_INFOR"
-        const val CAN_CAR_TIRP_INFO = "com.choiceway.eventcenter.EventUtils.CAN_CAR_TIRP_INFO"
-        val VEHICLE_SNIFF_ACTIONS = arrayOf(
-            CAN_TPMS_DATA_EVT, CAN_SEAT_DATA_EVT, CAN_SLS_DATA_EVT,
-            CAN_FUEL_CONSUMPTION_INFOR, CAN_CENTER_CONSOLE_INFOR, CAN_CAR_TIRP_INFO,
-            CAN_CAR_OUT_SIDE_TEMP_EVT, ZXW_CAN_WHEEL_TRACK_EVT,
-        )
+        // ---- v0.4.3: vehicle data sniffer — unprotected ------------------------------
+        // Raw capture of the two cockpit broadcasts, kept so a car can re-check the decode.
+        // CAN_TPMS/SEAT/SLS_DATA_EVT, CAN_FUEL_CONSUMPTION_INFOR, CAN_CENTER_CONSOLE_INFOR and
+        // CAN_CAR_TIRP_INFO are constants nothing ever sends (EventUtils.java:186-201,
+        // Camera360Receiver.java:13); TPMS and trip data stay inside canbus2's own EventBus.
+        val VEHICLE_SNIFF_ACTIONS = arrayOf(CAN_CAR_OUT_SIDE_TEMP_EVT, ZXW_CAN_WHEEL_TRACK_EVT)
 
         // ---- Climate (CAR_API §1.3) — unprotected ---------------------------
         const val CAR_AIR_STATE_ACTION = "com.szchoiceway.canbus.carairstruct"
@@ -175,32 +185,26 @@ class CarEvents(private val appContext: Context) {
 
         // ---- v3.0: cockpit signals (CAR_API §1.3) — unprotected --------------
         /**
-         * Outside temperature. The *action* is confirmed (`EvtModel.java:512-517`); the exact
-         * extra key strings are not quoted in the decompile, only described as `..._EVT_EXTRA`
-         * (int) and `..._EVT_EXTRA_STR` (String), so the candidates below are GUESSED. The
-         * String form is preferred when present because it
-         * arrives already formatted with the car's own unit, so we don't have to guess whether
-         * the int is °C, °F, or tenths.
+         * Outside temperature, sent by canbus2 as ONE String extra already carrying the car's
+         * unit, e.g. "23℃" (`CanDataParseBase.java:1552-1555`, `CanUtils.java:14-15`). The int
+         * `..._EXTRA` form is never put, so there is nothing to fall back to.
          */
         const val CAN_CAR_OUT_SIDE_TEMP_EVT =
             "com.choiceway.eventcenter.CanUtils.CAN_CAR_OUT_SIDE_TEMP_EVT"
-        private val OUT_TEMP_STR_EXTRA_KEYS = arrayOf(
-            "CAN_CAR_OUT_SIDE_TEMP_EVT_EXTRA_STR",
-            "CanUtils.CAN_CAR_OUT_SIDE_TEMP_EVT_EXTRA_STR",
-        )
-        private val OUT_TEMP_INT_EXTRA_KEYS = arrayOf(
-            "CAN_CAR_OUT_SIDE_TEMP_EVT_EXTRA",
-            "CanUtils.CAN_CAR_OUT_SIDE_TEMP_EVT_EXTRA",
-        )
+        const val EXTRA_OUT_SIDE_TEMP_STR =
+            "com.choiceway.eventcenter.CanUtils.CAN_CAR_OUT_SIDE_TEMP_EVT_EXTRA_STR"
 
         /**
-         * Steering angle, the signal the vendor uses to bend its reverse trajectory lines
-         * (`EvtModel.java:534-538`, confirmed). Its extra keys are undocumented and the guessed
-         * ones never matched on the car (RAV4-38), so it is only sniffed now; [steeringAngle]
-         * comes from the CAN bulk frame instead.
+         * Steering, the signal the vendor bends its reverse trajectory with. canbus2 sends an int
+         * under [EXTRA_WHEEL_TRACK] (`CanDataParseBase.java:1316-1318`): bit7 = raw angle was
+         * negative, bits 0-6 = |raw| / 14 — the same OEM scale as the 0x11 decode, never degrees.
+         * Decoded by [SteeringReading.fromWheelTrack]; the 0x11 frame keeps priority while fresh
+         * because it carries the un-truncated value.
          */
         const val ZXW_CAN_WHEEL_TRACK_EVT =
             "com.choiceway.eventcenter.EventUtils.ZXW_CAN_WHEEL_TRACK_EVT"
+        const val EXTRA_WHEEL_TRACK =
+            "com.choiceway.eventcenter.EventUtils.ZXW_CAN_WHEEL_TRACK_EVT_EXTRA"
 
         /** Sentinel for a cockpit signal the car has not sent us yet. */
         const val VALUE_UNKNOWN = Int.MIN_VALUE
@@ -237,6 +241,44 @@ class CarEvents(private val appContext: Context) {
          */
         const val MOVING_ABOVE_KMH = 8
         const val PARKED_BELOW_KMH = 3
+
+        // ---- CAN speed (MCU_CAR_CAN_INFO byte[0]) ---------------------------------
+        /**
+         * How long one CAN digest stays a valid speed. canbus2 re-sends on every 0x32 frame, so
+         * silence this long means the feed is gone, not that the car is stationary.
+         */
+        const val CAN_SPEED_STALE_MS = 5_000L
+
+        /**
+         * Whether a fresh CAN speed outranks GPS. The digest's speed byte is canbus2's
+         * `iCarSpeed`, i.e. the 0x32 frame's p[4:5] (`HiworldCanParseToyota.java:413-415`), and
+         * the 2026-08-29 drive capture showed that field does NOT track road speed on this car
+         * (see [HiworldCanDecoder.SPEED_SCALE_KMH]). Until a steady-cruise capture proves it,
+         * the reading is published on [canSpeedKmh] for diagnosis but does not feed the motion
+         * gate: a wrong "0 km/h" there would unlock text entry in a moving car. Flip to true
+         * once verified; [pickSpeed] and its test already cover both settings.
+         */
+        const val CAN_SPEED_TRUSTED = false
+
+        /**
+         * Speed arbitration: a fresh, trusted CAN reading wins, otherwise GPS. Pure, so the test
+         * can pin the priority without a Context. [canKmh] < 0 means no CAN reading yet.
+         */
+        internal fun pickSpeed(
+            canKmh: Int,
+            canAgeMs: Long,
+            gpsKmh: Int,
+            trusted: Boolean = CAN_SPEED_TRUSTED,
+        ): Pair<Int, SpeedSource> {
+            val canFresh = canKmh >= 0 && canAgeMs < CAN_SPEED_STALE_MS
+            if (trusted && canFresh) {
+                return canKmh to SpeedSource.CAN
+            }
+            if (gpsKmh >= 0) {
+                return gpsKmh to SpeedSource.GPS
+            }
+            return GpsSpeedSource.SPEED_UNKNOWN to SpeedSource.NONE
+        }
 
         /**
          * Apply the hysteresis band. Note the band's *entry* case: with no previous verdict, a
@@ -300,16 +342,17 @@ class CarEvents(private val appContext: Context) {
     /**
      * v0.4.9 — one `ACTION_ACC_SLEEP_STATUS_EVT` arrival (CAR_API §1.3).
      *
-     * ⚠ Decode UNCONFIRMED: the extra key (`ACC_Status`) is documented, but which value means
-     * sleep vs wake is not — the spec says only "int (sleep/wake)". So this exposes presence
-     * plus the raw value and deliberately does NOT claim a boolean; a consumer that needs the
-     * direction must confirm the encoding on-device first.
+     * `ACC_Status` is 1 = awake / ACC on (`EventService.java:492,2274`, MCU wake frame 0x96) and
+     * 0 = entering sleep (`:3535`, sent together with `EVENT_DISCONNECT_BT`).
      */
     data class AccSleep(
         /** Raw `ACC_Status` int, or null when the extra was absent. */
         val rawStatus: Int?,
         val atMs: Long,
-    )
+    ) {
+        /** True when the unit is going to sleep; null when the extra was absent. */
+        val sleeping: Boolean? get() = rawStatus?.let { it == ACC_STATUS_SLEEP }
+    }
 
     /**
      * v2.5 — stationary / in motion / unreadable, derived from [speedKmh].
@@ -320,7 +363,10 @@ class CarEvents(private val appContext: Context) {
      */
     enum class Motion { UNKNOWN, PARKED, MOVING }
 
-    /** Day/night illumination source (from the backlight broadcasts). */
+    /** Where the current [speedKmh] came from. */
+    enum class SpeedSource { NONE, GPS, CAN }
+
+    /** Day/night illumination, from the headlamps ([LAMP_STATUS] + `Sys_LAMP_STAUS_CHECK`). */
     enum class DayNight { DAY, NIGHT }
 
     /** Optional plain callback for Java / non-coroutine consumers. */
@@ -346,12 +392,12 @@ class CarEvents(private val appContext: Context) {
 
     private val _illuminationSeen = MutableStateFlow(false)
     /**
-     * v2.7 — true once an illumination broadcast has actually arrived.
+     * v2.7 — true once a headlamp broadcast ([LAMP_STATUS]) has actually arrived.
      *
      * [dayNight] cannot answer this. It starts at [DayNight.DAY] and stays there both when the car
-     * really is reporting daylight and when the broadcast never arrives at all — and on a normal
-     * (non-privileged) install it never arrives, because ACTION_DAY/NIGHT_BACKLIGHT_CHANGED ride
-     * `com.szchoiceway.permission.broadcast`, which is very likely `signature` (CAR_API §1.1).
+     * really is reporting daylight and when the broadcast never arrives at all. LAMP_STATUS is
+     * unprotected, but the gateway only sends it on a headlamp CHANGE (`EventService.java:2334`),
+     * so a unit whose lamps never toggle in a session hears nothing.
      *
      * The launcher's clock-based day/night fallback keys off this flag: a unit that is genuinely
      * hearing the car keeps following the car, and only a silent one falls back to the clock.
@@ -359,13 +405,29 @@ class CarEvents(private val appContext: Context) {
      */
     val illuminationSeen: StateFlow<Boolean> = _illuminationSeen.asStateFlow()
 
-    private val _accSleep = MutableStateFlow<AccSleep?>(null)
+    private val _gatewayNight = MutableStateFlow<Boolean?>(null)
     /**
-     * v0.4.9 — latest `ACTION_ACC_SLEEP_STATUS_EVT`, or null until one arrives. The action was
-     * registered since v2.5 but silently dropped by dispatch. See [AccSleep] for why this stays
-     * a raw presence signal rather than a decoded sleep/wake boolean.
+     * The system night mode the gateway last applied ([UI_MODE_NIGHT_CHANGED]), or null until it
+     * says. Diagnostic only, never a theming source: the gateway applies whatever
+     * [GatewayHandshake.sendUiMode] told it, so reading this back as "the car's illumination"
+     * would latch our own clock-fallback decision as if the car had made it.
      */
+    val gatewayNight: StateFlow<Boolean?> = _gatewayNight.asStateFlow()
+
+    private val _accSleep = MutableStateFlow<AccSleep?>(null)
+    /** v0.4.9 — latest `ACTION_ACC_SLEEP_STATUS_EVT`, or null until one arrives. */
     val accSleep: StateFlow<AccSleep?> = _accSleep.asStateFlow()
+
+    private val _doors = MutableStateFlow<DoorState?>(null)
+    /** Latest `ACCORD_DOOR_INFO` decode, or null until canbus2 reports a door. */
+    val doors: StateFlow<DoorState?> = _doors.asStateFlow()
+
+    private val _volume = MutableStateFlow<VolumeReading?>(null)
+    /**
+     * Main volume as last pushed by the gateway on [MCU_MSG_MAIL_VOL], or null until the MCU
+     * reports one. Arrives on every volume or mute change, so consumers need not poll.
+     */
+    val volume: StateFlow<VolumeReading?> = _volume.asStateFlow()
 
     private val _swcKeys = MutableSharedFlow<SwcKey>(extraBufferCapacity = 16)
     /** Discrete steering-wheel key presses/releases. */
@@ -399,9 +461,8 @@ class CarEvents(private val appContext: Context) {
     private val _radar = MutableStateFlow<RadarState?>(null)
     /**
      * Latest parking-sensor frame decoded from `MCU_CAR_CAN_RADAR_INFO` (byte[] CAR_CAN_DATA),
-     * or null until the first frame arrives. The frame is unprotected (a normal app receives
-     * it), typically only while reversing / at low speed. Byte layout is GUESSED — see
-     * [RadarState].
+     * or null until the first frame arrives. Unprotected, sent by canbus2 only while
+     * `Sys_Plugin_radar_Set` is 0. Layout and scale in [RadarState]; sensor order UNVERIFIED.
      */
     val radar: StateFlow<RadarState?> = _radar.asStateFlow()
 
@@ -410,19 +471,16 @@ class CarEvents(private val appContext: Context) {
     /**
      * v2.8 — the raw `CAR_CAN_DATA` payload of the last radar broadcast, undecoded.
      *
-     * Published even when [RadarState.fromRadarData] rejects the frame. The guessed layout is
-     * precisely what the capture screen exists to disprove, so gating the bytes on that guess being
-     * right would hide the evidence in exactly the case where it matters.
+     * Published even when [RadarState.fromRadarData] rejects the frame, so the capture screen
+     * can check the left→right order the decompile leaves open.
      */
     val radarRaw: StateFlow<RadarFrame?> = _radarRaw.asStateFlow()
 
     // v0.4.3 --- Undecoded CAN bulk frame, for the capture view ----------------
     private val _canRaw = MutableStateFlow<CanFrame?>(null)
     /**
-     * v0.4.3 — the last CAN bulk-frame broadcast (CAN_BASIC_EVT / MCU_CAR_CAN_INFO), with every
-     * extra captured and any byte[] payload kept undecoded. Null until a frame arrives (which, on a
-     * normal app or off a car, may be never — the action strings and payload key are unconfirmed;
-     * [com.ripostelabs.carlauncher.ui.settings.CanCaptureScreen] is the instrument that confirms them).
+     * v0.4.3 — the last MCU_MSG_CAN_ALL_INFO / MCU_CAR_CAN_INFO broadcast, with every extra
+     * captured and any byte[] payload kept undecoded. Null until a frame arrives.
      */
     val canRaw: StateFlow<CanFrame?> = _canRaw.asStateFlow()
 
@@ -439,23 +497,32 @@ class CarEvents(private val appContext: Context) {
     private val _vehicleSniff = MutableStateFlow<Map<String, CanFrame>>(emptyMap())
     /**
      * v0.4.3 - the latest broadcast per action in [VEHICLE_SNIFF_ACTIONS], every extra kept
-     * undecoded, so the extra key names (guessed for temp/steering, unknown for the rest) are
-     * confirmed on a car. Empty until a frame of a given action arrives.
+     * undecoded. Empty until a frame of a given action arrives.
      */
     val vehicleSniff: StateFlow<Map<String, CanFrame>> = _vehicleSniff.asStateFlow()
 
     /**
      * Numeric speed in km/h, or [GpsSpeedSource.SPEED_UNKNOWN] when it cannot be read.
      *
-     * v2.5: populated from [GpsSpeedSource] — option (b) of the three the v0.x stub listed. The
-     * gateway still does NOT broadcast a clean speed extra ([SHOW_CAR_SPEED_EVENT] is a
-     * show/hide toggle, CAR_API §1.3), so GPS is the only source a normal app can read.
-     * Decoding the CAN bulk frame (CAN_BASIC_EVT / MCU_CAR_CAN_INFO) remains the preferred
-     * upgrade and should be *preferred over* GPS once its layout is confirmed on-device: it is
-     * available instantly at power-on and indoors, where GPS is not.
+     * Two sources feed it through [pickSpeed]: canbus2's [MCU_CAR_CAN_INFO] digest (available at
+     * power-on and indoors, where GPS is not) and [GpsSpeedSource]. CAN outranks GPS while fresh
+     * and [CAN_SPEED_TRUSTED] — which it is not yet, see that constant. [speedSource] says which
+     * one is showing.
      */
     private val _speedKmh = MutableStateFlow(GpsSpeedSource.SPEED_UNKNOWN)
     val speedKmh: StateFlow<Int> = _speedKmh.asStateFlow()
+
+    private val _speedSource = MutableStateFlow(SpeedSource.NONE)
+    /** Which source [speedKmh] currently reflects. */
+    val speedSource: StateFlow<SpeedSource> = _speedSource.asStateFlow()
+
+    private val _canSpeedKmh = MutableStateFlow(GpsSpeedSource.SPEED_UNKNOWN)
+    /**
+     * The raw CAN digest speed (byte[0] of [MCU_CAR_CAN_INFO]), stale-cleared after
+     * [CAN_SPEED_STALE_MS]. Published regardless of [CAN_SPEED_TRUSTED] so a drive can compare
+     * it against GPS.
+     */
+    val canSpeedKmh: StateFlow<Int> = _canSpeedKmh.asStateFlow()
 
     private val _rootCapture = MutableStateFlow(false)
     /**
@@ -487,30 +554,47 @@ class CarEvents(private val appContext: Context) {
     // v3.0 --- cockpit signals ------------------------------------------------
     private val _outsideTemp = MutableStateFlow<String?>(null)
     /**
-     * Outside temperature as the car renders it (e.g. "12°C"), or null until a frame arrives.
-     *
-     * Deliberately a String rather than a number: the gateway sends a preformatted string
-     * alongside the raw int, and using it means we neither guess the unit nor re-render a value
-     * the car already rendered — the dashboard then always agrees with the cluster. If only the
-     * int arrives we fall back to labelling it °C, which is a GUESS and marked as such below.
+     * Outside temperature as the car renders it (e.g. "23℃"), or null until a frame arrives.
+     * A String on purpose: canbus2 formats it with the car's own unit, so the dashboard always
+     * agrees with the cluster.
      */
     val outsideTemp: StateFlow<String?> = _outsideTemp.asStateFlow()
 
     private val _steeringAngle = MutableStateFlow<SteeringReading?>(null)
     /**
-     * Steering angle decoded from the 0x11 Basic Status frame of the CAN bulk broadcast, or null
-     * until one arrives. The same decode the capture screen shows (RAV4-38: the vendor
-     * `ZXW_CAN_WHEEL_TRACK_EVT` path never delivered). Degrees on the OEM scale; sign convention
-     * unconfirmed — turn lock to lock on-device to settle it. Consumers must apply
-     * [SteeringReading.isStale] so a dead feed never reads as a held wheel.
+     * Steering on the OEM raw/14 scale, or null until a frame arrives. Fed by the 0x11 Basic
+     * Status decode of [MCU_MSG_CAN_ALL_INFO] (full precision) and, while that is stale, by the
+     * truncated [ZXW_CAN_WHEEL_TRACK_EVT] int. Which side a negative value means is UNVERIFIED —
+     * turn lock to lock on-device to settle it. Consumers must apply [SteeringReading.isStale]
+     * so a dead feed never reads as a held wheel.
      */
     val steeringAngle: StateFlow<SteeringReading?> = _steeringAngle.asStateFlow()
+
+    /** Latest GPS speed, kept so a CAN dropout can fall back to it. */
+    private var gpsKmh = GpsSpeedSource.SPEED_UNKNOWN
+
+    /** `System.currentTimeMillis()` of the last CAN digest; 0 = none yet. */
+    private var canSpeedAtMs = 0L
+
+    private val handler = Handler(Looper.getMainLooper())
+
+    /** Fires when CAN digests stop arriving: the CAN reading is unknown, not frozen. */
+    private val canSpeedStale = Runnable {
+        _canSpeedKmh.value = GpsSpeedSource.SPEED_UNKNOWN
+        republishSpeed()
+    }
 
     /**
      * v2.5 — GPS speed. Owned here so [speedKmh] has one front door regardless of which
      * underlying source fills it, matching how [reverse] and [dayNight] hide their broadcasts.
      */
-    private val speedSource = GpsSpeedSource(appContext) { kmh -> updateSpeed(kmh) }
+    private val gpsSource = GpsSpeedSource(appContext) { kmh ->
+        gpsKmh = kmh
+        republishSpeed()
+    }
+
+    /** Headlamp state lives in a SysVar; [LAMP_STATUS] only says it changed. */
+    private val sysVar = SysVar(appContext)
 
     /**
      * v0.4.3.8 — one arrival slot both protected-event paths pass through, so a frame that really
@@ -521,7 +605,7 @@ class CarEvents(private val appContext: Context) {
 
     /**
      * v2.9 — root capture of the `signature`-guarded broadcasts. Owned here for the same reason
-     * [speedSource] is: consumers keep one front door and never learn which source filled a flow.
+     * [gpsSource] is: consumers keep one front door and never learn which source filled a flow.
      */
     private val rootBridge = RootBroadcastBridge(appContext) { action, ints ->
         _rootCapture.value = true
@@ -547,8 +631,8 @@ class CarEvents(private val appContext: Context) {
          *
          * An exception out of `onReceive` is fatal: ActivityManager kills the process, and for the
          * HOME app that is a black screen in a moving car. The gateway attaches vendor Parcelables
-         * to `CAN_CAR_TIRP_INFO` / `MCU_CAR_CAN_INFO`, and apart from the mirrored
-         * [CarAirState] those classes are deliberately not bundled into this APK, so the lazy
+         * (e.g. `com.szchoiceway.canbus.CarAirState`) to `carairstruct`, and those classes are
+         * deliberately not bundled into this APK, so the lazy
          * `Bundle.unparcel()` that reading the extras forces throws `BadParcelableException`
          * (ClassNotFoundException underneath). Those frames arrive continuously with the engine
          * running, so an unguarded throw is a crash loop, not a one-off.
@@ -586,13 +670,11 @@ class CarEvents(private val appContext: Context) {
                 MCU_MSG_BACKCAR_END -> updateReverse(false)
 
                 ACTION_ACC_OPEN_CLOSE_EVT -> {
-                    val on = intent.getIntExtra(EXTRA_ACC_STATUS, 1) == 1
+                    val on = intent.getIntExtra(EXTRA_ACC_STATUS, ACC_STATUS_ON) == ACC_STATUS_ON
                     _accOn.value = on
                     listeners.forEach { it.onAcc(on) }
                 }
 
-                // v0.4.9: registered since v2.5 but silently dropped by the else branch.
-                // Exposed as raw presence only — the value encoding is UNCONFIRMED (AccSleep).
                 ACTION_ACC_SLEEP_STATUS_EVT -> {
                     val raw = intent.getIntExtra(EXTRA_ACC_STATUS, VALUE_UNKNOWN)
                     _accSleep.value = AccSleep(
@@ -602,9 +684,9 @@ class CarEvents(private val appContext: Context) {
                 }
 
                 // v0.4.9: the gateway's "open the app drawer" request (CUSTOMERUI_NOTES §6).
-                // The documented payload is LAUNCHER_EXTRA="AppList"; a missing extra still
-                // opens (the action itself is the request), but an extra naming something
-                // OTHER than the app list is a request we don't understand — ignore it.
+                // The payload is zxw_Launcher="AppList"; a missing extra still opens (the
+                // action itself is the request), but an extra naming something OTHER than the
+                // app list is a request we don't understand — ignore it.
                 ZXW_ACTION_LAUNCHER_ALLAPPS_START_EVT -> {
                     val what = intent.getStringExtra(EXTRA_LAUNCHER)
                     if (what == null || what == LAUNCHER_EXTRA_APPLIST) {
@@ -612,21 +694,45 @@ class CarEvents(private val appContext: Context) {
                     }
                 }
 
-                // v3.0: outside temperature. Prefer the car's own formatted string over the
-                // int, so the dashboard shows the same value and unit as the cluster.
+                // v3.0: outside temperature, preformatted by canbus2 with the car's own unit.
                 CAN_CAR_OUT_SIDE_TEMP_EVT -> {
-                    val text = OUT_TEMP_STR_EXTRA_KEYS.firstNotNullOfOrNull { key ->
-                        runCatching { intent.getStringExtra(key) }.getOrNull()?.takeIf {
-                            it.isNotBlank()
-                        }
+                    val text = intent.getStringExtra(EXTRA_OUT_SIDE_TEMP_STR)
+                    if (!text.isNullOrBlank()) _outsideTemp.value = text
+                }
+
+                // Truncated steering from canbus2; only stands in while the 0x11 decode is stale.
+                ZXW_CAN_WHEEL_TRACK_EVT -> {
+                    val raw = intExtra(intent, EXTRA_WHEEL_TRACK) ?: return
+                    val now = System.currentTimeMillis()
+                    if (_steeringAngle.value?.isStale(now) != false) {
+                        _steeringAngle.value = SteeringReading.fromWheelTrack(raw, now)
                     }
-                    val fallback = OUT_TEMP_INT_EXTRA_KEYS
-                        .map { key -> intent.getIntExtra(key, VALUE_UNKNOWN) }
-                        .firstOrNull { it != VALUE_UNKNOWN }
-                        // ⚠ GUESSED unit — only used when the preformatted string is absent.
-                        ?.let { "$it°C" }
-                    val value = text ?: fallback
-                    if (value != null) _outsideTemp.value = value
+                }
+
+                // Headlamps changed; the state itself is in the SysVar the gateway wrote first.
+                LAMP_STATUS -> {
+                    val on = sysVar.getString(SYSVAR_LAMP_STATUS) == LAMP_ON
+                    updateDayNight(if (on) DayNight.NIGHT else DayNight.DAY)
+                }
+
+                // The gateway's applied system night mode. Recorded, not themed from (see
+                // gatewayNight): it echoes what GatewayHandshake told it.
+                UI_MODE_NIGHT_CHANGED -> {
+                    _gatewayNight.value = intent.getBooleanExtra(EXTRA_UI_MODE_NIGHT, false)
+                }
+
+                ACCORD_DOOR_INFO -> {
+                    val raw = intExtra(intent, EXTRA_CAR_DOOR_DATA) ?: return
+                    _doors.value = DoorState.fromByte(raw and 0xFF, System.currentTimeMillis())
+                }
+
+                MCU_MSG_MAIL_VOL -> {
+                    val raw = intExtra(intent, EXTRA_MAIL_VOL_VAL) ?: return
+                    _volume.value = VolumeReading.fromMailVol(
+                        raw,
+                        intent.getBooleanExtra(EXTRA_SHOW_VOL_WND, false),
+                        System.currentTimeMillis(),
+                    )
                 }
 
                 // v2.9: the protected set. Still filtered for here, because a privileged/system
@@ -637,8 +743,7 @@ class CarEvents(private val appContext: Context) {
                 // reading _rootCapture here was a check-then-act across two threads (the flag is
                 // published from the root reader thread while this test runs on the main thread),
                 // so a frame arriving in that window was handled twice anyway.
-                ACTION_BACKCAR_START, ACTION_BACKCAR_END, STEER_WHEEL_INFOR,
-                ACTION_DAY_BACKLIGHT_CHANGED, ACTION_NIGHT_BACKLIGHT_CHANGED -> {
+                ACTION_BACKCAR_START, ACTION_BACKCAR_END, STEER_WHEEL_INFOR -> {
                     val ints = swcIntExtras(intent)
                     // v0.4.9: deduped on the stable subset so the unprotected fallback
                     // carriers (no voltage extra) match too — see swcDedupeInts.
@@ -648,26 +753,15 @@ class CarEvents(private val appContext: Context) {
                     }
                 }
 
-                // v0.4.9: the UNPROTECTED steering-wheel fallbacks (CAR_API §4 paths 2+3) —
-                // registered since v0.8 but dropped by the else branch, so a non-root install
-                // had zero wheel control. Decoded conservatively by SwcFallback, normalised to
-                // the canonical STEER_WHEEL_INFOR form, and pushed through the SAME dedupe:
-                // on a rooted unit the protected capture delivers the same press, and exactly
-                // one of the co-arriving copies may reach handleProtected.
-                ACTION_HOST_MCU_BUTTON_KEY -> {
-                    val edge = SwcFallback.hostKey(
-                        intExtra(intent, EXTRA_HOST_KEY),
-                        intExtra(intent, EXTRA_HOST_STATUS_KEY),
-                    )
-                    if (edge != null) {
-                        applyFallbackEdge(edge)
-                    }
-                }
-
+                // v0.4.9: the UNPROTECTED key path (CAR_API §4 path 2) — the only wheel input a
+                // non-root install gets. Decoded by SwcFallback, normalised to the canonical
+                // STEER_WHEEL_INFOR form, and pushed through the SAME dedupe: on a rooted unit
+                // the protected capture delivers the same press, and exactly one of the
+                // co-arriving copies may reach handleProtected.
                 MCU_KEY_INFOR_ACTION -> {
-                    // This path carries NO press state (CAR_API §1.3), so one broadcast is one
-                    // complete tap: synthesise the down and up edges back to back. KeyPump
-                    // treats that as a normal short press on every key class.
+                    // No press state on this path: one broadcast is one complete tap, so
+                    // synthesise the down and up edges back to back. KeyPump treats that as a
+                    // normal short press on every key class.
                     val index = SwcFallback.mcuKey(intExtra(intent, EXTRA_MCU_KEY_VALUE))
                     if (index != null) {
                         applyFallbackEdge(SwcFallback.Edge(index, down = true))
@@ -675,7 +769,7 @@ class CarEvents(private val appContext: Context) {
                     }
                 }
 
-                // v0.7: raw parking-radar frame → best-effort decode (offsets GUESSED).
+                // v0.7: parking-radar frame → distance codes → proximity bands (RadarState).
                 MCU_CAR_CAN_RADAR_INFO -> {
                     val bytes = intent.getByteArrayExtra(EXTRA_CAR_CAN_DATA)
                     // v2.8: keep the payload before it is interpreted (see radarRaw).
@@ -686,8 +780,8 @@ class CarEvents(private val appContext: Context) {
                     if (rs.valid) _radar.value = rs
                 }
 
-                // v0.4.3: bulk CAN frame — capture every extra + any byte[] payload, undecoded.
-                MCU_CAR_CAN_INFO, MCU_MSG_CAN_ALL_INFO, CAN_BASIC_EVT -> {
+                // v0.4.3: raw MCU passthrough — capture every extra + payload, undecoded.
+                MCU_MSG_CAN_ALL_INFO -> {
                     val frame = CanFrame.from(intent, System.currentTimeMillis())
                     _canRaw.value = frame
 
@@ -696,6 +790,17 @@ class CarEvents(private val appContext: Context) {
                     frame.bytes
                         ?.let { SteeringReading.fromFrame(it, frame.atMs) }
                         ?.let { _steeringAngle.value = it }
+                }
+
+                // canbus2's 3-byte digest: [speed km/h, rpmH, rpmL].
+                MCU_CAR_CAN_INFO -> {
+                    val frame = CanFrame.from(intent, System.currentTimeMillis())
+                    _canRaw.value = frame
+                    val bytes = frame.bytes ?: return
+                    if (bytes.size < CAN_INFO_LEN) {
+                        return
+                    }
+                    updateCanSpeed(bytes[CAN_INFO_SPEED].toInt() and 0xFF, frame.atMs)
                 }
 
                 // v0.4.3: radio info sniff - capture every extra of either radio broadcast.
@@ -730,8 +835,6 @@ class CarEvents(private val appContext: Context) {
         when (action) {
             ACTION_BACKCAR_START -> updateReverse(true)
             ACTION_BACKCAR_END -> updateReverse(false)
-            ACTION_DAY_BACKLIGHT_CHANGED -> updateDayNight(DayNight.DAY)
-            ACTION_NIGHT_BACKLIGHT_CHANGED -> updateDayNight(DayNight.NIGHT)
 
             STEER_WHEEL_INFOR -> {
                 val key = SwcKey(
@@ -760,9 +863,9 @@ class CarEvents(private val appContext: Context) {
     }
 
     /**
-     * v0.4.9 — an int extra whatever its carrier type. `HostKeyStatus` is documented as a BYTE
-     * (CAR_API §1.3), and `Intent.getIntExtra` returns the default for a Byte value, which
-     * would silently drop every event. Null when absent or non-numeric.
+     * v0.4.9 — an int extra whatever its carrier type. `CAR_DOOR_DATA` is a BYTE, and
+     * `Intent.getIntExtra` returns the default for a Byte value, which would silently drop
+     * every event. Null when absent or non-numeric.
      */
     private fun intExtra(intent: Intent, key: String): Int? {
         @Suppress("DEPRECATION")
@@ -806,8 +909,20 @@ class CarEvents(private val appContext: Context) {
         listeners.forEach { it.onDayNight(mode) }
     }
 
-    /** v2.5 — publish a new speed reading and re-derive [motion] from it. */
-    private fun updateSpeed(kmh: Int) {
+    /** One CAN digest arrived: record it, re-arm the staleness timer, re-arbitrate. */
+    private fun updateCanSpeed(kmh: Int, atMs: Long) {
+        _canSpeedKmh.value = kmh
+        canSpeedAtMs = atMs
+        handler.removeCallbacks(canSpeedStale)
+        handler.postDelayed(canSpeedStale, CAN_SPEED_STALE_MS)
+        republishSpeed()
+    }
+
+    /** v2.5 — pick the speed source, publish it and re-derive [motion] from it. */
+    private fun republishSpeed() {
+        val canAge = System.currentTimeMillis() - canSpeedAtMs
+        val (kmh, source) = pickSpeed(_canSpeedKmh.value, canAge, gpsKmh)
+        _speedSource.value = source
         _speedKmh.value = kmh
         _motion.value = nextMotion(_motion.value, kmh)
     }
@@ -815,8 +930,8 @@ class CarEvents(private val appContext: Context) {
     /**
      * Register the receiver. Safe to call once; a second call is a no-op.
      *
-     * We register for BOTH the protected (`ACTION_BACKCAR_*`, `STEER_WHEEL_INFOR`,
-     * day/night) and the unprotected (`MCU_MSG_BACKCAR_*`, ACC) actions in a single
+     * We register for BOTH the protected (`ACTION_BACKCAR_*`, `STEER_WHEEL_INFOR`) and the
+     * unprotected (`MCU_MSG_BACKCAR_*`, ACC, headlamps, keys, CAN) actions in a single
      * receiver. As a normal app the protected ones are silently never delivered; as a
      * privileged/system app holding [PERMISSION_CHOICEWAY_BROADCAST] they start flowing
      * with no code change.
@@ -836,22 +951,16 @@ class CarEvents(private val appContext: Context) {
             addAction(ACTION_ACC_OPEN_CLOSE_EVT)
             addAction(ACTION_ACC_SLEEP_STATUS_EVT)
             addAction(STEER_WHEEL_INFOR)
-            addAction(ACTION_HOST_MCU_BUTTON_KEY)
             addAction(MCU_KEY_INFOR_ACTION)
-            addAction(ACTION_DAY_BACKLIGHT_CHANGED)
-            addAction(ACTION_NIGHT_BACKLIGHT_CHANGED)
+            addAction(LAMP_STATUS)
+            addAction(UI_MODE_NIGHT_CHANGED)
+            addAction(ACCORD_DOOR_INFO)
+            addAction(MCU_MSG_MAIL_VOL)
             addAction(MCU_CAR_CAN_RADAR_INFO)
-            addAction(MCU_CAR_CAN_INFO) // v0.4.3 CAN bulk-frame capture
-            addAction(MCU_MSG_CAN_ALL_INFO) // v0.4.3 (confirmed bulk frame on GT6-CAR)
-            addAction(CAN_BASIC_EVT) // v0.4.3
+            addAction(MCU_CAR_CAN_INFO) // canbus2 speed/RPM digest
+            addAction(MCU_MSG_CAN_ALL_INFO) // v0.4.3 raw MCU passthrough (steering decode)
             addAction(ZXW_RADIO_INFO_EVT) // v0.4.3 radio sniffer
             addAction(RADIO_FREQUENCY_EVENT) // v0.4.3
-            addAction(CAN_TPMS_DATA_EVT) // v0.4.3 vehicle sniffer
-            addAction(CAN_SEAT_DATA_EVT) // v0.4.3
-            addAction(CAN_SLS_DATA_EVT) // v0.4.3
-            addAction(CAN_FUEL_CONSUMPTION_INFOR) // v0.4.3
-            addAction(CAN_CENTER_CONSOLE_INFOR) // v0.4.3
-            addAction(CAN_CAR_TIRP_INFO) // v0.4.3
             addAction(CAR_AIR_STATE_ACTION)
             addAction(CAN_CAR_OUT_SIDE_TEMP_EVT) // v3.0
             addAction(ZXW_CAN_WHEEL_TRACK_EVT) // v3.0
@@ -869,7 +978,7 @@ class CarEvents(private val appContext: Context) {
         registered = true
         // v2.5: GPS is a separate subsystem from the gateway broadcasts, but it feeds the same
         // front door, so it shares this lifecycle instead of asking every caller to manage it.
-        speedSource.start()
+        gpsSource.start()
         rootBridge.start() // v2.9
         Log.i(TAG, "CarEvents registered")
     }
@@ -877,7 +986,8 @@ class CarEvents(private val appContext: Context) {
     fun unregister() {
         if (!registered) return
         runCatching { appContext.unregisterReceiver(receiver) }
-        speedSource.stop() // v2.5
+        gpsSource.stop() // v2.5
+        handler.removeCallbacks(canSpeedStale)
         rootBridge.stop() // v2.9
         registered = false
     }
@@ -887,7 +997,7 @@ class CarEvents(private val appContext: Context) {
      * the user has answered the location prompt: the first attempt finds no permission and gives
      * up, so the grant callback calls this to actually start listening.
      */
-    fun startSpeedSource() = speedSource.start()
+    fun startSpeedSource() = gpsSource.start()
 
     /**
      * Cold [Flow] variant of [reverse] that manages its own receiver lifecycle: it

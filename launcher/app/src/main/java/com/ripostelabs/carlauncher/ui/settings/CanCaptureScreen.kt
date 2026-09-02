@@ -78,7 +78,7 @@ fun CanCaptureScreen(
 
     SettingsScaffold(
         title = "CAN frame capture",
-        subtitle = "MCU_MSG_CAN_ALL_INFO / MCU_CAR_CAN_INFO — action CONFIRMED on GT6-CAR, payload UNCONFIRMED",
+        subtitle = "MCU_MSG_CAN_ALL_INFO (raw MCU frames) / MCU_CAR_CAN_INFO (3-byte speed, rpmH, rpmL)",
         onBack = onBack,
     ) {
         SettingsSection(title = "Broadcast") {

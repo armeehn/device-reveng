@@ -1,41 +1,40 @@
 package com.ripostelabs.carlauncher.carlib
 
 /**
- * RadarState — a small, display-only snapshot of the parking-sensor (ultrasonic radar)
- * frame the vendor gateway broadcasts as `MCU_CAR_CAN_RADAR_INFO` with a raw byte[] under
- * `EventUtils.CAR_CAN_DATA` (CAR_API §1.3, §6.3 "Reverse / radar"; consumed in the gateway
- * at `EvtModel.java:525-529`).
+ * RadarState — a display-only snapshot of the parking-sensor frame canbus2 broadcasts as
+ * `MCU_CAR_CAN_RADAR_INFO` with a byte[] under `EventUtils.CAR_CAN_DATA` (CAR_API §1.3).
  *
- * ⚠ BYTE-LAYOUT CAVEAT: the exact frame layout was NOT recovered from the decompile. The
- * spec only says "byte[] raw radar frame, per-sensor distances". [fromRadarData] therefore
- * uses a *best-effort, GUESSED* layout and MUST be verified on-device:
+ * Frame layout, from the decompile (`CanDataParseBase.java:1221-1229`, `sendRadarInfo`):
  *
- *   byte[0]      — status / header (sensor bank enabled, beep flag …)  [GUESSED, skipped]
- *   byte[1..4]   — FRONT sensors, left→right (FL, FCL, FCR, FR)        [GUESSED]
- *   byte[5..8]   — REAR  sensors, left→right (RL, RCL, RCR, RR)        [GUESSED]
+ *   byte[0]      — constant 1 (header)
+ *   byte[1..4]   — FRONT bank, sensor index 0..3
+ *   byte[5..8]   — REAR  bank, sensor index 0..3
  *
- * and each sensor byte is treated as a proximity LEVEL where **0 = clear/no obstacle** and a
- * larger value = closer (typical parking-sensor "bar count", capped at [LEVEL_MAX]). If the
- * MCU actually encodes *distance* (larger = farther) the color ramp is simply inverted — the
- * layout is annotated GUESSED so this is easy to flip after a live capture.
+ * Each sensor byte is a DISTANCE CODE, not a bar count (`HiworldCanParseToyota.java:903-921`):
+ * the CAN box reports a level 1..5 and the parser stores `level * 30`, so 30 is the closest band
+ * and 150 the farthest; anything outside 1..5 is stored as 0xA0 = 160 = clear. 0 never leaves the
+ * parser and is treated here as "no data". Smaller = closer. The vendor overlay agrees: ≤32 red,
+ * ≤64 orange, ≤160 yellow, 160 = idle line (`BackcarEvent.java:960-975`).
  *
- * The UI ([RadarView]) only appears once a real frame arrives (StateFlow starts null), so a
- * wrong guess never fabricates confident readings out of thin air.
+ * [front] and [rear] hold the decoded proximity BAND per sensor, 0 = clear/no data … [LEVEL_MAX]
+ * = closest, so consumers can keep treating 0 as "nothing there" and larger as nearer.
+ *
+ * UNVERIFIED: the left→right order of the four sensors within a bank. The parser copies the CAN
+ * box's index order untouched and nothing in the decompile names a side. The launcher's default is
+ * index 0 = left; the maneuvering side-strip, which turns that guess into a safety claim, stays
+ * behind `LauncherSettings.radarLayoutConfirmed` until a car settles it.
  */
 data class RadarState(
     val valid: Boolean = false,
-    /** FRONT sensor levels, left→right. 0 = clear, higher = closer. May be empty. */
+    /** FRONT proximity bands, index order as sent (assumed left→right). 0 = clear, higher = closer. */
     val front: List<Int> = emptyList(),
-    /** REAR sensor levels, left→right. 0 = clear, higher = closer. May be empty. */
+    /** REAR proximity bands, index order as sent (assumed left→right). 0 = clear, higher = closer. */
     val rear: List<Int> = emptyList(),
 ) {
     /** True if any sensor (front or rear) is reporting an obstacle. */
     fun hasObstacle(): Boolean = (front + rear).any { it > 0 }
 
-    /**
-     * Normalized proximity for a raw sensor level: 0f (clear/far) … 1f (very close).
-     * GUESS: level is a bar-count 0..[LEVEL_MAX]. Verify polarity on-device.
-     */
+    /** Normalized proximity for a band: 0f (clear) … 1f (closest band). */
     fun proximity(level: Int): Float =
         (level.coerceIn(0, LEVEL_MAX).toFloat() / LEVEL_MAX)
 
@@ -53,9 +52,8 @@ data class RadarState(
      * neighbouring obstacle down, and the only useful summary of "how close is anything on my left
      * front" is the nearest thing there.
      *
-     * The left→right ordering this splits on is GUESSED along with the rest of the layout (see the
-     * class KDoc). An odd sensor count puts the middle sensor in both halves, which is right: a
-     * centre sensor genuinely covers both corners.
+     * The left→right split rests on the UNVERIFIED index order (class KDoc). An odd sensor count
+     * puts the middle sensor in both halves, which is right: a centre sensor covers both corners.
      */
     fun edgeProximity(edge: Edge, bank: Bank): Float {
         val levels = if (bank == Bank.FRONT) front else rear
@@ -69,8 +67,18 @@ data class RadarState(
     }
 
     companion object {
-        /** Guessed max bar-count per sensor. */
-        const val LEVEL_MAX = 8
+        /** Number of proximity bands: distance codes 30/60/90/110/150 → bands 5..1. */
+        const val LEVEL_MAX = 5
+
+        /** Closest distance code the parser emits (CAN level 1 × 30). */
+        const val CODE_NEAREST = 30
+        /** 0xA0: no object in range. Anything at or beyond it is clear. */
+        const val CODE_CLEAR = 0xA0
+        /** Never emitted by the parser; a 0 means no data. */
+        const val CODE_NONE = 0
+
+        /** Upper bound of each band, nearest first. 110 is the parser's own irregular step. */
+        private val BAND_CEILINGS = intArrayOf(30, 60, 90, 110, 150)
 
         private const val FRONT_START = 1
         private const val FRONT_END = 5   // exclusive → bytes 1..4
@@ -78,22 +86,33 @@ data class RadarState(
         private const val REAR_END = 9    // exclusive → bytes 5..8
 
         /**
-         * Best-effort decode of the `CAR_CAN_DATA` radar frame. Returns an invalid
-         * (placeholder) state when the frame is missing/too short. Offsets are GUESSED —
-         * see the class KDoc caveat.
+         * Distance code → proximity band. 0 and ≥ 0xA0 are clear; otherwise the band whose ceiling
+         * the code first fits under, counted from the nearest, so 30 → 5 and 150 → 1.
+         */
+        fun band(code: Int): Int {
+            if (code == CODE_NONE || code >= CODE_CLEAR) {
+                return 0
+            }
+            val index = BAND_CEILINGS.indexOfFirst { code <= it }
+            if (index < 0) {
+                return 0
+            }
+            return LEVEL_MAX - index
+        }
+
+        /**
+         * Decode the `CAR_CAN_DATA` radar frame. Returns an invalid (placeholder) state when the
+         * frame is missing or too short.
          */
         fun fromRadarData(bytes: ByteArray?): RadarState {
             if (bytes == null || bytes.size < 2) return RadarState(valid = false)
             fun u(i: Int): Int = if (i < bytes.size) bytes[i].toInt() and 0xFF else 0
 
-            // A byte of 0xFF is commonly "sensor off / no data" — treat as clear (0).
-            fun level(i: Int): Int = u(i).let { if (it == 0xFF) 0 else it.coerceIn(0, LEVEL_MAX) }
+            val front = (FRONT_START until minOf(FRONT_END, bytes.size)).map { band(u(it)) }
+            val rear = (REAR_START until minOf(REAR_END, bytes.size)).map { band(u(it)) }
 
-            val front = (FRONT_START until minOf(FRONT_END, bytes.size)).map { level(it) }
-            val rear = (REAR_START until minOf(REAR_END, bytes.size)).map { level(it) }
-
-            // Consider valid as long as we got at least one sensor slot from the frame; the
-            // presence of the broadcast itself is the real "radar active" signal.
+            // Valid as long as we got at least one sensor slot from the frame; the presence of
+            // the broadcast itself is the real "radar active" signal.
             val valid = front.isNotEmpty() || rear.isNotEmpty()
             return RadarState(valid = valid, front = front, rear = rear)
         }
