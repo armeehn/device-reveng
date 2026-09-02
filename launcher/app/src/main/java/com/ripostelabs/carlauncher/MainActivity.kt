@@ -219,8 +219,9 @@ class MainActivity : ComponentActivity() {
             )
         }
         radioPresetsStore = RadioPresetsStore(applicationContext, lifecycleScope) // v0.9
-        carSettingsController = CarSettingsController(applicationContext, lifecycleScope) // v1.1
-        rootTierController = RootTierController(applicationContext, lifecycleScope) // v2.9
+        // Both write SysVar through the bound gateway (changeSetup) and fall back to the provider.
+        carSettingsController = CarSettingsController(applicationContext, lifecycleScope, carService) // v1.1
+        rootTierController = RootTierController(applicationContext, lifecycleScope, carService) // v2.9
 
         // v0.7: auto-updater. The launch check self-gates (toggle, token, once a day), so on
         // most starts this launches one coroutine that reads a DataStore and stops.

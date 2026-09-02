@@ -13,18 +13,21 @@ package com.ripostelabs.carlauncher.data
  *
  * The vendor firmware declares **455** SysVar keys (SysProviderOpt.java lines 33–491). This is
  * the curated subset the friendly category screens use; the Advanced browser exposes the full
- * live table so nothing is hidden. Enum value→label tables are NOT recoverable from the
- * decompiled trees (the `com.szchoiceway.settings` APK that renders the vendor preference
- * screens isn't in the repo), so option mappings here are inferred and annotated per-screen.
+ * live table so nothing is hidden. Value domains marked below come from the decompiled
+ * `com.szchoiceway.settings` app (`ItemTextRightCheckBoxView.java`, `FactorySetFragment.java`)
+ * and the gateway (`EventService.java`); anything unmarked is still inferred.
  */
 object SettingKeys {
 
     // ---- Display / Illumination -------------------------------------------
+    /** 0..3 dim level forwarded to SystemUI (`EventService.updateLightLevel`), NOT the backlight. */
     const val LIGHT_LEVEL_SET = "Sys_Light_Level_set"
     const val BRIGHTNESS = "Set_Brightness_Key"
     const val CONTRAST = "Set_Contrast_Key"
+    /** MCU backlight 0..20 (defaults 18 / 8); reaches the MCU only via `sendBacklight`. */
     const val SET_DAY_LIGHT = "Set_Day_Light"
     const val SET_NIGHT_LIGHT = "Set_Night_Light"
+    /** 0 = follow headlamps, 1 day, 2 night, 3 by sunrise/sunset (default 3). */
     const val DAY_NIGHT_MODE = "Sys_Day_Night_Mode"
     const val MCU_PANEL_LIGHT = "Sys_MCU_Panel_Light_Key"
     const val MCU_SOFT_LIGHT_CONTROL = "Sys_Mcu_soft_light_control_Set"
@@ -88,17 +91,46 @@ object SettingKeys {
     const val WHEEL_KEY_LEARN_CUSTOM = "wheel_key_learn_custom"
     const val WHEEL_CUSTOM_KEY_SAVE = "Set_Mcu_Wheel_Custom_Key_Save"
 
-    // ---- Power / ACC / Sleep ----------------------------------------------
+    // ---- Power / ACC / Sleep (domains in PowerOptions) ---------------------
+    /** Seconds; the gateway sends it to the MCU as mm:ss (`sendAccDelayTime`). */
     const val ACC_DELAY = "Sys_Acc_Delay"
+    /** Never read by the gateway (a change only re-sends the factory MCU set); not exposed. */
     const val ACC_OFF_DELAY = "ACC_OFF_DELAY"
+    /** Seconds 0..7, packed `& 7` into MCU frame 0x10. */
     const val ACC_ON_DELAY = "SET_ACC_ON_DELAY"
+    /** 0/1 factory flag, bit4 of factory MCU byte 10. */
     const val SLEEP_SWITCH = "Sys_Sleep_Switch"
+    /** Enum 1/2/3 (default 2) -> MCU 960/1440/2880; unit UNVERIFIED. */
     const val SLEEP_TIME = "SYS_SLEEP_TIME"
+    /** 0/1 factory flag "ACC off delay", bit1 of factory MCU byte 8. */
     const val POWER_OFF_DELAY = "Sys_Power_Off_Delay"
+    /** 0/1, default 1: blank the screen when ACC changes. */
+    const val SCREEN_OFF_WHEN_ACC_CHANGE = "Sys_Screen_Off_When_Acc_Change"
+    /** Seconds in {0, 60, 300, 600, 1800}; 0 = never. */
+    const val AUTO_SCREENSAVER_TIME = "SYS_AUTO_START_SCREENSAVER_TIME"
+    /** Same domain as the screensaver; the gateway acts on it only for customer type 69. */
+    const val AUTO_CLOSE_SCREEN_TIME = "SYS_AUTO_START_CLOSE_SCREEN_TIME"
+
+    // ---- Vendor chrome (nav bar geometry, read by the gateway at boot and on change) -----
+    /** Bottom bar height in px; 0 = no bar. Factory options 170/212/220/270. Needs LANDSCAPE=1. */
+    const val NAVIBAR_HEIGHT = "Sys_Customer_NaviBar_Height_Key"
+    /** 1 = landscape layout branch in `SystemUtils.initNaviAndStatusBarHeight`. */
+    const val LANDSCAPE = "Sys_Landscape"
 
     // ---- System / About (mostly read-only) --------------------------------
+    /** Model index within [VEHICLE_SERIES] (Toyota: Camry 1, RAV4 2, Corolla 5, Highlander 7, C-HR 10). */
     const val CAR_TYPE = "Sys_CarType"
+    /** Make: 0 none, 1 Toyota, 2 Ford, 7 Honda, 8 VW (`CanConstantInfo.VEHICLE_DERIES_*`). */
     const val VEHICLE_SERIES = "Sys_Vehicle_deries"
+    /** Year/trim index inside the model (`YearType.TOYOTA_RAV4_TYPE_*`). */
+    const val CAR_INFO_ID = "Sys_CarInfor_ID"
+    /** CAN box vendor 1..18 (4 Raise, 6 Hiworld). */
+    const val CAN_SUPPLIER_ID = "Sys_camry_air_Supplier_id"
+    /**
+     * OEM/customer id, default 88. Known meanings: 53 = OEM build with the gateway's own
+     * status bar and USB multi-camera, 58 = original-car amplifier key relay, 13 = CHWY
+     * instrument-panel animation (`EventService.java`, `Customer.java`).
+     */
     const val CUSTOMER_TYPE = "Sys_CustomerType"
     const val MCU_VERSION = "Sys_McuVersion"
     const val CANBOX_VERSION = "Sys_Upgrade_Canbox_Version"
@@ -107,7 +139,8 @@ object SettingKeys {
     const val SCREEN_WIDTH = "Sys_Screen_Width"
     const val SCREEN_HEIGHT = "Sys_Screen_Height"
     const val SCREEN_DENSITY = "Sys_Screen_Density"
-    const val UI_NUMBER_KEY = "uiNumberKey"
+    /** Skin id (`SysProviderOpt.SYS_UI_NUMBER_KEY`); 0 = common. Was wrongly "uiNumberKey". */
+    const val UI_NUMBER_KEY = "Sys_UINumber"
     const val LANGUAGE = "Set_Language_Select"
     const val TIME_FORMAT = "Sys_Time_12_24_Format" // inferred 0=24h 1=12h
     const val APP_VERSION = "Sys_AppVersion"

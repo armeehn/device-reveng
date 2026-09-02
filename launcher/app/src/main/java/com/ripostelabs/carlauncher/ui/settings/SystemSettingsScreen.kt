@@ -63,8 +63,8 @@ fun SystemSettingsScreen(
         SettingsSection(title = "Vehicle profile") {
             InfoRow("Car type", controller.getString(SettingKeys.CAR_TYPE, "—").ifBlank { "—" })
             InfoRow("Vehicle series", controller.getString(SettingKeys.VEHICLE_SERIES, "—").ifBlank { "—" })
-            InfoRow("Customer/OEM UI", controller.getString(SettingKeys.CUSTOMER_TYPE, "—").ifBlank { "—" })
-            InfoRow("UI skin key", controller.getString(SettingKeys.UI_NUMBER_KEY, "default").ifBlank { "default" })
+            InfoRow("Customer/OEM id (default 88)", controller.getString(SettingKeys.CUSTOMER_TYPE, "—").ifBlank { "—" })
+            InfoRow("UI skin (Sys_UINumber, 0 = common)", controller.getString(SettingKeys.UI_NUMBER_KEY, "—").ifBlank { "—" })
         }
 
         SettingsSection(title = "Regional") {

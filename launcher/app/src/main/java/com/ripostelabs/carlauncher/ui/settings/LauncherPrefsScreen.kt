@@ -332,11 +332,10 @@ private fun MotionStatusRow(carEvents: CarEvents?) {
 /**
  * v2.8 — the live raw `Sys_CarType`, next to the override that ignores it.
  *
- * Auto has nothing to go on. CAR_API §2.3 calls the key a "car model/type profile id" and the
- * value domain was never recovered, so [com.ripostelabs.carlauncher.data.Reachability] ships an empty
- * mapping table and Auto always answers LHD. Showing the raw value is the only honest thing this
- * row can do: it turns "Auto is wrong for me" into a value a user can report, which is what would
- * let the table stop being empty.
+ * Auto has nothing to go on: `Sys_CarType` is a model index within `Sys_Vehicle_deries` (RAV4 =
+ * 2 under Toyota = 1), and the steering side lives only inside the CAN box's console map, so
+ * [com.ripostelabs.carlauncher.data.Reachability] cannot resolve RHD on this platform and always
+ * answers LHD. The raw value is shown so a user can at least confirm the vehicle profile.
  */
 @Composable
 private fun CarTypeRow(controller: CarSettingsController?) {
@@ -347,12 +346,13 @@ private fun CarTypeRow(controller: CarSettingsController?) {
     val carType = snapshot[SettingKeys.CAR_TYPE]
 
     InfoRow(
-        label = "Car profile (Sys_CarType)",
+        label = "Car profile (Sys_CarType, RAV4 = 2)",
         value = if (carType.isNullOrBlank()) "not set" else carType,
     )
     Text(
-        text = "Auto cannot read a driver's side out of this value — no mapping was ever " +
-            "recovered — so it stays left-hand drive. Set the override if that is wrong.",
+        text = "Auto cannot resolve the driver's side on this platform: the car type is a model " +
+            "index and the steering side never leaves the CAN box. It stays left-hand drive; " +
+            "set the override if that is wrong.",
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )

@@ -339,16 +339,13 @@ private fun RadioUnavailable() {
 internal fun formatFreqLabel(band: Int, freq: Int): String {
     if (freq <= 0) return "--"
     if (CarService.isAmBand(band)) {
-        val khz = if (freq > 30000) freq / 1000 else freq
-        return "$khz kHz"
+        return "$freq kHz"
     }
-    val mhz = when {
-        freq > 30000 -> freq / 1000.0      // kHz  -> MHz
-        freq > 3000 -> freq / 100.0        // 10kHz-> MHz
-        else -> freq / 10.0                // fallback
-    }
-    return "%.1f MHz".format(mhz)
+    // FM is reported in 10 kHz units; the NA dial steps by 100 kHz, so one decimal is exact.
+    return "%.1f MHz".format(freq / FM_UNITS_PER_MHZ)
 }
+
+private const val FM_UNITS_PER_MHZ = 100.0
 
 /** Immutable snapshot of the tuner state for the card. */
 private data class RadioInfo(
