@@ -43,6 +43,7 @@ import com.ripostelabs.carlauncher.carlib.CarService
 import com.ripostelabs.carlauncher.data.AppDirectoryStore // v0.4.2 custom app directory
 import com.ripostelabs.carlauncher.data.DriverSide // v2.8
 import com.ripostelabs.carlauncher.data.LauncherSettings // v0.6
+import com.ripostelabs.carlauncher.data.OemApps
 import com.ripostelabs.carlauncher.data.Placement // v0.4.2
 import com.ripostelabs.carlauncher.data.effectivePlacement // v0.4.2
 import com.ripostelabs.carlauncher.data.SettingsStore // v0.6
@@ -113,8 +114,10 @@ fun HomeScreen(
     val shownRadar = if (settings.radarLayoutConfirmed) radar else null
 
     var apps by remember { mutableStateOf<List<AppInfo>>(emptyList()) }
-    LaunchedEffect(Unit) {
-        apps = withContext(Dispatchers.IO) { appRepository.loadApps() }
+    // Reload when the OEM-shadow toggles change, so an un-shadowed app reappears at once.
+    val shadowPolicy = remember(settings) { OemApps.ShadowPolicy.from(settings) }
+    LaunchedEffect(shadowPolicy) {
+        apps = withContext(Dispatchers.IO) { appRepository.loadApps(shadowPolicy) }
     }
 
     // v0.4.2 custom app directory: the user's per-app placement overrides the built-in
