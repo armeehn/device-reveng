@@ -17,14 +17,18 @@ package com.ripostelabs.carlauncher.carlib
  *        3  audio to phone   4  audio to car   7  query power   8  re-send device name
  *     HBCP_HANGUP_EVENT                       hang up
  *     MCU_KEY_INFOR + int MCU_KEY_VALUE       22 hang up / 23 answer
+ *  launcher ──startActivity──▶ btsuite/.BTMainActivity + str GotoPageNum (a [Page])
  * ```
  *
- * `MCU_KEY_INFOR` is the same unprotected action [CarEvents] consumes as a panel-key fallback;
- * codes 22/23 are not CAR_KEY codes, so our own receiver drops them ([SwcFallback.mcuKey]).
+ * `MCU_KEY_INFOR` is the same unprotected action [CarEvents] consumes as a panel-key fallback.
+ * 23 is also the MCU's TALK key, so [answer] echoes back into our own receiver as
+ * `CAR_KEY_PHONE` ([SwcFallback.mcuKey]); 22 has no CAR_KEY twin and is dropped there.
  *
- * Nothing here is wired to UI. The builders are pure ([IntentSpec]) so a test can pin them.
+ * The builders are pure ([IntentSpec]) so a test can pin them; `ui/PhoneScreen` sends them.
  */
 object VendorBt {
+
+    const val PACKAGE = "com.szchoiceway.btsuite"
 
     const val ACTION_CONTROL = "zxw_bluetooth_contral_action"
     const val EXTRA_CONTROL_KEY = "zxw_bluetooth_contral_key"
@@ -45,9 +49,30 @@ object VendorBt {
     const val MCU_KEY_HANG_UP = 22
     const val MCU_KEY_ANSWER = 23
 
+    /** The vendor phone UI (`AndroidManifest.xml:49-60`, exported, no permission). */
+    const val MAIN_ACTIVITY = "com.szchoiceway.btsuite.BTMainActivity"
+    const val EXTRA_GOTO_PAGE = "GotoPageNum"
+    private const val ACTION_MAIN = "android.intent.action.MAIN"
+
+    /** `GotoPageNum` values (`bean/DisplayPageId.java:6-21`, read `BTMainActivity.java:92`). */
+    enum class Page(val key: String) {
+        DIAL("DialPage"),
+        CALL_RECORD("CallRecordPage"),
+        PHONE_BOOK("PhoneBookPage"),
+        SETTINGS("SetPage"),
+        MUSIC("BTMusic"),
+    }
+
     fun dial(number: String): IntentSpec = control(CONTROL_DIAL, number)
 
-    fun hangUp(): IntentSpec = IntentSpec(ACTION_HANGUP)
+    /**
+     * Hang up as the MCU's key path does (`OnKeyEvent(22)` -> `BTFunctionEvent(10)`,
+     * `BTService.java:1829`): the same function [hangUpEvent] reaches by its own action.
+     */
+    fun hangUp(): IntentSpec = mcuKey(MCU_KEY_HANG_UP)
+
+    /** The dedicated hang-up action (`BTService.java:1338-1341`); same effect as [hangUp]. */
+    fun hangUpEvent(): IntentSpec = IntentSpec(ACTION_HANGUP)
 
     fun answer(): IntentSpec = mcuKey(MCU_KEY_ANSWER)
 
@@ -58,6 +83,14 @@ object VendorBt {
 
     /** Ask btsuite to re-broadcast `HBCP_EVT_CUR_CONNECTED_DEVICE_NAME` (seeds a fresh UI). */
     fun requestDeviceName(): IntentSpec = control(CONTROL_SEND_DEVICE_NAME)
+
+    /** Open the vendor phone app on [page]; send with [IntentSpec.start]. */
+    fun openPage(page: Page): IntentSpec = IntentSpec(
+        action = ACTION_MAIN,
+        packageName = PACKAGE,
+        className = MAIN_ACTIVITY,
+        strings = mapOf(EXTRA_GOTO_PAGE to page.key),
+    )
 
     private fun control(key: Int, value: String? = null): IntentSpec = IntentSpec(
         action = ACTION_CONTROL,

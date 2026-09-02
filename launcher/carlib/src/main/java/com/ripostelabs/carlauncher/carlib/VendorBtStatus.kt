@@ -27,9 +27,42 @@ data class VendorBtState(
     val avPlaying: Boolean? = null,
     /** Track title carried by `HBCP_EVT_AV_STATUS`. */
     val avTitle: String? = null,
+    /** Other party's number (`HBCP_EVT_CONTACT_NUM`); cleared when the call ends. */
+    val callerNumber: String? = null,
+    /** Other party's name, or a geo string (`HBCP_EVT_CONTACT_NAME`); cleared with the call. */
+    val callerName: String? = null,
+    /** Seconds into the active call (`HBCP_EVT_SPEAKING_TIME`); cleared when the call ends. */
+    val speakingSec: Int? = null,
     /** Arrival time of the last HBCP_EVT_* broadcast of ANY shape; 0 = none this session. */
     val lastEventMs: Long = 0L,
-)
+) {
+    /** [hshf] as a name, or null while unknown / out of table. */
+    val hfp: HfpState? get() = HfpState.of(hshf)
+}
+
+/**
+ * The HFP state machine as btsuite numbers it (`BTUtils.java:115-121`, `HBCP_STATUS_HSHF_*`).
+ * Public twin of the `VendorBtDecode.HSHF_*` constants so a screen can switch on a name
+ * without reaching into the decoder.
+ *
+ * ```
+ *  0 INITIALISING  1 READY (no phone)  2 CONNECTING  3 CONNECTED (idle)
+ *  4 OUTGOING_CALL 5 INCOMING_CALL     6 ACTIVE_CALL          ( > 3 = call in progress )
+ * ```
+ */
+enum class HfpState(val code: Int) {
+    INITIALISING(0),
+    READY(1),
+    CONNECTING(2),
+    CONNECTED(3),
+    OUTGOING_CALL(4),
+    INCOMING_CALL(5),
+    ACTIVE_CALL(6);
+
+    companion object {
+        fun of(code: Int?): HfpState? = entries.firstOrNull { it.code == code }
+    }
+}
 
 /**
  * Pure decoder for the `HBCP_EVT_*` payloads.
@@ -44,7 +77,7 @@ data class VendorBtState(
  *  HBCP_EVT_CUR_CONNECTED_DEVICE_NAME         0                     phone name
  *  HBCP_EVT_AV_STATUS                         4 playing / 3 paused  track title
  *  HBCP_EVT_CONTACT_NUM / _CONTACT_NAME       0                     caller number / name
- *  HBCP_EVT_SPEAKING_TIME                     int[]{min, sec}       -   (NOT an int: ignored)
+ *  HBCP_EVT_SPEAKING_TIME                     int[]{min, sec}       -   (NOT an int)
  * ```
  *
  * HFP states (`BTUtils.java:115-121`): 0 initialising, 1 ready (no phone), 2 connecting,
@@ -54,6 +87,10 @@ data class VendorBtState(
  *
  * An event outside the table (or with a malformed extra) still stamps
  * [VendorBtState.lastEventMs]: the channel is alive even when the reading is unusable.
+ *
+ * Caller number / name and the speaking timer live only while HSHF says a call is in
+ * progress: the HSHF drop to <= 3 that ends the call clears them, since btsuite sends no
+ * "contact cleared" event. UNVERIFIED that the int[] shape survives the broadcast unchanged.
  */
 internal object VendorBtDecode {
 
@@ -87,6 +124,10 @@ internal object VendorBtDecode {
     private const val POWER_ON = 1
     private const val POWER_OFF = 0
 
+    /** `HBCP_EVT_SPEAKING_TIME` carries `int[]{min, sec}` (`BTService.java:746-749`). */
+    private const val SPEAKING_TIME_FIELDS = 2
+    private const val SECONDS_PER_MINUTE = 60
+
     /** Fold one HBCP broadcast into [prev]. [extras] is the raw bundle snapshot. */
     fun apply(
         prev: VendorBtState,
@@ -103,6 +144,9 @@ internal object VendorBtDecode {
             EVT_HSHF, EVT_HSHF_GET -> applyHshf(stamped, int)
             EVT_DEVICE_NAME -> applyDeviceName(stamped, str)
             EVT_AV_STATUS -> applyAv(stamped, int, str)
+            EVT_CONTACT_NUM -> stamped.copy(callerNumber = str)
+            EVT_CONTACT_NAME -> stamped.copy(callerName = str)
+            EVT_SPEAKING_TIME -> applySpeaking(stamped, extras[EXTRA_INT])
             else -> stamped
         }
     }
@@ -118,11 +162,26 @@ internal object VendorBtDecode {
         if (int == null || int !in HSHF_INITIALISING..HSHF_ACTIVE_CALL) {
             return state
         }
-        return state.copy(
+        val next = state.copy(
             hshf = int,
             connected = int >= HSHF_CONNECTED,
             inCall = int > HSHF_CONNECTED,
         )
+        if (next.inCall == true) {
+            return next
+        }
+
+        // Call over: the party and the timer belong to it.
+        return next.copy(callerNumber = null, callerName = null, speakingSec = null)
+    }
+
+    /** `int[]{min, sec}` -> total seconds; any other shape leaves the timer alone. */
+    private fun applySpeaking(state: VendorBtState, raw: Any?): VendorBtState {
+        val fields = raw as? IntArray ?: return state
+        if (fields.size < SPEAKING_TIME_FIELDS) {
+            return state
+        }
+        return state.copy(speakingSec = fields[0] * SECONDS_PER_MINUTE + fields[1])
     }
 
     /**

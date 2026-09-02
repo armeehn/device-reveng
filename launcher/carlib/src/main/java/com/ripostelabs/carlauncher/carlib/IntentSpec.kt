@@ -14,11 +14,15 @@ data class IntentSpec(
     val packageName: String? = null,
     val ints: Map<String, Int> = emptyMap(),
     val strings: Map<String, String> = emptyMap(),
+    /** Explicit target class inside [packageName] (activity launches); ignored without one. */
+    val className: String? = null,
 ) {
 
     fun toIntent(): Intent {
         val intent = Intent(action)
-        if (packageName != null) {
+        if (packageName != null && className != null) {
+            intent.setClassName(packageName, className)
+        } else if (packageName != null) {
             intent.setPackage(packageName)
         }
         ints.forEach { (key, value) -> intent.putExtra(key, value) }
