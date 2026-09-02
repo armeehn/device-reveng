@@ -63,7 +63,10 @@ class CarEvents(private val appContext: Context) {
 
         // ---- Steering-wheel keys (CAR_API §4) — protected -------------------
         const val STEER_WHEEL_INFOR = "com.choiceway.eventcenter.EventUtils.STEER_WHEEL_INFOR"
-        /** int: key index (bArr[1] + 1). */
+        /**
+         * int: learned SLOT + 1 (`bArr[1] + 1`, 1..10), NOT a CAR_KEY code. Which function the
+         * slot means is the vendor learn app's map — see [WheelKeyMap].
+         */
         const val EXTRA_SWC_LPARAM = "EventUtils.STEER_WHEEL_INFOR_LPARAM"
         /** int: 3 = pressed/down, 4 = released/up. */
         const val EXTRA_SWC_WPARAM = "EventUtils.STEER_WHEEL_INFOR_WPARAM"
@@ -90,19 +93,20 @@ class CarEvents(private val appContext: Context) {
         const val EXTRA_LAUNCHER = "LAUNCHER_EXTRA"
         const val LAUNCHER_EXTRA_APPLIST = "AppList"
 
-        // ---- v0.4.9: vendor BT module status (CUSTOMERUI_NOTES §3e/§4) ------
-        // The vendor launcher's BT chip rides `com.szchoiceway.btsuite.HBCP_EVT_*` broadcasts
-        // (power / connected-device / HSHF status — unprotected). The decompile names only the
-        // prefix and those three categories, so the concrete action names below are GUESSED
-        // candidates; dispatch matches on the prefix, so a name confirmed on-device later is a
-        // one-line addition. A wrong guess is inert: no delivery, no state change.
+        // ---- Vendor BT module status (btsuite/BTUtils.java:88-105) -----------
+        // `com.szchoiceway.btsuite` broadcasts its state unprotected as HBCP_EVT_* with two
+        // fixed extras (DATA_INT / DATA_STR); the table is in VendorBtDecode. Only the actions
+        // btsuite actually sends are registered (PAIR_STATUS, SEARCH, PINCODE, OBD never are).
         const val HBCP_ACTION_PREFIX = "com.szchoiceway.btsuite.HBCP_EVT_"
-        val HBCP_CANDIDATE_ACTIONS = arrayOf(
-            HBCP_ACTION_PREFIX + "POWER_STATUS",
-            HBCP_ACTION_PREFIX + "POWER_ON_OFF",
-            HBCP_ACTION_PREFIX + "CONNECT_STATUS",
-            HBCP_ACTION_PREFIX + "CONNECTED_DEVICE",
-            HBCP_ACTION_PREFIX + "HSHF_STATUS",
+        val HBCP_ACTIONS = arrayOf(
+            HBCP_ACTION_PREFIX + VendorBtDecode.EVT_POWER,
+            HBCP_ACTION_PREFIX + VendorBtDecode.EVT_HSHF,
+            HBCP_ACTION_PREFIX + VendorBtDecode.EVT_HSHF_GET,
+            HBCP_ACTION_PREFIX + VendorBtDecode.EVT_DEVICE_NAME,
+            HBCP_ACTION_PREFIX + VendorBtDecode.EVT_AV_STATUS,
+            HBCP_ACTION_PREFIX + VendorBtDecode.EVT_CONTACT_NUM,
+            HBCP_ACTION_PREFIX + VendorBtDecode.EVT_CONTACT_NAME,
+            HBCP_ACTION_PREFIX + VendorBtDecode.EVT_SPEAKING_TIME,
         )
 
         // ---- Speed (CAR_API §1.3 note) --------------------------------------
@@ -275,8 +279,28 @@ class CarEvents(private val appContext: Context) {
         }
     }
 
-    /** A steering-wheel key event decoded from [STEER_WHEEL_INFOR]. */
-    data class SwcKey(val keyIndex: Int, val down: Boolean, val voltage: Int)
+    /**
+     * A steering-wheel key event decoded from [STEER_WHEEL_INFOR].
+     *
+     * [keyIndex] lives in one of two spaces, and [space] says which: the resistive wheel
+     * reports a learned slot + 1 ([WheelKeyMap.slotOfLparam]), while the unprotected panel
+     * fallbacks ([SwcFallback]) carry `CAR_KEY_*` codes. The two overlap numerically, so a
+     * consumer must branch on [space] before reading [keyIndex].
+     */
+    data class SwcKey(
+        val keyIndex: Int,
+        val down: Boolean,
+        val voltage: Int,
+        val space: KeySpace = KeySpace.LEARNED_SLOT,
+    )
+
+    /** Which number space an [SwcKey.keyIndex] is in. */
+    enum class KeySpace {
+        /** `STEER_WHEEL_INFOR` LPARAM: learned slot + 1, resolved through [WheelKeyMap]. */
+        LEARNED_SLOT,
+        /** `CAR_KEY_*` (CAR_API §4) from the host/panel fallback broadcasts. */
+        CAR_KEY,
+    }
 
     /**
      * v0.4.9 — one `ACTION_ACC_SLEEP_STATUS_EVT` arrival (CAR_API §1.3).
@@ -362,8 +386,8 @@ class CarEvents(private val appContext: Context) {
 
     private val _vendorBt = MutableStateFlow(VendorBtState())
     /**
-     * v0.4.9 — Bluetooth status per the vendor bt module's `HBCP_EVT_*` broadcasts
-     * (CUSTOMERUI_NOTES §3e). Starts as the all-null [VendorBtState]; consumers must gate on
+     * Bluetooth status per the vendor bt module's `HBCP_EVT_*` broadcasts (contract in
+     * [VendorBtDecode]). Starts as the all-null [VendorBtState]; consumers must gate on
      * [VendorBtState.lastEventMs] so absence of events changes nothing.
      */
     val vendorBt: StateFlow<VendorBtState> = _vendorBt.asStateFlow()
@@ -556,8 +580,7 @@ class CarEvents(private val appContext: Context) {
                     _vehicleSniff.value = _vehicleSniff.value +
                         (a to CanFrame.from(intent, System.currentTimeMillis()))
                 }
-                // v0.4.9: vendor BT module status. Prefix match, because the concrete
-                // HBCP_EVT_* names are guessed candidates (see HBCP_CANDIDATE_ACTIONS).
+                // Vendor BT module status (HBCP_ACTIONS); decoded by VendorBtDecode.
                 if (a.startsWith(HBCP_ACTION_PREFIX)) {
                     _vendorBt.value = VendorBtDecode.apply(
                         _vendorBt.value, a, rawExtras(intent), System.currentTimeMillis(),
@@ -712,7 +735,11 @@ class CarEvents(private val appContext: Context) {
      * [ints] holds only the extras that action defines; a missing one falls back to the same
      * default the v2.5 receiver used.
      */
-    private fun handleProtected(action: String, ints: Map<String, Int>) {
+    private fun handleProtected(
+        action: String,
+        ints: Map<String, Int>,
+        space: KeySpace = KeySpace.LEARNED_SLOT,
+    ) {
         when (action) {
             ACTION_BACKCAR_START -> updateReverse(true)
             ACTION_BACKCAR_END -> updateReverse(false)
@@ -724,6 +751,7 @@ class CarEvents(private val appContext: Context) {
                     keyIndex = ints[EXTRA_SWC_LPARAM] ?: 0,
                     down = (ints[EXTRA_SWC_WPARAM] ?: 0) == SWC_STATE_DOWN,
                     voltage = ints[EXTRA_SWC_VOLTAGE] ?: 0,
+                    space = space,
                 )
                 _swcKeys.tryEmit(key)
                 listeners.forEach { it.onSwcKey(key) }
@@ -739,7 +767,8 @@ class CarEvents(private val appContext: Context) {
     private fun applyFallbackEdge(edge: SwcFallback.Edge) {
         val ints = SwcFallback.canonicalInts(edge)
         if (protectedDedupe.accept(STEER_WHEEL_INFOR, ints, System.currentTimeMillis())) {
-            handleProtected(STEER_WHEEL_INFOR, ints)
+            // The fallbacks carry CAR_KEY codes, not learned slots (see KeySpace).
+            handleProtected(STEER_WHEEL_INFOR, ints, KeySpace.CAR_KEY)
         }
     }
 
@@ -840,7 +869,7 @@ class CarEvents(private val appContext: Context) {
             addAction(CAN_CAR_OUT_SIDE_TEMP_EVT) // v3.0
             addAction(ZXW_CAN_WHEEL_TRACK_EVT) // v3.0
             addAction(ZXW_ACTION_LAUNCHER_ALLAPPS_START_EVT) // v0.4.9 drawer request
-            HBCP_CANDIDATE_ACTIONS.forEach { addAction(it) } // v0.4.9 vendor BT status
+            HBCP_ACTIONS.forEach { addAction(it) } // vendor BT status
         }
         // Vendor gateway is a separate app -> this is not an app-internal broadcast,
         // so it must be exported on API 33+ (RECEIVER_EXPORTED).

@@ -88,8 +88,14 @@ All action/extra names below are `public static final String` in `EventUtils.jav
 | `...EventUtils.ACTION_ACC_OPEN_CLOSE_EVT` | `ACTION_ACC_OPEN_CLOSE_EVT` | `ACC_Status` → int → 1=ACC on, 0=off | no | `EventService.java:3404-3407` **[confirmed]** |
 | `...EventUtils.ACTION_ACC_SLEEP_STATUS_EVT` | `ACTION_ACC_SLEEP_STATUS_EVT` | `ACC_Status` → int (sleep/wake); also targeted to `com.szchoiceway.btsuite/.BTServiceAutoStart` | no | `EventService.java:3397-3400` **[confirmed]** |
 | `...EventUtils.HANDLER_ACC_POWER_OFF_EVT` | `HANDLER_ACC_POWER_OFF_EVT` | — | no | const `EventUtils.java` **[confirmed]** |
-| `com.choiceway.eventcenter.EventUtils.STEER_WHEEL_INFOR` | `STEER_WHEEL_INFOR` | `EventUtils.STEER_WHEEL_INFOR_LPARAM` → int (key index+1), `..._WPARAM` → int (3=down,4=up/release), `..._VOLTAGE` → int (raw ADC) | **yes** | `EventService.java:2846-2857` **[confirmed]** |
-| `com.choiceway.eventcenter.EventUtils.STEER_WHEEL_STATUS` | `STEER_WHEEL_STATUS` | — | — | const **[confirmed]**, see §4 |
+| `com.choiceway.eventcenter.EventUtils.STEER_WHEEL_INFOR` | `STEER_WHEEL_INFOR` | `EventUtils.STEER_WHEEL_INFOR_LPARAM` → int **learned slot + 1** (`bArr[1]+1`, 1..10 — NOT a `CAR_KEY_*` code; the function is whatever `wheel_key_learn_custom` maps that slot to, §4), `..._WPARAM` → int (3=down,4=up/release), `..._VOLTAGE` → int (ADC 0..255, ×3.3/255 V) | **yes** | `EventService.java:2846-2857` **[confirmed]** |
+| `com.choiceway.eventcenter.EventUtils.STEER_WHEEL_STATUS` | `STEER_WHEEL_STATUS` | `EventUtils.STEER_WHEEL_STUDY_STATUS` → int, 16-bit mask of learned slots | — | `EventService.java:3065-3066` **[confirmed]**, see §4 |
+| `com.szchoiceway.btsuite.HBCP_EVT_BT_POWER_STATUS` | (btsuite `BTUtils`) | `com.szchoiceway.btsuite.DATA_INT` → 1 on / 0 off, `..DATA_STR` → "" | no | `ParseFEasycom.java:175-179` **[confirmed]** |
+| `com.szchoiceway.btsuite.HBCP_EVT_HSHF_STATUS` / `_HSHF_GET_STATUS` | (btsuite) | `DATA_INT` → HFP state 0 init, 1 ready, 2 connecting, 3 connected, 4 outgoing, 5 incoming, 6 active call (connected = ≥3, in call = >3) | no | `ParseFEasycom.java:412,423`, `BTUtils.java:115-121` **[confirmed]** |
+| `com.szchoiceway.btsuite.HBCP_EVT_CUR_CONNECTED_DEVICE_NAME` | (btsuite) | `DATA_STR` → phone name (sent on control key 8) | no | `BTService.java:1536-1538` **[confirmed]** |
+| `com.szchoiceway.btsuite.HBCP_EVT_AV_STATUS` | (btsuite) | `DATA_INT` → 4 playing / 3 paused, `DATA_STR` → track title | no | `BTService.java:262-265` **[confirmed]** |
+| `com.szchoiceway.btsuite.HBCP_EVT_CONTACT_NUM` / `_CONTACT_NAME` | (btsuite) | `DATA_STR` → caller number / name (HFP states 4/5) | no | `ParseFEasycom.java:498-499` **[confirmed]** |
+| `com.szchoiceway.btsuite.HBCP_EVT_SPEAKING_TIME` | (btsuite) | `DATA_INT` → **int[]** {min, sec} | no | `BTService.java:746-749` **[confirmed]** — no battery/signal exists on this surface |
 | `...EventUtils.MCU_KEY_INFOR` | `MCU_KEY_INFOR_ACTION` | `EventUtils.MCU_KEY_VALUE` → int (panel/host keycode) | no | `EventUtils.java:2147-2153`, sent `EventService.java:8966` **[confirmed]** |
 | `com.choiceway.eventcenter.EventUtils.ACTION_HOST_MCU_BUTTON_KEY` | `ACTION_HOST_MCU_BUTTON_KEY` | `HostKeyWord` (`EXTRA_HOST_KEY`) → int keycode, `HostKeyStatus` (`EXTRA_HOST_STATUS_KEY`) → byte (down/up) | no | `EventService.java:4285-4290` **[confirmed]** |
 | `...EventUtils.SHOW_CAR_SPEED_EVENT` | `SHOW_CAR_SPEED_EVENT` | none (UI toggle only; **speed value is not in this intent** — see note) | no | `EventService.java:5214,5747,6280` **[confirmed]** |
@@ -345,8 +351,25 @@ RADIO=9, BACK=10, L_TUNE_L=11, L_TUNE_R=12, R_TUNE_L=13, R_TUNE_R=14`.
 `MCU_KEY_SYS_*` (`:1617-1620`): `HOME=76, MENU=77, ESC=78, WINCE=79`.
 There are also Porsche/vendor variants (`CAR_PORSCHE_KEY_*`, `KSP_PORSCHE_KEY_*`).
 
-**Learning/mapping** wheel keys is done via SysVar keys `wheel_key_learn_custom`
-(`SYS_WHEEL_INDEX_CUSTOM_KEY`) and `Set_Mcu_Wheel_Custom_Key_Save`, plus `base/WheelCustomKey.java`.
+**Learning/mapping.** `STEER_WHEEL_INFOR_LPARAM` is a learned **slot + 1**, not a function.
+The vendor learn app (`com.szchoiceway.learn.key`, `view/CarWheelView.java`) drives the MCU with
+`IEventService.sendWheelKey(n)` (frame `{0x07, n}`): `112` enter learn mode, `<slot>` (lowest
+free 0..14) learn the next press into that slot, `114` save, `113` exit, `115` clear all,
+`116`/`117` high/low-impedance wheel (also bit 2 of `Sys_McuSet`). The MCU answers with
+`STEER_WHEEL_INFOR` (LPARAM≠0 read as success) and `STEER_WHEEL_STATUS`
+(`EventUtils.STEER_WHEEL_STUDY_STATUS` = 16-bit mask of learned slots). The result is persisted
+as a **JSON object** in SysVar `wheel_key_learn_custom` (`SYS_WHEEL_INDEX_CUSTOM_KEY`):
+`{"<icon id>":"<slot>"}`, e.g. `{"svg_wheel_next_c":"1","svg_wheel_mode_home":"0"}` (panel keys:
+`mcu_panel_key_learn_custom`). Icon ids = fields of `base/WheelCustomKey.java`, meanings from
+`manager/McuToArmDataManage.java:441-520`: `svg_wheel_mode_c` Mode, `next_c` Next, `pre_c` Prev,
+`gj` Power, `dh` Navi, `jy` Mute, `gd` Hangup, `jt` Talk, `s_add` VolAdd, `s_j` VolSub,
+`mode_voice`, `mode_360` Camera, `mode_fm`, `mode_back`, `mode_home`, `mode_ok`, `mode_video`,
+`mode_music`, `mode_backlight_brightness`, `mode_original_car_info`, `mode_audio_dsp`,
+`mode_settings`, `mode_car_android`, `mode_fenping` SplitScreen, `mode_houtai` RecentTask,
+`mode_aux`, `mode_ams`, `mode_aps`, `mode_loud`, `mode_chewaijiankong`. The gateway itself
+does `Gson.fromJson` on this key at startup: a scalar there crash-loops it (launcher v2.4.2
+incident). The launcher parses it read-only (`carlib/WheelKeyMap.kt`). That the MCU's `bArr[1]`
+equals the taught slot is inferred, **UNVERIFIED** on the car.
 
 Register example:
 ```java
