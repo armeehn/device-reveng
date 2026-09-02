@@ -329,17 +329,18 @@ dashboard that renders a guess identically to a confirmed reading is worse than 
 
 | Tile | Source | Status |
 |---|---|---|
-| Speed | `CarEvents.speedKmh` (GPS, v2.5) | derived, not from the car |
-| Outside temp | `CAN_CAR_OUT_SIDE_TEMP_EVT` | action **confirmed**; extra key names GUESSED |
-| Steering | `ZXW_CAN_WHEEL_TRACK_EVT` | action **confirmed**; units and sign GUESSED |
+| Speed | `CarEvents.speedKmh`: GPS (v2.5); canbus2's `MCU_CAR_CAN_INFO` byte[0] is decoded too but held back (`CAN_SPEED_TRUSTED`) | the 0x32 field did not track road speed on the 2026-08-29 drive |
+| Outside temp | `CAN_CAR_OUT_SIDE_TEMP_EVT` | **confirmed**, one unit-suffixed String extra |
+| Steering | 0x11 decode of `MCU_MSG_CAN_ALL_INFO`, `ZXW_CAN_WHEEL_TRACK_EVT` as fallback | raw/14 scale **confirmed**; which side is negative UNVERIFIED |
 | Ignition | `ACTION_ACC_OPEN_CLOSE_EVT` | **confirmed** |
-| Radar | `MCU_CAR_CAN_RADAR_INFO` | byte layout GUESSED (v2.8) |
+| Radar | `MCU_CAR_CAN_RADAR_INFO` | bank layout + distance codes **confirmed**; left→right order UNVERIFIED |
 | Session timer | measured here | not the car's trip computer |
 
-The steering tile shows **no number**. The extra's units and sign are undocumented, so printing
-"42°" would invent precision we do not have; a bar that leans the way the wheel leans is exactly
-as much as the signal supports. `CAN_CAR_TIRP_INFO` exists in the constant table but no extras
-were recovered for it, so the real trip computer is not readable — hence "this session".
+The steering tile shows **no number**. The value is the OEM raw/14 scale, never calibrated to
+degrees, and which side a negative value means is unverified, so printing "42°" would invent
+precision we do not have; a bar that leans the way the wheel leans is exactly as much as the
+signal supports. `CAN_CAR_TIRP_INFO` is never broadcast, so the real trip computer is not readable
+without decoding frame 0x13 ourselves — hence "this session".
 
 **Driver profiles** (`data/DriverProfilesStore.kt`, status bar ▸ account icon — two taps from
 Home, as §3.0 asks). A profile bundles theme, favourites, quick-launch order and reachability.
@@ -348,12 +349,12 @@ second source of truth, so a profile can never disagree with the live value. Sav
 parked-only (it needs the keyboard); applying is not — being unable to restore your own layout
 while moving would be worse than the single tap.
 
-**Gateway UIMODE handshake** (`carlib/GatewayHandshake.kt`). Announces our UI mode on
-`ACTION_LAUNCHER_TO_EVENTCENTER_UIMODE_EVENT` (CAR_API §6.2), which is what makes the vendor
-stack treat us as *the* launcher. It deliberately does **not** drive our theming:
-`CUSTOMERUI_NOTES.md` records that the vendor launcher themes from `setUiModeNight/Day` plus a
-local broadcast, *not* from this pair, so reading it as a day/night source would be reading a
-channel the vendor does not actually theme from.
+**Gateway UI mode** (`carlib/GatewayHandshake.kt`). Not a handshake: the gateway delegates its
+day/night decision to the launcher. We send `ACTION_LAUNCHER_TO_EVENTCENTER_UIMODE_EVENT` with
+the int extra `Extra_Day_Night_UiMode` (1 day, 2 night; 0 = follow headlamps, which is what a
+missing or boolean extra decodes to — the v3.0 bug). The gateway→launcher half is a request to
+echo the same int; unanswered, the gateway applies it itself after 2 s (CAR_API §6.2). Theming
+does not read this class; it follows the headlamps via `LAMP_STATUS`.
 
 ### HVAC write controls — sender only, no UI
 
@@ -615,33 +616,32 @@ approximation; a sunset calculation would be wrong exactly when it matters.
   **ordinals almost certainly do not match** the real service — regenerate from the
   decompiled `IEventService.java` preserving method order before relying on any call.
 - **`ICallbackfn.aidl`** signature is a placeholder; verify against the device.
-- **No volume event.** The status-bar volume chip polls because nothing pushes: none of the seven
-  `ICallbackfn` registrars is audio-scoped, the `EventUtils` broadcast table has no volume action,
-  and `SYSTEM_VOLUME` is a LocalSocket text-protocol marker. Capturing that socket, or the real
-  `ICallbackfn` signature, is what would replace the poll. See `ui/StatusIndicators.kt`.
-- **Numeric speed** now comes from GPS (v2.5, above). The gateway still broadcasts none, so
-  decoding the CAN bulk frame (`CAN_BASIC_EVT` / `MCU_CAR_CAN_INFO`) remains the upgrade worth
-  making: it is available at power-on and indoors, where GPS is not.
+- **Volume** is pushed: the gateway broadcasts `MCU_MSG_MAIL_VOL` (`(mute ? 0x80 : 0) | vol`) on
+  every MCU volume/mute report, decoded by `CarEvents.volume`. The status-bar chip's AIDL poll
+  stays only until the first push lands. There is no LocalSocket; `SYSTEM_VOLUME:` rides the
+  `ZXW_MESSAGE_TO_ICCOMMUNICATION` broadcast as text.
+- **Numeric speed** comes from GPS (v2.5, above). canbus2's `MCU_CAR_CAN_INFO` digest
+  (`[speed, rpmH, rpmL]`) is decoded into `CarEvents.canSpeedKmh` and would outrank GPS via
+  `CarEvents.pickSpeed`, but `CAN_SPEED_TRUSTED` stays false: its speed byte is the 0x32 field
+  that did not track road speed on the 2026-08-29 drive. A steady-cruise capture settles it.
 - **Reverse camera feed** — `ReverseOverlay` is a black placeholder; embed a `SurfaceView`
   bound to the reverse video input, or host `com.szchoiceway.view.BackCarActivity`.
 - **Climate widget** — reads the mirrored `CarAirState` parcel; unverified on the car.
 - **`Rdo_MyFavorite0..5` write-back** — the encoding is known (`freq | (am ? 0x10000 : 0)`,
   `RadioTuning.encodeVendorFavorite`) and the slots are recallable from RadioScreen; writing our
   presets into them is a product decision, not a research item any more.
-- **Radar byte layout** — still **UNCONFIRMED** (v2.8 above). Run the capture, then either fix the
-  offsets in `RadarState` or set the layout-confirmed flag. Until then the maneuvering side-strips
-  never draw.
+- **Radar sensor order** — bank layout and distance codes are from the decompile; the left→right
+  order within a bank is still **UNVERIFIED**. Run the capture, then set the layout-confirmed
+  flag. Until then the maneuvering side-strips never draw.
 - **Steering side** — not recoverable from SysVar (`Sys_CarType` is a model index). The
   reachability mirror's Auto mode stays LHD; only a CAN-box console read could ever feed it.
 - **Vendor `sendMode` value table** — needed before MediaScreen can switch the car between
   Bluetooth / USB / the built-in player.
-- **`CAN_CAR_OUT_SIDE_TEMP_EVT` / `ZXW_CAN_WHEEL_TRACK_EVT` extra keys** — the actions are
-  confirmed but the extra *names* were never quoted in the decompile, so v3.0 tries a short list
-  of candidates. Dump the real extras on-device and pin them.
 - **Steering angle units** — turn lock to lock with the dashboard open and read the extremes off
   the raw value; the indicator currently assumes ±540 and saturates.
-- **`CAN_CAR_TIRP_INFO` extras** — would replace the dashboard's own session timer with the car's
-  real trip computer.
+- **Trip computer** — `CAN_CAR_TIRP_INFO` is never broadcast; canbus2 keeps frame 0x13 (range,
+  average speed, elapsed) in its own EventBus. Decoding it from `MCU_MSG_CAN_ALL_INFO` would
+  replace the dashboard's session timer.
 - **Profile renaming** — captured profiles get a generated name until v2.7's in-app keyboard
   (`CarTextField`) is on this branch.
 ```

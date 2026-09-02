@@ -1,67 +1,65 @@
 package com.ripostelabs.carlauncher.carlib
 
 /**
- * v0.4.9 — decode the two UNPROTECTED steering-wheel/panel key broadcasts (CAR_API §4 paths
- * 2 and 3) into the same canonical form as the protected `STEER_WHEEL_INFOR` path.
+ * Decode the UNPROTECTED `MCU_KEY_INFOR` key broadcast into the same canonical form as the
+ * protected `STEER_WHEEL_INFOR` path, so a NON-ROOT install still has wheel control.
  *
- * Why this exists: CarEvents registered `ACTION_HOST_MCU_BUTTON_KEY` and `MCU_KEY_INFOR` but
- * never dispatched them, so a NON-ROOT install (where the protected broadcast is silently
- * never delivered and the root helper cannot run) had zero wheel control. These two actions
- * are exactly the fallback CAR_API §4 documents for a normal app.
+ * `MCU_KEY_INFOR` is where every key the MCU reports ends up — panel keys, learned SWC keys and
+ * CAN-box keys alike (`EventService.java:8948-8967` → `EventUtils.sendKeyEventBroadcast`,
+ * `EventUtils.java:2147-2154`). Its int extra is a code from the vendor `MCU_KEY_*` table
+ * (`EventUtils.java:1458-1656`), NOT a `CAR_KEY_*` index. There is no edge encoding: one
+ * broadcast per press, and a long press is its own code. The RAV4 CAN box maps its wheel to these
+ * codes at `HiworldCanParseToyota.java:853-885`.
+ *
+ * `ACTION_HOST_MCU_BUTTON_KEY` is deliberately NOT decoded here any more: it is the volume relay
+ * to an original-car amplifier (`HostKeyWord` 1..4, `HostKeyStatus` 1 down / 0 up), only sent
+ * when that routing is configured (`EventService.java:4224-4289`). It was never a wheel path.
  *
  * All functions are pure so a unit test reaches them without a Context.
- *
- * Decode rules are deliberately conservative (unknown → null → the event is dropped):
- *  - Key codes: `CAR_KEY_*` (1..14) pass through; the `MCU_KEY_SYS_*` panel codes translate
- *    to their CAR_KEY twin (HOME/MENU by name; ESC → BACK). Anything else is unknown.
- *  - `HostKeyStatus` (byte, "down/up" — CAR_API §1.3): only the 3=down / 4=up convention the
- *    same MCU documents for `STEER_WHEEL_INFOR_WPARAM` is accepted. Any other encoding is
- *    UNCONFIRMED, and a wrong guess here is worse than a dropped event — an inverted edge
- *    leaves a key "held" in KeyPump and fires a phantom long-press.
  */
 internal object SwcFallback {
 
-    /** A decoded key edge from an unprotected fallback broadcast. */
+    /** A decoded key edge in the canonical `STEER_WHEEL_INFOR` form. */
     data class Edge(val keyIndex: Int, val down: Boolean)
 
-    // ---- MCU_KEY_SYS_* panel codes (CAR_API §4, EventUtils.java:1617-1620) ----
-    const val MCU_KEY_SYS_HOME = 76
-    const val MCU_KEY_SYS_MENU = 77
-    const val MCU_KEY_SYS_ESC = 78
+    // ---- MCU_KEY_* codes (EventUtils.java:1458-1656). Codes with no CAR_KEY twin are listed
+    // so a reader can see they were considered, not overlooked.
+    const val MCU_KEY_POWER = 1
+    const val MCU_KEY_NEXT = 2
+    const val MCU_KEY_PREV = 3
+    const val MCU_KEY_PLAYPAUSE = 6
+    /** The vendor's HOME key is named MENU. */
+    const val MCU_KEY_MENU = 9
+    const val MCU_KEY_MODE = 16
+    const val MCU_KEY_MUTE = 17
+    const val MCU_KEY_VOL_ADD = 18
+    const val MCU_KEY_VOL_SUB = 19
+    const val MCU_KEY_HANGUP = 22
+    const val MCU_KEY_TALK = 23
+    /** The vendor's BACK key. */
+    const val MCU_KEY_RETURN = 85
+    const val MCU_KEY_TASK_LIST = 113
+    /** Voice assistant ("shengkong"). */
+    const val MCU_KEY_VOICE = 116
 
     /**
-     * `ACTION_HOST_MCU_BUTTON_KEY`: `HostKeyWord` (int keycode) + `HostKeyStatus` (down/up).
-     * @return the decoded edge, or null when either extra is unknown/undecodable.
+     * `MCU_KEY_INFOR`: `MCU_KEY_VALUE` (int MCU_KEY code), NO press state on this path — the
+     * caller synthesises a complete down+up tap from the one broadcast.
+     *
+     * Only codes with a `CAR_KEY_*` meaning map. Volume and mute are left out on purpose: the
+     * gateway already applies them to the amplifier before broadcasting, so acting on them here
+     * would double the step. Play/pause, hang-up, voice, task list and power have no CAR_KEY twin.
+     *
+     * @return the canonical CAR_KEY index, or null for a code we do not act on.
      */
-    fun hostKey(keyWord: Int?, status: Int?): Edge? {
-        val index = normalizeKey(keyWord) ?: return null
-        val down = when (status) {
-            CarEvents.SWC_STATE_DOWN -> true
-            CarEvents.SWC_STATE_UP -> false
-            else -> return null // UNCONFIRMED encoding — drop rather than guess an edge
-        }
-        return Edge(index, down)
-    }
-
-    /**
-     * `MCU_KEY_INFOR`: `MCU_KEY_VALUE` (int keycode), NO press state on this path — the caller
-     * synthesises a complete down+up tap from the one broadcast.
-     * @return the canonical CAR_KEY index, or null for an unknown code.
-     */
-    fun mcuKey(value: Int?): Int? = normalizeKey(value)
-
-    /** Map a received keycode into the CAR_KEY_* space, or null if it is not one we know. */
-    fun normalizeKey(code: Int?): Int? {
-        if (code == null) {
-            return null
-        }
-        return when (code) {
-            in CarEvents.CAR_KEY_POWER..CarEvents.CAR_KEY_R_TUNE_R -> code
-            MCU_KEY_SYS_HOME -> CarEvents.CAR_KEY_HOME
-            MCU_KEY_SYS_MENU -> CarEvents.CAR_KEY_MENU
-            MCU_KEY_SYS_ESC -> CarEvents.CAR_KEY_BACK // ESC ≈ Android Back on this panel
-            else -> null
-        }
+    fun mcuKey(value: Int?): Int? = when (value) {
+        MCU_KEY_MENU -> CarEvents.CAR_KEY_HOME
+        MCU_KEY_RETURN -> CarEvents.CAR_KEY_BACK
+        MCU_KEY_NEXT -> CarEvents.CAR_KEY_NEXT
+        MCU_KEY_PREV -> CarEvents.CAR_KEY_PREV
+        MCU_KEY_TALK -> CarEvents.CAR_KEY_PHONE
+        MCU_KEY_MODE -> CarEvents.CAR_KEY_MEDIA
+        else -> null
     }
 
     /**

@@ -70,11 +70,12 @@ data class LauncherSettings(
      * v2.8 — the user has checked the radar byte layout against their car (Settings ▸ Parking
      * radar ▸ Raw frame capture) and it decodes correctly.
      *
-     * Off by default, and the default is the whole point: [com.ripostelabs.carlauncher.carlib.RadarState]
-     * decodes a GUESSED layout, so anything that turns a decoded level into a *safety* claim — the
-     * maneuvering side-strip — stays hidden until a human has confirmed the guess on a real car.
-     * The bars that merely mirror the raw frame (the radar settings readout) are not gated: they
-     * report what arrived, not what it means.
+     * Off by default, and the default is the whole point. The bank layout and distance scale of
+     * [com.ripostelabs.carlauncher.carlib.RadarState] are now read off the vendor decompile, but
+     * the left→right order of the sensors within a bank is not, so anything that turns "which
+     * side" into a *safety* claim — the maneuvering side-strip — stays hidden until a human has
+     * confirmed the order on a real car. The bars that merely mirror the frame (the radar
+     * settings readout) are not gated: they report what arrived, not which corner it means.
      */
     val radarLayoutConfirmed: Boolean = false,
     /**

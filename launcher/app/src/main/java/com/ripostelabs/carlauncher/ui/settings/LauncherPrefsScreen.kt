@@ -374,8 +374,8 @@ private fun illuminationHint(carEvents: CarEvents?): String {
     if (seen) {
         return "The car is reporting illumination, so Auto follows it and these hours are unused."
     }
-    return "No illumination broadcast has arrived this session — the signal is permission-gated " +
-        "and usually silent on a normal install, which is what these hours are for."
+    return "No headlamp broadcast has arrived this session — the car only sends one when the " +
+        "lamps toggle, which is what these hours are for."
 }
 
 /** Whole hours only; a 24-position slider is already as fine as this control should get. */

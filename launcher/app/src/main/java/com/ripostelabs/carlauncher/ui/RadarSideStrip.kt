@@ -42,9 +42,9 @@ import com.ripostelabs.carlauncher.ui.theme.proximityRamp
  * motion budget in launcher/README.md forbids it: the moment the strip most needs to be read is
  * the moment an animation is most distracting. Colour and fill carry the signal.
  *
- * Gated on the decode being trusted — see `LauncherSettings.radarLayoutConfirmed`. The byte layout
- * in [RadarState] is GUESSED and has never been checked against a car, and an arc that says "clear"
- * because a guessed offset happened to read zero is worse than no arc at all.
+ * Gated on the decode being trusted — see `LauncherSettings.radarLayoutConfirmed`. The left→right
+ * sensor order [RadarState] splits corners on is UNVERIFIED, and an arc that says "clear" on the
+ * side the obstacle is actually on is worse than no arc at all.
  */
 @Composable
 fun RadarSideStrip(

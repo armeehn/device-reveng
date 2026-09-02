@@ -329,11 +329,14 @@ class MainActivity : ComponentActivity() {
             // Mirror our day/night into the SYSTEM night mode. The soft keyboard is a separate
             // system app that themes off system uiMode, not our Compose theme — without this it
             // renders light over a dark drawer. uiMode is in configChanges, so no recreate.
-            // v3.0: announce the same mode to the vendor gateway (CAR_API §6.2), which is what
-            // makes the vendor stack treat us as *the* launcher rather than an app that happens
-            // to be foreground. Fire-and-forget; re-announcing costs nothing.
+            // v3.0: tell the vendor gateway the same mode (CAR_API §6.2). The gateway delegates
+            // its day/night decision to the launcher and applies the int it is sent, so this is
+            // what keeps its own uiMode writes from fighting ours. Sent on change only: every
+            // send cancels the gateway's pending day/night timers.
             LaunchedEffect(night) {
-                gatewayHandshake.announceUiMode(night)
+                gatewayHandshake.sendUiMode(
+                    if (night) GatewayHandshake.UiMode.NIGHT else GatewayHandshake.UiMode.DAY,
+                )
             }
 
             LaunchedEffect(night) {

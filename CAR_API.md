@@ -86,7 +86,7 @@ All action/extra names below are `public static final String` in `EventUtils.jav
 | `com.choiceway.eventcenter.EventUtils.MCU_MSG_BACKCAR_START` | `MCU_MSG_BACKCAR_START_EVT` | none | no | `EventService.java:664` (raw MCU-level reverse) **[confirmed]** |
 | `com.choiceway.eventcenter.EventUtils.MCU_MSG_BACKCAR_END` | `MCU_MSG_BACKCAR_END_EVT` | none | no | `EventService.java:709` **[confirmed]** |
 | `...EventUtils.ACTION_ACC_OPEN_CLOSE_EVT` | `ACTION_ACC_OPEN_CLOSE_EVT` | `ACC_Status` → int → 1=ACC on, 0=off | no | `EventService.java:3404-3407` **[confirmed]** |
-| `...EventUtils.ACTION_ACC_SLEEP_STATUS_EVT` | `ACTION_ACC_SLEEP_STATUS_EVT` | `ACC_Status` → int (sleep/wake); also targeted to `com.szchoiceway.btsuite/.BTServiceAutoStart` | no | `EventService.java:3397-3400` **[confirmed]** |
+| `...EventUtils.ACTION_ACC_SLEEP_STATUS_EVT` | `ACTION_ACC_SLEEP_STATUS_EVT` | `ACC_Status` → int, 1 = awake (`:492,2274`), 0 = entering sleep (`:3535`); also targeted to `com.szchoiceway.btsuite/.BTServiceAutoStart` | no | `EventService.java:3397-3400` **[confirmed]** |
 | `...EventUtils.HANDLER_ACC_POWER_OFF_EVT` | `HANDLER_ACC_POWER_OFF_EVT` | — | no | const `EventUtils.java` **[confirmed]** |
 | `com.choiceway.eventcenter.EventUtils.STEER_WHEEL_INFOR` | `STEER_WHEEL_INFOR` | `EventUtils.STEER_WHEEL_INFOR_LPARAM` → int **learned slot + 1** (`bArr[1]+1`, 1..10 — NOT a `CAR_KEY_*` code; the function is whatever `wheel_key_learn_custom` maps that slot to, §4), `..._WPARAM` → int (3=down,4=up/release), `..._VOLTAGE` → int (ADC 0..255, ×3.3/255 V) | **yes** | `EventService.java:2846-2857` **[confirmed]** |
 | `com.choiceway.eventcenter.EventUtils.STEER_WHEEL_STATUS` | `STEER_WHEEL_STATUS` | `EventUtils.STEER_WHEEL_STUDY_STATUS` → int, 16-bit mask of learned slots | — | `EventService.java:3065-3066` **[confirmed]**, see §4 |
@@ -96,10 +96,10 @@ All action/extra names below are `public static final String` in `EventUtils.jav
 | `com.szchoiceway.btsuite.HBCP_EVT_AV_STATUS` | (btsuite) | `DATA_INT` → 4 playing / 3 paused, `DATA_STR` → track title | no | `BTService.java:262-265` **[confirmed]** |
 | `com.szchoiceway.btsuite.HBCP_EVT_CONTACT_NUM` / `_CONTACT_NAME` | (btsuite) | `DATA_STR` → caller number / name (HFP states 4/5) | no | `ParseFEasycom.java:498-499` **[confirmed]** |
 | `com.szchoiceway.btsuite.HBCP_EVT_SPEAKING_TIME` | (btsuite) | `DATA_INT` → **int[]** {min, sec} | no | `BTService.java:746-749` **[confirmed]** — no battery/signal exists on this surface |
-| `...EventUtils.MCU_KEY_INFOR` | `MCU_KEY_INFOR_ACTION` | `EventUtils.MCU_KEY_VALUE` → int (panel/host keycode) | no | `EventUtils.java:2147-2153`, sent `EventService.java:8966` **[confirmed]** |
-| `com.choiceway.eventcenter.EventUtils.ACTION_HOST_MCU_BUTTON_KEY` | `ACTION_HOST_MCU_BUTTON_KEY` | `HostKeyWord` (`EXTRA_HOST_KEY`) → int keycode, `HostKeyStatus` (`EXTRA_HOST_STATUS_KEY`) → byte (down/up) | no | `EventService.java:4285-4290` **[confirmed]** |
+| `com.szchoiceway.eventcenter.EventUtils.MCU_KEY_INFOR` | `MCU_KEY_INFOR_ACTION` | `EventUtils.MCU_KEY_VALUE` → int `MCU_KEY_*` code (`EventUtils.java:1458-1656`); one broadcast per press, no edge, long presses are their own codes | no | `EventUtils.java:2147-2153`, sent `EventService.java:8966` **[confirmed]** |
+| `com.choiceway.eventcenter.EventUtils.ACTION_HOST_MCU_BUTTON_KEY` | `ACTION_HOST_MCU_BUTTON_KEY` | `HostKeyWord` → int 1..4 (2 vol−, 3 vol+, 4 mute), `HostKeyStatus` → byte 1 down / 0 up. **Not a key path**: the volume relay to an original-car amplifier, sent only when that routing is configured (`:4224-4235`) | no | `EventService.java:4271-4289` **[confirmed]** |
 | `...EventUtils.SHOW_CAR_SPEED_EVENT` | `SHOW_CAR_SPEED_EVENT` | none (UI toggle only; **speed value is not in this intent** — see note) | no | `EventService.java:5214,5747,6280` **[confirmed]** |
-| `...EventUtils.MCU_CAR_CAN_RADAR_INFO` | `MCU_CAR_CAN_RADAR_INFO` | `EventUtils.CAR_CAN_DATA` → byte[] (raw radar frame, per-sensor distances) | no | consumed `EvtModel.java:525-529` **[confirmed]** |
+| `com.szchoiceway.eventcenter.EventUtils.MCU_CAR_CAN_RADAR_INFO` | `MCU_CAR_CAN_RADAR_INFO` | `EventUtils.CAR_CAN_DATA` → byte[9] `{1, F1..F4, R1..R4}`; each a distance code 30 (closest) / 60 / 90 / 110 / 150, 0xA0 = clear, 0 = no data. Sent by canbus2 only while `Sys_Plugin_radar_Set` = 0. Left→right order within a bank UNRESOLVED | no | `CanDataParseBase.java:1221-1229`, `HiworldCanParseToyota.java:903-921` **[confirmed]** |
 | `...EventUtils.MCU_CAR_CAN_PLUG_IN_RADAR_INFO` | `MCU_CAR_CAN_PLUG_IN_RADAR_INFO` | byte[] `CAR_CAN_DATA` | no | const **[confirmed]** |
 | `EventUtils.CAR_RADAR_STATE_EVT_TRA`, `CAR_RADAR_BEEP_EVT_TRA` | — | radar on/off + beep | — | consts **[confirmed]** |
 | `com.szchoiceway.canbus.carairstruct` | `CAN_NEW_CAR_AIR_DATA_INFO_EVT` | `com.choiceway.canbus.carairstruct.airstate` (`CAN_NEW_CAR_AIR_DATA_INFO`) → **Parcelable `com.szchoiceway.canbus.CarAirState`** | no | broadcast `EvtModel.java:1133-1135`, received `EvtModel.java:749-750` **[confirmed]** |
@@ -108,13 +108,18 @@ All action/extra names below are `public static final String` in `EventUtils.jav
 | `...EventUtils.SHOW_CAR_AIR_EVT` / `HIDE_CAR_AIR_EVT` / `ACTION_SHOW_CAR_AIR_WND_EVENT` | — | `EXTRA_SHOW_WND_DATA`("EventUtils.ACTION_SHOW_WND_DATA") → int 0/1 | no | `EventService.java:8970-8973` **[confirmed]** |
 | `com.szchoiceway.eventcenter.EventUtils.CAR_LIGHT_STATE` (+ `_LEFT`, `_RIGHT`) | `CAR_LIGHT_STATE*` | turn-signal / lamp state | no | consts **[confirmed]** |
 | `...EventUtils.MCU_CAR_RIGHT_SIGH_EVT`, `CAR_RIGHT_SIGH_EVT` | — | `CAR_RIGHT_SIGH_EVT_TRA` (turn-signal / camera assist) | no | consts **[confirmed]** |
-| `com.szchoiceway.ACTION_DAY_BACKLIGHT_CHAGNED` | `ACTION_DAY_BACKLIGHT_CHENAGHED` | none (illumination → day) | **yes** | `EventService.java:4848` **[confirmed]** |
-| `com.szchoiceway.ACTION_NIGHT_BACKLIGHT_CHAGNED` | `ACTION_NIGHT_BACKLIGHT_CHENAGHED` | none (illumination → night / dimming) | **yes** | `EventService.java:4852,5384` **[confirmed]** |
+| `com.szchoiceway.ACTION_DAY_BACKLIGHT_CHAGNED` | `ACTION_DAY_BACKLIGHT_CHENAGHED` | none. **Not illumination**: fires when the SysVar brightness target `Set_Day_Light` changes | **yes** | `EventService.java:4847-4853` **[confirmed]** |
+| `com.szchoiceway.ACTION_NIGHT_BACKLIGHT_CHAGNED` | `ACTION_NIGHT_BACKLIGHT_CHENAGHED` | none. Same, for `Set_Night_Light` | **yes** | `EventService.java:4852,5384` **[confirmed]** |
+| `com.szchoiceway.eventcenter.LAMP_STATUS` | `LAMP_CONNECTION_CHANGE` | none; headlamp state in SysVar `Sys_LAMP_STAUS_CHECK` "1"/"0", written first (`:2340`) | no | `EventService.java:802` **[confirmed]** |
+| `com.szchoiceway.uiModeNightChanged` | (literal) | `mode` → boolean, true = night: the system night mode the gateway just applied | no | `EventService.java:14089-14093` **[confirmed]** |
 | `com.choiceway.eventcenter.EventUtils.RefreshBacklight` | `ACTION_REFRESH_BACKLIGHT` | brightness/illumination refresh | — | const **[confirmed]** |
-| `...EventUtils.MCU_CAR_DOOR_INFO`, `ACCORD_DOOR_INFO`, `CAR_DOOR_DATA` | — | door open/close state | no | consts **[confirmed]** |
-| `...EventUtils.MCU_CAR_CAN_INFO`, `MCU_MSG_CAN_ALL_INFO`, `CAN_BASIC_EVT` | — | bulk CAN state frame | no | consts; `CAN_BASIC_EVT` recv `EvtModel.java:522` **[confirmed]** |
-| `com.choiceway.eventcenter.CanUtils.CAN_CAR_OUT_SIDE_TEMP_EVT` | `CAN_CAR_OUT_SIDE_TEMP_EVT` | `..._EVT_EXTRA` → int, `..._EVT_EXTRA_STR` → String (outside temp) | no | `EvtModel.java:512-517` **[confirmed]** |
-| `...EventUtils.CAN_TPMS_DATA_EVT`, `CAN_SEAT_DATA_EVT`, `CAN_SLS_DATA_EVT`, `CAN_FUEL_CONSUMPTION_INFOR`, `CAN_CENTER_CONSOLE_INFOR`, `CAN_CAR_TIRP_INFO` | — | tyre pressure / seat / fuel / trip computer | no | consts **[confirmed]** |
+| `com.szchoiceway.eventcenter.EventUtils.ACCORD_DOOR_INFO` | `ACCORD_DOOR_INFO` | `EventUtils.CAR_DOOR_DATA` → byte: 0x80 FL, 0x40 FR, 0x20 RR, 0x10 RL (rear pair swapped by `Sys_Rear_Door_Tip_Set`), 0x08 tailgate, 0x04 bonnet; set = open. `MCU_CAR_DOOR_INFO` from the gateway only ever carries 0 | no | `CanDataParseBase.java:453-460,1260-1296`, `DoorInfoWindow.java:211-291` **[confirmed]** |
+| `com.szchoiceway.eventcenter.EventUtils.MCU_CAR_CAN_INFO` | `MCU_CAR_CAN_INFO` | `EventUtils.CAR_CAN_DATA` → byte[3] `{speed km/h, rpmH, rpmL}` from canbus2 (Hiworld frame 0x32). **Not a bulk frame.** ⚠ the 0x32 speed field did not track road speed on the 2026-08-29 drive | no | `CanDataParseBase.java:1205-1208` **[confirmed]** |
+| `com.choiceway.eventcenter.EventUtils.MCU_MSG_CAN_ALL_INFO` | `MCU_MSG_CAN_ALL_INFO` | `EventUtils.CAR_AIR_DATA` → byte[] raw MCU 0xA5 frame (the framed CANBOX stream) | no | `EventService.java:2060-2067` **[confirmed]** |
+| `...EventUtils.CAN_BASIC_EVT` | `CAN_BASIC_EVT` | **never sent**; the receiver at `EvtModel.java:522` is an empty `return` | — | const only |
+| `com.choiceway.eventcenter.CanUtils.CAN_CAR_OUT_SIDE_TEMP_EVT` | `CAN_CAR_OUT_SIDE_TEMP_EVT` | `com.choiceway.eventcenter.CanUtils.CAN_CAR_OUT_SIDE_TEMP_EVT_EXTRA_STR` → String, unit-suffixed (e.g. "23℃"); the int `..._EXTRA` is never put | no | `CanDataParseBase.java:1552-1555`, `CanUtils.java:14-15` **[confirmed]** |
+| `...EventUtils.CAN_TPMS_DATA_EVT`, `CAN_SEAT_DATA_EVT`, `CAN_SLS_DATA_EVT`, `CAN_FUEL_CONSUMPTION_INFOR`, `CAN_CENTER_CONSOLE_INFOR`, `CAN_CAR_TIRP_INFO` | — | **never sent**: constants only (`EventUtils.java:186-201`, `Camera360Receiver.java:13`). TPMS and trip data stay inside canbus2's EventBus | — | consts |
+| `com.choiceway.eventcenter.EventUtils.MCU_MSG_MAIL_VOL` | `MCU_MSG_MAIL_VOL` | `...MCU_MSG_MAIL_VOL_VAL` → int `(mute ? 0x80 : 0) \| volume`, `...MCU_MSG_SHOW_VOL_WND` → boolean | no | `EventService.java:3105-3125` **[confirmed]** |
 | `...EventUtils.MCU_408_INFO0/1/2`, `MCU_408_CRUISE_SPEED`, `MCU_408_MEM_SPEED`, `MCU_3DH_INFO` | — | car-specific dashboards (PSA 408 etc.) | no | consts **[confirmed]** |
 | `com.choiceway.eventcenter.EventUtils.ZXW_RADIO_INFO_EVT`, `...RADIO_EVENT_INFOR`, `com.szchoiceway.radio.frequency` (`BROADCAST_RADIO_FREQUENCY_EVENT`, extra `com.szchoiceway.radio.frequency_extra`) | — | radio band/freq/RDS | no | consts **[confirmed]** |
 | Music now-playing: `com.choiceway.musicplayer.ZXW_MUSIC_PLAY_SONG_NAME_EVT` / `..._ARTIST_NAME_EVT` / `..._ALBUM_NAME_EVT` / `..._PLAYFILE_EVT` | `ZXW_MUSIC_PLAY_*_EVT` | matching `*_EXTRA` String | no | consts **[confirmed]** |
@@ -122,9 +127,9 @@ All action/extra names below are `public static final String` in `EventUtils.jav
 > **Getting the numeric car speed:** `SHOW_CAR_SPEED_EVENT` is only a *show/hide* toggle. The actual
 > speed lives inside the gateway as `mGpsSpeed` (GPS) or `camera360Receiver.getCanCarSpeed()` (CAN)
 > — `EventService.java:1172-1176`. It is **not** published as a clean broadcast extra. To read speed:
-> (a) parse the CAN bulk frame from `CAN_BASIC_EVT`/`MCU_CAR_CAN_INFO`, (b) read GPS speed yourself
-> via `LocationManager`, or (c) use the AIDL/socket channel. **[confirmed]** behaviour; a clean
-> speed extra does **not** exist.
+> (a) take byte[0] of canbus2's `MCU_CAR_CAN_INFO` digest (above — but see the 0x32 caveat), (b)
+> read GPS speed yourself via `LocationManager`, or (c) decode the framed CANBOX stream on
+> `MCU_MSG_CAN_ALL_INFO`. **[confirmed]** behaviour; the gateway itself publishes no speed extra.
 
 ### 1.4 APP → CAR / APP → gateway commands (you `sendBroadcast`)
 
@@ -136,7 +141,7 @@ UI or the CAN layer. Registered in `EvtModel.java:210-300`.
 | `com.szchoiceway.ACTION_LAUNCHER_KEY_CTRL` | `ACTION_LAUNCHER_KEY_CTRL` | drives launcher control (`startLauncherCtrl`) | recv `EvtModel.java:906-908` **[confirmed]** |
 | `com.choiceway.eventcenter.EventUtils.ZXW_CAN_KEY_EVT` | `ZXW_CAN_KEY_EVT` | `..._EXTRA` → int CAN key code → routed to media/mode logic | recv `EvtModel.java:492-511`; sender helper `EventUtils.java:2610-2617` **[confirmed]** |
 | `com.choiceway.eventcenter.EventUtils.ZXW_SYS_KEY` | `ZXW_SYS_KEY_EVT` | `ZXW_SYS_EXTRA` → int syskey (6=play/pause) | recv `EvtModel.java:541-549` **[confirmed]** |
-| `...EventUtils.ZXW_CAN_WHEEL_TRACK_EVT` | `ZXW_CAN_WHEEL_TRACK_EVT` | `..._EXTRA` → int steering angle → reverse trajectory | recv `EvtModel.java:534-538` **[confirmed]** |
+| `com.choiceway.eventcenter.EventUtils.ZXW_CAN_WHEEL_TRACK_EVT` | `ZXW_CAN_WHEEL_TRACK_EVT` | `com.choiceway.eventcenter.EventUtils.ZXW_CAN_WHEEL_TRACK_EVT_EXTRA` → int: bit7 = raw angle negative, bits 0-6 = \|raw\|/14 (never degrees); which side bit7 means is UNRESOLVED | sent `CanDataParseBase.java:1316-1318`, `HiworldCanParseToyota.java:818-829`; recv `EvtModel.java:534-538` **[confirmed]** |
 | `...EventUtils.MCU_CAR_CAN_RADAR_INFO` | `MCU_CAR_CAN_RADAR_INFO` | byte[] `CAR_CAN_DATA` (also used app→gateway to inject radar) | `EvtModel.java:525` **[confirmed]** |
 | `com.szchoiceway.eventcenter.EventUtils.ACTION_MCU_CMD_EVENT` | `ACTION_MCU_CMD_EVENT` | raw MCU command passthrough | const **[confirmed]** |
 | `com.szchoiceway.eventcenter.EventUtils.ACTION_CLICK_SYSTEM_KEYCODE_EVENT` | `ACTION_CLICK_SYSTEM_KEYCODE_EVENT` | inject a system keycode | const **[confirmed]** |
@@ -300,9 +305,11 @@ the int untouched as MCU frame `{0x02, key}`): 1–6 recall preset N, 7–12 sto
 13 preset scan, 14/15 step down/up, 16/17 seek down/up, 18 auto-store (AMS), 19 stereo/mono,
 20 DX/LOC, 30 band FM, 31 band AM. `sendUserFreq(int freq, boolean fm)` → `{0x0C, hi, lo,
 fm ? 0 : 1}`, freq in the units `getRadioFreq()` reports. Claiming tuner audio is
-`setCurModeCallback(1, cb)` + `setRadioCallback(cb)` + `sendMode(1, false)` ×2
-(`eSrcMode.SRC_RADIO` = 1); note `sendMode` calls `kill3rdAPK()` unless
-`Sys_SoundManager_Type` is set, force-stopping non-system foreground tasks.
+`setCurModeCallback(1, cb)` + `setRadioCallback(cb)` + `sendMode(1, wait)` (`eSrcMode.SRC_RADIO`
+= 1); the boolean means "wait for the MCU's ACK, frame 0x70" (`EventService.java:3933-3958`), so
+one call with `true` replaces the vendor's two with `false`. `sendMode` calls `kill3rdAPK()`, but
+that is gated by SysVar `Sys_SoundManager_Type`, which **defaults to "1" = no kill**
+(`:6581,6750,8294`); only a unit set to 0 force-stops non-system foreground tasks.
 Also 21 AF toggle, 22 PTY seek (after `sendSetup(3, ptyIndex)`), 23 TA toggle, 24 band
 cycle, 25 next, 26 previous. Units: `getRadioFreq()` is FM in 10 kHz units (9630 = 96.30 MHz),
 AM in kHz. `getRadioBand()`: 0..2 = FM1..FM3, 3..6 = AM. `getRadioPTYName()` returns the **RDS
@@ -317,10 +324,11 @@ the decimal string of `freq | (am ? 0x10000 : 0)` (0 = empty).
 
 ### 3.3 Secondary channel: LocalSocket
 
-`LocalSocketServer.java` / `SocketUtils.java` expose a text protocol (`CURRENT_MODE_INFO:`,
-`SYSTEM_VOLUME:`, `CAR_ACC_STATUS:`, `BACK_LIGHT_LEVEL:`, `CAR_LIGHT_LEVEL:`, `SYSTEM_AIRPLANE_MODE:`,
-`ONCLICK:`, `makeStartStopSocketString(...)` at `EventService.java:2374`). Prefer AIDL/broadcasts;
-the socket is mainly for the stock UI apps. **[confirmed]** constants in `EventUtils.java`.
+**Dead code.** `LocalSocketServer` (`com.szchoiceway.LocalServerSocket`) is never instantiated,
+and the `addMessageListener(ICommunication)` listeners are stored but never called. The text lines
+`SocketUtils.java` formats (`CURRENT_MODE_INFO:`, `SYSTEM_VOLUME:<mute>,<vol>`, `CAR_ACC_STATUS:`,
+`BACK_LIGHT_LEVEL:`, …) ride the `com.szchoiceway.eventcenter.ZXW_MESSAGE_TO_ICCOMMUNICATION`
+broadcast as String extra `zxw_MessageToListener` (`EventService.java:12917-12925`). **[confirmed]**
 
 ---
 
@@ -336,9 +344,9 @@ Three coexisting paths — a custom launcher should listen to **all three** to b
    - `EventUtils.STEER_WHEEL_INFOR_VOLTAGE` (int) = raw resistive-key ADC
    Sent **with** `PERMISSION_CHOICEWAY_BROADCAST`.
 
-2. **Host/panel key broadcast** — `ACTION_HOST_MCU_BUTTON_KEY` (`sendHostCarKey`,
-   `EventService.java:4284-4290`) with `HostKeyWord`(int keycode) + `HostKeyStatus`(byte down/up), and
-   `MCU_KEY_INFOR` (`MCU_KEY_VALUE` int) from `sendKeyEventBroadcast` (`EventUtils.java:2147`).
+2. **MCU key broadcast** — `MCU_KEY_INFOR` (`MCU_KEY_VALUE` int `MCU_KEY_*` code) from
+   `sendKeyEventBroadcast` (`EventUtils.java:2147`): every key the MCU reports, panel and learned
+   SWC alike, one broadcast per press. `ACTION_HOST_MCU_BUTTON_KEY` is **not** a key path (§1.3).
 
 3. **Injected Android KeyEvents** — for standard media keys the gateway calls `sendKeyDownUpSync(...)`
    (e.g. power=26 at `EventService.java:3428`), so ordinary `onKeyDown` handling in your Activity
@@ -447,13 +455,20 @@ A secondary "car console" home is `com.android.atslcarconsole` (`CARCONSOLE_PACK
 `EventUtils.java:206`). **[confirmed]** (Full customerui source is not in this dump; its manifest is
 not available, so the exact stock HOME filter is **[inferred]** standard.)
 
-### 6.2 Launcher ↔ gateway handshake
-The gateway and launcher exchange UI-mode via two broadcasts (`EventUtils.java:66,76`):
-- gateway → launcher: `com.szchoiceway.eventcenter.EventUtils.ACTION_EVENTCENTER_TO_LAUNCHER_UIMODE_EVENT`
+### 6.2 Launcher ↔ gateway UI mode
+Not a handshake: the gateway delegates its day/night decision to the launcher. Two broadcasts
+(`EventUtils.java:66,76`), both carrying ONE int extra `Extra_Day_Night_UiMode` (`:1235`) holding a
+`Sys_Day_Night_Mode` value — 1 day, 2 night, 3 by sunrise/sunset, anything else (0) = follow headlamps:
 - launcher → gateway: `com.szchoiceway.eventcenter.EventUtils.ACTION_LAUNCHER_TO_EVENTCENTER_UIMODE_EVENT`
+  → `setDayNightMode(int)` (`EvtModel.java:1076`, `EventService.java:14043-14087`). A missing or
+  non-int extra reads as 0 and switches the gateway to headlamp mode.
+- gateway → launcher: `com.szchoiceway.eventcenter.EventUtils.ACTION_EVENTCENTER_TO_LAUNCHER_UIMODE_EVENT`
+  is a *request* to echo the same int back; after 2 s without a reply the gateway applies it itself
+  (`EventService.java:14856-14862`). Sent only on a `Sys_Day_Night_Mode` or headlamp change, so it
+  is not a liveness signal.
 
-A custom launcher should send `ACTION_LAUNCHER_KEY_CTRL` for control actions and listen for the
-UIMODE + day/night backlight broadcasts to theme itself.
+A custom launcher should send `ACTION_LAUNCHER_KEY_CTRL` for control actions and theme itself from
+`LAMP_STATUS` + `Sys_LAMP_STAUS_CHECK` (headlamps) or `uiModeNightChanged` (§1.3).
 
 ### 6.3 The car widgets a launcher shows, and where the data comes from
 
@@ -464,7 +479,7 @@ UIMODE + day/night backlight broadcasts to theme itself.
 | **Climate / A/C** | `com.choiceway.canbus.carairstruct` → Parcelable `CarAirState` (AIDL `getAirData` is a null stub) | §1.3, §5 |
 | **Reverse / radar** | `ACTION_BACKCAR_START/END` + `MCU_CAR_CAN_RADAR_INFO` (byte[]) + `ZXW_CAN_WHEEL_TRACK_EVT` (angle) | §1.3 |
 | **Navigation** | configured nav pkg/class in SysVar (`Set_NavPackageName`/`Set_NavClassName`), nav-sound broadcasts (`ACTION_NAVI_START/STOP_PLAY_SOUND`) | SysVar + consts |
-| **Day/night theming** | `ACTION_DAY_BACKLIGHT_CHAGNED` / `ACTION_NIGHT_BACKLIGHT_CHAGNED`, `Sys_Day_Night_Mode` | §1.3, §2.3 |
+| **Day/night theming** | `LAMP_STATUS` + SysVar `Sys_LAMP_STAUS_CHECK`, `uiModeNightChanged` (`mode`), `Sys_Day_Night_Mode` | §1.3, §2.3, §6.2 |
 | **Status/nav bar config** | SysVar `Sys_Statusbar_Icon_Config_Key`, `Sys_Function_Icon_Config_Key`, `Sys_customer_statusbar`, `SYS_SHOW_TOOL_NAVI_BAR_WND` | §2.3 |
 | **App list / hidden apps** | SysVar `SYS_LAUNCHER_APP_HIDE_KEY`, customized-app slots `SET_CustomizedPackageName_KEY0..6` | §2.3 |
 

@@ -93,9 +93,9 @@ fun RadarSettingsScreen(
                 text = if (confirmed) {
                     "Marked confirmed on this car. Maneuvering side-strips are enabled."
                 } else {
-                    "UNCONFIRMED. The sensor order and the level polarity below are best-effort " +
-                        "guesses — the vendor frame layout was never recovered. Run the capture " +
-                        "to settle them; until then the maneuvering side-strips stay hidden."
+                    "UNCONFIRMED. Bank layout and distance scale are from the vendor decompile; " +
+                        "the left-to-right sensor order within a bank is not. Run the capture " +
+                        "to settle it; until then the maneuvering side-strips stay hidden."
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = if (confirmed) {

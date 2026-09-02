@@ -7,63 +7,59 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The unprotected SWC fallback is the only wheel input a NON-ROOT install gets, and on a rooted
- * unit its events co-arrive with the protected capture. So this pins two things: the conservative
- * decode (unknown → dropped, never guessed) and the canonical form that lets ProtectedEventDedupe
- * drop the cross-carrier duplicate.
+ * The unprotected `MCU_KEY_INFOR` path is the only wheel input a NON-ROOT install gets, and on a
+ * rooted unit its events co-arrive with the protected capture. So this pins two things: the
+ * MCU_KEY → CAR_KEY table (`EventUtils.java:1458-1656`) and the canonical form that lets
+ * ProtectedEventDedupe drop the cross-carrier duplicate.
  */
 class SwcFallbackTest {
 
-    // ---- hostKey decode -----------------------------------------------------
+    // ---- MCU_KEY table ----------------------------------------------------------
 
     @Test
-    fun hostKeyDecodesDocumentedDownUp() {
-        assertEquals(
-            SwcFallback.Edge(CarEvents.CAR_KEY_NEXT, down = true),
-            SwcFallback.hostKey(CarEvents.CAR_KEY_NEXT, CarEvents.SWC_STATE_DOWN),
-        )
-        assertEquals(
-            SwcFallback.Edge(CarEvents.CAR_KEY_NEXT, down = false),
-            SwcFallback.hostKey(CarEvents.CAR_KEY_NEXT, CarEvents.SWC_STATE_UP),
-        )
+    fun vendorCodesMapToCarKeys() {
+        assertEquals(CarEvents.CAR_KEY_HOME, SwcFallback.mcuKey(SwcFallback.MCU_KEY_MENU))
+        assertEquals(CarEvents.CAR_KEY_BACK, SwcFallback.mcuKey(SwcFallback.MCU_KEY_RETURN))
+        assertEquals(CarEvents.CAR_KEY_NEXT, SwcFallback.mcuKey(SwcFallback.MCU_KEY_NEXT))
+        assertEquals(CarEvents.CAR_KEY_PREV, SwcFallback.mcuKey(SwcFallback.MCU_KEY_PREV))
+        assertEquals(CarEvents.CAR_KEY_PHONE, SwcFallback.mcuKey(SwcFallback.MCU_KEY_TALK))
+        assertEquals(CarEvents.CAR_KEY_MEDIA, SwcFallback.mcuKey(SwcFallback.MCU_KEY_MODE))
     }
 
     @Test
-    fun hostKeyDropsUnknownStatusEncodings() {
-        // 1/0 (and anything else) is an UNCONFIRMED encoding: a wrong edge guess would leave a
-        // key held in KeyPump and fire a phantom long-press, so these must drop.
-        assertNull(SwcFallback.hostKey(CarEvents.CAR_KEY_NEXT, 1))
-        assertNull(SwcFallback.hostKey(CarEvents.CAR_KEY_NEXT, 0))
-        assertNull(SwcFallback.hostKey(CarEvents.CAR_KEY_NEXT, 99))
-        assertNull(SwcFallback.hostKey(CarEvents.CAR_KEY_NEXT, null))
+    fun vendorTableValuesAreTheDecompiledOnes() {
+        // The numbers themselves are the contract; a typo here is a wheel that does nothing.
+        assertEquals(9, SwcFallback.MCU_KEY_MENU)
+        assertEquals(85, SwcFallback.MCU_KEY_RETURN)
+        assertEquals(2, SwcFallback.MCU_KEY_NEXT)
+        assertEquals(3, SwcFallback.MCU_KEY_PREV)
+        assertEquals(23, SwcFallback.MCU_KEY_TALK)
+        assertEquals(16, SwcFallback.MCU_KEY_MODE)
+        assertEquals(18, SwcFallback.MCU_KEY_VOL_ADD)
+        assertEquals(19, SwcFallback.MCU_KEY_VOL_SUB)
+        assertEquals(17, SwcFallback.MCU_KEY_MUTE)
     }
 
     @Test
-    fun hostKeyDropsUnknownKeycodes() {
-        assertNull(SwcFallback.hostKey(0, CarEvents.SWC_STATE_DOWN))
-        assertNull(SwcFallback.hostKey(15, CarEvents.SWC_STATE_DOWN))
-        assertNull(SwcFallback.hostKey(null, CarEvents.SWC_STATE_DOWN))
-    }
-
-    // ---- keycode normalisation ----------------------------------------------
-
-    @Test
-    fun carKeyRangePassesThrough() {
-        for (code in CarEvents.CAR_KEY_POWER..CarEvents.CAR_KEY_R_TUNE_R) {
-            assertEquals(code, SwcFallback.normalizeKey(code))
-        }
+    fun carKeyIndicesAreNotPassedThrough() {
+        // MCU codes 1..14 are POWER/NEXT/PREV/… in the vendor table, not CAR_KEY_* indices.
+        // CAR_KEY_HOME (2) arriving raw is MCU_KEY_NEXT and must map as such, not as HOME.
+        assertEquals(CarEvents.CAR_KEY_NEXT, SwcFallback.mcuKey(CarEvents.CAR_KEY_HOME))
+        assertNull(SwcFallback.mcuKey(CarEvents.CAR_KEY_L_TUNE_L))
     }
 
     @Test
-    fun panelSysCodesTranslateToCarKeys() {
-        assertEquals(CarEvents.CAR_KEY_HOME, SwcFallback.normalizeKey(SwcFallback.MCU_KEY_SYS_HOME))
-        assertEquals(CarEvents.CAR_KEY_MENU, SwcFallback.normalizeKey(SwcFallback.MCU_KEY_SYS_MENU))
-        assertEquals(CarEvents.CAR_KEY_BACK, SwcFallback.normalizeKey(SwcFallback.MCU_KEY_SYS_ESC))
-    }
-
-    @Test
-    fun mcuKeyDropsWinceAndUnknownCodes() {
-        assertNull(SwcFallback.mcuKey(79)) // MCU_KEY_SYS_WINCE — no CAR_KEY meaning
+    fun audioAndUnmappedCodesAreDropped() {
+        // The gateway already applied volume/mute to the amp before broadcasting.
+        assertNull(SwcFallback.mcuKey(SwcFallback.MCU_KEY_VOL_ADD))
+        assertNull(SwcFallback.mcuKey(SwcFallback.MCU_KEY_VOL_SUB))
+        assertNull(SwcFallback.mcuKey(SwcFallback.MCU_KEY_MUTE))
+        // No CAR_KEY twin.
+        assertNull(SwcFallback.mcuKey(SwcFallback.MCU_KEY_POWER))
+        assertNull(SwcFallback.mcuKey(SwcFallback.MCU_KEY_PLAYPAUSE))
+        assertNull(SwcFallback.mcuKey(SwcFallback.MCU_KEY_HANGUP))
+        assertNull(SwcFallback.mcuKey(SwcFallback.MCU_KEY_VOICE))
+        assertNull(SwcFallback.mcuKey(SwcFallback.MCU_KEY_TASK_LIST))
         assertNull(SwcFallback.mcuKey(-1))
         assertNull(SwcFallback.mcuKey(null))
     }

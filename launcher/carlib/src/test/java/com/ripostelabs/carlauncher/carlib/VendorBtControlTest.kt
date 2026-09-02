@@ -40,8 +40,9 @@ class VendorBtControlTest {
             ),
             VendorBt.answer(),
         )
-        // Our own fallback receiver must not turn that code into a wheel key.
-        assertEquals(null, SwcFallback.mcuKey(VendorBt.MCU_KEY_ANSWER))
+        // The same code is the MCU's TALK key: btsuite answers on it and the launcher's fallback
+        // treats it as the phone key, which is consistent. HANG_UP has no wheel-key twin.
+        assertEquals(CarEvents.CAR_KEY_PHONE, SwcFallback.mcuKey(VendorBt.MCU_KEY_ANSWER))
         assertEquals(null, SwcFallback.mcuKey(VendorBt.MCU_KEY_HANG_UP))
     }
 }

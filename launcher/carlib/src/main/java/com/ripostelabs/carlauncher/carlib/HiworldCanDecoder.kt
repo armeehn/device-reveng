@@ -13,7 +13,7 @@ package com.ripostelabs.carlauncher.carlib
  *  - [decodeFrame] — a full framed `A5 5A A5 | LEN | OPCODE | PAYLOAD | C1 | C2` byte array
  *    (verifies the checksum, strips the header, dispatches on opcode).
  *  - [decodePayload] — a bare payload where the opcode is already known. This is the common
- *    path in the launcher: `MCU_CAR_CAN_INFO` / `CAN_BASIC_EVT` delivers the payload already
+ *    path in the launcher: `MCU_MSG_CAN_ALL_INFO` delivers the payload already
  *    extracted as a `byte[]` extra (see `CanCapture.kt` / `CanFrame`).
  *
  * `p[i]` throughout == payload byte i, 0-based, i.e. the byte *after* the opcode. In the OEM
