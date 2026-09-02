@@ -178,7 +178,7 @@ private fun SpeedTile(speed: Int, motion: CarEvents.Motion, modifier: Modifier =
         CarEvents.Motion.UNKNOWN -> "no GPS fix"
     }
     Tile(modifier = modifier) {
-        Text(
+        AutoSizeText(
             text = if (speed < 0) "—" else "$speed",
             fontSize = SPEED_SP.sp,
             lineHeight = (SPEED_SP * 1.05f).sp,
@@ -221,7 +221,7 @@ private fun TripTile(sessionStartMs: Long?, modifier: Modifier = Modifier) {
     }
 
     Tile(modifier = modifier) {
-        Text(
+        AutoSizeText(
             text = formatElapsed(elapsedMs),
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.SemiBold,
@@ -265,7 +265,7 @@ private fun SteeringTile(reading: SteeringReading?, modifier: Modifier = Modifie
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(4.dp))
-        Text(
+        AutoSizeText(
             text = steeringValue(reading, nowMs),
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.SemiBold,
@@ -342,7 +342,7 @@ private fun RadarTile(radar: RadarState?, modifier: Modifier = Modifier) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(8.dp))
-        Text(
+        AutoSizeText(
             text = when {
                 radar == null -> "—"
                 radar.hasObstacle() -> "obstacle"
@@ -367,13 +367,13 @@ private fun ValueTile(
     modifier: Modifier = Modifier,
 ) {
     Tile(modifier = modifier) {
-        Text(
+        AutoSizeText(
             text = label,
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(4.dp))
-        Text(
+        AutoSizeText(
             text = value,
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.SemiBold,
@@ -402,12 +402,13 @@ private fun Tile(modifier: Modifier = Modifier, content: @Composable () -> Unit)
 /** The provenance line every tile carries. Small on purpose — present, not shouting. */
 @Composable
 private fun TileNote(text: String) {
-    Text(
+    AutoSizeText(
         text = text,
         style = MaterialTheme.typography.labelMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         textAlign = TextAlign.Center,
         modifier = Modifier.fillMaxWidth(),
+        maxLines = 2,
     )
 }
 

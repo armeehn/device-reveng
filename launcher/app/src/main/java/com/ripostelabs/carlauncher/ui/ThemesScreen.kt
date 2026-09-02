@@ -209,7 +209,7 @@ private fun ImportThemeDialog(files: List<File>, onPick: (File) -> Unit, onDismi
                 )
             } else {
                 files.forEach { file ->
-                    Text(
+                    AutoSizeText(
                         text = file.name,
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurface,
@@ -282,7 +282,7 @@ private fun ThemeCard(
         )
         Spacer(Modifier.height(10.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
+            AutoSizeText(
                 text = theme.name,
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurface,

@@ -1,0 +1,326 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		CC0000000000000000000019 /* ClaudeCarApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0000000000000000000012 /* ClaudeCarApp.swift */; };
+		CC000000000000000000001A /* ChatModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0000000000000000000013 /* ChatModel.swift */; };
+		CC000000000000000000001B /* ClaudeAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0000000000000000000014 /* ClaudeAPI.swift */; };
+		CC000000000000000000001C /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0000000000000000000015 /* Theme.swift */; };
+		CC000000000000000000001D /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0000000000000000000016 /* ChatView.swift */; };
+		CC0000000000000000000021 /* ClientConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC000000000000000000001E /* ClientConfig.swift */; };
+		CC0000000000000000000022 /* AskClaudeIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC000000000000000000001F /* AskClaudeIntent.swift */; };
+		CC0000000000000000000029 /* ChatBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0000000000000000000023 /* ChatBackend.swift */; };
+		CC000000000000000000002A /* ClaudeCarBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0000000000000000000024 /* ClaudeCarBackend.swift */; };
+		CC000000000000000000002B /* AnthropicBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0000000000000000000025 /* AnthropicBackend.swift */; };
+		CC000000000000000000002C /* Transcript.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0000000000000000000026 /* Transcript.swift */; };
+		CC000000000000000000002D /* Keychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0000000000000000000027 /* Keychain.swift */; };
+		CC000000000000000000002E /* SpeechInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0000000000000000000028 /* SpeechInput.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		CC0000000000000000000005 /* ClaudeCar.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ClaudeCar.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		CC0000000000000000000012 /* ClaudeCarApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeCarApp.swift; sourceTree = "<group>"; };
+		CC0000000000000000000013 /* ChatModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatModel.swift; sourceTree = "<group>"; };
+		CC0000000000000000000014 /* ClaudeAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeAPI.swift; sourceTree = "<group>"; };
+		CC0000000000000000000015 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		CC0000000000000000000016 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
+		CC0000000000000000000017 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		CC0000000000000000000018 /* Config.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config.xcconfig; sourceTree = "<group>"; };
+		CC000000000000000000001E /* ClientConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClientConfig.swift; sourceTree = "<group>"; };
+		CC000000000000000000001F /* AskClaudeIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AskClaudeIntent.swift; sourceTree = "<group>"; };
+		CC0000000000000000000023 /* ChatBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatBackend.swift; sourceTree = "<group>"; };
+		CC0000000000000000000024 /* ClaudeCarBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeCarBackend.swift; sourceTree = "<group>"; };
+		CC0000000000000000000025 /* AnthropicBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnthropicBackend.swift; sourceTree = "<group>"; };
+		CC0000000000000000000026 /* Transcript.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Transcript.swift; sourceTree = "<group>"; };
+		CC0000000000000000000027 /* Keychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Keychain.swift; sourceTree = "<group>"; };
+		CC0000000000000000000028 /* SpeechInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechInput.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		CC000000000000000000000D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		CC0000000000000000000002 = {
+			isa = PBXGroup;
+			children = (
+				CC000000000000000000000F /* ClaudeCar */,
+				CC0000000000000000000018 /* Config.xcconfig */,
+				CC0000000000000000000003 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		CC0000000000000000000003 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				CC0000000000000000000005 /* ClaudeCar.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		CC000000000000000000000F /* ClaudeCar */ = {
+			isa = PBXGroup;
+			children = (
+				CC0000000000000000000012 /* ClaudeCarApp.swift */,
+				CC0000000000000000000013 /* ChatModel.swift */,
+				CC000000000000000000001E /* ClientConfig.swift */,
+				CC000000000000000000002F /* Backend */,
+				CC0000000000000000000020 /* Intents */,
+				CC0000000000000000000010 /* Net */,
+				CC0000000000000000000011 /* UI */,
+				CC0000000000000000000017 /* Info.plist */,
+			);
+			path = ClaudeCar;
+			sourceTree = "<group>";
+		};
+		CC000000000000000000002F /* Backend */ = {
+			isa = PBXGroup;
+			children = (
+				CC0000000000000000000023 /* ChatBackend.swift */,
+				CC0000000000000000000024 /* ClaudeCarBackend.swift */,
+				CC0000000000000000000025 /* AnthropicBackend.swift */,
+				CC0000000000000000000026 /* Transcript.swift */,
+				CC0000000000000000000027 /* Keychain.swift */,
+			);
+			path = Backend;
+			sourceTree = "<group>";
+		};
+		CC0000000000000000000020 /* Intents */ = {
+			isa = PBXGroup;
+			children = (
+				CC000000000000000000001F /* AskClaudeIntent.swift */,
+			);
+			path = Intents;
+			sourceTree = "<group>";
+		};
+		CC0000000000000000000010 /* Net */ = {
+			isa = PBXGroup;
+			children = (
+				CC0000000000000000000014 /* ClaudeAPI.swift */,
+			);
+			path = Net;
+			sourceTree = "<group>";
+		};
+		CC0000000000000000000011 /* UI */ = {
+			isa = PBXGroup;
+			children = (
+				CC0000000000000000000015 /* Theme.swift */,
+				CC0000000000000000000016 /* ChatView.swift */,
+				CC0000000000000000000028 /* SpeechInput.swift */,
+			);
+			path = UI;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		CC0000000000000000000004 /* ClaudeCar */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CC0000000000000000000007 /* Build configuration list for PBXNativeTarget "ClaudeCar" */;
+			buildPhases = (
+				CC000000000000000000000C /* Sources */,
+				CC000000000000000000000D /* Frameworks */,
+				CC000000000000000000000E /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ClaudeCar;
+			productName = ClaudeCar;
+			productReference = CC0000000000000000000005 /* ClaudeCar.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		CC0000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1540;
+				LastUpgradeCheck = 1540;
+				TargetAttributes = {
+					CC0000000000000000000004 = {
+						CreatedOnToolsVersion = 15.4;
+					};
+				};
+			};
+			buildConfigurationList = CC0000000000000000000006 /* Build configuration list for PBXProject "ClaudeCar" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = CC0000000000000000000002;
+			productRefGroup = CC0000000000000000000003 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				CC0000000000000000000004 /* ClaudeCar */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		CC000000000000000000000E /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		CC000000000000000000000C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CC0000000000000000000019 /* ClaudeCarApp.swift in Sources */,
+				CC000000000000000000001A /* ChatModel.swift in Sources */,
+				CC0000000000000000000021 /* ClientConfig.swift in Sources */,
+				CC0000000000000000000022 /* AskClaudeIntent.swift in Sources */,
+				CC000000000000000000001B /* ClaudeAPI.swift in Sources */,
+				CC000000000000000000001C /* Theme.swift in Sources */,
+				CC000000000000000000001D /* ChatView.swift in Sources */,
+				CC0000000000000000000029 /* ChatBackend.swift in Sources */,
+				CC000000000000000000002A /* ClaudeCarBackend.swift in Sources */,
+				CC000000000000000000002B /* AnthropicBackend.swift in Sources */,
+				CC000000000000000000002C /* Transcript.swift in Sources */,
+				CC000000000000000000002D /* Keychain.swift in Sources */,
+				CC000000000000000000002E /* SpeechInput.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		CC0000000000000000000008 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = CC0000000000000000000018 /* Config.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		CC0000000000000000000009 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = CC0000000000000000000018 /* Config.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		CC000000000000000000000A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ClaudeCar/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.ripostelabs.claudecar;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		CC000000000000000000000B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ClaudeCar/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.ripostelabs.claudecar;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		CC0000000000000000000006 /* Build configuration list for PBXProject "ClaudeCar" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CC0000000000000000000008 /* Debug */,
+				CC0000000000000000000009 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		CC0000000000000000000007 /* Build configuration list for PBXNativeTarget "ClaudeCar" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CC000000000000000000000A /* Debug */,
+				CC000000000000000000000B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = CC0000000000000000000001 /* Project object */;
+}

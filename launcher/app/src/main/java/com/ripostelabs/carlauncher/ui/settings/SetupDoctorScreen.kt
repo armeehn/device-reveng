@@ -33,6 +33,7 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
+import com.ripostelabs.carlauncher.ui.AutoSizeText
 import com.ripostelabs.carlauncher.ui.theme.JetBrainsMono
 import com.ripostelabs.carlauncher.data.CarSettingsController
 import com.ripostelabs.carlauncher.data.CrashLog // v0.4.3.7
@@ -219,12 +220,12 @@ private fun CrashRow(record: CrashRecord, onOpen: () -> Unit) {
             .clickable(onClick = onOpen)
             .padding(vertical = 8.dp),
     ) {
-        Text(
+        AutoSizeText(
             text = crashTimeLabel(record),
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurface,
         )
-        Text(
+        AutoSizeText(
             text = record.summary.ifEmpty { "(no trace recorded)" },
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -289,15 +290,16 @@ private fun DoctorCheckRow(check: DoctorCheck, showAdb: Boolean) {
             )
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(
+                AutoSizeText(
                     text = check.title,
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
-                Text(
+                AutoSizeText(
                     text = check.detail,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
                 )
             }
         }
