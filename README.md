@@ -184,6 +184,7 @@ layout in particular is **unconfirmed**.
 | [`launcher/`](launcher/) | The Car Launcher app (`:app` + `:carlib`) |
 | [`HEAD_UNIT.md`](HEAD_UNIT.md) | Root, EDL backup, camera and MCU findings, debloat |
 | [`CAR_API.md`](CAR_API.md) | The vendor car-integration API |
+| [`OEM_SYSTEM.md`](OEM_SYSTEM.md) | Every OEM app decompiled: contracts, keys, and the replacement matrix |
 | [`AIDL_ORDINALS.md`](AIDL_ORDINALS.md) | Transaction ordinals for the vendor AIDL |
 | [`LAUNCHER_DESIGN.md`](LAUNCHER_DESIGN.md) | UI/UX spec and capability tiers |
 | [`CUSTOMERUI_NOTES.md`](CUSTOMERUI_NOTES.md) | Stock launcher, decompiled — reference |

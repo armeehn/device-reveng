@@ -208,11 +208,11 @@ Two things §3.3/§3.4 planned turned out not to exist, so they are not built:
 - **No NET.** The vendor radio app's AM / FM / NET row had a third tab for its internet-radio
   source. `getRadioBand()` never reports it and no `IEventService` method selects it, so the
   band toggle is AM / FM only.
-- **No RDS text.** The 144-method AIDL has no PS (station name) or RT (radio text) getter.
-  `getRadioPTYName` (ordinal 19) returns the programme *genre* — "Pop Music" — not a station.
-  So the screen shows the indicators that do exist (RDS / TA / AF / TP / stereo + PTY genre)
-  rather than an empty scroller. `ZXW_RADIO_INFO_EVT` may carry more, but only its action
-  string was recovered: no sender was traced and no payload extra is named.
+- **Station name yes, radio text no.** `getRadioPTYName` (ordinal 19) is misnamed: the gateway
+  stores the MCU's RDS PS frame in `mRadioPSName` and returns it there, so the screen shows the
+  station name. The genre is `getRadioPTYNum` (index into a 32-entry PTY table). There is no RT
+  getter. `ZXW_RADIO_INFO_EVT` is sent by the gateway on band/frequency change with int extras
+  `RadioBndNum`, `RadioTuneNum`, `RadioCurFreq` — nothing the getters do not already say.
 - **Scan is a key.** `getRadioAMSState` / `getRadioAPSState` only report; `sendRadioKey(13)`
   starts a preset scan and 18 an auto-store. Neither is wired to a control yet.
 
@@ -623,11 +623,9 @@ approximation; a sunset calculation would be wrong exactly when it matters.
 - **Reverse camera feed** — `ReverseOverlay` is a black placeholder; embed a `SurfaceView`
   bound to the reverse video input, or host `com.szchoiceway.view.BackCarActivity`.
 - **Climate widget** — placeholder only; wire `CarAirState`.
-- **`ZXW_RADIO_INFO_EVT`** — the action string is known but its payload is not, and no sender
-  was traced. Capturing it on-device would replace RadioScreen's 3 s poll with a push, and may
-  be the only route to a station name (see v2.6 above).
-- **`Rdo_MyFavorite0..5` encoding** — capture the raw values (RadioScreen shows them) to make
-  two-way preset sync with the vendor radio safe.
+- **`Rdo_MyFavorite0..5` write-back** — the encoding is known (`freq | (am ? 0x10000 : 0)`,
+  `RadioTuning.encodeVendorFavorite`) and the slots are recallable from RadioScreen; writing our
+  presets into them is a product decision, not a research item any more.
 - **Radar byte layout** — still **UNCONFIRMED** (v2.8 above). Run the capture, then either fix the
   offsets in `RadarState` or set the layout-confirmed flag. Until then the maneuvering side-strips
   never draw.
