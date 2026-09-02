@@ -102,6 +102,17 @@ data class LauncherSettings(
     val readNowPlaying: Boolean = false,
     /** v0.4.2 — speak newly-arrived shelf notifications aloud (TTS). Off by default. */
     val readNotifications: Boolean = false,
+    /**
+     * Hide a Choiceway app from the drawer once our replacement is installed ([OemApps]).
+     * On by default: it only ever hides an app whose stand-in is present, so a unit with no
+     * suite keeps every OEM app. Off puts the twins back for a side-by-side comparison.
+     */
+    val hideReplacedOemApps: Boolean = true,
+    /**
+     * Also hide the OEM System settings app. Off by default: it still hosts the factory menu,
+     * which the launcher's settings do not reproduce.
+     */
+    val hideOemSettings: Boolean = false,
 ) {
     companion object {
         /** 0 = adaptive/auto sizing; otherwise a fixed column count. */
@@ -181,6 +192,8 @@ class SettingsStore(context: Context) {
                     reverseGuideLines = prefs[REVERSE_GUIDE_LINES_KEY] ?: true, // v0.4.7.1
                     readNowPlaying = prefs[READ_NOW_PLAYING_KEY] ?: false, // v0.4.2
                     readNotifications = prefs[READ_NOTIFICATIONS_KEY] ?: false, // v0.4.2
+                    hideReplacedOemApps = prefs[HIDE_REPLACED_OEM_KEY] ?: true,
+                    hideOemSettings = prefs[HIDE_OEM_SETTINGS_KEY] ?: false,
                 )
             }
             .stateIn(scope, SharingStarted.Eagerly, LauncherSettings())
@@ -259,6 +272,16 @@ class SettingsStore(context: Context) {
         ds.edit { it[READ_NOTIFICATIONS_KEY] = enabled }
     }
 
+    /** Shadow the replaced OEM apps ([OemApps]) in the drawer, or show them again. */
+    fun setHideReplacedOemApps(enabled: Boolean) = scope.launch {
+        ds.edit { it[HIDE_REPLACED_OEM_KEY] = enabled }
+    }
+
+    /** Opt in to hiding the OEM System settings app as well. */
+    fun setHideOemSettings(enabled: Boolean) = scope.launch {
+        ds.edit { it[HIDE_OEM_SETTINGS_KEY] = enabled }
+    }
+
 
     private companion object {
         val GRID_COLUMNS_KEY = intPreferencesKey("grid_columns")
@@ -280,5 +303,7 @@ class SettingsStore(context: Context) {
         val REVERSE_GUIDE_LINES_KEY = booleanPreferencesKey("reverse_guide_lines") // v0.4.7.1
         val READ_NOW_PLAYING_KEY = booleanPreferencesKey("read_now_playing") // v0.4.2 TTS
         val READ_NOTIFICATIONS_KEY = booleanPreferencesKey("read_notifications") // v0.4.2 TTS
+        val HIDE_REPLACED_OEM_KEY = booleanPreferencesKey("hide_replaced_oem_apps") // OemApps shadow
+        val HIDE_OEM_SETTINGS_KEY = booleanPreferencesKey("hide_oem_settings") // OemApps shadow
     }
 }

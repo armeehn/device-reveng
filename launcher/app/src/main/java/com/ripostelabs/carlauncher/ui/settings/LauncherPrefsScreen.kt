@@ -152,6 +152,32 @@ fun LauncherPrefsScreen(
             )
         }
 
+        // The OEM-shadow toggles (data/OemApps). Both read-only in effect: they hide or show
+        // drawer entries and never touch what is installed.
+        SettingsSection(title = "Vendor apps") {
+            Text(
+                text = "Once one of our rewrites is installed, the Choiceway app it replaces " +
+                    "leaves the drawer. Nothing is uninstalled; Setup doctor lists what is " +
+                    "hidden and what can go.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.size(12.dp))
+            ToggleSetting(
+                label = "Hide replaced OEM apps",
+                description = "Radio, Music, HD movies and GPS, each only while its " +
+                    "com.ripostelabs.* rewrite is installed.",
+                checked = settings.hideReplacedOemApps,
+                onChange = settingsStore::setHideReplacedOemApps,
+            )
+            ToggleSetting(
+                label = "Hide OEM System settings",
+                description = "Off by default: the vendor settings app still hosts the factory menu.",
+                checked = settings.hideOemSettings,
+                onChange = settingsStore::setHideOemSettings,
+            )
+        }
+
         // v0.4.2: text-to-speech. Off by default — a launcher that talks unasked is worse
         // than silent (LAUNCHER_DESIGN eyes-free posture; pairs with the car's own beep feedback).
         SettingsSection(title = "Read aloud") {

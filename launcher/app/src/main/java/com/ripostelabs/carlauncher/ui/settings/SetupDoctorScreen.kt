@@ -23,6 +23,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -35,15 +36,23 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import com.ripostelabs.carlauncher.ui.AutoSizeText
 import com.ripostelabs.carlauncher.ui.theme.JetBrainsMono
+import com.ripostelabs.carlauncher.carlib.CarService
 import com.ripostelabs.carlauncher.data.CarSettingsController
 import com.ripostelabs.carlauncher.data.CrashLog // v0.4.3.7
 import com.ripostelabs.carlauncher.data.CrashRecord // v0.4.3.7
 import com.ripostelabs.carlauncher.data.DoctorCheck
+import com.ripostelabs.carlauncher.data.LauncherSettings
+import com.ripostelabs.carlauncher.data.OemApps
+import com.ripostelabs.carlauncher.data.SettingKeys
+import com.ripostelabs.carlauncher.data.SettingsStore
 import com.ripostelabs.carlauncher.data.SetupDoctor
+import com.ripostelabs.carlauncher.data.SrcModeNames
 import com.ripostelabs.carlauncher.ui.ParkedOnly // v0.4.3.7
 import com.ripostelabs.carlauncher.ui.collectAsStateSafe
 import com.ripostelabs.carlauncher.ui.theme.carShape
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
@@ -64,6 +73,8 @@ import java.util.Locale
 fun SetupDoctorScreen(
     controller: CarSettingsController,
     onBack: () -> Unit,
+    settingsStore: SettingsStore? = null, // OEM-shadow policy (null keeps previews working)
+    carService: CarService? = null, // live source mode; null = "gateway not bound"
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -71,6 +82,13 @@ fun SetupDoctorScreen(
     val checks by doctor.checks.collectAsStateSafe(initial = emptyList())
     val repairing by doctor.repairing.collectAsStateSafe(initial = false)
     val root by controller.rootAvailable.collectAsStateSafe(initial = null)
+    val vendorApps by doctor.vendorApps.collectAsStateSafe(initial = null)
+
+    // The vendor report depends on the driver's shadow toggles; re-probe when they change.
+    val settings by (settingsStore?.settings?.collectAsStateSafe(initial = LauncherSettings())
+        ?: remember { mutableStateOf(LauncherSettings()) })
+    val shadowPolicy = remember(settings) { OemApps.ShadowPolicy.from(settings) }
+    LaunchedEffect(shadowPolicy) { doctor.refresh(shadowPolicy) }
 
     var crashes by remember { mutableStateOf<List<CrashRecord>>(emptyList()) }
     var opened by remember { mutableStateOf<CrashRecord?>(null) }
@@ -151,6 +169,9 @@ fun SetupDoctorScreen(
             }
         }
 
+        VendorAppsSection(report = vendorApps)
+        GatewayStateSection(controller = controller, carService = carService)
+
         SettingsSection(title = "Crashes") {
             if (crashes.isEmpty()) {
                 Text(
@@ -207,6 +228,160 @@ fun SetupDoctorScreen(
                 }
             },
             onDismiss = { confirmClear = false },
+        )
+    }
+}
+
+/**
+ * The OEM replacement matrix ([OemApps]) against this unit: what the drawer hides, what is
+ * still visible and why, what may be uninstalled (as a line to copy, never a button), and which
+ * KEEP package is missing. That last one is the alarm: no btsuite, canbus2, eventcenter or
+ * zlink means the unit lost part of its own plumbing.
+ */
+@Composable
+private fun VendorAppsSection(report: OemApps.Report?) {
+    SettingsSection(title = "Vendor apps") {
+        if (report == null) {
+            MutedText("Checking…")
+            return@SettingsSection
+        }
+
+        report.missingKeep.forEach { app ->
+            WarningRow(
+                title = "${app.packageName} missing or disabled",
+                detail = "Never remove this one: ${app.why}",
+            )
+        }
+
+        val hidden = report.shadowed.joinToString { it.label }
+        MutedText(
+            if (hidden.isEmpty()) "Nothing hidden from the drawer." else "Hidden from the drawer: $hidden.",
+        )
+
+        // Pending = REPLACED but still visible; say what each one waits for.
+        report.pending.forEach { app ->
+            InfoRow(label = app.label, value = OemApps.pendingReason(app, report.installed))
+        }
+
+        if (report.removable.isNotEmpty()) {
+            MutedText(
+                "Safe to remove. Nothing runs from here: copy each line into adb shell or a " +
+                    "root shell yourself. -k keeps the app's data for a reinstall.",
+            )
+            report.removable.forEach { app ->
+                MutedText("${app.label}: ${app.why}")
+                CommandBox(OemApps.uninstallLine(app.packageName))
+            }
+        }
+
+        val kept = OemApps.APPS.filter { it.oemClass == OemApps.OemClass.KEEP }
+        MutedText("Never hidden: " + kept.joinToString { "${it.label} (${it.why.trimEnd('.')})" })
+    }
+}
+
+/**
+ * Live gateway state, read-only. Every value is a plain row: the driver reports them, the
+ * launcher writes none of them. Source mode is polled off the main thread like Home does
+ * (a blocking AIDL read in a composition body once spun a main-thread IPC loop).
+ */
+@Composable
+private fun GatewayStateSection(controller: CarSettingsController, carService: CarService?) {
+    val mode by produceState<Int?>(initialValue = null, carService) {
+        while (true) {
+            value = withContext(Dispatchers.IO) {
+                runCatching { carService?.getValidMode() }.getOrNull()
+            }
+            delay(SOURCE_MODE_POLL_MS)
+        }
+    }
+    val sysVars by controller.snapshot.collectAsStateWithLifecycle()
+
+    SettingsSection(title = "Gateway state") {
+        InfoRow(label = "Source mode (getValidMode)", value = SrcModeNames.label(mode))
+        InfoRow(
+            label = "Sys_SoundManager_Type",
+            value = sysVarValue(sysVars, SettingKeys.SOUND_MANAGER_TYPE) +
+                if (sysVars[SettingKeys.SOUND_MANAGER_TYPE] == KILL3RD_OFF) " (kill3rdAPK off)" else "",
+        )
+        InfoRow(label = "Sys_UINumber", value = sysVarValue(sysVars, SettingKeys.UI_NUMBER_KEY))
+        InfoRow(label = "Sys_Landscape", value = sysVarValue(sysVars, SettingKeys.LANDSCAPE))
+        InfoRow(label = "Sys_CustomerType", value = sysVarValue(sysVars, SettingKeys.CUSTOMER_TYPE))
+        InfoRow(label = "Sys_CarType", value = sysVarValue(sysVars, SettingKeys.CAR_TYPE))
+        InfoRow(label = "Sys_Vehicle_deries", value = sysVarValue(sysVars, SettingKeys.VEHICLE_SERIES))
+    }
+}
+
+private fun sysVarValue(sysVars: Map<String, String>, key: String): String =
+    sysVars[key]?.takeIf { it.isNotBlank() } ?: "not set"
+
+/** `Sys_SoundManager_Type` "1" (the firmware default) means sendMode never force-stops apps. */
+private const val KILL3RD_OFF = "1"
+private const val SOURCE_MODE_POLL_MS = 5_000L
+
+@Composable
+private fun MutedText(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+/** Same shape as a failing [DoctorCheckRow], without a command: there is nothing to run. */
+@Composable
+private fun WarningRow(title: String, detail: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = Icons.Filled.ErrorOutline,
+            contentDescription = "Needs attention",
+            tint = MaterialTheme.colorScheme.error,
+            modifier = Modifier.size(24.dp),
+        )
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            AutoSizeText(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            AutoSizeText(
+                text = detail,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+            )
+        }
+    }
+}
+
+/** A monospaced line that copies itself on tap: the adb-command affordance, shared. */
+@Composable
+private fun CommandBox(command: String) {
+    val clipboard = LocalClipboardManager.current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(carShape(10.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .clickable { clipboard.setText(AnnotatedString(command)) }
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = command,
+            style = MaterialTheme.typography.bodySmall.copy(fontFamily = JetBrainsMono),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
+        )
+        Icon(
+            imageVector = Icons.Filled.ContentCopy,
+            contentDescription = "Copy command",
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(18.dp),
         )
     }
 }
