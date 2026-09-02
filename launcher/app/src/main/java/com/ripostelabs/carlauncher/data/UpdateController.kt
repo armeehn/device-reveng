@@ -122,8 +122,11 @@ class UpdateController(
         _status.value = UpdateStatus.Checking
         val outcome = withContext(Dispatchers.IO) {
             runCatching {
-                val json = httpGet("$API_BASE/releases/latest", token, ACCEPT_JSON)
-                UpdateFeed.parseLatest(json)
+                // The release list, newest-first by GitHub's ordering — but we pick by the
+                // versionCode we parse ourselves, because /releases/latest was answering with
+                // an older release than it had (see UpdateFeed.parseNewest).
+                val json = httpGet("$API_BASE/releases?per_page=$RELEASES_PAGE_SIZE", token, ACCEPT_JSON)
+                UpdateFeed.parseNewest(json)
             }
         }
         ds.edit { it[LAST_CHECK_KEY] = System.currentTimeMillis() }
@@ -133,7 +136,7 @@ class UpdateController(
                 when {
                     release == null ->
                         _status.value = UpdateStatus.Failed(
-                            "Latest release isn't a CI launcher build — nothing to compare against.",
+                            "No CI launcher build in the release feed — nothing to compare against.",
                         )
                     UpdateFeed.isNewer(release, BuildConfig.VERSION_CODE) -> {
                         _status.value = UpdateStatus.Available(release)
@@ -311,7 +314,7 @@ class UpdateController(
         in 200..299 -> null
         401 -> "GitHub rejected the token (401). Clear or re-check it in the field below."
         403 -> "GitHub refused the request (403) — likely the anonymous rate limit; try later or set a token."
-        404 -> "No release found (404) — nothing published to carlauncher-releases yet?"
+        404 -> "Release feed not found (404) — is carlauncher-releases still public?"
         else -> "GitHub answered HTTP $code."
     }
 
@@ -371,6 +374,13 @@ class UpdateController(
         const val ACCEPT_JSON = "application/vnd.github+json"
         const val ACCEPT_BINARY = "application/octet-stream"
         const val HTTP_TEMP_REDIRECT = 307
+
+        /**
+         * How many releases to weigh when picking the newest. One page is plenty — CI publishes
+         * one release per green main build, so 30 covers weeks, and the answer only has to be
+         * newer than what is installed, not the newest that ever existed.
+         */
+        const val RELEASES_PAGE_SIZE = 30
 
         const val CONNECT_TIMEOUT_MS = 15_000
         const val READ_TIMEOUT_MS = 60_000

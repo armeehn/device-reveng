@@ -1,5 +1,6 @@
 package com.ripostelabs.carlauncher.data
 
+import org.json.JSONArray
 import org.json.JSONObject
 
 /**
@@ -52,13 +53,48 @@ object UpdateFeed {
         body?.let { SHA_ROW.find(it)?.groupValues?.get(1)?.lowercase() }
 
     /**
-     * One release object (the `/releases/latest` response) → [Release], or null when it isn't a
-     * CI launcher release: unparseable tag, no `.apk` asset, or malformed JSON. Null rather than
-     * throwing, because the feed is remote input — a repo admin creating a hand-made release
-     * must degrade to "nothing to update", not crash the settings screen.
+     * One release object → [Release], or null when it isn't a CI launcher release: unparseable
+     * tag, no `.apk` asset, or malformed JSON. Null rather than throwing, because the feed is
+     * remote input — a repo admin creating a hand-made release must degrade to "nothing to
+     * update", not crash the settings screen.
      */
-    fun parseLatest(json: String): Release? = runCatching {
-        val root = JSONObject(json)
+    fun parseLatest(json: String): Release? =
+        runCatching { parseOne(JSONObject(json)) }.getOrNull()
+
+    /**
+     * The newest CI launcher build in a `GET /releases` array — the highest versionCode, not
+     * whatever the array happens to lead with.
+     *
+     * **Why we do not ask GitHub for `/releases/latest`.** That endpoint resolves "latest" by
+     * `created_at`, which for a release is the *target commit's* date, not when the release was
+     * published. Every release mirrored into carlauncher-releases has carried an identical
+     * `created_at` (2026-08-30T15:16:58Z across vc152, vc154 and vc155), so the tie-break is
+     * arbitrary: on 2026-09-01 the endpoint answered vc152 while vc154 and vc155 were both
+     * published, non-draft and non-prerelease. The car could never update past vc152 no matter
+     * what CI shipped, and nothing surfaced — it simply reported "up to date".
+     *
+     * Ordering by the versionCode we parse out of the tag ourselves removes the dependency on
+     * GitHub's ordering entirely, which is the same reason [selfUpdateRefusal] trusts the APK
+     * over the release notes: the number we act on should be one we derived, not one we were
+     * handed.
+     *
+     * Drafts and prereleases are skipped — an unauthenticated read never sees drafts anyway, but
+     * a token with push rights does, and a half-finished release is not something to install onto
+     * a running HOME app.
+     */
+    fun parseNewest(json: String): Release? = runCatching {
+        val arr = JSONArray(json)
+        var best: Release? = null
+        for (i in 0 until arr.length()) {
+            val obj = arr.optJSONObject(i) ?: continue
+            if (obj.optBoolean("draft", false) || obj.optBoolean("prerelease", false)) continue
+            val release = parseOne(obj) ?: continue
+            if (best == null || release.versionCode > best!!.versionCode) best = release
+        }
+        best
+    }.getOrNull()
+
+    private fun parseOne(root: JSONObject): Release? {
         val tag = root.getString("tag_name")
         val code = versionCodeOfTag(tag) ?: return null
         val name = versionNameOfTag(tag) ?: return null
@@ -74,7 +110,7 @@ object UpdateFeed {
         }
         val found = apk ?: return null
 
-        Release(
+        return Release(
             tag = tag,
             versionName = name,
             versionCode = code,
@@ -83,7 +119,7 @@ object UpdateFeed {
             apkSizeBytes = found.getLong("size"),
             sha256 = sha256OfBody(root.optString("body")),
         )
-    }.getOrNull()
+    }
 
     /** True when [release] is strictly newer than the running build. */
     fun isNewer(release: Release, installedVersionCode: Int): Boolean =
