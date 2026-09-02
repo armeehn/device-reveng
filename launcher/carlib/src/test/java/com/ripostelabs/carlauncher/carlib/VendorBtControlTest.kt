@@ -27,8 +27,27 @@ class VendorBtControlTest {
     }
 
     @Test
-    fun hangUpIsItsOwnAction() {
-        assertEquals(IntentSpec("com.szchoiceway.btsuite.HBCP_HANGUP_EVENT"), VendorBt.hangUp())
+    fun hangUpRidesMcuKeyInfor() {
+        assertEquals(
+            IntentSpec(
+                action = CarEvents.MCU_KEY_INFOR_ACTION,
+                ints = mapOf(CarEvents.EXTRA_MCU_KEY_VALUE to 22),
+            ),
+            VendorBt.hangUp(),
+        )
+        assertEquals(IntentSpec("com.szchoiceway.btsuite.HBCP_HANGUP_EVENT"), VendorBt.hangUpEvent())
+    }
+
+    @Test
+    fun openPageTargetsBtMainActivity() {
+        val spec = VendorBt.openPage(VendorBt.Page.CALL_RECORD)
+        assertEquals("com.szchoiceway.btsuite", spec.packageName)
+        assertEquals("com.szchoiceway.btsuite.BTMainActivity", spec.className)
+        assertEquals(mapOf("GotoPageNum" to "CallRecordPage"), spec.strings)
+        assertEquals("PhoneBookPage", VendorBt.Page.PHONE_BOOK.key)
+        assertEquals("SetPage", VendorBt.Page.SETTINGS.key)
+        assertEquals("DialPage", VendorBt.Page.DIAL.key)
+        assertEquals("BTMusic", VendorBt.Page.MUSIC.key)
     }
 
     @Test

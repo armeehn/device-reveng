@@ -26,6 +26,34 @@ class ZlinkTest {
         assertEquals(mapOf("specFuncCode" to 1500), spec.ints)
     }
 
+    /** RAV4-52: every quick action is one REQ_SPEC_FUNC_CMD broadcast carrying its code. */
+    @Test
+    fun quickActionsAreOneBroadcastEach() {
+        val expected = mapOf(
+            Zlink.Feature.SIRI to 1500,
+            Zlink.Feature.MAPS to 1504,
+            Zlink.Feature.PHONE to 1505,
+            Zlink.Feature.MUSIC to 1506,
+            Zlink.Feature.NOW_PLAYING to 1507,
+            Zlink.Feature.HOME to 1508,
+        )
+        for ((feature, code) in expected) {
+            assertEquals(
+                IntentSpec(
+                    action = "com.zjinnova.zlink",
+                    strings = mapOf("command" to "REQ_SPEC_FUNC_CMD"),
+                    ints = mapOf("specFuncCode" to code),
+                ),
+                Zlink.request(feature),
+            )
+        }
+    }
+
+    @Test
+    fun openIsTheMainPageDeepLink() {
+        assertEquals(Zlink.mainPage("main", "carplay"), Zlink.open())
+    }
+
     @Test
     fun featureCodesMatchTheGateway() {
         assertEquals(1500, Zlink.Feature.SIRI.code)

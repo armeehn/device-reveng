@@ -7,6 +7,7 @@ import android.content.IntentFilter
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import com.szchoiceway.canbus.CarAirState
 import kotlinx.coroutines.channels.awaitClose
@@ -449,6 +450,13 @@ class CarEvents(private val appContext: Context) {
      */
     val vendorBt: StateFlow<VendorBtState> = _vendorBt.asStateFlow()
 
+    private val _carPlay = MutableStateFlow(CarPlayState())
+    /**
+     * RAV4-52 — the Zlink phone-projection session (contract in [CarPlayState]). Starts
+     * disconnected; consumers gate on [CarPlayState.lastEventMs] so silence shows nothing.
+     */
+    val carplayState: StateFlow<CarPlayState> = _carPlay.asStateFlow()
+
     private val _climate = MutableStateFlow<ClimateState?>(null)
     /**
      * Latest HVAC snapshot from the `carairstruct` broadcast, or null until the CAN app sends
@@ -483,6 +491,51 @@ class CarEvents(private val appContext: Context) {
      * captured and any byte[] payload kept undecoded. Null until a frame arrives.
      */
     val canRaw: StateFlow<CanFrame?> = _canRaw.asStateFlow()
+
+    // --- Wheel-key gestures off the 0x11 frames --------------------------------
+    private val _wheelGestures = MutableSharedFlow<WheelGesture>(extraBufferCapacity = 16)
+    /**
+     * Hold / double-press of the RAV4 wheel keys, decoded from the raw 0x11 frames in
+     * [MCU_MSG_CAN_ALL_INFO] ([WheelGestures]). The vendor path reports a key once, on release,
+     * so this is the only place a hold is visible. Silent without the raw-frame broadcast.
+     */
+    val wheelGestures: SharedFlow<WheelGesture> = _wheelGestures.asSharedFlow()
+
+    /**
+     * Long presses arm this so the vendor's plain key for the same button — the release the CAN
+     * app reports after the hold — is dropped on both delivery paths ([WheelKeySwallow]). The
+     * broadcast path is filtered here; MainActivity asks [swallowKeyEvent] for the injected one.
+     */
+    private val keySwallow = WheelKeySwallow()
+
+    private val gestures = WheelGestures { gesture ->
+        if (gesture is WheelGesture.LongPress) {
+            keySwallow.arm(gesture.key, SystemClock.elapsedRealtime())
+        }
+        _wheelGestures.tryEmit(gesture)
+    }
+
+    /** Fires at [WheelGestures.nextDeadlineMs]: a frame gap is a release, a long hold a gesture. */
+    private val gestureTick = Runnable {
+        gestures.onTick(SystemClock.elapsedRealtime())
+        scheduleGestureTick()
+    }
+
+    /**
+     * True when an injected KeyEvent [edge] for [key] is the vendor echo of a long press we
+     * already acted on; the caller drops it. Main thread only, like the receiver.
+     */
+    fun swallowKeyEvent(key: WheelKey, edge: WheelKeySwallow.Edge): Boolean =
+        keySwallow.swallowKeyEvent(key, edge, SystemClock.elapsedRealtime())
+
+    // --- Zlink (CarPlay / Android Auto) session -------------------------------
+    private val _zlinkConnected = MutableStateFlow(false)
+    /**
+     * True between a `CONNECTED` and a `DISCONNECT` / `EXIT` on Zlink's own status broadcast
+     * (`Zlink.ACTION_MESSAGE`, `ZlinkManage.java:205-300`). UNVERIFIED: the receiver's DEX is
+     * packed, so the vocabulary is the gateway's reading of it. False until the first status.
+     */
+    val zlinkConnected: StateFlow<Boolean> = _zlinkConnected.asStateFlow()
 
     // v0.4.3 --- Undecoded radio info broadcast, for the capture view -----------
     private val _radioInfoRaw = MutableStateFlow<CanFrame?>(null)
@@ -759,10 +812,20 @@ class CarEvents(private val appContext: Context) {
                 // the protected capture delivers the same press, and exactly one of the
                 // co-arriving copies may reach handleProtected.
                 MCU_KEY_INFOR_ACTION -> {
+                    // The echo of a long press we already acted on is dropped here, before the
+                    // tap is synthesised (see keySwallow).
+                    val code = intExtra(intent, EXTRA_MCU_KEY_VALUE)
+                    val wheelKey = WheelKey.fromMcuKey(code)
+                    if (wheelKey != null &&
+                        keySwallow.swallowBroadcast(wheelKey, SystemClock.elapsedRealtime())
+                    ) {
+                        return
+                    }
+
                     // No press state on this path: one broadcast is one complete tap, so
                     // synthesise the down and up edges back to back. KeyPump treats that as a
                     // normal short press on every key class.
-                    val index = SwcFallback.mcuKey(intExtra(intent, EXTRA_MCU_KEY_VALUE))
+                    val index = SwcFallback.mcuKey(code)
                     if (index != null) {
                         applyFallbackEdge(SwcFallback.Edge(index, down = true))
                         applyFallbackEdge(SwcFallback.Edge(index, down = false))
@@ -787,9 +850,21 @@ class CarEvents(private val appContext: Context) {
 
                     // RAV4-38: the dashboard's steering is this frame's 0x11 decode, the one
                     // the capture screen already shows. Other opcodes leave it untouched.
-                    frame.bytes
-                        ?.let { SteeringReading.fromFrame(it, frame.atMs) }
-                        ?.let { _steeringAngle.value = it }
+                    // The same decode carries the wheel key byte the gesture engine reads.
+                    val basic = frame.bytes
+                        ?.let { HiworldCanDecoder.decodeFrame(it) as? CanSignal.BasicStatus }
+                        ?: return
+                    _steeringAngle.value = SteeringReading(basic.steerAngleDeg, frame.atMs)
+                    gestures.onSample(basic.swcButtonId, basic.swcPressed, SystemClock.elapsedRealtime())
+                    scheduleGestureTick()
+                }
+
+                // Zlink's own session status; only the connect/disconnect words are read.
+                Zlink.ACTION_MESSAGE -> {
+                    when (intent.getStringExtra(Zlink.EXTRA_STATUS)) {
+                        Zlink.STATUS_CONNECTED -> _zlinkConnected.value = true
+                        Zlink.STATUS_DISCONNECT, Zlink.STATUS_EXIT -> _zlinkConnected.value = false
+                    }
                 }
 
                 // canbus2's 3-byte digest: [speed km/h, rpmH, rpmL].
@@ -813,6 +888,25 @@ class CarEvents(private val appContext: Context) {
                     // and field order match the vendor's. A missing extra leaves the flow as-is.
                     intent.getParcelableExtra(EXTRA_CAR_AIR_STATE, CarAirState::class.java)
                         ?.let { _climate.value = ClimateState.from(it) }
+                }
+
+                // RAV4-52: Zlink session status. The same action also carries gateway → zlink
+                // commands (no `status` extra, our own REQ_SPEC_FUNC_CMD included): skipped.
+                Zlink.ACTION_MESSAGE -> {
+                    val status = intent.getStringExtra(Zlink.EXTRA_STATUS) ?: return
+                    _carPlay.value = CarPlayDecode.applyStatus(
+                        _carPlay.value,
+                        status,
+                        intent.getStringExtra(Zlink.EXTRA_PHONE_MODE),
+                        System.currentTimeMillis(),
+                    )
+                }
+
+                Zlink.ACTION_TELEPHONE_STATUS -> {
+                    val raw = intExtra(intent, Zlink.EXTRA_TELEPHONE_STATUS) ?: return
+                    _carPlay.value = CarPlayDecode.applyTelephone(
+                        _carPlay.value, raw, System.currentTimeMillis(),
+                    )
                 }
 
                 else -> Log.d(TAG, "unhandled action: ${intent?.action}")
@@ -847,6 +941,13 @@ class CarEvents(private val appContext: Context) {
                 listeners.forEach { it.onSwcKey(key) }
             }
         }
+    }
+
+    /** Re-arm the one gesture timer for the engine's next deadline, or clear it when idle. */
+    private fun scheduleGestureTick() {
+        handler.removeCallbacks(gestureTick)
+        val deadline = gestures.nextDeadlineMs() ?: return
+        handler.postDelayed(gestureTick, (deadline - SystemClock.elapsedRealtime()).coerceAtLeast(0L))
     }
 
     /**
@@ -965,7 +1066,10 @@ class CarEvents(private val appContext: Context) {
             addAction(CAN_CAR_OUT_SIDE_TEMP_EVT) // v3.0
             addAction(ZXW_CAN_WHEEL_TRACK_EVT) // v3.0
             addAction(ZXW_ACTION_LAUNCHER_ALLAPPS_START_EVT) // v0.4.9 drawer request
+            addAction(Zlink.ACTION_MESSAGE) // CarPlay session status (wheel NAV gesture)
             HBCP_ACTIONS.forEach { addAction(it) } // vendor BT status
+            addAction(Zlink.ACTION_MESSAGE) // RAV4-52 CarPlay session status
+            addAction(Zlink.ACTION_TELEPHONE_STATUS)
         }
         // Vendor gateway is a separate app -> this is not an app-internal broadcast,
         // so it must be exported on API 33+ (RECEIVER_EXPORTED).

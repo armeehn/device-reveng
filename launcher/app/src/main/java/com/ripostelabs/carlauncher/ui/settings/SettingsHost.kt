@@ -207,6 +207,12 @@ fun SettingsHost(
                 onBack = ::pop,
             )
 
+            SettingsRoute.WheelGestures -> WheelGesturesSettingsScreen(
+                settingsStore = settingsStore,
+                carEvents = carEvents,
+                onBack = ::pop,
+            )
+
             SettingsRoute.Power -> PowerSettingsScreen(
                 controller = controller,
                 carEvents = carEvents,
@@ -301,6 +307,7 @@ sealed interface SettingsRoute {
     data object Climate : SettingsRoute
     data object Radio : SettingsRoute
     data object SteeringWheel : SettingsRoute
+    data object WheelGestures : SettingsRoute
     data object Power : SettingsRoute
     data object RootTier : SettingsRoute // v2.9
     data object System : SettingsRoute
