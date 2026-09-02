@@ -352,9 +352,9 @@ private const val VENDOR_BT_FRESH_MS = 10 * 60_000L
  * Only ever ADDITIVE, and only for the presence/connected booleans: the head unit's phone
  * Bluetooth runs through the vendor `btsuite` module, which the Android `BluetoothManager` can
  * be blind to — so a vendor "connected" with a silent Android stack is the case this exists
- * for. The payload decode is UNCONFIRMED (see [VendorBtDecode]), so a vendor "disconnected"
- * never overrides an Android-confirmed connection, and an absent/stale vendor state (the
- * caller's freshness guard) changes nothing at all.
+ * for. The two are separate stacks (the module owns the phone, Android may hold something
+ * else), so a vendor "disconnected" never overrides an Android-confirmed connection, and an
+ * absent/stale vendor state (the caller's freshness guard) changes nothing at all.
  */
 internal fun applyVendorBt(android: BtStatus, vendor: VendorBtState): BtStatus {
     var merged = android

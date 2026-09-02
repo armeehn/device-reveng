@@ -5,91 +5,129 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 /**
- * The HBCP payload encoding is unconfirmed, so the decoder's contract is "never fabricate":
- * only an unambiguous 0/1 moves a boolean, a device identity only ever raises `connected`,
- * and an undecodable event still proves the channel is alive via lastEventMs.
+ * Pins the HBCP contract from `btsuite/BTUtils.java`: fixed DATA_INT / DATA_STR extras, the
+ * HSHF table (>= 3 connected, > 3 in call), and that anything outside the table only stamps
+ * the timestamp.
  */
 class VendorBtDecodeTest {
 
     private val start = VendorBtState()
-    private fun power(name: String = "POWER_STATUS") = CarEvents.HBCP_ACTION_PREFIX + name
-    private fun connect(name: String = "CONNECT_STATUS") = CarEvents.HBCP_ACTION_PREFIX + name
+    private fun action(suffix: String) = CarEvents.HBCP_ACTION_PREFIX + suffix
+    private fun ints(value: Int) = mapOf(VendorBtDecode.EXTRA_INT to value)
+    private fun hshf(state: Int, prev: VendorBtState = start, at: Long = 1L) =
+        VendorBtDecode.apply(prev, action(VendorBtDecode.EVT_HSHF), ints(state), at)
 
     @Test
-    fun undecodableEventOnlyStampsTheTimestamp() {
-        val next = VendorBtDecode.apply(start, power(), mapOf("blob" to "???"), 42L)
-        assertEquals(VendorBtState(powered = null, connected = null, lastEventMs = 42L), next)
+    fun unknownEventOnlyStampsTheTimestamp() {
+        val next = VendorBtDecode.apply(start, action("PAIR_STATUS"), ints(1), 42L)
+        assertEquals(start.copy(lastEventMs = 42L), next)
     }
 
     @Test
-    fun powerStatusOneMeansOn() {
-        val next = VendorBtDecode.apply(start, power(), mapOf("PowerStatus" to 1), 1L)
-        assertEquals(true, next.powered)
-        assertNull(next.connected) // power on says nothing about connections
-    }
+    fun powerOnAndOff() {
+        val on = VendorBtDecode.apply(start, action(VendorBtDecode.EVT_POWER), ints(1), 1L)
+        assertEquals(true, on.powered)
+        assertNull(on.connected) // power on says nothing about a phone
 
-    @Test
-    fun powerOffAlsoClearsConnected() {
-        val on = VendorBtState(powered = true, connected = true, lastEventMs = 1L)
-        val next = VendorBtDecode.apply(on, power(), mapOf("PowerStatus" to 0), 2L)
-        assertEquals(false, next.powered)
-        assertEquals(false, next.connected)
-    }
-
-    @Test
-    fun nonBinaryStatusValueIsIgnored() {
-        // Could be an enum (e.g. 2=connecting) — refusing to map it is the whole point.
-        val next = VendorBtDecode.apply(start, connect(), mapOf("ConnectState" to 2), 3L)
-        assertNull(next.connected)
-        assertEquals(3L, next.lastEventMs)
-    }
-
-    @Test
-    fun connectStatusMapsZeroAndOne() {
-        val on = VendorBtDecode.apply(start, connect(), mapOf("ConnectStatus" to 1), 4L)
-        assertEquals(true, on.connected)
-        val off = VendorBtDecode.apply(on, connect(), mapOf("ConnectStatus" to 0), 5L)
+        val live = on.copy(connected = true, inCall = true)
+        val off = VendorBtDecode.apply(live, action(VendorBtDecode.EVT_POWER), ints(0), 2L)
+        assertEquals(false, off.powered)
         assertEquals(false, off.connected)
+        assertEquals(false, off.inCall)
     }
 
     @Test
-    fun hshfStatusCountsAsConnectionEvidence() {
-        val next = VendorBtDecode.apply(start, connect("HSHF_STATUS"), mapOf("HshfState" to 1), 6L)
-        assertEquals(true, next.connected)
+    fun hshfTableDrivesConnectedAndInCall() {
+        val expected = mapOf(
+            VendorBtDecode.HSHF_INITIALISING to (false to false),
+            VendorBtDecode.HSHF_READY to (false to false),
+            VendorBtDecode.HSHF_CONNECTING to (false to false),
+            VendorBtDecode.HSHF_CONNECTED to (true to false),
+            VendorBtDecode.HSHF_OUTGOING_CALL to (true to true),
+            VendorBtDecode.HSHF_INCOMING_CALL to (true to true),
+            VendorBtDecode.HSHF_ACTIVE_CALL to (true to true),
+        )
+        for ((state, verdict) in expected) {
+            val next = hshf(state)
+            assertEquals("hshf=$state connected", verdict.first, next.connected)
+            assertEquals("hshf=$state inCall", verdict.second, next.inCall)
+            assertEquals(state, next.hshf)
+        }
     }
 
     @Test
-    fun byteAndBooleanStatusCarriersDecodeToo() {
-        val b = VendorBtDecode.apply(start, power(), mapOf("PowerStatus" to 1.toByte()), 7L)
-        assertEquals(true, b.powered)
-        val bool = VendorBtDecode.apply(start, power(), mapOf("PowerState" to false), 8L)
-        assertEquals(false, bool.powered)
+    fun hshfGetStatusIsTheSameTable() {
+        val next = VendorBtDecode.apply(
+            start, action(VendorBtDecode.EVT_HSHF_GET), ints(VendorBtDecode.HSHF_ACTIVE_CALL), 3L,
+        )
+        assertEquals(true, next.inCall)
+    }
+
+    @Test
+    fun hshfOutOfRangeOrMissingIsIgnored() {
+        assertNull(hshf(7).connected)
+        assertNull(hshf(-1).connected)
+        val missing = VendorBtDecode.apply(start, action(VendorBtDecode.EVT_HSHF), emptyMap(), 4L)
+        assertNull(missing.connected)
+        assertEquals(4L, missing.lastEventMs)
+    }
+
+    @Test
+    fun hshfDropLowersConnected() {
+        val connected = hshf(VendorBtDecode.HSHF_CONNECTED)
+        val ready = hshf(VendorBtDecode.HSHF_READY, prev = connected, at = 2L)
+        assertEquals(false, ready.connected)
     }
 
     @Test
     fun deviceNameOnlyRaisesConnected() {
-        val next = VendorBtDecode.apply(
-            start, connect("CONNECTED_DEVICE"), mapOf("DeviceName" to "Pixel 9"), 9L,
+        val named = VendorBtDecode.apply(
+            start, action(VendorBtDecode.EVT_DEVICE_NAME),
+            mapOf(VendorBtDecode.EXTRA_STR to "Pixel 9", VendorBtDecode.EXTRA_INT to 0), 5L,
         )
-        assertEquals(true, next.connected)
+        assertEquals("Pixel 9", named.deviceName)
+        assertEquals(true, named.connected)
 
-        // A blank name is NOT evidence of a disconnect — it stays whatever it was.
-        val already = VendorBtState(connected = true, lastEventMs = 9L)
+        // A blank name is a re-send with nothing stored, not a disconnect.
         val blank = VendorBtDecode.apply(
-            already, connect("CONNECTED_DEVICE"), mapOf("DeviceName" to ""), 10L,
+            named, action(VendorBtDecode.EVT_DEVICE_NAME),
+            mapOf(VendorBtDecode.EXTRA_STR to "", VendorBtDecode.EXTRA_INT to 0), 6L,
         )
         assertEquals(true, blank.connected)
+        assertEquals("", blank.deviceName)
     }
 
     @Test
-    fun twoNumericExtrasWithoutHintAreAmbiguous() {
-        val next = VendorBtDecode.apply(start, connect(), mapOf("a" to 1, "b" to 0), 11L)
-        assertNull(next.connected)
+    fun avStatusCarriesPlayStateAndTitle() {
+        val playing = VendorBtDecode.apply(
+            start, action(VendorBtDecode.EVT_AV_STATUS),
+            mapOf(VendorBtDecode.EXTRA_INT to VendorBtDecode.AV_PLAYING, VendorBtDecode.EXTRA_STR to "Song"),
+            7L,
+        )
+        assertEquals(true, playing.avPlaying)
+        assertEquals("Song", playing.avTitle)
+        assertNull(playing.connected) // AV status is not a connection verdict
+
+        val paused = VendorBtDecode.apply(
+            playing, action(VendorBtDecode.EVT_AV_STATUS), ints(VendorBtDecode.AV_PAUSED), 8L,
+        )
+        assertEquals(false, paused.avPlaying)
     }
 
     @Test
-    fun singleUnhintedNumericExtraStillDecodes() {
-        val next = VendorBtDecode.apply(start, power(), mapOf("x" to 1), 12L)
+    fun speakingTimeIntArrayIsNotMisreadAsAnInt() {
+        val next = VendorBtDecode.apply(
+            start, action(VendorBtDecode.EVT_SPEAKING_TIME),
+            mapOf(VendorBtDecode.EXTRA_INT to intArrayOf(1, 30)), 9L,
+        )
+        assertEquals(start.copy(lastEventMs = 9L), next)
+    }
+
+    @Test
+    fun byteCarrierDecodesLikeAnInt() {
+        val next = VendorBtDecode.apply(
+            start, action(VendorBtDecode.EVT_POWER), mapOf(VendorBtDecode.EXTRA_INT to 1.toByte()), 10L,
+        )
         assertEquals(true, next.powered)
     }
 }

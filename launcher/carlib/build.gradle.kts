@@ -52,4 +52,6 @@ dependencies {
     // CarEvents.nextMotion). No Robolectric: everything under test is deliberately free of
     // framework calls, so a plain local JVM run needs no emulator and stays fast in CI.
     testImplementation("junit:junit:4.13.2")
+    // Real org.json for WheelKeyMap.parse; android.jar's copy is a stub on the JVM.
+    testImplementation("org.json:json:20240303")
 }
