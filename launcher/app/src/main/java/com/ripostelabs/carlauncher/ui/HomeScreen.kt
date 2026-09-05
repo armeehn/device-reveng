@@ -118,6 +118,11 @@ fun HomeScreen(
     val media by nowPlaying.state.collectAsStateSafe(initial = null)
     val radar by carEvents.radar.collectAsStateSafe(initial = null) // v0.7 parking sensors
     val carPlay by carEvents.carplayState.collectAsStateSafe(initial = CarPlayState()) // RAV4-52
+    // No session visible while a phone is projected: the card shows the CarPlay row instead of
+    // "No source connected" (the gateway carries no CarPlay track metadata, see carPlayNowPlaying).
+    val cardMedia = media ?: carPlayNowPlaying(
+        carPlay, carPlayChipText(carPlay), stringResource(R.string.media_carplay_idle),
+    )
     // v0.6: observe launcher settings (null store -> defaults, keeps previews working).
     val settings by (settingsStore?.settings?.collectAsStateSafe(initial = LauncherSettings())
         ?: remember { mutableStateOf(LauncherSettings()) })
@@ -305,14 +310,14 @@ fun HomeScreen(
                                 )
                             } else {
                                 MediaCard(
-                                    now = media,
+                                    now = cardMedia,
                                     onPlayPause = nowPlaying::playPause,
                                     onNext = nowPlaying::next,
                                     onPrev = nowPlaying::prev,
                                     onSeek = nowPlaying::seekTo,
                                     onCycleSource = nowPlaying::cycleSession,
                                     // RAV4-52: the CarPlay chip deep-links into the receiver.
-                                    onOpenSource = if (SourceLabels.isCarPlay(media?.sourcePackage)) {
+                                    onOpenSource = if (SourceLabels.isCarPlay(cardMedia?.sourcePackage)) {
                                         { Zlink.open().start(appContext) }
                                     } else {
                                         null

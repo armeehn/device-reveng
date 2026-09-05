@@ -6,7 +6,7 @@ package com.ripostelabs.carlauncher.carlib
  *
  * ```
  *  zlink   ──▶ com.zjinnova.zlink  status=CONNECTED phoneMode=carplay_wireless  connected
- *  zlink   ──▶ com.zjinnova.zlink  status=MAIN_AUDIO_START                       connected
+ *  zlink   ──▶ com.zjinnova.zlink  status=MAIN_AUDIO_START | MAIN_AUDIO_STOP     audioPlaying
  *  zlink   ──▶ com.zjinnova.zlink  status=DISCONNECT                             gone
  *  zlink   ──▶ com.zjinnova.zlink  status=PHONE_CALL_ON | PHONE_CALL_OFF         inCall
  *  gateway ──▶ ACTION_CARPLAY_TELEPHONE_STATUS_EVENT int 1 | 0                   inCall
@@ -22,6 +22,11 @@ data class CarPlayState(
     /** `phoneMode` of the last CONNECTED (e.g. `carplay_wireless`); null when unknown or gone. */
     val phoneMode: String? = null,
     val inCall: Boolean = false,
+    /**
+     * MAIN_AUDIO_START seen, no MAIN_AUDIO_STOP since. The gateway turns the pair into its
+     * play flag for SRC_CARPLAY (`ZlinkManage.java:296-301`); no track metadata rides with it.
+     */
+    val audioPlaying: Boolean = false,
     /** Arrival time of the last status of any shape; 0 = none this session. */
     val lastEventMs: Long = 0L,
 ) {
@@ -62,12 +67,14 @@ internal object CarPlayDecode {
             )
             // Audio can only start on a live session, so it counts as connected even when the
             // CONNECTED broadcast was missed (launcher started after the phone was plugged in).
-            Zlink.STATUS_MAIN_AUDIO_START -> stamped.copy(connected = true)
+            Zlink.STATUS_MAIN_AUDIO_START -> stamped.copy(connected = true, audioPlaying = true)
+            Zlink.STATUS_MAIN_AUDIO_STOP -> stamped.copy(audioPlaying = false)
             // EXIT only leaves the source mode (`:228-230`); the phone stays connected.
             Zlink.STATUS_DISCONNECT -> stamped.copy(
                 connected = false,
                 phoneMode = null,
                 inCall = false,
+                audioPlaying = false,
             )
             Zlink.STATUS_PHONE_CALL_ON -> stamped.copy(connected = true, inCall = true)
             Zlink.STATUS_PHONE_CALL_OFF -> stamped.copy(inCall = false)
