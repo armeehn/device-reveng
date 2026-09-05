@@ -37,7 +37,8 @@ EDL backup. Nothing here deletes from /system. **Prefer this over deleting APKs.
   `com.szchoiceway.learn.key`, `com.szchoiceway.gps`
 - **Camera:** `com.szchoiceway.auxcamera`, `com.ivicar.avm`
 - **Audio/radio:** `com.choiceway.dsp`, `com.szchoiceway.radio`, `com.szchoiceway.zxwmedia`,
-  `com.szchoiceway.btsuite`
+  `com.szchoiceway.btsuite` (its in-call popup is a window inside `BTService`, not a
+  component: nothing to `pm disable`; the launcher hides it over the binder instead)
 - **Illumination/UX:** `com.szchoiceway.ambient.light`, `com.szchoiceway.multicolor.light`,
   `com.szchoiceway.gesture`
 - **System/UI/settings:** `com.szchoiceway.customerui` (launcher!),

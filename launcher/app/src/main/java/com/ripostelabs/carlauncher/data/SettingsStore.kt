@@ -116,6 +116,11 @@ data class LauncherSettings(
      * which the launcher's settings do not reproduce.
      */
     val hideOemSettings: Boolean = false,
+    /**
+     * Knock down btsuite's in-call floating window while the launcher is on screen
+     * ([CallPopupGuard]). On by default: the status chip and the Phone screen carry the call.
+     */
+    val hideVendorCallPopup: Boolean = true,
 ) {
     companion object {
         /** 0 = adaptive/auto sizing; otherwise a fixed column count. */
@@ -204,6 +209,7 @@ class SettingsStore(context: Context) {
                     ),
                     hideReplacedOemApps = prefs[HIDE_REPLACED_OEM_KEY] ?: true,
                     hideOemSettings = prefs[HIDE_OEM_SETTINGS_KEY] ?: false,
+                    hideVendorCallPopup = prefs[HIDE_VENDOR_CALL_POPUP_KEY] ?: true,
                 )
             }
             .stateIn(scope, SharingStarted.Eagerly, LauncherSettings())
@@ -308,6 +314,11 @@ class SettingsStore(context: Context) {
         ds.edit { it[HIDE_OEM_SETTINGS_KEY] = enabled }
     }
 
+    /** Hide the vendor in-call window over the launcher, or let it show again. */
+    fun setHideVendorCallPopup(enabled: Boolean) = scope.launch {
+        ds.edit { it[HIDE_VENDOR_CALL_POPUP_KEY] = enabled }
+    }
+
     private companion object {
         val GRID_COLUMNS_KEY = intPreferencesKey("grid_columns")
         val SHOW_MEDIA_KEY = booleanPreferencesKey("show_media")
@@ -333,5 +344,6 @@ class SettingsStore(context: Context) {
         val WHEEL_DOUBLE_KEY = stringPreferencesKey("wheel_gestures_double")
         val HIDE_REPLACED_OEM_KEY = booleanPreferencesKey("hide_replaced_oem_apps") // OemApps shadow
         val HIDE_OEM_SETTINGS_KEY = booleanPreferencesKey("hide_oem_settings") // OemApps shadow
+        val HIDE_VENDOR_CALL_POPUP_KEY = booleanPreferencesKey("hide_vendor_call_popup") // CallPopupGuard
     }
 }

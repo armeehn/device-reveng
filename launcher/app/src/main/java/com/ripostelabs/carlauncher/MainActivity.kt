@@ -26,16 +26,21 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.ripostelabs.carlauncher.carlib.CarEvents
 import com.ripostelabs.carlauncher.carlib.CarService
 import com.ripostelabs.carlauncher.carlib.GatewayHandshake // v3.0
 import com.ripostelabs.carlauncher.carlib.RootShell
 import com.ripostelabs.carlauncher.carlib.SysVar // v0.4.9 vendor hidden-apps list
+import com.ripostelabs.carlauncher.carlib.VendorBtService
+import com.ripostelabs.carlauncher.carlib.VendorBtState
 import com.ripostelabs.carlauncher.carlib.WheelKey
 import com.ripostelabs.carlauncher.carlib.WheelKeyMap
 import com.ripostelabs.carlauncher.carlib.WheelKeySwallow
 import com.ripostelabs.carlauncher.carlib.Zlink // RAV4-52 CarPlay deep link
+import com.ripostelabs.carlauncher.data.CallPopupGuard
 import com.ripostelabs.carlauncher.data.CarSettingsController // v1.1 settings suite
 import com.ripostelabs.carlauncher.data.parseVendorHidden // v0.4.9
 import com.ripostelabs.carlauncher.data.CrashLog // v0.4.3.7
@@ -115,6 +120,7 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var carEvents: CarEvents
     private lateinit var carService: CarService
+    private lateinit var vendorBtService: VendorBtService
     private lateinit var appRepository: AppRepository
     private lateinit var nowPlaying: NowPlayingRepository
     private lateinit var themeStore: ThemeStore
@@ -293,6 +299,23 @@ class MainActivity : ComponentActivity() {
             carEvents.swcKeys.collect { key ->
                 val nav = SwcNavigator.resolve(key, wheelMap) ?: return@collect
                 if (key.down) keyPump.down(nav) else keyPump.up(nav)
+            }
+        }
+
+        // btsuite pops its own floating call window on every call (CallPopupGuard). Knock it
+        // down while the launcher is what the driver sees; elsewhere it stays the vendor's.
+        vendorBtService = VendorBtService(applicationContext).also { it.bind() }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                var prev = VendorBtState()
+                carEvents.vendorBt.collect { next ->
+                    val wanted = settingsStore.settings.value.hideVendorCallPopup &&
+                        CallPopupGuard.wants(prev, next)
+                    prev = next
+                    if (!wanted) return@collect
+                    delay(CallPopupGuard.SETTLE_MS)
+                    withContext(Dispatchers.IO) { vendorBtService.hideFloatWnd() }
+                }
             }
         }
 
@@ -963,6 +986,7 @@ class MainActivity : ComponentActivity() {
         gatewayHandshake.unregister() // v3.0
         carEvents.unregister()
         carService.unbind()
+        vendorBtService.unbind()
         nowPlaying.stop()
         speechController.shutdown() // v0.4.2 TTS
         carSettingsController.release() // v1.1

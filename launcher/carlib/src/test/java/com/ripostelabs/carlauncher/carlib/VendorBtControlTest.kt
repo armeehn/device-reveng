@@ -50,6 +50,14 @@ class VendorBtControlTest {
         assertEquals("BTMusic", VendorBt.Page.MUSIC.key)
     }
 
+    /** `IBTService.java:5,35`; `AndroidManifest.xml:82-87`. */
+    @Test
+    fun floatWindowHideRidesBtServiceBinder() {
+        assertEquals("com.szchoiceway.btsuite.BTService", VendorBtService.BIND_ACTION)
+        assertEquals("com.szchoiceway.btsuite.IBTService", VendorBtService.DESCRIPTOR)
+        assertEquals(2, VendorBtService.TXN_HIDE_FLOAT_WND)
+    }
+
     @Test
     fun answerRidesMcuKeyInfor() {
         assertEquals(
