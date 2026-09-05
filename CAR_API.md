@@ -348,6 +348,16 @@ and the `addMessageListener(ICommunication)` listeners are stored but never call
 `BACK_LIGHT_LEVEL:`, …) ride the `com.szchoiceway.eventcenter.ZXW_MESSAGE_TO_ICCOMMUNICATION`
 broadcast as String extra `zxw_MessageToListener` (`EventService.java:12917-12925`). **[confirmed]**
 
+### 3.4 btsuite `IBTService`
+
+`com.szchoiceway.btsuite.BTService`, exported, no permission (`btsuite/AndroidManifest.xml:82-87`),
+descriptor `com.szchoiceway.btsuite.IBTService`: 1 `getContractAddress()`, 2 `hideBTFloatWnd()`,
+3 `sendData(String)` raw module command (`IBTService.java:34-36`) **[confirmed]**. The in-call
+floating window is `BTService.mFloatWnd`, shown on message 1005 from the module's HFP line
+(`ParseFEasycom.java:556-559`, `BTService.java:269-278`), gate `isShowFloatWndAllowed()` = `true`
+(`:328-330`), no SysVar. `hideBTFloatWnd()` (`:1105-1115`) hides it and cancels the poll.
+Launcher wrapper: `carlib/VendorBtService.kt`; a normal uid binding is **[UNVERIFIED]**.
+
 ---
 
 ## 4. Steering-wheel (SWC) key events

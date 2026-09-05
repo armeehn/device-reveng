@@ -231,6 +231,14 @@ offered instead, and Contacts / Bluetooth settings always open btsuite's own pag
 page buttons stay available while moving. **UNVERIFIED on the car**: every control broadcast,
 whether the provider answers a normal uid, and the speaking-time payload shape.
 
+btsuite also pops its own floating call window (`BTService.mFloatWnd`, a `WindowManager` view,
+not a component) on every call, on the module's HFP line rather than on our command, and nothing
+in SysVar turns it off. While the launcher is resumed, `data/CallPopupGuard` knocks it down
+through btsuite's binder (`carlib/VendorBtService`, `IBTService.hideBTFloatWnd`, which also
+cancels its 1 s re-show poll); Settings ▸ Launcher ▸ **Hide vendor call window** (default on)
+lets it back. Expect a brief flash before the hide. A `SPEAKING_TIME` tick is read as
+ACTIVE_CALL because the HSHF 6 line is withheld while the audio is on the car.
+
 ### What the firmware does not have
 
 Two things §3.3/§3.4 planned turned out not to exist, so they are not built:

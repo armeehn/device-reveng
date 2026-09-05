@@ -176,6 +176,13 @@ fun LauncherPrefsScreen(
                 checked = settings.hideOemSettings,
                 onChange = settingsStore::setHideOemSettings,
             )
+            ToggleSetting(
+                label = "Hide vendor call window",
+                description = "The Bluetooth app's floating call display, while the launcher " +
+                    "is on screen. The status chip and the Phone screen carry the call.",
+                checked = settings.hideVendorCallPopup,
+                onChange = settingsStore::setHideVendorCallPopup,
+            )
         }
 
         // v0.4.2: text-to-speech. Off by default — a launcher that talks unasked is worse
