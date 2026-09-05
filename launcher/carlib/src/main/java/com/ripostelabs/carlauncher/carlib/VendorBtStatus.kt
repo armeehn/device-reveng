@@ -91,6 +91,11 @@ enum class HfpState(val code: Int) {
  * Caller number / name and the speaking timer live only while HSHF says a call is in
  * progress: the HSHF drop to <= 3 that ends the call clears them, since btsuite sends no
  * "contact cleared" event. UNVERIFIED that the int[] shape survives the broadcast unchanged.
+ *
+ * HSHF is NOT broadcast while the call audio is on the car (`ParseFEasycom.java:411`), which
+ * is where it sits once a call is answered, so the 4/5 -> 6 step usually never arrives. The
+ * module runs the speaking timer only in state 6 (`ParseFEasycom.java:400-407`,
+ * `BTService.java:167-183`): a `SPEAKING_TIME` tick is therefore read as ACTIVE_CALL.
  */
 internal object VendorBtDecode {
 
@@ -175,13 +180,21 @@ internal object VendorBtDecode {
         return next.copy(callerNumber = null, callerName = null, speakingSec = null)
     }
 
-    /** `int[]{min, sec}` -> total seconds; any other shape leaves the timer alone. */
+    /**
+     * `int[]{min, sec}` -> total seconds; any other shape leaves the timer alone. A tick on a
+     * ringing / dialling state means the call was answered (see the class KDoc).
+     */
     private fun applySpeaking(state: VendorBtState, raw: Any?): VendorBtState {
         val fields = raw as? IntArray ?: return state
         if (fields.size < SPEAKING_TIME_FIELDS) {
             return state
         }
-        return state.copy(speakingSec = fields[0] * SECONDS_PER_MINUTE + fields[1])
+        val ticking = state.copy(speakingSec = fields[0] * SECONDS_PER_MINUTE + fields[1])
+
+        if (state.hshf != HSHF_OUTGOING_CALL && state.hshf != HSHF_INCOMING_CALL) {
+            return ticking
+        }
+        return ticking.copy(hshf = HSHF_ACTIVE_CALL)
     }
 
     /**
