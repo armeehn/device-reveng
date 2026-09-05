@@ -49,7 +49,7 @@ launcher/
                 ├── HomeScreen.kt    # app drawer + status bar + widgets + reverse overlay
                 ├── StatusBar.kt     # clock + ACC/day-night chips
                 ├── AppDrawer.kt     # LazyVerticalGrid of launchable apps, big tap targets
-                ├── MediaCard.kt     # placeholder now-playing card
+                ├── MediaCard.kt     # now-playing card (MediaSession, or the CarPlay row)
                 ├── ReverseOverlay.kt# full-screen black overlay on reverse (camera TODO)
                 └── ComposeUtil.kt   # lifecycle-aware Flow → State helper
 ```
@@ -271,7 +271,10 @@ flow. While a phone is projected, the quick-launch CarPlay tile becomes a row of
 shortcuts: Siri, Maps, Music, Now playing, Home. Each is one `REQ_SPEC_FUNC_CMD` broadcast
 with the gateway's own code (1500 / 1504 / 1506 / 1507 / 1508). The two lowest fill tiles
 drop for the duration. The media card and MediaScreen source labels open CarPlay through
-`ZLINK_MAIN`, and the status bar shows a "CarPlay wireless" / "CarPlay call" chip. Idle, the
+`ZLINK_MAIN`, and the status bar shows a "CarPlay wireless" / "CarPlay call" chip. While a
+phone is projected and no MediaSession is visible, the media card shows a CarPlay row
+(play flag from `MAIN_AUDIO_START/STOP`) instead of "No source connected": the gateway's
+CarPlay now-playing is the protocol name alone, no track (`ZlinkManage.java:587-605`). Idle, the
 tile launches the receiver as before. Nothing here writes `SYS_LAUNCHER_APP_HIDE_KEY` or
 starts `DaemonService`; both make the gateway kill or re-gate Zlink.
 
