@@ -504,7 +504,7 @@ A custom launcher should send `ACTION_LAUNCHER_KEY_CTRL` for control actions and
 
 | Widget | Data source | Confirmed API |
 |---|---|---|
-| **Media / now-playing** | `ZXW_MUSIC_PLAY_SONG/ARTIST/ALBUM/PLAYFILE_EVT` broadcasts, or AIDL `getValidMode*Infor()` / `getValidPlayState()` | §1.3, §3.2 |
+| **Media / now-playing** | `ZXW_MUSIC_PLAY_SONG/ARTIST/ALBUM/PLAYFILE_EVT` broadcasts, or AIDL `getValidMode*Infor()` / `getValidPlayState()`. CarPlay (SRC_CARPLAY 32): title = protocol name only, no track metadata; `getValidPlayState()` follows zlink `MAIN_AUDIO_START/STOP` | §1.3, §3.2 |
 | **Radio** | `ZXW_RADIO_INFO_EVT` / `com.szchoiceway.radio.frequency`, or AIDL `getRadioFreq/Band/Num()`, control via `sendRadioKey/sendUserFreq` | §1.3, §3.2 |
 | **Climate / A/C** | `com.choiceway.canbus.carairstruct` → Parcelable `CarAirState` (AIDL `getAirData` is a null stub) | §1.3, §5 |
 | **Reverse / radar** | `ACTION_BACKCAR_START/END` + `MCU_CAR_CAN_RADAR_INFO` (byte[]) + `ZXW_CAN_WHEEL_TRACK_EVT` (angle) | §1.3 |

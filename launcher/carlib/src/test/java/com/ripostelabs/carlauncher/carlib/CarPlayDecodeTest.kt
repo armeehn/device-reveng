@@ -64,8 +64,27 @@ class CarPlayDecodeTest {
         val state = replay("MAIN_AUDIO_START" to null)
 
         assertTrue(state.connected)
+        assertTrue(state.audioPlaying)
         assertNull(state.phoneMode)
         assertNull(state.link)
+    }
+
+    @Test
+    fun audioStartAndStopToggleAudioPlayingOnly() {
+        val playing = replay("CONNECTED" to "carplay_wireless", "MAIN_AUDIO_START" to null)
+        assertTrue(playing.audioPlaying)
+
+        val stopped = CarPlayDecode.applyStatus(playing, "MAIN_AUDIO_STOP", null, t0 + 9)
+        assertFalse(stopped.audioPlaying)
+        assertTrue(stopped.connected)
+        assertEquals("carplay_wireless", stopped.phoneMode)
+    }
+
+    @Test
+    fun disconnectStopsAudio() {
+        val state = replay("MAIN_AUDIO_START" to null, "DISCONNECT" to null)
+
+        assertFalse(state.audioPlaying)
     }
 
     @Test
