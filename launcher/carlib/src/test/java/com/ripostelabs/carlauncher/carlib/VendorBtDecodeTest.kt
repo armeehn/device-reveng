@@ -124,6 +124,24 @@ class VendorBtDecodeTest {
     }
 
     @Test
+    fun speakingTickOnARingingOrDiallingStateMeansActive() {
+        val tick = mapOf(VendorBtDecode.EXTRA_INT to intArrayOf(0, 1))
+        for (state in listOf(VendorBtDecode.HSHF_OUTGOING_CALL, VendorBtDecode.HSHF_INCOMING_CALL)) {
+            val next = VendorBtDecode.apply(hshf(state), action(VendorBtDecode.EVT_SPEAKING_TIME), tick, 2L)
+            assertEquals(HfpState.ACTIVE_CALL, next.hfp)
+            assertEquals(true, next.inCall)
+            assertEquals(1, next.speakingSec)
+        }
+
+        // Already active, idle, or unknown: the timer lands, the state stays.
+        for (state in listOf(VendorBtDecode.HSHF_ACTIVE_CALL, VendorBtDecode.HSHF_CONNECTED)) {
+            val next = VendorBtDecode.apply(hshf(state), action(VendorBtDecode.EVT_SPEAKING_TIME), tick, 2L)
+            assertEquals(state, next.hshf)
+        }
+        assertEquals(null, VendorBtDecode.apply(start, action(VendorBtDecode.EVT_SPEAKING_TIME), tick, 2L).hshf)
+    }
+
+    @Test
     fun speakingTimeOfAnotherShapeIsIgnored() {
         val short = VendorBtDecode.apply(
             start, action(VendorBtDecode.EVT_SPEAKING_TIME),
