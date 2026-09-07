@@ -229,9 +229,40 @@ private fun decodedRows(sig: CanSignal): Map<String, String> = when (sig) {
         put("Energy flow", "0x%02X".format(sig.energyFlowRaw))
     }
     is CanSignal.BasicStatus -> buildMap {
-        put("SWC button", "${sig.swcButtonId}" + if (sig.swcPressed) " (pressed)" else "")
-        put("Driver door", if (sig.doorFrontLeftOpen) "open" else "closed")
+        val swc = if (sig.swcAction == HiworldCanDecoder.SwcAction.UNKNOWN) {
+            "id ${sig.swcButtonId}"
+        } else {
+            "${sig.swcAction.name.lowercase().replace('_', ' ')} (id ${sig.swcButtonId})"
+        }
+        put("SWC button", swc + if (sig.swcPressed) " — pressed" else "")
+        // Every opening the vendor byte carries, named. Listing only the ones that are open
+        // keeps the row short in the common case and makes a stuck sensor obvious.
+        val openings = buildList {
+            if (sig.doorFrontLeftOpen) add("driver")
+            if (sig.doorFrontRightOpen) add("passenger")
+            if (sig.doorRearLeftOpen) add("rear L")
+            if (sig.doorRearRightOpen) add("rear R")
+            if (sig.tailgateOpen) add("tailgate")
+            if (sig.hoodOpen) add("bonnet")
+        }
+        put("Doors", if (openings.isEmpty()) "all shut" else openings.joinToString(", ") + " open")
         put("Steering", "%.1f°".format(sig.steerAngleDeg))
+    }
+    is CanSignal.Climate -> buildMap {
+        fun temp(v: Double?) = v?.let { "%.1f".format(it) + if (sig.tempUnitCelsius) "\u00B0C" else "\u00B0F" } ?: "LO/HI"
+        fun level(v: Int) = if (v == 0) "off" else "$v"
+        put("Climate", if (sig.on) "on" else "off")
+        put("A/C", listOfNotNull(
+            if (sig.acOn) "on" else null,
+            if (sig.acMax) "max" else null,
+            if (sig.auto) "auto" else null,
+            if (sig.eco) "eco" else null,
+            if (sig.recirculate) "recirc" else null,
+        ).joinToString(", ").ifEmpty { "off" })
+        put("Fan", "step ${sig.fanStep}" + if (sig.rearFanStep > 0) " (rear ${sig.rearFanStep})" else "")
+        put("Set temp L/R", "${temp(sig.leftTempC)} / ${temp(sig.rightTempC)}" + if (sig.dual) " (dual)" else "")
+        put("Seat heat L/R", "${level(sig.seatHeatLeft)} / ${level(sig.seatHeatRight)}")
+        put("Seat vent L/R", "${level(sig.seatCoolLeft)} / ${level(sig.seatCoolRight)}")
     }
     is CanSignal.Tpms -> buildMap {
         fun kpa(v: Int?) = v?.let { "$it kPa" } ?: "—"

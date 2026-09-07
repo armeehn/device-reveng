@@ -29,9 +29,14 @@ the hardware is installed, not because they're ready to wire today.
   `A5 5A A5 | LEN | OPCODE | PAYLOAD | C1 C2`. Live-verified signals: RPM (0x32 p[2:3]),
   hybrid battery/energy (0x1F), SWC buttons + driver door + steering (0x11), range (0x13),
   gear-mirror (0x1A). **This is the one that closes the roadmap's deferred CAN item.**
-- **`RawCanDecoder.kt`** — decodes **raw Toyota bus** frames (opendbc `toyota_nodsu_hybrid`
-  IDs: speed 0xB4, gear 0x127, steer 0x25, gas 0x245, brake, cruise, doors 0x620,
-  blinkers 0x614). Only useful with a physical bus tap (below).
+- **`RawCanDecoder.kt`** — decodes **raw Toyota body-bus** frames. Now implemented and unit
+  tested against real 2019 RAV4 captures (see `docs/VEHICLE_SIGNALS_2019.md`): doors **0x4A5**
+  byte 3 bitfield, climate on/off **0x380**/**0x3B0**, blower **0x4AD** byte 6.
+  Two ids in the earlier 2023-derived list were re-verified on the 2019 and are **wrong**:
+  `doors 0x620` is a ~0.3 s activity *pulse*, not door state (it stayed clear for 47 s of a 60 s
+  door-held-open run), and `blinkers 0x614` is not indicators — indicators are not on this bus at
+  all. Speed 0xB4, gear 0x127, steer 0x25 and gas 0x245 remain plausible but are **not yet
+  actuation-verified on this car**, so the decoder does not emit them.
 - **`LinClimateDecoder.kt`** — decodes the **A/C-amp climate LIN** (frames 0xB1 status /
   0x39 buttons). Only useful with a LIN transceiver tap.
 
