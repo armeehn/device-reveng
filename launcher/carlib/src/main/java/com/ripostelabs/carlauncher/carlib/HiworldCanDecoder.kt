@@ -34,6 +34,8 @@ object HiworldCanDecoder {
     private const val OP_RPM_GEAR_MIRROR = 0x1A // unparsed by OEM; RPM + gear raw found in capture
     private const val OP_HYBRID = 0x1F         // hybrid battery + energy flow
     private const val OP_VEHICLE_INFO = 0x32   // RPM / coolant (NOT road speed — see 2026-08-29 finding)
+    private const val OP_SIDE_CAMERA = 0x18   // OEM calls it LightInfo; on this car it drives the side cameras
+    private const val OP_CLIMATE = 0x31       // full climate state (this car uses 0x31, not the generic one)
     private const val OP_RADAR = 0x41          // PDC ultrasonic front/rear
     private const val OP_TPMS = 0x48           // tyre pressures
     private const val OP_VERSION = 0xF0        // CANBOX firmware version ASCII
@@ -53,6 +55,28 @@ object HiworldCanDecoder {
      * capture holding several constant speeds is needed to confirm the scale and linearity.
      */
     const val SPEED_017_SCALE_KMH: Double = 0.1
+
+    // Door bitfield in 0x11 p[4]. Mapping taken from the vendor's own DoorInfoWindow.setDoorData
+    // and cross-checked against a raw-bus actuation capture, where 0x4A5 byte 3 uses the same
+    // layout. See can-integration/docs/VEHICLE_SIGNALS_2019.md.
+    private const val DOOR_FRONT_LEFT = 0x80
+    private const val DOOR_FRONT_RIGHT = 0x40
+    private const val DOOR_REAR_RIGHT = 0x20
+    private const val DOOR_REAR_LEFT = 0x10
+    private const val DOOR_TAILGATE = 0x08
+    private const val DOOR_HOOD = 0x04
+
+    // 0x18 p[1]: the OEM's openRightCamera / openLeftCamera bits.
+    private const val CAM_RIGHT = 0x80
+    private const val CAM_LEFT = 0x40
+    private const val CAM_LEFT_FORCE = 0x08
+
+    /** OEM climate sentinels: the setpoint byte reads "LO"/"HI" rather than a temperature. */
+    private const val TEMP_LO = 0xFE
+    private const val TEMP_HI = 0xFF
+
+    /** OEM: setpoint byte * 0.5 = degrees C. */
+    private const val TEMP_SCALE_C = 0.5
 
     /** OEM sentinel: 0xFF in the coolant byte means "unsupported / no reading". */
     private const val COOLANT_SENTINEL = 0xFF
@@ -104,6 +128,8 @@ object HiworldCanDecoder {
         OP_HYBRID -> decodeHybrid(payload)
         OP_BASIC_STATUS -> decodeBasicStatus(payload)
         OP_TPMS -> decodeTpms(payload)
+        OP_SIDE_CAMERA -> decodeSideCamera(payload)
+        OP_CLIMATE -> decodeClimate(payload)
         OP_RADAR -> decodeRadar(payload)
         OP_TRIP_INFO -> decodeTripInfo(payload)
         OP_SPEED -> decodeSpeed(payload)
@@ -175,6 +201,39 @@ object HiworldCanDecoder {
      *    divides by 14 and sign-extends via bit15 (0x8000) ⇒ steerAngle = signed(raw)/14.0 deg.
      * Variance: p[2] ∈ {0,1,2}, p[3] ∈ {0,1}, p[4] ∈ {0,0x40}.
      */
+    /**
+     * What a steering-wheel button means, recovered from the OEM's own OnHandleCanKeyCmd on
+     * 2026-09-07. The raw id alone is not useful: several ids map to the same action because two
+     * physical controls share it, and one is context dependent.
+     */
+    enum class SwcAction {
+        VOLUME_UP, VOLUME_DOWN, MUTE, VOICE, CALL, HANGUP, PREV, NEXT, MODE, PLAY_PAUSE, BACK, UNKNOWN
+    }
+
+    /**
+     * Map a raw SWC button id to its action.
+     *
+     * Ids 13 and 14 duplicate 8 and 9 because two physical controls are wired to the same action.
+     * Id 5 is CONTEXT DEPENDENT in the OEM: it hangs up during a call and otherwise starts one.
+     * We report [SwcAction.CALL] and leave the call-state decision to the caller, which knows
+     * whether a call is up; guessing here would be wrong half the time.
+     * Ids 7, 10 and 11 are unhandled by this car's parser and come back [SwcAction.UNKNOWN].
+     */
+    fun swcAction(buttonId: Int): SwcAction = when (buttonId) {
+        1 -> SwcAction.VOLUME_UP
+        2 -> SwcAction.VOLUME_DOWN
+        3 -> SwcAction.MUTE
+        4 -> SwcAction.VOICE
+        5 -> SwcAction.CALL
+        6 -> SwcAction.HANGUP
+        8, 13 -> SwcAction.PREV
+        9, 14 -> SwcAction.NEXT
+        12 -> SwcAction.MODE
+        15 -> SwcAction.PLAY_PAUSE
+        16 -> SwcAction.BACK
+        else -> SwcAction.UNKNOWN
+    }
+
     private fun decodeBasicStatus(p: ByteArray): CanSignal.BasicStatus {
         val doorBits = u(p, 4)
         val raw = u16be(p, 6, 7)
@@ -182,12 +241,96 @@ object HiworldCanDecoder {
         return CanSignal.BasicStatus(
             swcButtonId = u(p, 2),
             swcPressed = u(p, 3) != 0,
+            swcAction = swcAction(u(p, 2)),
             doorBits = doorBits,
-            doorFrontLeftOpen = (doorBits and 0x40) != 0, // bit6 = driver/front-left (confirmed)
-            // TODO(drive-capture): other door bits observed 0 while parked — positions unconfirmed.
+            doorFrontLeftOpen = (doorBits and DOOR_FRONT_LEFT) != 0,
+            doorFrontRightOpen = (doorBits and DOOR_FRONT_RIGHT) != 0,
+            doorRearRightOpen = (doorBits and DOOR_REAR_RIGHT) != 0,
+            doorRearLeftOpen = (doorBits and DOOR_REAR_LEFT) != 0,
+            tailgateOpen = (doorBits and DOOR_TAILGATE) != 0,
+            hoodOpen = (doorBits and DOOR_HOOD) != 0,
             steerAngleDeg = signed / 14.0,
         )
     }
+
+    /**
+     * 0x18 side-camera request.
+     *
+     * The OEM names this opcode LightInfo and its handler touches no lamps at all: it reads three
+     * bits of p[1] and calls openRightCamera / openLeftCamera. On this car those cameras are
+     * triggered by the indicators, so this doubles as the only indicator state the head unit sees.
+     *
+     * That matters because indicators are NOT on the raw CAN bus - three separate actuation hunts
+     * on 2026-09-07 found nothing, including with the car in READY. They most likely reach the
+     * decoder over its IEBUS/AVC-LAN pins, which CAN hardware cannot read. This opcode is the only
+     * route to them.
+     *
+     * Bit 3 forces the left camera on independently of bit 6, so it is surfaced separately rather
+     * than folded in: a caller that wants "is the left view wanted" should use [left], while
+     * [leftForced] distinguishes the override for anyone mapping this back to indicator state.
+     */
+    private fun decodeSideCamera(p: ByteArray): CanSignal.SideCamera {
+        val b = u(p, 1)
+        val forced = (b and CAM_LEFT_FORCE) != 0
+        return CanSignal.SideCamera(
+            right = (b and CAM_RIGHT) != 0,
+            left = (b and CAM_LEFT) != 0 || forced,
+            leftForced = forced,
+        )
+    }
+
+    /**
+     * 0x31 climate.
+     *
+     * **This is the climate message on this car, not the generic 0x2x one.** The OEM's generic
+     * OnHandleCanAirCmd returns immediately when its mHas31ClimateData flag is set, which it is
+     * here, so the generic handler's byte layout is dead code on this vehicle. Reading it instead
+     * produces a plausible but entirely wrong decode. Layout below is from
+     * HiworldCanParseToyota.OnHandleCanAirCmdVertical.
+     *
+     * Payload indices are OEM bArr minus 2 (bArr[2] is p[0]).
+     *
+     * Temperature: raw * 0.5 degrees C, with 0xFE meaning "LO" and 0xFF "HI" rather than a value.
+     * In Fahrenheit mode the OEM divides the same raw byte by 2 instead; [tempUnitCelsius] says
+     * which, so callers can render without re-deriving it.
+     *
+     * [fanStep] is the DISPLAYED step (0-7 plus off) and is the number to show a user. The raw-bus
+     * blower byte (0x4AD) is a duty-like value that does not map onto those steps - see
+     * can-integration/docs/VEHICLE_SIGNALS_2019.md.
+     */
+    private fun decodeClimate(p: ByteArray): CanSignal.Climate {
+        val b0 = u(p, 0)
+        val b1 = u(p, 1)
+        val b2 = u(p, 2)
+        val b3 = u(p, 3)
+        return CanSignal.Climate(
+            on = (b0 and 0x40) != 0,
+            acMax = (b0 and 0x20) != 0,
+            auto = (b0 and 0x08) != 0,
+            // The OEM tests this bit for ZERO, not one. Inverted on purpose, not a typo.
+            dual = (b0 and 0x04) == 0,
+            tempUnitCelsius = (b0 and 0x01) == 0,
+            acOn = (b1 and 0x40) != 0,
+            recirculate = (b1 and 0x10) != 0,
+            eco = (b1 and 0x02) != 0,
+            airPurifier = (b1 and 0x01) != 0,
+            rearDefog = (b2 and 0x40) != 0,
+            maxFront = (b2 and 0x10) != 0,
+            seatHeatRight = (b2 shr 2) and 0x03,
+            seatHeatLeft = b2 and 0x03,
+            seatCoolRight = (b3 shr 6) and 0x03,
+            seatCoolLeft = (b3 shr 4) and 0x03,
+            ventDirectionRaw = u(p, 4),
+            fanStep = u(p, 5) and 0x0F,
+            leftTempC = tempC(u(p, 6)),
+            rightTempC = tempC(u(p, 7)),
+            rearFanStep = u(p, 9) and 0x0F,
+        )
+    }
+
+    /** Climate setpoint byte to degrees C; null for the LO/HI sentinels, which are not values. */
+    private fun tempC(raw: Int): Double? =
+        if (raw == TEMP_LO || raw == TEMP_HI) null else raw * TEMP_SCALE_C
 
     /**
      * 0x48 TPMS — five tyre pressures.
@@ -420,12 +563,74 @@ sealed interface CanSignal {
     data class BasicStatus(
         val swcButtonId: Int,
         val swcPressed: Boolean,
-        /** Raw door bitfield p[4]. */
+        /** [swcButtonId] resolved to a named action; UNKNOWN for ids this car does not use. */
+        val swcAction: HiworldCanDecoder.SwcAction,
+        /** Raw door bitfield p[4] (the OEM's bArr[6]). */
         val doorBits: Int,
-        /** bit6 (0x40): driver / front-left door open. */
+        /**
+         * bit7 (0x80): driver / front-left door open.
+         *
+         * **Was bit6 (0x40), and that was wrong** - 0x40 is the FRONT RIGHT door, so this flag
+         * reported the passenger door as the driver's. Two independent sources agree on 0x80:
+         * the vendor's own DoorInfoWindow.setDoorData maps (i and 128) to the front-left image,
+         * and a 2026-09-07 actuation capture on the raw bus (0x4A5 byte 3, same bit layout) had
+         * bit 0x80 set for 96% of a run with only the driver's door open, and 6% of a run with
+         * only the passenger's.
+         */
         val doorFrontLeftOpen: Boolean,
+        /** bit6 (0x40): front-right / passenger door open. */
+        val doorFrontRightOpen: Boolean,
+        /** bit5 (0x20): rear right door. Swaps with rear-left on RHD (OEM bRearDoorSet). */
+        val doorRearRightOpen: Boolean,
+        /** bit4 (0x10): rear left door open. */
+        val doorRearLeftOpen: Boolean,
+        /** bit3 (0x08): tailgate open. */
+        val tailgateOpen: Boolean,
+        /** bit2 (0x04): bonnet open. From the vendor UI mapping; never actuated to confirm. */
+        val hoodOpen: Boolean,
         /** Degrees; positive/negative per steering direction. Scale = raw/14 (OEM). */
         val steerAngleDeg: Double,
+    ) : CanSignal
+
+    /**
+     * 0x18 — which side camera the car is asking for. Also the only indicator state available,
+     * since the indicators are not present on the raw CAN bus.
+     */
+    data class SideCamera(
+        val left: Boolean,
+        val right: Boolean,
+        /** p[1] bit3, which forces the left view on regardless of bit6. */
+        val leftForced: Boolean,
+    ) : CanSignal
+
+    /** 0x31 — full climate state. [fanStep] is the displayed step; temps are null when LO/HI. */
+    data class Climate(
+        val on: Boolean,
+        val acOn: Boolean,
+        val acMax: Boolean,
+        val auto: Boolean,
+        val dual: Boolean,
+        val eco: Boolean,
+        val recirculate: Boolean,
+        val airPurifier: Boolean,
+        val rearDefog: Boolean,
+        val maxFront: Boolean,
+        val maxFrontDefrost: Boolean = maxFront,
+        /** 0-3, off to high. */
+        val seatHeatLeft: Int,
+        val seatHeatRight: Int,
+        /** 0-3, off to high. Ventilated seats. */
+        val seatCoolLeft: Int,
+        val seatCoolRight: Int,
+        /** OEM enum: 1 face, 5 level+foot, 12 head+foot, 13 head+level. Kept raw, unmapped. */
+        val ventDirectionRaw: Int,
+        /** 0-7 front blower, 0 = off. */
+        val fanStep: Int,
+        val rearFanStep: Int,
+        /** Null when the display reads LO or HI rather than a number. */
+        val leftTempC: Double?,
+        val rightTempC: Double?,
+        val tempUnitCelsius: Boolean,
     ) : CanSignal
 
     /** 0x48 — tyre pressures in kPa; null = no reading (0xFE sentinel). */
