@@ -65,7 +65,47 @@ class CanableStatsTest {
         assertEquals(40, stats.ratePerSec())
     }
 
+    @Test
+    fun `distinct count is the bus, not the display slice`() {
+        // The head unit reported "16 ids" at 1214 frames/s purely because 16 was the display cap.
+        repeat(40) { stats.record(frame(0x300 + it)) }
+
+        assertEquals(40, stats.distinctIds)
+    }
+
+    @Test
+    fun `the connect banner identifies the adapter`() {
+        stats.record(SlcanCodec.decode("16e7497-dirty github.com/normaldotcom/canable2.git"))
+
+        assertEquals("16e7497-dirty github.com/normaldotcom/canable2.git", stats.banner)
+        assertNull(stats.version)
+    }
+
+    @Test
+    fun `the banner does not flap once set`() {
+        stats.record(SlcanCodec.decode("16e7497-dirty github.com/normaldotcom/canable2.git"))
+        stats.record(SlcanCodec.decode("some later stray line"))
+
+        assertEquals("16e7497-dirty github.com/normaldotcom/canable2.git", stats.banner)
+    }
+
     // ── Negative controls ───────────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `a short stray line is not an identity`() {
+        stats.record(SlcanCodec.decode("xy"))
+
+        assertNull(stats.banner)
+    }
+
+    @Test
+    fun `a decoded frame never becomes a banner`() {
+        repeat(5) { stats.record(frame(0x4A5)) }
+
+        assertNull(stats.banner)
+        assertNull(stats.version)
+    }
+
 
     @Test
     fun `an adapter that answers nothing reports nothing`() {

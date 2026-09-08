@@ -19,6 +19,17 @@ class CanableStats(private val clock: () -> Long = System::currentTimeMillis) {
     var version: String? = null
         private set
 
+    /**
+     * The build string the adapter prints on connect, e.g.
+     * `16e7497-dirty github.com/normaldotcom/canable2.git`.
+     *
+     * Kept apart from [version] rather than folded into it: one is an answer to a question we
+     * asked, the other is volunteered at connect time. This firmware sends the banner and does not
+     * answer `V`, so without this the adapter identifies itself and the screen still says nothing.
+     */
+    var banner: String? = null
+        private set
+
     var frames: Long = 0
         private set
 
@@ -47,8 +58,12 @@ class CanableStats(private val clock: () -> Long = System::currentTimeMillis) {
 
             is SlcanEvent.Text -> {
                 unparsed++
-                if (event.text.startsWith(VERSION_PREFIX)) {
-                    version = event.text
+                when {
+                    event.text.startsWith(VERSION_PREFIX) -> version = event.text
+
+                    // First volunteered line only. Later text is noise, and letting it overwrite
+                    // the banner would make the identity flap.
+                    banner == null && event.text.length >= MIN_BANNER -> banner = event.text
                 }
             }
 
@@ -63,6 +78,14 @@ class CanableStats(private val clock: () -> Long = System::currentTimeMillis) {
         rollWindow()
         return lastRate
     }
+
+    /**
+     * How many distinct ids have been seen. Reported separately from [ids] because callers take
+     * only the busiest few to display, and the size of that slice is a property of the screen,
+     * not of the bus — the head unit read 1214 frames/s and reported "16 ids" purely because 16
+     * was the display cap.
+     */
+    val distinctIds: Int get() = counts.size
 
     /** Distinct CAN ids seen, busiest first. The tapped body bus carries 111 of them. */
     fun ids(): List<Pair<Int, Int>> = counts.entries
@@ -87,6 +110,9 @@ class CanableStats(private val clock: () -> Long = System::currentTimeMillis) {
 
     private companion object {
         const val VERSION_PREFIX = "V"
+
+        /** Shorter than this is a stray line, not an identity. The real banner is 51 characters. */
+        const val MIN_BANNER = 8
         const val WINDOW_MS = 1_000L
         const val MS_PER_SEC = 1_000L
     }
