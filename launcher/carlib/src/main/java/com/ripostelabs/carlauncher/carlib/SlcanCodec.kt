@@ -88,12 +88,20 @@ object SlcanCodec {
 
     private const val CMD_OPEN_ACTIVE = "O"
     private const val CMD_CLOSE = "C"
+    private const val CMD_VERSION = "V"
 
     /** Close, set bitrate, open. In this order because the adapter refuses `S` while open. */
     fun startup(bitrate: SlcanBitrate): List<ByteArray> =
         listOf(line(CMD_CLOSE), line(bitrate.code), line(CMD_OPEN_ACTIVE))
 
     fun shutdown(): ByteArray = line(CMD_CLOSE)
+
+    /**
+     * Ask the adapter to identify itself. The reply (`V1013`) proves the USB path works even with
+     * nothing wired to CAN-H/CAN-L, which a frame count alone can never distinguish from a dead
+     * link.
+     */
+    fun version(): ByteArray = line(CMD_VERSION)
 
     /** Encode a frame for transmission, e.g. OBD request `7DF#02 01 0D 00 00 00 00 00`. */
     fun transmit(frame: SlcanFrame): ByteArray {
