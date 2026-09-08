@@ -60,6 +60,13 @@ sealed class CanableStatus {
 class CanableSource private constructor(
     private val link: CanableUsbLink,
     private val context: Context,
+
+    /**
+     * Where decoded frames go, beyond the capture file. The raw bus is a second source for the
+     * same vehicle fields the MCU feeds, so it lands in the same [VehicleState] and a screen never
+     * has to know which protocol a reading arrived on.
+     */
+    private val vehicle: VehicleState,
 ) {
 
     private val _status = MutableStateFlow<CanableStatus>(CanableStatus.Idle)
@@ -236,6 +243,7 @@ class CanableSource private constructor(
                 // capture held in RAM until the screen closes is both large and lost on a crash.
                 if (event is SlcanEvent.Received) {
                     capture.record(event.frame)
+                    vehicle.onRawFrame(event.frame, System.currentTimeMillis())
                 }
             }
 
@@ -309,9 +317,9 @@ class CanableSource private constructor(
         private const val MAX_IDS_SHOWN = 16
 
         /** Build a source for [context]. Callers never see the driver or [UsbManager]. */
-        fun create(context: Context): CanableSource {
+        fun create(context: Context, vehicle: VehicleState): CanableSource {
             val manager = context.getSystemService(Context.USB_SERVICE) as UsbManager
-            return CanableSource(CanableUsbLink(manager), context.applicationContext)
+            return CanableSource(CanableUsbLink(manager), context.applicationContext, vehicle)
         }
     }
 }
