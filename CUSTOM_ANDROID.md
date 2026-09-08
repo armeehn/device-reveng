@@ -113,6 +113,52 @@ hooks (if Choiceway modified `framework.jar`/SystemServer) may be unrecoverable.
 
 ---
 
+## 2d. Reopened 2026-09-08 — two of the three blockers do not hold `[confirmed]`
+
+Section 2c was written before the MCU protocol was decoded. Re-examined against the decompile,
+two of its "breaks" are wrong and a third is narrower than stated. This does not make a custom
+system *advisable*; it makes the argument against it much weaker than it reads.
+
+**The reverse camera is not vendor-composited `[confirmed]`.** `AUXCamera.apk` reaches it through
+`CameraManager.openCamera()` → `Camera.open(1)` — the *standard Android Camera API* — over the AIS
+automotive-camera HAL in `/vendor/etc/camera/`, which a GSI keeps. Signal format is a system
+property (`persist.camera.sensorcfg.signal`), settable by root. It is an app calling a public API
+against a HAL you retain, not vendor magic. Reimplementable.
+
+**The radio is not a separate subsystem `[confirmed]`.** `com.szchoiceway.radio` declares the same
+`UART_DEV_PATH = "/dev/ttyS1"` and speaks the same MCU protocol as everything else —
+`SendCmdLstToCanbus`, `MCU_CMD_DATA`, `CMD_RADIO_ONOFF`. There is no broadcastradio HAL in the
+picture. The Si479x sits behind the MCU.
+
+**Everything car-facing is one link `[confirmed]`.** Twelve packages carry that same constant, from
+a shared vendor lib bundled into each APK. One process actually opens the port and re-broadcasts;
+the rest are downstream of it. The architecture is:
+
+    MCU  <--/dev/ttyS1-->  one owner process  --broadcasts-->  every other car app
+
+Replace the owner and you replace the stack. The framing is known and encoded
+(`McuFrame`), and fifteen commands are mapped (`can-integration/docs/HIWORLD_MCU_PROTOCOL.md`).
+
+### What genuinely cannot be rewritten
+
+- **`/vendor` HALs** — GPU, panel, audio routing, Wi-Fi/BT, RIL, sensors, camera decode. A GSI
+  keeps `/vendor` precisely because nobody can reproduce these. Not Choiceway *software* in the
+  sense that matters; it is the hardware layer, and it survives.
+- **The MCU firmware.** It does the actual CAN decoding. You talk to it; you do not replace it.
+
+### The one blocker still standing `[unknown]`
+
+Whether Choiceway patched `framework.jar` or SystemServer. Section 2c calls that potentially
+unrecoverable and it is the only claim here still untested — the decompile covers APKs only, and
+there is no framework artefact or EDL backup on the build host to inspect. **Answer it before
+anything else**: pull `/system/framework/framework.jar` and `services.jar` off the unit and look
+for Choiceway classes. It is a five-minute check that decides whether the rest is worth planning.
+
+### Standing recommendation is unchanged
+
+Stay stock + Magisk. This section lowers the estimated cost of the alternative; it does not argue
+for paying it. A daily-driven car is a bad place to discover the remaining unknown the hard way.
+
 ## 3. Ranked realistic paths
 
 ### (a) Stay stock + Magisk — **RECOMMENDED** ✅
