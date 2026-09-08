@@ -2,6 +2,9 @@ package com.ripostelabs.carlauncher.carlib
 
 import android.content.Context
 import android.util.Log
+import java.io.BufferedWriter
+import java.io.File
+import java.io.FileWriter
 import android.hardware.usb.UsbManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -37,6 +40,10 @@ sealed class CanableStatus {
 
         /** Every distinct id on the bus, not just the [ids] the screen shows. */
         val distinctIds: Int = 0,
+
+        /** Where the capture is being written, and how much of it exists so far. */
+        val capturePath: String? = null,
+        val captureBytes: Long = 0,
 
         /**
          * Lines that were neither a frame nor an acknowledgement. Carried because a read that
@@ -143,9 +150,49 @@ class CanableSource private constructor(
         val watchdog = ReadWatchdog()
         var published = 0L
 
+        val file = captureFile()
+        val writer = runCatching { BufferedWriter(FileWriter(file)) }.getOrNull()
+        val recorder = writer?.let { CanableRecorder(it) }
+        Log.i(LOG_TAG, "capture -> ${file?.absolutePath ?: "unavailable"}")
+
+        try {
+            pump(session, stats, watchdog, recorder, file, published)
+        } finally {
+            runCatching { writer?.flush() }
+            runCatching { writer?.close() }
+        }
+    }
+
+    /**
+     * Where a capture goes. The app's own external directory, so `adb pull` reaches it without
+     * root and uninstalling cleans it up.
+     */
+    private fun captureFile(): File? {
+        val dir = context.getExternalFilesDir(CAPTURE_DIR) ?: return null
+        dir.mkdirs()
+
+        return File(dir, "can-${System.currentTimeMillis()}.log")
+    }
+
+    private fun pump(
+        session: CanableUsbLink.Session,
+        stats: CanableStats,
+        watchdog: ReadWatchdog,
+        recorder: CanableRecorder?,
+        file: File?,
+        publishedAt: Long,
+    ) {
+        var published = publishedAt
+
         while (running) {
             for (event in session.poll()) {
                 stats.record(event)
+
+                // Written straight through rather than buffered in memory: at ~1215 frames/s a
+                // capture held in RAM until the screen closes is both large and lost on a crash.
+                if (event is SlcanEvent.Received) {
+                    recorder?.record(event.frame, System.currentTimeMillis())
+                }
             }
 
             // Unplugging the adapter mid-session does not fail the reads, it just makes them
@@ -172,6 +219,8 @@ class CanableSource private constructor(
                 ids = stats.ids().take(MAX_IDS_SHOWN),
                 distinctIds = stats.distinctIds,
                 unparsed = stats.unparsed,
+                capturePath = file?.absolutePath,
+                captureBytes = recorder?.bytesWritten ?: 0,
             ))
         }
     }
@@ -202,11 +251,15 @@ class CanableSource private constructor(
         is CanableStatus.Failed -> "adapter found, unusable: ${status.reason}"
         is CanableStatus.Running -> "open firmware=${status.version ?: "-"} " +
             "frames=${status.frames} rate=${status.ratePerSec}/s " +
-            "rejected=${status.rejected} unparsed=${status.unparsed} ids=${status.distinctIds}"
+            "rejected=${status.rejected} unparsed=${status.unparsed} ids=${status.distinctIds} " +
+            "captured=${status.captureBytes}B"
     }
 
     companion object {
         private const val LOG_TAG = "Canable"
+
+        /** Under the app's external files dir, so adb pull needs no root. */
+        private const val CAPTURE_DIR = "can"
         private const val RETRY_MS = 1_000L
         private const val PUBLISH_MS = 500L
         private const val MAX_IDS_SHOWN = 16
