@@ -150,16 +150,61 @@ class CanableSource private constructor(
         val watchdog = ReadWatchdog()
         var published = 0L
 
-        val file = captureFile()
-        val writer = runCatching { BufferedWriter(FileWriter(file)) }.getOrNull()
-        val recorder = writer?.let { CanableRecorder(it) }
-        Log.i(LOG_TAG, "capture -> ${file?.absolutePath ?: "unavailable"}")
+        val capture = Capture(captureDir())
+        Log.i(LOG_TAG, "capture -> ${capture.path() ?: "unavailable"}")
 
         try {
-            pump(session, stats, watchdog, recorder, file, published)
+            pump(session, stats, watchdog, capture, published)
         } finally {
+            capture.close()
+        }
+    }
+
+    /**
+     * A rolling capture. Owns the current file and the rotation policy so [pump] does not have to
+     * think about either; when a file fills, the next one opens and the oldest is deleted.
+     */
+    private inner class Capture(private val dir: File?) {
+
+        private val rotation = CaptureRotation()
+        private var writer: BufferedWriter? = null
+        private var recorder: CanableRecorder? = null
+
+        init {
+            open()
+        }
+
+        val bytes: Long get() = recorder?.bytesWritten ?: 0
+
+        fun path(): String? = dir?.let { File(it, rotation.currentName()).absolutePath }
+
+        fun record(frame: SlcanFrame) {
+            recorder?.record(frame, System.currentTimeMillis())
+
+            if (rotation.shouldRoll(bytes)) {
+                roll()
+            }
+        }
+
+        fun close() {
             runCatching { writer?.flush() }
             runCatching { writer?.close() }
+            writer = null
+        }
+
+        private fun roll() {
+            close()
+
+            // Evicting before opening keeps the directory at its bound even if the next open
+            // fails, which matters on a device whose storage is already tight.
+            rotation.roll()?.let { stale -> dir?.let { File(it, stale).delete() } }
+            open()
+        }
+
+        private fun open() {
+            val target = dir?.let { File(it, rotation.currentName()) } ?: return
+            writer = runCatching { BufferedWriter(FileWriter(target)) }.getOrNull()
+            recorder = writer?.let { CanableRecorder(it) }
         }
     }
 
@@ -167,19 +212,18 @@ class CanableSource private constructor(
      * Where a capture goes. The app's own external directory, so `adb pull` reaches it without
      * root and uninstalling cleans it up.
      */
-    private fun captureFile(): File? {
+    private fun captureDir(): File? {
         val dir = context.getExternalFilesDir(CAPTURE_DIR) ?: return null
         dir.mkdirs()
 
-        return File(dir, "can-${System.currentTimeMillis()}.log")
+        return dir
     }
 
     private fun pump(
         session: CanableUsbLink.Session,
         stats: CanableStats,
         watchdog: ReadWatchdog,
-        recorder: CanableRecorder?,
-        file: File?,
+        capture: Capture,
         publishedAt: Long,
     ) {
         var published = publishedAt
@@ -191,7 +235,7 @@ class CanableSource private constructor(
                 // Written straight through rather than buffered in memory: at ~1215 frames/s a
                 // capture held in RAM until the screen closes is both large and lost on a crash.
                 if (event is SlcanEvent.Received) {
-                    recorder?.record(event.frame, System.currentTimeMillis())
+                    capture.record(event.frame)
                 }
             }
 
@@ -219,8 +263,8 @@ class CanableSource private constructor(
                 ids = stats.ids().take(MAX_IDS_SHOWN),
                 distinctIds = stats.distinctIds,
                 unparsed = stats.unparsed,
-                capturePath = file?.absolutePath,
-                captureBytes = recorder?.bytesWritten ?: 0,
+                capturePath = capture.path(),
+                captureBytes = capture.bytes,
             ))
         }
     }

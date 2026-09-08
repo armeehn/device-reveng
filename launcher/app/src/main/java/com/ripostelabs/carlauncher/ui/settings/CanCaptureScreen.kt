@@ -24,7 +24,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import com.ripostelabs.carlauncher.ui.theme.JetBrainsMono
 import com.ripostelabs.carlauncher.carlib.CanFrame
-import com.ripostelabs.carlauncher.carlib.CanableSource
+import com.ripostelabs.carlauncher.service.CanCaptureService
 import com.ripostelabs.carlauncher.carlib.CanableStatus
 import com.ripostelabs.carlauncher.carlib.CanSignal
 import com.ripostelabs.carlauncher.carlib.CarEvents
@@ -67,11 +67,18 @@ fun CanCaptureScreen(
     // The USB adapter is a second, independent path to the same bus: the vendor broadcast above is
     // whatever the MCU chose to forward, this is the wire. Started only while the screen is open.
     val context = LocalContext.current
-    val canable = remember { CanableSource.create(context) }
+
+    // The service owns the reader; this screen observes the same instance. Creating a second
+    // source here would claim the same bulk endpoint twice and split the byte stream between
+    // them, which is exactly how the vendor MCU serial port was corrupted once already.
+    val canable = remember { CanCaptureService.shared(context) }
     val usb by canable.status.collectAsStateSafe(initial = CanableStatus.Idle)
-    DisposableEffect(canable) {
-        canable.start()
-        onDispose { canable.stop() }
+    DisposableEffect(Unit) {
+        CanCaptureService.start(context)
+
+        // Deliberately NOT stopped on dispose: a drive is precisely when no settings screen is
+        // open, and stopping here is what made "leave the car, fetch the data later" untrue.
+        onDispose { }
     }
 
     var capture by remember { mutableStateOf(RadarCapture()) }
@@ -185,6 +192,12 @@ fun CanCaptureScreen(
 
         SettingsSection(title = "USB CAN adapter (CANable)") {
             CanableRows(status = usb, onGrant = { canable.requestAccess() })
+            ActionRow(
+                label = "Stop background capture",
+                description = "Recording continues after leaving this screen, for a drive. " +
+                    "Captures are pulled off the car automatically.",
+                onClick = { CanCaptureService.stop(context) },
+            )
         }
     }
 }
