@@ -100,6 +100,7 @@ class CanableUsbLink(private val manager: UsbManager) {
         private val reader = SlcanReader()
         private val buffer = ByteArray(READ_BUFFER_BYTES)
         private val claimed = ArrayList<UsbInterface>()
+        private var polls = 0
 
         /** Claim the interfaces, raise DTR, then close/set-bitrate/open the CAN channel. */
         internal fun start(bitrate: SlcanBitrate): Boolean {
@@ -116,6 +117,14 @@ class CanableUsbLink(private val manager: UsbManager) {
                 val dtr = setControlLineState(it)
                 Log.i(LOG_TAG, "control iface=$it lineCoding=$coding dtr=$dtr")
             }
+
+            // A bulk IN that fails instantly instead of timing out is a halted endpoint, not a
+            // quiet one. The kernel's cdc_acm clears the halt on open; claiming the interface
+            // ourselves does not, so a stall left by an earlier session survives a reconnect and
+            // looks exactly like an adapter that never answers.
+            val haltIn = clearHalt(pipes.bulkIn)
+            val haltOut = clearHalt(pipes.bulkOut)
+            Log.i(LOG_TAG, "clearHalt in=$haltIn out=$haltOut")
 
             for (command in SlcanCodec.startup(bitrate)) {
                 if (!write(command)) {
@@ -134,13 +143,19 @@ class CanableUsbLink(private val manager: UsbManager) {
          */
         fun poll(timeoutMs: Int = READ_TIMEOUT_MS): List<SlcanEvent> {
             val endpoint = endpoint(pipes.bulkIn) ?: return emptyList()
-            val read = connection.bulkTransfer(endpoint, buffer, buffer.size, timeoutMs)
-            if (read <= 0) {
-                // A timeout is -1 and normal on a quiet bus; anything else is worth seeing once.
-                if (read < -1) {
-                    Log.w(LOG_TAG, "read returned $read")
-                }
 
+            val startedAt = System.currentTimeMillis()
+            val read = connection.bulkTransfer(endpoint, buffer, buffer.size, timeoutMs)
+
+            // Log the first few reads whatever they say. A -1 after the full timeout is an idle
+            // bus; a -1 that returns immediately is a failing transfer, and the two are impossible
+            // to tell apart from a frame count.
+            if (polls < LOGGED_POLLS) {
+                polls++
+                Log.i(LOG_TAG, "read=$read after ${System.currentTimeMillis() - startedAt}ms")
+            }
+
+            if (read <= 0) {
                 return emptyList()
             }
 
@@ -183,6 +198,20 @@ class CanableUsbLink(private val manager: UsbManager) {
 
             return true
         }
+
+        /**
+         * USB 2.0 §9.4.1: CLEAR_FEATURE(ENDPOINT_HALT) on one endpoint. Also resets its data
+         * toggle, which is what actually gets traffic moving again after a stall.
+         */
+        private fun clearHalt(endpointAddress: Int): Int = connection.controlTransfer(
+            REQUEST_TYPE_STANDARD_ENDPOINT_OUT,
+            REQUEST_CLEAR_FEATURE,
+            FEATURE_ENDPOINT_HALT,
+            endpointAddress,
+            null,
+            0,
+            CONTROL_TIMEOUT_MS,
+        )
 
         /**
          * USB CDC 1.2 §6.2.12: SET_LINE_CODING. The rate is meaningless to a native-USB adapter,
@@ -259,6 +288,11 @@ class CanableUsbLink(private val manager: UsbManager) {
 
         /** USB CDC 1.2 constants. */
         private const val REQUEST_TYPE_CLASS_INTERFACE_OUT = 0x21
+        /** USB 2.0 standard endpoint requests, for clearing a stall. */
+        private const val REQUEST_TYPE_STANDARD_ENDPOINT_OUT = 0x02
+        private const val REQUEST_CLEAR_FEATURE = 0x01
+        private const val FEATURE_ENDPOINT_HALT = 0x00
+
         private const val REQUEST_SET_LINE_CODING = 0x20
         private const val REQUEST_SET_CONTROL_LINE_STATE = 0x22
         private const val CONTROL_LINE_DTR_AND_RTS = 0x03
@@ -268,6 +302,9 @@ class CanableUsbLink(private val manager: UsbManager) {
         private const val READ_TIMEOUT_MS = 200
         private const val WRITE_TIMEOUT_MS = 500
         private const val CONTROL_TIMEOUT_MS = 500
+
+        /** How many reads to narrate before going quiet. Enough to see the pattern. */
+        private const val LOGGED_POLLS = 12
 
         /** The firmware needs a moment between close, bitrate and open. Matches the shell probe. */
         private const val SETTLE_MS = 200L
