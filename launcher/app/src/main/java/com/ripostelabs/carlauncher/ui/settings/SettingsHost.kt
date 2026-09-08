@@ -163,6 +163,13 @@ fun SettingsHost(
                 onBack = ::pop,
             )
 
+            // What the car is reporting, as tiles. The logic behind it is unit-tested; this
+            // route only draws.
+            SettingsRoute.Vehicle -> VehicleScreen(
+                carEvents = carEvents,
+                onBack = ::pop,
+            )
+
             // v0.4.3: the instrument that confirms the CAN bulk-frame action + payload layout,
             // the route to a real speed reading (README "Known TODOs").
             SettingsRoute.CanCapture -> CanCaptureScreen(
@@ -300,6 +307,7 @@ sealed interface SettingsRoute {
     data object ReverseCamera : SettingsRoute
     data object Radar : SettingsRoute
     data object RadarCapture : SettingsRoute // v2.8
+    data object Vehicle : SettingsRoute
     data object CanCapture : SettingsRoute // v0.4.3
     data object RadioInfoCapture : SettingsRoute // v0.4.3
     data object VehicleDataCapture : SettingsRoute // v0.4.3

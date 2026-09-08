@@ -146,6 +146,12 @@ fun SettingsHub(
                 onClick = { onOpen(SettingsRoute.System) },
             )
             SettingsCategoryCard(
+                icon = Icons.Filled.DirectionsCar,
+                title = "Vehicle",
+                subtitle = "Engine, hybrid, doors, tyres — what the car is reporting",
+                onClick = { onOpen(SettingsRoute.Vehicle) },
+            )
+            SettingsCategoryCard(
                 icon = Icons.Filled.DataObject,
                 title = "CAN frame capture",
                 subtitle = "Raw CAN bulk frame — the route to real speed (diagnostic)",
