@@ -650,14 +650,20 @@ sealed interface CanSignal {
         /** Raw door bitfield p[4] (the OEM's bArr[6]). */
         val doorBits: Int,
         /**
-         * bit7 (0x80): driver / front-left door open.
+         * bit6 (0x40): driver / front-left door open.
          *
-         * **Was bit6 (0x40), and that was wrong** - 0x40 is the FRONT RIGHT door, so this flag
-         * reported the passenger door as the driver's. Two independent sources agree on 0x80:
-         * the vendor's own DoorInfoWindow.setDoorData maps (i and 128) to the front-left image,
-         * and a 2026-09-07 actuation capture on the raw bus (0x4A5 byte 3, same bit layout) had
-         * bit 0x80 set for 96% of a run with only the driver's door open, and 6% of a run with
-         * only the passenger's.
+         * **The two buses do NOT share a bit layout.** This comment previously claimed 0x80 and
+         * that 0x40 "was wrong", which contradicted [DOOR_FRONT_LEFT] a few lines above and was
+         * the original misconception rather than the fix for it. Corrected 2026-09-08.
+         *
+         * - **MCU cmd 0x11 (here): driver = 0x40.** Settled in the car — the earlier 0x80 build
+         *   reported the driver's door as the passenger's.
+         * - **Raw CAN 0x4A5 byte 3: driver = 0x80.** A different layout on a different protocol;
+         *   the vendor swaps bits 6/7 and 4/5 while repacking.
+         *
+         * The 0x4A5 actuation capture cited for 0x80 was real, but it measured the RAW bus and
+         * was applied to the MCU byte. Never copy a door byte between the two; convert by name.
+         * [RawCanSignal.Doors] is decoded into named booleans precisely so that is possible.
          */
         val doorFrontLeftOpen: Boolean,
         /** bit6 (0x40): front-right / passenger door open. */
