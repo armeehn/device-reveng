@@ -3,6 +3,9 @@
 _Last verified against `main` on 2026-08-28 at versionCode 61. Every "shipped" claim below was
 checked by reading the code, not by the presence of a file with the right name._
 
+_The section "0.7 — the raw bus, read on the head unit" was added 2026-09-08 and verified at
+versionCode 244 the same way. The older sections were not re-audited on that date._
+
 Workflow: **one feature = one branch off `main` = one PR**. Versions are derived from git
 (see below) — do not claim, bump, or mention a versionCode in a PR. Only tagged `main`
 builds are meant to go on-device as the home launcher. CI builds every PR.
@@ -236,6 +239,43 @@ Verified on the emulated head unit: the launcher's now-playing card shows the su
 with live position, and pausing from that card pauses the app through the session — the same path
 the wheel's buttons use.
 
+## 0.7 — the raw bus, read on the head unit
+
+Until this point every vehicle reading came through the vendor MCU: a repacked digest, on the
+vendor's schedule, of whatever the vendor chose to forward. This milestone reads the **real Toyota
+body bus** on the head unit itself — 1214 frames/s across 111 ids, measured in the car on
+2026-09-08 — with no kernel driver, no root and no laptop.
+
+- **The transport is the Android USB host API** (`CanableUsbLink`, `CdcAcm`, `SlcanCodec`). This
+  kernel has no CDC-ACM driver, so the CANable enumerates on both ports and never produces a
+  `/dev/ttyACM*` node. CDC-ACM is only a bulk endpoint pair plus two control requests, so the
+  launcher claims the device and speaks slcan itself. The docs that said "no app work is worth
+  doing until a node exists" were wrong, and would have blocked exactly this.
+- **Listen-only is deliberately unavailable.** Firmware `b158aa7` accepts `L` and silently
+  ignores it, leaving zero frames and zero errors. `SlcanCodec` exposes no such option, so the
+  mistake cannot be made from code.
+- **Recording survives the screen** (`CanCaptureService`, `CanableRecorder`, `CaptureRotation`).
+  A foreground service owns the one reader; captures are candump-format, roll at 16 MB, keep the
+  most recent six files, and start hands-free on USB attach via a no-UI trampoline activity. x
+  pulls them over Tailscale every two minutes. A drive is exactly when nobody holds a settings
+  screen open.
+- **The raw bus and the MCU fold into one snapshot** (`VehicleState`, `VehicleSnapshot.foldRaw`).
+  The Vehicle screen shows doors, climate and fan from either source and does not care which.
+  The door layouts differ — the vendor swaps bits 6/7 and 4/5 while repacking — so packing goes
+  by name, and the tests assert tile *text* so a divergence fails at a desk rather than in a seat.
+- **Screens: Vehicle, Games, CAN frame capture (USB section).** Games lists installed emulator
+  frontends behind the existing parked-only gate; matching is exact because RetroArch's ABI builds
+  differ only by a package suffix and are not interchangeable.
+- **Accessory control groundwork** (`Accessory`, `AccessoryController`). No transport chosen yet.
+  An unconfirmed state is *unknown*, never off, and there is no optimistic update: a switch moves
+  only on a confirmed `APPLIED`.
+
+What the car taught, and where it is written down: a **badly grounded CANable enumerates,
+prints its banner, and ignores every command** — the tell is bytes out with nothing in, and reads
+that time out cleanly rather than failing fast. `can-integration/docs/CANABLE_INTEGRATION.md`
+carries the full account. **Not yet exercised in the car:** the recorder, rotation, background
+service and the Vehicle screen. All desk-tested only; the first drive is their real test.
+
 ## Deferred — needs the car, not the desk
 
 Not blocked forever, just not buildable from here. Each needs one session at the vehicle.
@@ -253,6 +293,10 @@ Not blocked forever, just not buildable from here. Each needs one session at the
   while driving). Remaining work: a **steady-cruise capture** (hold 20/40/60/80 km/h ~10 s each, with
   continuous 5–10 Hz GPS, no dropout) to calibrate `SPEED_017_SCALE_KMH` / the `0x13` scale; P/N/D
   likely must be inferred (reverse from `0x71`, "in-gear & moving" from speed)._
+  _Update (vc244, 2026-09-08): the reference for that calibration is no longer GPS. The CANable
+  can transmit, so the plan is to poll OBD PID `0x0D` (vehicle speed, integer km/h, a real ECU
+  answer) on `0x7DF` and fit the `0x17`/`0x13` scales against it — `DriveLog` already refuses to
+  calibrate across a gap. Needs one drive with the adapter grounded properly; no speed holding._
 - **Radar byte layout confirmation**, which unblocks radar history on the dashboard.
 - **The LHD/RHD auto table.** The manual override works; the automatic side detection is inert
   because the vendor car-type values are unknown. One device read, then one line.
