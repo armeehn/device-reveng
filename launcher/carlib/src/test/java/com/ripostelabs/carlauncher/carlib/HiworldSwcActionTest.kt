@@ -32,13 +32,20 @@ class HiworldSwcActionTest {
         assertEquals(SwcAction.BACK, HiworldCanDecoder.swcAction(16))
     }
 
-    /** 13 and 14 duplicate 8 and 9 — two physical controls wired to one action. */
+    /**
+     * 13 and 14 duplicate 8 and 9 — two physical controls wired to one action.
+     *
+     * The direction here follows the CAR, not the decompile. The OEM maps 8/13 to its
+     * MCU_KEY_PREV constant and 9/14 to MCU_KEY_NEXT, but pressing them in the car on 2026-09-07
+     * produced the opposite. Either those constants are named backwards in the vendor source or
+     * something downstream inverts them; either way the observed behaviour wins.
+     */
     @Test
     fun `duplicate ids resolve to the same action`() {
-        assertEquals(SwcAction.PREV, HiworldCanDecoder.swcAction(8))
-        assertEquals(SwcAction.PREV, HiworldCanDecoder.swcAction(13))
-        assertEquals(SwcAction.NEXT, HiworldCanDecoder.swcAction(9))
-        assertEquals(SwcAction.NEXT, HiworldCanDecoder.swcAction(14))
+        assertEquals(SwcAction.NEXT, HiworldCanDecoder.swcAction(8))
+        assertEquals(SwcAction.NEXT, HiworldCanDecoder.swcAction(13))
+        assertEquals(SwcAction.PREV, HiworldCanDecoder.swcAction(9))
+        assertEquals(SwcAction.PREV, HiworldCanDecoder.swcAction(14))
     }
 
     /**

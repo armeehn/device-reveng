@@ -56,11 +56,22 @@ object HiworldCanDecoder {
      */
     const val SPEED_017_SCALE_KMH: Double = 0.1
 
-    // Door bitfield in 0x11 p[4]. Mapping taken from the vendor's own DoorInfoWindow.setDoorData
-    // and cross-checked against a raw-bus actuation capture, where 0x4A5 byte 3 uses the same
-    // layout. See can-integration/docs/VEHICLE_SIGNALS_2019.md.
-    private const val DOOR_FRONT_LEFT = 0x80
-    private const val DOOR_FRONT_RIGHT = 0x40
+    // Door bitfield in 0x11 p[4].
+    //
+    // THE VENDOR SWAPS BITS ON THE WAY IN, which is easy to miss and was missed once here.
+    // OnHandleCanDoorInfoCmd passes incoming bit7 as sendDoorInfo's FIRST argument, and
+    // sendDoorInfo writes its SECOND argument to bit7 of the byte DoorInfoWindow renders.
+    // Net effect: incoming 6<->7 and 4<->5 are exchanged before the UI sees them. So the
+    // driver's door, which DoorInfoWindow draws from 0x80, arrives here as 0x40.
+    //
+    // Confirmed in the car 2026-09-07: opening the driver's door was reported as the passenger
+    // while this read 0x80. Do not "correct" it back by reading DoorInfoWindow alone.
+    //
+    // NOTE the raw CAN message is genuinely different: 0x4A5 byte 3 really does use 0x80 for the
+    // driver, verified by actuation. The two layouts do NOT match, and assuming they did is what
+    // caused the inversion. See RawCanDecoder.
+    private const val DOOR_FRONT_LEFT = 0x40
+    private const val DOOR_FRONT_RIGHT = 0x80
     private const val DOOR_REAR_RIGHT = 0x20
     private const val DOOR_REAR_LEFT = 0x10
     private const val DOOR_TAILGATE = 0x08
@@ -226,8 +237,12 @@ object HiworldCanDecoder {
         4 -> SwcAction.VOICE
         5 -> SwcAction.CALL
         6 -> SwcAction.HANGUP
-        8, 13 -> SwcAction.PREV
-        9, 14 -> SwcAction.NEXT
+        // Observed in the car 2026-09-07: these are the other way round in practice. The OEM
+        // maps 8/13 to its MCU_KEY_PREV constant and 9/14 to MCU_KEY_NEXT, so either those
+        // constants are named backwards in the vendor source or something downstream inverts
+        // them. The car is the authority, not the decompile.
+        8, 13 -> SwcAction.NEXT
+        9, 14 -> SwcAction.PREV
         12 -> SwcAction.MODE
         15 -> SwcAction.PLAY_PAUSE
         16 -> SwcAction.BACK

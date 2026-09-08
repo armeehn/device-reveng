@@ -5,13 +5,19 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Pins the 0x11 door bitfield, and specifically guards the bit that was wrong.
+ * Pins the 0x11 door bitfield, with the front pair as the CAR reports it.
  *
- * `doorFrontLeftOpen` previously read bit6 (0x40), which is the FRONT RIGHT door — so the launcher
- * showed the passenger door as the driver's. Two independent sources fix it at bit7 (0x80): the
- * vendor's own `DoorInfoWindow.setDoorData` maps `i and 128` to the front-left image, and a
- * 2026-09-07 raw-bus actuation capture (0x4A5 byte 3, identical layout) had 0x80 set for 96% of a
- * driver's-door-open run against 6% of a passenger-only run.
+ * This flipped twice, so the reasoning is written down. `DoorInfoWindow` draws the front-left door
+ * from bit 0x80 — but of a byte the vendor has already REPACKED. `OnHandleCanDoorInfoCmd` hands
+ * incoming bit7 to `sendDoorInfo` as its first argument, and `sendDoorInfo` writes its *second*
+ * argument to bit7, exchanging 6<->7 (and 4<->5) on the way through. So the driver's door arrives
+ * on this opcode as **0x40**, not 0x80.
+ *
+ * Confirmed in the car on 2026-09-07: with the decoder reading 0x80, opening the driver's door was
+ * reported as the passenger's.
+ *
+ * The raw CAN message is a genuinely different layout — 0x4A5 byte 3 really does use 0x80 for the
+ * driver, proven by actuation. Assuming the two matched is what caused the inversion.
  */
 class HiworldDoorBitsTest {
 
@@ -23,17 +29,17 @@ class HiworldDoorBitsTest {
     }
 
     @Test
-    fun `driver door is bit7, not bit6`() {
-        assertTrue(status(0x80).doorFrontLeftOpen)
-        // The regression: 0x40 alone must NOT read as the driver's door.
-        assertEquals(false, status(0x40).doorFrontLeftOpen)
-        assertTrue(status(0x40).doorFrontRightOpen)
+    fun `driver door is bit6, because the vendor swaps 6 and 7 on the way in`() {
+        assertTrue(status(0x40).doorFrontLeftOpen)
+        // The regression, in both directions: 0x80 is the PASSENGER on this opcode.
+        assertEquals(false, status(0x80).doorFrontLeftOpen)
+        assertTrue(status(0x80).doorFrontRightOpen)
     }
 
     @Test
     fun `every opening maps to its own bit`() {
-        assertTrue(status(0x80).doorFrontLeftOpen)
-        assertTrue(status(0x40).doorFrontRightOpen)
+        assertTrue(status(0x40).doorFrontLeftOpen)
+        assertTrue(status(0x80).doorFrontRightOpen)
         assertTrue(status(0x20).doorRearRightOpen)
         assertTrue(status(0x10).doorRearLeftOpen)
         assertTrue(status(0x08).tailgateOpen)
@@ -42,7 +48,7 @@ class HiworldDoorBitsTest {
 
     @Test
     fun `bits do not leak into each other`() {
-        val s = status(0x80)
+        val s = status(0x40)
         assertEquals(false, s.doorFrontRightOpen)
         assertEquals(false, s.doorRearLeftOpen)
         assertEquals(false, s.tailgateOpen)
@@ -57,6 +63,7 @@ class HiworldDoorBitsTest {
         assertTrue(s.doorRearRightOpen)
         assertEquals(false, s.doorRearLeftOpen)
         assertEquals(false, s.doorFrontLeftOpen)
+        assertEquals(false, s.doorFrontRightOpen)
     }
 
     @Test
