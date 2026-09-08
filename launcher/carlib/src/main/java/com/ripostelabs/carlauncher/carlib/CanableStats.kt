@@ -40,6 +40,34 @@ class CanableStats(private val clock: () -> Long = System::currentTimeMillis) {
     var unparsed: Long = 0
         private set
 
+    /**
+     * The ECU's own speed, from the last OBD PID 0x0D reply. Null until the car answers.
+     *
+     * Kept in stats rather than the vehicle snapshot on purpose: this is a diagnostic reference
+     * for calibrating the candidate speed fields, and the rule that no speed reaches the Vehicle
+     * tiles until one is calibrated stands. It appears on the capture screen only.
+     */
+    var obdKmh: Int? = null
+        private set
+
+    var obdReplies: Long = 0
+        private set
+
+    /** Negative responses to service 01. A steady count here means the ECU will not play. */
+    var obdRefusals: Long = 0
+        private set
+
+    fun recordObd(reply: ObdSpeed.Reply) {
+        when (reply) {
+            is ObdSpeed.Reply.Speed -> {
+                obdKmh = reply.kmh
+                obdReplies++
+            }
+
+            is ObdSpeed.Reply.Refused -> obdRefusals++
+        }
+    }
+
     private val counts = LinkedHashMap<Int, Int>()
 
     private var windowStart: Long = clock()
