@@ -2,21 +2,25 @@
 
 A **second, independent** CAN data path for the launcher, alongside the existing HiWorld CANBOX
 digest. Where HiWorld gives a pre-chewed vendor serial protocol, this reads the **real vehicle bus
-1:1** off a CANable 2.0 (slcan firmware) on `/dev/ttyACM0` and decodes it against opendbc
-`toyota_nodsu` (hybrid). Both paths fold into one `VehicleState`.
+1:1** off a CANable 2.0 and decodes it against opendbc `toyota_nodsu` (hybrid).
+
+**The transport is the Android USB host API, not a serial node.** See "No CDC-ACM on this kernel"
+below; everything in this file that once described `/dev/ttyACM0` was written before the hardware
+was available and is corrected here.
 
 ```
-CANable 2.0 (slcan fw) ──USB CDC-ACM──▶ /dev/ttyACM0
-        │
-        ▼
-  CanableReader  ──(t/T lines)──▶ RawCanDecoder.decode(id, data) ──▶ RawCanSignal
-        │                                                              │
-        │  VehicleState.apply(signal, atMs)  ◀───────────────────────┘
-        ▼
-  StateFlow<VehicleState>  ──▶ launcher UI
-        ▲
-        └── VehicleState.applyHiworld(canSignal)   ◀── HiWorld path (HiworldCanDecoder)
+CANable 2.0 ──USB bulk endpoints──▶ CanableUsbLink   (claims the device, no kernel driver)
+                                          │
+                                          ▼
+                                    SlcanCodec ──▶ SlcanFrame
+                                          │
+                                          ▼
+                              CanableSource ──┬──▶ CanableRecorder (candump log)
+                                              └──▶ CanableStats    (rate, ids, banner)
 ```
+
+Shipped in `launcher/carlib/`: `SlcanCodec.kt`, `CdcAcm.kt`, `CanableUsbLink.kt`,
+`CanableSource.kt`, `CanableStats.kt`, `CanableRecorder.kt`, `CaptureRotation.kt`.
 
 ## The three pieces
 
@@ -31,76 +35,97 @@ CANable 2.0 (slcan fw) ──USB CDC-ACM──▶ /dev/ttyACM0
 > would not compile. Fields: Speed, WheelSpeeds, Gear, SteeringAngle,
 > GasPedal, Brake, Cruise, Cruise2, Doors, Blinkers, Unknown).
 
-## STEP 0 (gate): verify USB host + CDC-ACM BEFORE anything else
+## No CDC-ACM on this kernel — verified 2026-09-08, car on
 
-The head unit must (a) act as a USB **host** on the port you use and (b) have the `cdc_acm` kernel
-driver. This is unverified on the offline unit — do not integrate until it's confirmed:
+The original gate here read: *"No app work is worth doing until a `/dev/ttyACM*` node exists."*
+**That was wrong, and it would have stopped the work that succeeded.**
 
-```sh
-adb shell ls -l /dev/ttyACM*                 # a node must appear when the CANable is plugged in
-adb shell "dmesg | grep -i cdc_acm"          # expect 'cdc_acm ... ttyACM0: USB ACM device'
-adb shell "zcat /proc/config.gz | grep -i USB_ACM"   # expect CONFIG_USB_ACM=y (or =m)
-adb shell lsusb                              # if present; CANable VID often 1d50/16d0
+What the head unit actually does:
+
+- The CANable enumerates correctly on **both** USB ports (`16d0:117e`, behind the `1a40:0101` hub).
+- There is **no `/dev/ttyACM*`**, no `/sys/bus/usb-serial` at all, and no ACM module in
+  `/vendor/lib/modules` (audio and camera only). The kernel has no CDC-ACM driver, so no port and
+  no cable will ever produce a serial node here.
+
+CDC-ACM is only a bulk endpoint pair plus two control requests, so the launcher claims the device
+through Android's USB host API and speaks the protocol itself. **No kernel module, no root, no
+vendor cooperation.** Descriptors as read from the device:
+
+```
+1-1.1:1.0  class=02 sub=02  ep 0x82 interrupt      (communications)
+1-1.1:1.1  class=0a         ep 0x01 bulk OUT, 0x81 bulk IN   (data)
 ```
 
-`canable-probe.sh` runs all of these first and refuses to continue if no node shows up. If nothing
-enumerates: the port may be host-incapable or stuck in ADB mode, or the kernel lacks `cdc_acm`. Try
-the other port / a powered hub. **No app work is worth doing until a `/dev/ttyACM*` node exists.**
+`SET_LINE_CODING` **and** `SET_CONTROL_LINE_STATE` (DTR) are both required before the adapter
+sends anything.
+
+## The failure mode that costs a day: grounding
+
+**A badly grounded CANable enumerates normally, prints its connect banner, and then ignores every
+slcan command.** Ports, drivers, stalled endpoints and inverted H/L were all checked and cleared
+before grounding turned out to be the answer.
+
+The tell is asymmetric. Bytes come *out* of the adapter while `C`/`S6`/`O`/`V` are all ignored,
+and reads then time out cleanly at the full timeout rather than failing fast. A slcan adapter
+answers a command it dislikes with BELL, so **frames=0 with no BELL means the commands never
+landed**. If the adapter talks but never answers, check GND before anything else.
+
+## What the adapter volunteers
+
+On connect it prints a 51-character build banner, CRLF-terminated, and **never answers `V`**:
+
+```
+16e7497-dirty github.com/normaldotcom/canable2.git
+```
+
+Note the USB product string says `b158aa7` — a *different commit* from the banner. Do not trust
+either alone as the firmware identity.
 
 ## slcan init sequence (exact)
 
-ASCII commands, each terminated by CR (`\r`). Sent to the same node we read from:
+ASCII commands, each terminated by CR (`\r`):
 
 ```
 C\r     close channel (harmless if already closed)
-S6\r    set bitrate 500 kbps  ← Toyota powertrain bus
-L\r     OPEN LISTEN-ONLY   (preferred: adapter sends no ACKs, physically cannot transmit)
+S6\r    set bitrate 500 kbps  ← Toyota bus
+O\r     OPEN, ACTIVE
 ```
 
-`L` is tried first. Some slcan builds (e.g. older CANable/candleLight) don't implement `L` and NAK
-it with a BELL (`0x07`); the reader detects "no frames within 1.5 s" and reopens with `O\r` (normal).
-**Either way the software never emits a `t`/`T` transmit frame** — `CanableReader.writeCmd` hard-
-asserts against any command starting with `t`/`T`. On stop we send `C\r` to close cleanly.
+Bitrate codes: `S4`=125k, `S5`=250k, `S6`=500k, `S8`=1M.
 
-Bitrate codes if you need them: `S4`=125k, `S5`=250k, `S6`=500k, `S8`=1M.
+## Do NOT use listen-only on this firmware
 
-## Listen-only safety
+The earlier revision of this file preferred `L` (listen-only) and claimed a fallback would notice
+within 1.5 s. **Both halves are wrong on firmware `b158aa7`.**
 
-Three independent guards, so a bug can't put traffic on the car's bus:
+`L` is *accepted and silently ignored*: the channel never opens, and the host sees a healthy
+interface with **zero frames and zero errors**. There is no BELL to detect and nothing to time
+out on, so a "no frames yet" fallback cannot distinguish it from a quiet bus. That cost about an
+hour in the car.
 
-1. **Open with `L`** (listen-only) when supported — the adapter won't even ACK frames.
-2. `writeCmd` **refuses** any `t`/`T` (transmit) command via `require(...)`.
-3. There is **no transmit code path at all** — the reader only ever writes the four control
-   commands `C`/`S6`/`L`/`O`.
+`SlcanBitrate`/`SlcanCodec` therefore expose **no listen-only option at all** — the mistake is
+unavailable from code rather than warned about in a comment.
 
-The probe script is equally transmit-free.
+## Root / device-node access: not needed
 
-## Root / device-node access
+Moot on this unit — there is no device node to chmod. The USB host API grants access through
+`UsbManager.requestPermission`, and the launcher declares a `USB_DEVICE_ATTACHED` filter so
+permission is granted on attach rather than re-prompted every drive.
 
-`/dev/ttyACM*` is usually `crw-rw---- root:dialout`, so the launcher's app uid can't open it. On this
-rooted unit (SELinux **Permissive**, per the ZLink notes) the reader:
+## Wiring into the launcher
 
-1. `RootShell.exec("chmod 666 <node>")` — then a plain-uid `FileInputStream`/`FileOutputStream` open
-   succeeds (primary path).
-2. If chmod is refused, falls back to piping: `su -c 'stdbuf -o0 cat <node>'` for reads and a fresh
-   `su -c 'printf …\r > <node>'` per control write.
-
-`RootShell`/`RootSession` are the launcher's existing helpers — no new privileged surface is added.
-
-## Wiring into the launcher (alongside HiWorld)
-
-`VehicleState` is pure and immutable; both CAN paths mutate it by returning a new copy:
+The reader is owned by a foreground service so a capture survives the screen closing — a drive is
+exactly when nobody holds a settings screen open.
 
 ```kotlin
-// one reader, held in launcher DI like CarService / CarEvents:
-val canable = CanableReader()                 // defaults: /dev/ttyACM0, S6 (500k)
-canable.start(appScope)                        // launches read+reconnect loop on Dispatchers.IO
-// canable.state : StateFlow<VehicleState>     // collect in Compose
-// canable.connected / canable.frameCount      // for a capture/diagnostic view
-
-// merge the HiWorld digest into the SAME snapshot (raw bus wins; HiWorld fills gaps):
-val merged: VehicleState = canable.state.value.applyHiworld(hiworldSignal)
+CanCaptureService.start(context)          // foreground, connectedDevice type
+val source = CanCaptureService.shared(context)
+// source.status : StateFlow<CanableStatus>   // version/banner, frames, rate, ids, capture bytes
 ```
+
+**One reader per process.** Two claims on the same bulk endpoint split the byte stream between
+them; that mistake was already made once on this project against the vendor MCU serial port, so
+the screen observes the service's instance rather than creating its own.
 
 Merge policy today: the raw bus is higher fidelity, so `applyHiworld` only fills fields the raw path
 hasn't set (`speedKmh ?: …`). For a single UI model, collect `canable.state` and, wherever the

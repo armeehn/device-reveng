@@ -65,7 +65,9 @@ Two viable data paths into Android. **SocketCAN in-kernel is unlikely to work** 
 ### Path 1 — USB **slcan** into the head unit (RECOMMENDED if a spare USB port exists)
 - **Adapter:** CANable 2.0 / CANable Pro (or CANtact) flashed with **slcan (CDC-ACM)** firmware → enumerates as `/dev/ttyACM0`. ASCII slcan protocol (`t<id><len><data>\r`) is trivial to parse. ~$25–40.
   - Alt transceiver-only route: **Teensy 4.0 + SN65HVD230** (3.3 V transceiver) running an slcan/print sketch, or an **MCP2515+MCP2551** Arduino — cheaper but MCP2515 is known to wedge and need a watchdog reset ([RaceChrono DIY notes](https://github.com/timurrrr/RaceChronoDiyBleDevice)).
-- **On Android (rooted):** read `/dev/ttyACM0` directly (root gives node access) with a small Kotlin/JNI serial reader, **or** use the Android **USB-host API + usb-serial-for-android** (no root needed for USB host). Parse slcan ASCII → frames in userspace. No kernel module required.
+- **On this RAV4's head unit the first option is unavailable** (verified 2026-09-08): no CDC-ACM
+  driver, so no node exists to read. The USB-host route is the one that works, and it needs no root.
+- **On Android (rooted), where a node does exist:** read `/dev/ttyACM0` directly (root gives node access) with a small Kotlin/JNI serial reader, **or** use the Android **USB-host API + usb-serial-for-android** (no root needed for USB host). Parse slcan ASCII → frames in userspace. No kernel module required.
 - **comma panda** is a strong alternative adapter: robust, Toyota-tuned, well-documented USB protocol with existing Java/Android consumers; RX-only is a config choice. Slightly pricier but the most turnkey for Toyota. ([openpilot/panda](https://github.com/commaai/openpilot)).
 
 ### Path 2 — **BLE** CAN (RECOMMENDED for a clean permanent install / no USB port)

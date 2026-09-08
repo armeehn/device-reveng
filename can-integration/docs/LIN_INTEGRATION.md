@@ -108,7 +108,10 @@ Two LIN forms, both over a modulo-255 carry-folded sum, then one's-complemented:
   and mandatory — set it with `stty`.
 - A **CDC-ACM** USB-UART enumerates as **`/dev/ttyACM*`**. Its baud is virtual (the slave sets the
   real rate), but `raw -echo` still matters.
-- **The CANable (CAN adapter) already owns `/dev/ttyACM0`**, so the LIN adapter is **most likely
+- **Correction (2026-09-08):** on this head unit the CANable owns **no** node — the kernel has no
+  CDC-ACM driver, so `/dev/ttyACM*` never appears and the CAN path runs over the USB host API
+  instead. A CDC LIN dongle would hit the same wall and need the same treatment.
+- (Original text, true only on a device with a CDC-ACM driver:) the CANable owns `/dev/ttyACM0`, so the LIN adapter is **most likely
   `/dev/ttyUSB0`** — hence `LinReader.DEFAULT_NODE = "/dev/ttyUSB0"`.
 
 `LinReader.resolveNode()` tries `preferredNode`, then any `ttyUSB*`, then any `ttyACM*` that is **not

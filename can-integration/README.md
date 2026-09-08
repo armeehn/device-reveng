@@ -40,11 +40,13 @@ the hardware is installed, not because they're ready to wire today.
 - **`LinClimateDecoder.kt`** — decodes the **A/C-amp climate LIN** (frames 0xB1 status /
   0x39 buttons). Only useful with a LIN transceiver tap.
 
-### `readers/` — Android glue (compiled against `carlib`'s real `RootShell`, not wired in)
-- **`CanableReaderService.kt`** — `CanableReader` over a CANable 2.0 (slcan, `/dev/ttyACM0`),
-  listen-only, exposes `StateFlow<VehicleState>`.
-- **`LinReaderService.kt`** — `LinReader` over a LIN transceiver → USB-UART (`/dev/ttyUSB0`),
-  plus `combineWithVehicle(can, lin)` folding CAN + LIN into one `StateFlow<UnifiedCarState>`.
+### `readers/` — staging only, NOT in the gradle build
+- **`CanableReaderService.kt`** — `CanableReader` over `/dev/ttyACM0`. **Superseded and unused.**
+  This head unit has no CDC-ACM driver, so the serial-node approach cannot work here; the shipped
+  path is the Android USB host API in `launcher/carlib/` (`CanableUsbLink` and friends). Kept for
+  reference on a device that *does* expose a node.
+- **`LinReaderService.kt`** — **does not exist.** Listed here previously as though it did. A LIN
+  reader has not been written; `LinClimateDecoder.kt` is the only LIN code in the repo.
 
 ### `docs/` and `probes/`
 - `CANABLE_INTEGRATION.md`, `LIN_INTEGRATION.md`, `H62_TAP_PLAN.md` — wiring, protocol, tap
@@ -55,7 +57,7 @@ the hardware is installed, not because they're ready to wire today.
 | File | Destination | Note |
 |---|---|---|
 | `decoders/HiworldCanDecoder.kt` | `launcher/carlib/…/carlib/` | closes the deferred CAN decode; wire to `CanCapture`'s `byte[]` |
-| `decoders/RawCanDecoder.kt` + `readers/CanableReaderService.kt` | `carlib/` | only after a raw bus tap exists |
+| `decoders/RawCanDecoder.kt` | `carlib/` | already shipped; the reader beside it is superseded by `CanableUsbLink` |
 | `decoders/LinClimateDecoder.kt` + `readers/LinReaderService.kt` | `carlib/` | only after a LIN tap exists; note existing `ClimateState.kt` is a *different* (AIDL) source |
 
 ## Honest caveats (all flagged in-code, none faked)
