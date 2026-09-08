@@ -101,17 +101,25 @@ which is the right shape for a run-up to a public release.
 
 ### Stability invariants that shipped broken
 
-- **An indicator with no source must disappear, not lie.** Wi-Fi, Bluetooth and volume honour
-  this; the brightness chip does not — it renders unconditionally and defaults an unreadable
-  read to a fabricated midpoint. "A chip that lies is worse than no chip" is the rule; make the
-  read nullable and drop the chip.
-- **Eyes-free confirmation is missing where it matters.** The beep-and-haptic helper is applied
-  to eleven files but not to Home, the app drawer, quick controls or settings rows — the four
-  surfaces a driver touches most.
-- **The volume chip still polls.** It samples on a timer instead of riding the vendor volume
-  event, so a change made at the wheel is stale on the bar for seconds. Ships only if the AIDL
-  genuinely exposes a callback; if it does not, record which methods were checked and keep the
-  poll.
+> Audited 2026-09-07. Two of the three below were already fixed and the entries had simply not
+> been updated, which is worse than useless: a stale "known broken" list sends someone to redo
+> finished work, and it did — this audit began as an attempt to fix the brightness chip. Each
+> entry now records how it was verified.
+
+- ~~**An indicator with no source must disappear, not lie.**~~ **DONE.** Verified 2026-09-07:
+  `rememberBrightnessPercent` returns `Int?` and the chip is behind `if (brightnessPercent
+  != null)`, so an unreadable backlight renders no chip rather than a fabricated midpoint. The
+  rule is stated in the code. Nothing left to do here.
+- **Eyes-free confirmation is PARTIAL, not missing.** Re-measured 2026-09-07: `withTapFeedback`
+  *is* used on all four surfaces, just not everywhere. Home 3 of 4 click sites, the app drawer 5
+  of 8, quick controls 4 of 10; settings rows get it for free through `SettingsComponents`.
+  So the remaining work is roughly ten specific call sites, and each needs a judgement about
+  whether a tap is the right moment for feedback — not a blanket sweep.
+- ~~**The volume chip still polls.**~~ **RESOLVED as written.** This item shipped conditionally:
+  keep the poll if the AIDL exposes no callback, provided the search is recorded. Verified
+  2026-09-07 — `StatusIndicators.kt` documents that the vendor AIDL exposes no volume event and
+  lists the methods checked against `AIDL_ORDINALS.md`. The condition was met, so the poll stays
+  and this is closed rather than outstanding.
 
 ### Crash and ANR correctness
 
@@ -131,12 +139,23 @@ port rotates on every reboot, so a crash on the road currently leaves no evidenc
 
 ### Safety gating
 
-- **The raw SysVar browser can re-brick the gateway.** It exposes every live key to free-text
-  editing, including the one whose malformed value crash-loops the vendor service on boot. That
-  write was removed from the feature screen and remains fully reachable here. It needs a
-  refuse-list rendering dangerous keys read-only, with the reason shown.
-- **"Reboot head unit" is not marked destructive**, so the parked-only gate never withholds it.
-  Confirming it at speed takes down the reverse camera, SWC, radio and launcher mid-drive.
+> Audited 2026-09-07 alongside the invariants above: both items were already implemented.
+
+- ~~**The raw SysVar browser can re-brick the gateway.**~~ **DONE.** Verified 2026-09-07:
+  `AdvancedSettingsScreen` reads `ProtectedSettingKeys.reasonFor(k)` and renders those rows
+  read-only with the reason shown, and refuses the write. `CarSettingsController` refuses the
+  same keys again independently, so the guard survives a UI mistake. Exactly the refuse-list
+  this entry asked for.
+- ~~**"Reboot head unit" is not marked destructive.**~~ **DONE, and this entry had the mechanism
+  wrong.** `destructive` on `ActionRow` only picks the tint; it gates nothing. The parked-only
+  lock lives on `ConfirmDialog`, and reboot's dialog *is* `destructive = true` with a comment
+  naming this exact risk. So the reboot is withheld while moving. The only real difference from
+  Factory reset is cosmetic — the row is not tinted red — which is arguably right, since a reboot
+  is recoverable and a factory reset is not.
+
+  Worth keeping in mind generally: a flag named `destructive` appears on two different components
+  here and means something different on each. Reading the name rather than the implementation is
+  what produced this entry.
 
 ### Traceability and proof
 
