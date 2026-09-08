@@ -1,6 +1,7 @@
 package com.ripostelabs.carlauncher.carlib
 
 import com.ripostelabs.carlauncher.carlib.VehicleSnapshot.Companion.fold
+import com.ripostelabs.carlauncher.carlib.VehicleSnapshot.Companion.foldRaw
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -39,6 +40,19 @@ class VehicleState {
     /** Absorb one already-decoded signal. */
     fun onSignal(signal: CanSignal, atMs: Long) {
         _snapshot.value = _snapshot.value.fold(signal, atMs)
+    }
+
+    /**
+     * Absorb one frame from the **raw bus** (the CANable tap), as opposed to the vendor MCU.
+     *
+     * Both sources land in the same fields, so the screen above does not need to know which one
+     * a reading came from. An id the decoder does not handle leaves the snapshot untouched, for
+     * the same reason an unreadable MCU frame does: silence is not evidence of change, and the
+     * raw bus carries 111 ids of which only a few are decoded.
+     */
+    fun onRawFrame(id: Int, data: ByteArray, atMs: Long) {
+        val signal = RawCanDecoder.decode(id, data) ?: return
+        _snapshot.value = _snapshot.value.foldRaw(signal, atMs)
     }
 
     /** The tiles to draw right now. [now] is passed in so staleness stays testable. */

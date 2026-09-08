@@ -101,6 +101,65 @@ data class VehicleSnapshot(
             is CanSignal.Version -> this
             is CanSignal.Unknown -> this
         }.copy(atMs = atMs)
+
+        /**
+         * Fold one **raw bus** signal into a snapshot.
+         *
+         * Separate from [fold] because the two sources are genuinely different protocols: the MCU
+         * hands over a vendor repack, this is the wire. They land in the same fields so a screen
+         * does not care which arrived, and the freshest reading wins.
+         *
+         * ── The door trap ───────────────────────────────────────────────────────────────────────
+         * The MCU door byte and the raw 0x4A5 door byte use DIFFERENT bit layouts — the vendor
+         * swaps bits 6/7 and 4/5 while repacking. Reading one with the other's constants is how
+         * "the driver door opening thinks it's the passenger" happened before.
+         *
+         * [RawCanSignal.Doors] is already decoded into named booleans, so this packs them into the
+         * MCU layout by NAME rather than copying a byte across. There is no bit-shuffling to get
+         * wrong, and [VehicleSnapshotRawTest] pins the result all the way through to the tile text.
+         */
+        fun VehicleSnapshot.foldRaw(sig: RawCanSignal, atMs: Long): VehicleSnapshot = when (sig) {
+            is RawCanSignal.Doors -> put(atMs, Field.DOOR_BITS to packDoors(sig).toDouble())
+
+            is RawCanSignal.Climate -> put(atMs, Field.CLIMATE_ON to if (sig.on) 1.0 else 0.0)
+
+            // `level` is the raw byte, not a displayed step, and the mapping is unpinned. Only
+            // `running` is trustworthy, so a stopped fan is 0 and a running one carries the raw
+            // value for whoever is still working the scale out.
+            is RawCanSignal.Fan -> put(atMs, Field.FAN_STEP to if (sig.running) sig.level.toDouble() else 0.0)
+
+            // Everything below is declared in RawCanSignal for a future tap but is never emitted
+            // by RawCanDecoder on this car. Folding a value nothing produces would put an
+            // unverified reading on a screen the moment someone wired the decoder up.
+            else -> this
+        }.copy(atMs = atMs)
+
+        /**
+         * Pack named openings into the MCU door byte.
+         *
+         * Constants mirror `HiworldCanDecoder`'s private layout, which `VehicleTiles.OPENINGS`
+         * also encodes. Three copies would normally be a drift risk; the end-to-end test asserts
+         * the tile TEXT, so a divergence between them fails a test rather than misreporting a
+         * door in a car.
+         */
+        private fun packDoors(d: RawCanSignal.Doors): Int {
+            var bits = 0
+            if (d.driver) bits = bits or DOOR_DRIVER
+            if (d.passenger) bits = bits or DOOR_PASSENGER
+            if (d.rearLeft) bits = bits or DOOR_REAR_LEFT
+            if (d.rearRight) bits = bits or DOOR_REAR_RIGHT
+            if (d.tailgate) bits = bits or DOOR_TAILGATE
+            if (d.hood) bits = bits or DOOR_HOOD
+
+            return bits
+        }
+
+        private const val DOOR_DRIVER = 0x40
+        private const val DOOR_PASSENGER = 0x80
+        private const val DOOR_REAR_LEFT = 0x10
+        private const val DOOR_REAR_RIGHT = 0x20
+        private const val DOOR_TAILGATE = 0x08
+        private const val DOOR_HOOD = 0x04
     }
 
     private fun put(atMs: Long, vararg pairs: Pair<Field, Double>): VehicleSnapshot =
