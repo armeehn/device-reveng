@@ -149,7 +149,43 @@ class SlcanCodecTest {
         assertTrue(reader.feed("x".repeat(4096).toByteArray()).isEmpty())
         val events = reader.feed("\rt1231AA\r".toByteArray())
 
-        assertEquals(0x123, (events.single() as SlcanEvent.Received).frame.id)
+        // The first delimiter closes the dropped line, the frame after it decodes normally.
+        assertTrue((events.first() as SlcanEvent.Text).text.contains("overlong"))
+        assertEquals(0x123, (events.last() as SlcanEvent.Received).frame.id)
+    }
+
+    // ── What the adapter says when it is not answering a command ────────────────────────────────
+
+    @Test
+    fun `the connect banner survives and does not eat the next frame`() {
+        val reader = SlcanReader()
+
+        // Verbatim from the head unit, 2026-09-08: 51 characters, CRLF-terminated.
+        val banner = "16e7497-dirty github.com/normaldotcom/canable2.git"
+        val events = reader.feed(("$banner\r\n" + "t1231AA\r").toByteArray())
+
+        assertEquals(banner, (events[0] as SlcanEvent.Text).text)
+        assertEquals(0x123, (events[1] as SlcanEvent.Received).frame.id)
+    }
+
+    @Test
+    fun `a stray LF does not poison the following line`() {
+        val reader = SlcanReader()
+
+        // The LF of a CRLF arrives at the head of the next line. Kept, it would make the frame
+        // start with a character that is not 't', and the frame would be lost.
+        val events = reader.feed("\r\nt4562BBCC\r".toByteArray())
+
+        assertEquals(0x456, (events.last() as SlcanEvent.Received).frame.id)
+    }
+
+    @Test
+    fun `an overlong line is reported rather than vanishing`() {
+        val reader = SlcanReader()
+
+        val events = reader.feed(("x".repeat(400) + "\r").toByteArray())
+
+        assertTrue((events.single() as SlcanEvent.Text).text.contains("overlong"))
     }
 
     @Test

@@ -78,8 +78,21 @@ private const val BYTE_MASK = 0xFF
 private const val CR = '\r'
 private const val BELL = '\u0007'
 
-/** Longest line worth keeping: `T` + 8 id + 1 dlc + 16 data = 26. Anything longer is line noise. */
-private const val MAX_LINE = 32
+private const val LF = '\n'
+
+/** Stands in for a line too long to keep, so an overrun is visible rather than silent. */
+private const val OVERLONG = "<overlong line dropped>"
+
+/**
+ * Longest line worth keeping.
+ *
+ * A frame needs only 26 (`T` + 8 id + 1 dlc + 16 data), but the adapter also speaks when it is
+ * not answering a command: on connect it prints a 51-character build banner,
+ * `16e7497-dirty github.com/normaldotcom/canable2.git`. Observed on the head unit 2026-09-08.
+ * A cap tight enough for frames alone silently ate it, which cost an iteration of guessing at
+ * why a device that was plainly talking appeared to say nothing.
+ */
+private const val MAX_LINE = 128
 
 private fun hex2(value: Int): String =
     (value and BYTE_MASK).toString(RADIX_HEX).uppercase().padStart(2, '0')
@@ -204,6 +217,8 @@ class SlcanReader {
             if (c == CR || c == BELL) {
                 if (state == LineState.COLLECTING) {
                     events.add(if (c == BELL) SlcanEvent.Rejected else SlcanCodec.decode(pending.toString()))
+                } else {
+                    events.add(SlcanEvent.Text(OVERLONG))
                 }
 
                 pending.setLength(0)
@@ -211,11 +226,18 @@ class SlcanReader {
                 continue
             }
 
+            // The adapter terminates its banner with CRLF. Keeping the LF would leave it at the
+            // head of the NEXT line, and a frame whose first character is not 't' or 'T' does not
+            // parse — so one banner would cost the frame that followed it.
+            if (c == LF) {
+                continue
+            }
+
             if (state == LineState.DISCARDING) {
                 continue
             }
 
-            // A line this long is not a frame. Drop it, and stay dropping until the next
+            // Longer than anything this adapter says. Drop it, and stay dropping until the next
             // delimiter: restarting here would splice garbage onto the front of a real frame.
             if (pending.length >= MAX_LINE) {
                 pending.setLength(0)
