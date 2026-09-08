@@ -373,6 +373,7 @@ object HiworldCanDecoder {
      * i = FL:2, FR:3, RL:4, RR:5, spare:6. A byte of 0xFE ⇒ no reading (OEM tests `!= 254` on
      * the first byte; we null if *either* byte is the sentinel). Units: kPa.
      * Variance: p[2..6] all 0xFE while parked (sensors asleep) ⇒ all null.
+     * Sentinel is the FIRST byte of each pair only — see [tpms].
      */
     private fun decodeTpms(p: ByteArray): CanSignal.Tpms = CanSignal.Tpms(
         frontLeftKpa = tpms(p, 2),
@@ -382,10 +383,21 @@ object HiworldCanDecoder {
         spareKpa = tpms(p, 6),
     )
 
+    /**
+     * One wheel's pressure, as the OEM computes it: `p[i] + p[i+5]`, in kPa.
+     *
+     * **The sentinel is tested on the FIRST byte only**, which is what `addTpms` does:
+     * `if (i2 != 254)` where `i2` is that first byte. Testing both bytes — which this used to do —
+     * discards readings the vendor would happily display, because 0xFE is a perfectly ordinary
+     * value for the second byte. A pair of (0, 254) is 254 kPa, about 37 psi, an unremarkable
+     * tyre. Being stricter than the source here is not caution, it is a wrong answer.
+     */
     private fun tpms(p: ByteArray, i: Int): Int? {
-        val a = u(p, i)
-        val b = u(p, i + 5)
-        return if (a == TPMS_SENTINEL || b == TPMS_SENTINEL) null else a + b
+        val first = u(p, i)
+        if (first == TPMS_SENTINEL) {
+            return null
+        }
+        return first + u(p, i + 5)
     }
 
     /**
