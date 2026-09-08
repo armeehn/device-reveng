@@ -266,6 +266,27 @@ private fun decodedRows(sig: CanSignal): Map<String, String> = when (sig) {
         put("Seat heat L/R", "${level(sig.seatHeatLeft)} / ${level(sig.seatHeatRight)}")
         put("Seat vent L/R", "${level(sig.seatCoolLeft)} / ${level(sig.seatCoolRight)}")
     }
+    is CanSignal.SysEvent -> buildMap {
+        // reverseRaw is the bit WITHOUT the vendor's ACC gate, so it is labelled as raw rather
+        // than presented as "in reverse" — the two can legitimately disagree with the ignition off.
+        put("Reverse (raw bit)", if (sig.reverseRaw) "engaged" else "not engaged")
+        put("Media present", listOfNotNull(
+            if (sig.discPresent) "disc" else null,
+            if (sig.usbPresent) "USB" else null,
+        ).joinToString(", ").ifEmpty { "none" })
+        put("Sys byte", "0x%02X".format(sig.raw))
+    }
+    is CanSignal.SideCamera -> buildMap {
+        val sides = listOfNotNull(
+            if (sig.left) "left" else null,
+            if (sig.right) "right" else null,
+        )
+        put("Side camera", if (sides.isEmpty()) "none requested" else sides.joinToString(" + "))
+        // These cameras are indicator-triggered on this car, and the indicators are NOT on the raw
+        // CAN bus at all, so this row is the only turn-signal state available anywhere.
+        put("Turn signal (via camera)", if (sides.isEmpty()) "off" else sides.joinToString(" + "))
+        if (sig.leftForced) put("Left camera", "forced on (bit3)")
+    }
     is CanSignal.Tpms -> buildMap {
         fun kpa(v: Int?) = v?.let { "$it kPa" } ?: "—"
         put("TPMS FL/FR", "${kpa(sig.frontLeftKpa)} / ${kpa(sig.frontRightKpa)}")
@@ -285,7 +306,10 @@ private fun decodedRows(sig: CanSignal): Map<String, String> = when (sig) {
         "Gear raw (0x1A b1,b5)" to "0x%02X,0x%02X".format(sig.gearRawB1, sig.gearRawB5),
     )
     is CanSignal.Version -> mapOf("CANBOX firmware" to sig.text)
-    else -> emptyMap()
+    // Exhaustive on purpose: no `else`. A new CanSignal type must fail to compile here until
+    // someone decides how to show it. Both SideCamera and SysEvent were decoded and shipped while
+    // rendering nothing at all, because an `else` branch swallowed them without a word.
+    is CanSignal.Unknown -> emptyMap()
 }
 
 private const val LOG_TAG = "CanCapture"
