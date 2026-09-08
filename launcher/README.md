@@ -117,6 +117,30 @@ head unit and match its `sha256sum` against the release body.
 | Write SysVar provider | ❌ direct | `SysVar.putString` routes through **root** (`content` shell) |
 | Bind `EventService`, read-only AIDL | ✅ | exported service |
 | AIDL control side-effects | ⚠️ | not recovered by root either; see *Root-native tier* |
+| Read the raw vehicle CAN bus | ✅ no root | over the USB host API to a CANable; there is no CDC-ACM driver on this kernel, so no serial node — see *Raw vehicle bus* below |
+
+## Raw vehicle bus (USB CAN)
+
+A second, independent source of vehicle data beside the vendor MCU digest: the real Toyota body
+bus, read 1:1 through a CANable 2.0 plugged into the head unit's USB port. Measured in the car
+at ~1214 frames/s across 111 ids.
+
+```
+CANable ──USB bulk──▶ CanableUsbLink ──▶ SlcanCodec ──▶ CanableSource ──┬──▶ CanableRecorder (candump)
+                                                                        └──▶ VehicleState ──▶ Vehicle screen
+MCU broadcast ──▶ HiworldCanDecoder ────────────────────────────────────────▶ VehicleState
+```
+
+- **No driver, no root.** The kernel ships no CDC-ACM module, so `/dev/ttyACM*` never appears on
+  either port. The launcher claims the device with `UsbManager` and does the bulk transfers
+  itself. A `USB_DEVICE_ATTACHED` filter grants permission on attach.
+- **Recording is a foreground service** and starts hands-free when the adapter is plugged in.
+  Captures land under the app's external files dir in candump log format, roll at 16 MB, and the
+  newest six survive. `Settings → CAN frame capture` shows the live adapter state and can stop it.
+- **Grounding.** A badly grounded adapter enumerates and prints its banner but ignores every
+  command. If it talks and never answers, check GND first.
+- Where the wire, the pinout and the decoded ids are documented:
+  [`../can-integration/docs/CANABLE_INTEGRATION.md`](../can-integration/docs/CANABLE_INTEGRATION.md).
 
 ## Settings suite (v1.1 → v2.0)
 
