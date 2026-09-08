@@ -17,7 +17,6 @@ import androidx.compose.ui.unit.dp
 import com.ripostelabs.carlauncher.carlib.CarEvents
 import com.ripostelabs.carlauncher.service.CanCaptureService
 import com.ripostelabs.carlauncher.carlib.VehicleTiles
-import com.ripostelabs.carlauncher.ui.collectAsStateSafe
 import kotlinx.coroutines.delay
 
 /**
@@ -41,8 +40,8 @@ fun VehicleScreen(
     carEvents: CarEvents,
     onBack: () -> Unit,
 ) {
-    // The service's snapshot, not a private one: the CANable feeds it whether or not this screen
-    // is open, and the MCU frames folded below land in the same place. One snapshot, two buses.
+    // The service's snapshot, not a private one: both buses feed it whether or not this screen
+    // is open. This page only reads it. One snapshot, two buses.
     val context = LocalContext.current
     val vehicle = remember { CanCaptureService.vehicle() }
     DisposableEffect(Unit) {
@@ -50,14 +49,8 @@ fun VehicleScreen(
         onDispose { }
     }
 
-    val frame by carEvents.canRaw.collectAsStateSafe(initial = null)
-
-    // Each opcode rides its own frame, so every arrival is folded into the same accumulating
-    // snapshot rather than replacing it.
-    LaunchedEffect(frame) {
-        val bytes = frame?.bytes ?: return@LaunchedEffect
-        vehicle.onFrame(bytes, System.currentTimeMillis())
-    }
+    // MCU frames are folded by MainActivity for the life of the launcher, not here. Folding them
+    // here as well would mint every speed-calibration sample twice while this page is open.
 
     // Staleness expires on read, so the screen has to re-read even when no frame arrives —
     // otherwise a bus that goes silent leaves its last values on screen forever.

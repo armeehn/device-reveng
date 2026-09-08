@@ -30,6 +30,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.ripostelabs.carlauncher.carlib.CarEvents
+import com.ripostelabs.carlauncher.service.CanCaptureService
 import com.ripostelabs.carlauncher.carlib.CarService
 import com.ripostelabs.carlauncher.carlib.GatewayHandshake // v3.0
 import com.ripostelabs.carlauncher.carlib.RootShell
@@ -299,6 +300,18 @@ class MainActivity : ComponentActivity() {
             carEvents.swcKeys.collect { key ->
                 val nav = SwcNavigator.resolve(key, wheelMap) ?: return@collect
                 if (key.down) keyPump.down(nav) else keyPump.up(nav)
+            }
+        }
+
+        // Every MCU frame folds into the one vehicle snapshot the capture service owns, for as
+        // long as this activity exists — which, for the HOME app, is the whole drive. Before this
+        // the Vehicle screen folded them itself, so the speed calibration only collected MCU
+        // candidates while someone was looking at that page. This is the ONLY place MCU frames
+        // are folded: a second fold of the same frame would mint a second calibration sample.
+        lifecycleScope.launch {
+            carEvents.canRaw.collect { frame ->
+                val bytes = frame?.bytes ?: return@collect
+                CanCaptureService.vehicle().onFrame(bytes, System.currentTimeMillis())
             }
         }
 
