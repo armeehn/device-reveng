@@ -30,6 +30,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.ripostelabs.carlauncher.carlib.CarEvents
+import com.ripostelabs.carlauncher.data.AccessoryRuntime
 import com.ripostelabs.carlauncher.service.CanCaptureService
 import com.ripostelabs.carlauncher.carlib.CarService
 import com.ripostelabs.carlauncher.carlib.GatewayHandshake // v3.0
@@ -314,6 +315,16 @@ class MainActivity : ComponentActivity() {
                 CanCaptureService.vehicle().onFrame(bytes, System.currentTimeMillis())
             }
         }
+
+        // Accessories run for the life of the launcher, like the frame fold above: a trigger such
+        // as "reverse → work lights" has to work with no settings screen open. Rebuilt whole on
+        // every change of the stored blob.
+        lifecycleScope.launch {
+            settingsStore.settings.map { it.accessoryConfigJson }.distinctUntilChanged().collect { json ->
+                AccessoryRuntime.configure(json)
+            }
+        }
+        AccessoryRuntime.start(lifecycleScope)
 
         // btsuite pops its own floating call window on every call (CallPopupGuard). Knock it
         // down while the launcher is what the driver sees; elsewhere it stays the vendor's.

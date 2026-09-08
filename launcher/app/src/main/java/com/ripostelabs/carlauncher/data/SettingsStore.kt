@@ -106,6 +106,12 @@ data class LauncherSettings(
     /** Hold / double-press actions for the wheel keys; on by default, see [WheelGestureBindings]. */
     val wheelGestures: WheelGestureBindings = WheelGestureBindings(),
     /**
+     * The accessory board, sequences and triggers, as one JSON blob (see `AccessoryConfig`).
+     * Kept raw here and parsed where it is used, so a bad paste degrades in one place with a
+     * list of what was dropped rather than failing the whole settings read.
+     */
+    val accessoryConfigJson: String = "",
+    /**
      * Hide a Choiceway app from the drawer once our replacement is installed ([OemApps]).
      * On by default: it only ever hides an app whose stand-in is present, so a unit with no
      * suite keeps every OEM app. Off puts the twins back for a side-by-side comparison.
@@ -207,6 +213,7 @@ class SettingsStore(context: Context) {
                         ),
                         double = WheelGestureBindings.decode(prefs[WHEEL_DOUBLE_KEY], emptyMap()),
                     ),
+                    accessoryConfigJson = prefs[ACCESSORY_CONFIG_KEY] ?: "",
                     hideReplacedOemApps = prefs[HIDE_REPLACED_OEM_KEY] ?: true,
                     hideOemSettings = prefs[HIDE_OEM_SETTINGS_KEY] ?: false,
                     hideVendorCallPopup = prefs[HIDE_VENDOR_CALL_POPUP_KEY] ?: true,
@@ -294,6 +301,10 @@ class SettingsStore(context: Context) {
     }
 
     /** Bind [key]'s hold to [action]; the whole map is re-encoded from the current snapshot. */
+    fun setAccessoryConfig(json: String) = scope.launch {
+        ds.edit { it[ACCESSORY_CONFIG_KEY] = json }
+    }
+
     fun setWheelLong(key: WheelKey, action: WheelGestureAction) = scope.launch {
         val next = settings.value.wheelGestures.long + (key to action)
         ds.edit { it[WHEEL_LONG_KEY] = WheelGestureBindings.encode(next) }
@@ -342,6 +353,7 @@ class SettingsStore(context: Context) {
         val WHEEL_GESTURES_KEY = booleanPreferencesKey("wheel_gestures_enabled")
         val WHEEL_LONG_KEY = stringPreferencesKey("wheel_gestures_long")
         val WHEEL_DOUBLE_KEY = stringPreferencesKey("wheel_gestures_double")
+        val ACCESSORY_CONFIG_KEY = stringPreferencesKey("accessory_config") // AccessoryConfig blob
         val HIDE_REPLACED_OEM_KEY = booleanPreferencesKey("hide_replaced_oem_apps") // OemApps shadow
         val HIDE_OEM_SETTINGS_KEY = booleanPreferencesKey("hide_oem_settings") // OemApps shadow
         val HIDE_VENDOR_CALL_POPUP_KEY = booleanPreferencesKey("hide_vendor_call_popup") // CallPopupGuard
