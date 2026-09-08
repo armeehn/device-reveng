@@ -254,6 +254,19 @@ private fun CanableRows(status: CanableStatus, onGrant: () -> Unit) {
                 label = "ECU speed (OBD 0x0D)",
                 value = status.obdKmh?.let { "$it km/h (${status.obdReplies} replies)" } ?: "no answer yet",
             )
+            // The calibration, as evidence rather than as a speedometer. A scale appears only when
+            // enough paired points span enough range; until then the row says how far along it is.
+            InfoRow(label = "Calibration samples", value = "${status.calibrationSamples}")
+            val fit = status.fit
+            InfoRow(
+                label = "0x17 scale",
+                value = fit?.scale017?.let { "%.4f km/h per LSB (%d pts, %d bands)".format(it, fit.usable, fit.bands) }
+                    ?: "not yet",
+            )
+            InfoRow(
+                label = "0x13 scale",
+                value = fit?.scale013?.let { "%.4f km/h per LSB".format(it) } ?: "not yet",
+            )
 
             Spacer(Modifier.size(8.dp))
             if (status.frames == 0L) {

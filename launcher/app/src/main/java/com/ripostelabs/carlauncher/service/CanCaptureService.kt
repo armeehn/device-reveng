@@ -11,6 +11,7 @@ import android.os.IBinder
 import android.util.Log
 import com.ripostelabs.carlauncher.carlib.CanableSource
 import com.ripostelabs.carlauncher.carlib.CanableStatus
+import com.ripostelabs.carlauncher.carlib.SpeedCalibration
 import com.ripostelabs.carlauncher.carlib.VehicleState
 
 /**
@@ -85,9 +86,18 @@ class CanCaptureService : Service() {
          * outlives any screen: a reading that arrived while nobody was looking is still there
          * when someone opens the Vehicle page.
          */
-        private val vehicleState = VehicleState()
+        /**
+         * The one speed calibration. MCU candidates reach it through [vehicleState] whenever a
+         * screen folds MCU frames; ECU answers reach it from the reader. Both halves have to be
+         * alive for a sample to be usable, which is why they share an owner.
+         */
+        private val calibration = SpeedCalibration()
+
+        private val vehicleState = VehicleState(calibration)
 
         fun vehicle(): VehicleState = vehicleState
+
+        fun calibration(): SpeedCalibration = calibration
 
         /**
          * The one reader in the process. Shared so the screen and the service never open the
@@ -95,7 +105,7 @@ class CanCaptureService : Service() {
          */
         @Synchronized
         fun shared(context: Context): CanableSource =
-            instance ?: CanableSource.create(context, vehicleState).also { instance = it }
+            instance ?: CanableSource.create(context, vehicleState, calibration).also { instance = it }
 
         fun start(context: Context) {
             context.startForegroundService(Intent(context, CanCaptureService::class.java))
