@@ -1,6 +1,7 @@
 package com.ripostelabs.carlauncher.carlib
 
 import android.content.Context
+import android.util.Log
 import android.hardware.usb.UsbManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -68,7 +69,7 @@ class CanableSource private constructor(
     fun stop() {
         running = false
         worker = null
-        _status.value = CanableStatus.Idle
+        publish(CanableStatus.Idle)
     }
 
     /**
@@ -105,18 +106,18 @@ class CanableSource private constructor(
     private fun connect(bitrate: SlcanBitrate): CanableUsbLink.Session? {
         val device = link.find()
         if (device == null) {
-            _status.value = CanableStatus.NoAdapter
+            publish(CanableStatus.NoAdapter)
             return null
         }
 
         if (!link.hasPermission(device)) {
-            _status.value = CanableStatus.NoPermission
+            publish(CanableStatus.NoPermission)
             return null
         }
 
         val session = link.open(device, bitrate)
         if (session == null) {
-            _status.value = CanableStatus.Failed("claim or open refused")
+            publish(CanableStatus.Failed("claim or open refused"))
             return null
         }
 
@@ -143,17 +144,47 @@ class CanableSource private constructor(
             }
 
             published = now
-            _status.value = CanableStatus.Running(
+            publish(CanableStatus.Running(
                 version = stats.version,
                 frames = stats.frames,
                 ratePerSec = stats.ratePerSec(),
                 rejected = stats.rejected,
                 ids = stats.ids().take(MAX_IDS_SHOWN),
-            )
+            ))
         }
     }
 
+    /**
+     * Publish a state, and log it when it says something different from the last one.
+     *
+     * The screen shows this, but the screen is in a car. Logging every transition means the same
+     * result is readable over `adb logcat -s Canable` from a desk, which is the only way to check
+     * the adapter without sitting in the driver seat.
+     */
+    private fun publish(next: CanableStatus) {
+        val previous = _status.value
+        _status.value = next
+
+        if (summarise(previous) != summarise(next)) {
+            Log.i(LOG_TAG, summarise(next))
+        }
+    }
+
+    /** One line per state. Frame counts are deliberately included: a rate that stops climbing is
+     *  the signal that the bus went quiet, and that has to be visible in a log read after the
+     *  fact rather than only while watching the screen. */
+    private fun summarise(status: CanableStatus): String = when (status) {
+        is CanableStatus.Idle -> "idle"
+        is CanableStatus.NoAdapter -> "no adapter on USB"
+        is CanableStatus.NoPermission -> "adapter found, no USB permission"
+        is CanableStatus.Failed -> "adapter found, unusable: ${status.reason}"
+        is CanableStatus.Running -> "open firmware=${status.version ?: "-"} " +
+            "frames=${status.frames} rate=${status.ratePerSec}/s " +
+            "rejected=${status.rejected} ids=${status.ids.size}"
+    }
+
     companion object {
+        private const val LOG_TAG = "Canable"
         private const val RETRY_MS = 1_000L
         private const val PUBLISH_MS = 500L
         private const val MAX_IDS_SHOWN = 16
