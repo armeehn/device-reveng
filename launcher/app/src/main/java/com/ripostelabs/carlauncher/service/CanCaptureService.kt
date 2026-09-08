@@ -11,6 +11,7 @@ import android.os.IBinder
 import android.util.Log
 import com.ripostelabs.carlauncher.carlib.CanableSource
 import com.ripostelabs.carlauncher.carlib.CanableStatus
+import com.ripostelabs.carlauncher.carlib.VehicleState
 
 /**
  * CanCaptureService — keeps the bus recording while nobody is looking at the screen.
@@ -80,12 +81,21 @@ class CanCaptureService : Service() {
         private var instance: CanableSource? = null
 
         /**
+         * The one accumulating vehicle snapshot. The raw bus and the MCU both fold into it, so it
+         * outlives any screen: a reading that arrived while nobody was looking is still there
+         * when someone opens the Vehicle page.
+         */
+        private val vehicleState = VehicleState()
+
+        fun vehicle(): VehicleState = vehicleState
+
+        /**
          * The one reader in the process. Shared so the screen and the service never open the
          * device twice — a second claim on the same bulk endpoint splits the stream.
          */
         @Synchronized
         fun shared(context: Context): CanableSource =
-            instance ?: CanableSource.create(context).also { instance = it }
+            instance ?: CanableSource.create(context, vehicleState).also { instance = it }
 
         fun start(context: Context) {
             context.startForegroundService(Intent(context, CanCaptureService::class.java))

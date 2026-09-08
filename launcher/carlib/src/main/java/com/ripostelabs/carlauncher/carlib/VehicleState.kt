@@ -55,6 +55,15 @@ class VehicleState {
         _snapshot.value = _snapshot.value.foldRaw(signal, atMs)
     }
 
+    /**
+     * The same, straight off the adapter. [SlcanFrame] carries unsigned byte values so equality
+     * works; the decoder wants a ByteArray and masks each byte back to 0..255 itself, so a value
+     * of 0x80 survives the round trip through a signed Kotlin Byte.
+     */
+    fun onRawFrame(frame: SlcanFrame, atMs: Long) {
+        onRawFrame(frame.id, ByteArray(frame.data.size) { frame.data[it].toByte() }, atMs)
+    }
+
     /** The tiles to draw right now. [now] is passed in so staleness stays testable. */
     fun tiles(now: Long): List<VehicleTiles.Tile> = VehicleTiles.tilesFor(_snapshot.value, now)
 

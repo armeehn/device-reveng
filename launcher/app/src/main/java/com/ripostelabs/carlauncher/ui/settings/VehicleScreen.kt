@@ -5,15 +5,17 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.ripostelabs.carlauncher.carlib.CarEvents
-import com.ripostelabs.carlauncher.carlib.VehicleState
+import com.ripostelabs.carlauncher.service.CanCaptureService
 import com.ripostelabs.carlauncher.carlib.VehicleTiles
 import com.ripostelabs.carlauncher.ui.collectAsStateSafe
 import kotlinx.coroutines.delay
@@ -39,7 +41,15 @@ fun VehicleScreen(
     carEvents: CarEvents,
     onBack: () -> Unit,
 ) {
-    val vehicle = remember { VehicleState() }
+    // The service's snapshot, not a private one: the CANable feeds it whether or not this screen
+    // is open, and the MCU frames folded below land in the same place. One snapshot, two buses.
+    val context = LocalContext.current
+    val vehicle = remember { CanCaptureService.vehicle() }
+    DisposableEffect(Unit) {
+        CanCaptureService.start(context)
+        onDispose { }
+    }
+
     val frame by carEvents.canRaw.collectAsStateSafe(initial = null)
 
     // Each opcode rides its own frame, so every arrival is folded into the same accumulating
