@@ -163,6 +163,8 @@ fun SettingsHost(
                 onBack = ::pop,
             )
 
+            SettingsRoute.Games -> GamesScreen(onBack = ::pop)
+
             // What the car is reporting, as tiles. The logic behind it is unit-tested; this
             // route only draws.
             SettingsRoute.Vehicle -> VehicleScreen(
@@ -308,6 +310,7 @@ sealed interface SettingsRoute {
     data object Radar : SettingsRoute
     data object RadarCapture : SettingsRoute // v2.8
     data object Vehicle : SettingsRoute
+    data object Games : SettingsRoute
     data object CanCapture : SettingsRoute // v0.4.3
     data object RadioInfoCapture : SettingsRoute // v0.4.3
     data object VehicleDataCapture : SettingsRoute // v0.4.3

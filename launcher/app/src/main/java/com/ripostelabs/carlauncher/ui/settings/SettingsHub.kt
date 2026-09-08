@@ -6,6 +6,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.BrightnessMedium
 import androidx.compose.material.icons.filled.DataObject
+import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.GridView
@@ -150,6 +151,12 @@ fun SettingsHub(
                 title = "Vehicle",
                 subtitle = "Engine, hybrid, doors, tyres — what the car is reporting",
                 onClick = { onOpen(SettingsRoute.Vehicle) },
+            )
+            SettingsCategoryCard(
+                icon = Icons.Filled.SportsEsports,
+                title = "Games",
+                subtitle = "RetroArch and other emulators — available when parked",
+                onClick = { onOpen(SettingsRoute.Games) },
             )
             SettingsCategoryCard(
                 icon = Icons.Filled.DataObject,
