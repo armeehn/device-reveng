@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- CANable 2.0 Pro. Matching here is what grants USB permission without a dialog on
+         every attach, and it is why a capture can start hands-free on a drive. -->
+    <usb-device vendor-id="5840" product-id="4478" />
+</resources>

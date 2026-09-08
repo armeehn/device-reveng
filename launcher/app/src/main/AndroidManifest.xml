@@ -39,6 +39,12 @@
          serial node to open. Not required: the launcher must still install on a unit without
          host mode, it simply finds no adapter. -->
     <uses-feature android:name="android.hardware.usb.host" android:required="false" />
+
+    <!-- Recording has to survive a whole ignition cycle with no screen open. connectedDevice is
+         the honest type: this is an app talking to attached hardware. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
 
     <!-- v0.7 auto-updater: HTTPS to the GitHub releases API (UpdateController). The app's
@@ -170,6 +176,31 @@
             android:authorities="${applicationId}.theme"
             android:exported="true"
             android:grantUriPermissions="false" />
-    </application>
+    
+        <service
+            android:name=".service.CanCaptureService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
+
+        <!--
+          A no-UI trampoline, deliberately NOT the launcher activity. USB_DEVICE_ATTACHED has to
+          sit on an activity for Android to grant device permission, but putting it on the HOME
+          activity would tie the launcher's own lifecycle to plugging in an adapter.
+        -->
+        <activity
+            android:name=".service.UsbAttachActivity"
+            android:exported="true"
+            android:noHistory="true"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.NoDisplay">
+            <intent-filter>
+                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
+                android:resource="@xml/canable_device_filter" />
+        </activity>
+
+</application>
 
 </manifest>
