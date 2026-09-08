@@ -282,7 +282,24 @@ object HiworldCanDecoder {
     /**
      * 0x31 climate.
      *
-     * **This is the climate message on this car, not the generic 0x2x one.** The OEM's generic
+     * **UNVERIFIED AGAINST A REAL VEHICLE.** Every field below was read out of the decompiled
+     * vendor parser and unit-tested against synthetic payloads. No frame from an actual car has
+     * ever been checked against it, and the first person to look at the readout reported that it
+     * does not track what they press.
+     *
+     * Two reasons to distrust it until a capture says otherwise:
+     *  - The decompile proves how the OEM app PARSES bytes. It does not prove those bytes arrive,
+     *    nor that this vehicle's CANBOX uses this opcode.
+     *  - The OEM's own climate screen reportedly never worked on this unit. If their display was
+     *    broken, decoding their parser may be decoding a message that is never sent.
+     *
+     * To settle it: logcat the unit while changing one climate control, see which opcode actually
+     * moves, and confirm the byte that changes. Until then treat the readout as a hypothesis.
+     *
+     * Nothing drives a control from this — it feeds the CAN capture diagnostic screen only, so a
+     * wrong layout shows bad numbers on a debug page and costs nothing else.
+     *
+     * **Believed to be the climate message on this car rather than the generic 0x2x one.** The OEM's generic
      * OnHandleCanAirCmd returns immediately when its mHas31ClimateData flag is set, which it is
      * here, so the generic handler's byte layout is dead code on this vehicle. Reading it instead
      * produces a plausible but entirely wrong decode. Layout below is from

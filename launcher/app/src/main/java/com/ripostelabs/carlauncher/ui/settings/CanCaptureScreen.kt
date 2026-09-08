@@ -251,7 +251,9 @@ private fun decodedRows(sig: CanSignal): Map<String, String> = when (sig) {
     is CanSignal.Climate -> buildMap {
         fun temp(v: Double?) = v?.let { "%.1f".format(it) + if (sig.tempUnitCelsius) "\u00B0C" else "\u00B0F" } ?: "LO/HI"
         fun level(v: Int) = if (v == 0) "off" else "$v"
-        put("Climate", if (sig.on) "on" else "off")
+        // Flagged in the UI, not just in a comment: this layout has never been checked against
+        // a real vehicle and was reported as not tracking the physical controls.
+        put("Climate", (if (sig.on) "on" else "off") + "  (unverified decode)")
         put("A/C", listOfNotNull(
             if (sig.acOn) "on" else null,
             if (sig.acMax) "max" else null,
