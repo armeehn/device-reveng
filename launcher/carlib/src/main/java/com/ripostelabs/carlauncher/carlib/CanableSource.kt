@@ -35,6 +35,9 @@ sealed class CanableStatus {
         val rejected: Long,
         val ids: List<Pair<Int, Int>>,
 
+        /** Every distinct id on the bus, not just the [ids] the screen shows. */
+        val distinctIds: Int = 0,
+
         /**
          * Lines that were neither a frame nor an acknowledgement. Carried because a read that
          * returns bytes which decode to nothing is a real state — a wrong line terminator, or a
@@ -162,11 +165,12 @@ class CanableSource private constructor(
 
             published = now
             publish(CanableStatus.Running(
-                version = stats.version,
+                version = stats.version ?: stats.banner,
                 frames = stats.frames,
                 ratePerSec = stats.ratePerSec(),
                 rejected = stats.rejected,
                 ids = stats.ids().take(MAX_IDS_SHOWN),
+                distinctIds = stats.distinctIds,
                 unparsed = stats.unparsed,
             ))
         }
@@ -198,7 +202,7 @@ class CanableSource private constructor(
         is CanableStatus.Failed -> "adapter found, unusable: ${status.reason}"
         is CanableStatus.Running -> "open firmware=${status.version ?: "-"} " +
             "frames=${status.frames} rate=${status.ratePerSec}/s " +
-            "rejected=${status.rejected} unparsed=${status.unparsed} ids=${status.ids.size}"
+            "rejected=${status.rejected} unparsed=${status.unparsed} ids=${status.distinctIds}"
     }
 
     companion object {

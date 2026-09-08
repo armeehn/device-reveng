@@ -232,7 +232,7 @@ private fun CanableRows(status: CanableStatus, onGrant: () -> Unit) {
             InfoRow(label = "Rate", value = "${status.ratePerSec} /s")
             InfoRow(label = "Rejected", value = "${status.rejected}")
             InfoRow(label = "Unreadable lines", value = "${status.unparsed}")
-            InfoRow(label = "Distinct IDs", value = "${status.ids.size}")
+            InfoRow(label = "Distinct IDs", value = "${status.distinctIds}")
 
             Spacer(Modifier.size(8.dp))
             if (status.frames == 0L) {
