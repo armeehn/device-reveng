@@ -34,6 +34,13 @@ sealed class CanableStatus {
         val ratePerSec: Int,
         val rejected: Long,
         val ids: List<Pair<Int, Int>>,
+
+        /**
+         * Lines that were neither a frame nor an acknowledgement. Carried because a read that
+         * returns bytes which decode to nothing is a real state — a wrong line terminator, or a
+         * protocol that is not slcan — and without this counter it is reported as pure silence.
+         */
+        val unparsed: Long = 0,
     ) : CanableStatus()
 
     /** Enumerated, but could not be claimed or opened. */
@@ -150,6 +157,7 @@ class CanableSource private constructor(
                 ratePerSec = stats.ratePerSec(),
                 rejected = stats.rejected,
                 ids = stats.ids().take(MAX_IDS_SHOWN),
+                unparsed = stats.unparsed,
             ))
         }
     }
@@ -180,7 +188,7 @@ class CanableSource private constructor(
         is CanableStatus.Failed -> "adapter found, unusable: ${status.reason}"
         is CanableStatus.Running -> "open firmware=${status.version ?: "-"} " +
             "frames=${status.frames} rate=${status.ratePerSec}/s " +
-            "rejected=${status.rejected} ids=${status.ids.size}"
+            "rejected=${status.rejected} unparsed=${status.unparsed} ids=${status.ids.size}"
     }
 
     companion object {

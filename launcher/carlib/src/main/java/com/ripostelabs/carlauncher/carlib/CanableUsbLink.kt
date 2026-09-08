@@ -152,7 +152,8 @@ class CanableUsbLink(private val manager: UsbManager) {
             // to tell apart from a frame count.
             if (polls < LOGGED_POLLS) {
                 polls++
-                Log.i(LOG_TAG, "read=$read after ${System.currentTimeMillis() - startedAt}ms")
+                Log.i(LOG_TAG, "read=$read after ${System.currentTimeMillis() - startedAt}ms" +
+                    if (read > 0) " " + preview(read) else "")
             }
 
             if (read <= 0) {
@@ -160,6 +161,22 @@ class CanableUsbLink(private val manager: UsbManager) {
             }
 
             return reader.feed(buffer, read)
+        }
+
+        /**
+         * Hex and printable ASCII for the head of a read.
+         *
+         * A byte count alone was not enough: the first read returned 51 bytes that decoded to no
+         * frames, no version and no error, which can mean the wrong line terminator, a banner, or
+         * a protocol that is not slcan at all. Those are indistinguishable without the bytes.
+         */
+        private fun preview(read: Int): String {
+            val n = minOf(read, PREVIEW_BYTES)
+            val hex = (0 until n).joinToString(" ") { "%02X".format(buffer[it].toInt() and 0xFF) }
+            val text = (0 until n).map { buffer[it].toInt() and 0xFF }
+                .joinToString("") { if (it in 0x20..0x7E) it.toChar().toString() else "." }
+
+            return "| $hex | $text"
         }
 
         /** Ask the adapter for its firmware version. The reply arrives via [poll] as text. */
@@ -305,6 +322,9 @@ class CanableUsbLink(private val manager: UsbManager) {
 
         /** How many reads to narrate before going quiet. Enough to see the pattern. */
         private const val LOGGED_POLLS = 12
+
+        /** Enough of a read to identify a protocol without flooding the log. */
+        private const val PREVIEW_BYTES = 48
 
         /** The firmware needs a moment between close, bitrate and open. Matches the shell probe. */
         private const val SETTLE_MS = 200L
