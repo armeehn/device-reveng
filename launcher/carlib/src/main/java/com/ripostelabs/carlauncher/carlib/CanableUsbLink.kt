@@ -102,6 +102,10 @@ class CanableUsbLink(private val manager: UsbManager) {
         private val claimed = ArrayList<UsbInterface>()
         private var polls = 0
 
+        /** Bytes the last [poll] moved: > 0 data, 0 empty, < 0 the transfer failed. */
+        var lastRead: Int = 0
+            private set
+
         /** Claim the interfaces, raise DTR, then close/set-bitrate/open the CAN channel. */
         internal fun start(bitrate: SlcanBitrate): Boolean {
             if (!claim(pipes.dataInterface)) {
@@ -146,6 +150,7 @@ class CanableUsbLink(private val manager: UsbManager) {
 
             val startedAt = System.currentTimeMillis()
             val read = connection.bulkTransfer(endpoint, buffer, buffer.size, timeoutMs)
+            lastRead = read
 
             // Log the first few reads whatever they say. A -1 after the full timeout is an idle
             // bus; a -1 that returns immediately is a failing transfer, and the two are impossible

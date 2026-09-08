@@ -137,11 +137,21 @@ class CanableSource private constructor(
 
     private fun read(session: CanableUsbLink.Session) {
         val stats = CanableStats()
+        val watchdog = ReadWatchdog()
         var published = 0L
 
         while (running) {
             for (event in session.poll()) {
                 stats.record(event)
+            }
+
+            // Unplugging the adapter mid-session does not fail the reads, it just makes them
+            // empty forever. Without this the loop span on a dead handle, still publishing the
+            // last good state, and only a restart recovered it.
+            watchdog.record(session.lastRead)
+            if (watchdog.shouldVerifyDevice() && link.find() == null) {
+                publish(CanableStatus.NoAdapter)
+                return
             }
 
             // Repainting per frame would push ~1215 recompositions a second at the UI.
