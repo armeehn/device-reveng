@@ -35,6 +35,10 @@
 
     <!-- v3.1 status chips: read-only Wi-Fi / network state for the top-bar indicators. -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- The CANable is claimed over USB host; this kernel has no CDC-ACM driver, so there is no
+         serial node to open. Not required: the launcher must still install on a unit without
+         host mode, it simply finds no adapter. -->
+    <uses-feature android:name="android.hardware.usb.host" android:required="false" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
 
     <!-- v0.7 auto-updater: HTTPS to the GitHub releases API (UpdateController). The app's

@@ -1,5 +1,8 @@
 package com.ripostelabs.carlauncher.carlib
 
+import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
 import android.hardware.usb.UsbConstants
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbDeviceConnection
@@ -23,6 +26,21 @@ class CanableUsbLink(private val manager: UsbManager) {
     /** Find an attached CANable. Returns null when none is plugged in, or none we recognise. */
     fun find(): UsbDevice? = manager.deviceList.values.firstOrNull {
         it.vendorId == VENDOR_ID && it.productId == PRODUCT_ID
+    }
+
+    /** Whether the launcher may already claim [device], without prompting. */
+    fun hasPermission(device: UsbDevice): Boolean = manager.hasPermission(device)
+
+    /**
+     * Prompt for access to [device]. The system answers with a broadcast, which nothing here
+     * listens for: callers re-check [hasPermission] instead, so a granted dialog simply makes the
+     * next attempt succeed and a dismissed one changes nothing.
+     */
+    fun requestPermission(context: Context, device: UsbDevice) {
+        val intent = Intent(ACTION_USB_PERMISSION).setPackage(context.packageName)
+        val pending = PendingIntent.getBroadcast(context, 0, intent, PendingIntent.FLAG_IMMUTABLE)
+
+        manager.requestPermission(device, pending)
     }
 
     /**
@@ -121,6 +139,9 @@ class CanableUsbLink(private val manager: UsbManager) {
             return reader.feed(buffer, read)
         }
 
+        /** Ask the adapter for its firmware version. The reply arrives via [poll] as text. */
+        fun askVersion(): Boolean = write(SlcanCodec.version())
+
         /** Transmit one frame, e.g. the OBD speed request `7DF#02 01 0D …`. */
         fun send(frame: SlcanFrame): Boolean = write(SlcanCodec.transmit(frame))
 
@@ -174,6 +195,9 @@ class CanableUsbLink(private val manager: UsbManager) {
     }
 
     companion object {
+        /** Our own broadcast action; the system echoes it back with the permission verdict. */
+        private const val ACTION_USB_PERMISSION = "com.ripostelabs.carlauncher.USB_PERMISSION"
+
         /** CANable 2.0 Pro running the slcan firmware. */
         const val VENDOR_ID = 0x16D0
         const val PRODUCT_ID = 0x117E

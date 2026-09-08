@@ -12,16 +12,20 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import com.ripostelabs.carlauncher.ui.theme.JetBrainsMono
 import com.ripostelabs.carlauncher.carlib.CanFrame
+import com.ripostelabs.carlauncher.carlib.CanableSource
+import com.ripostelabs.carlauncher.carlib.CanableStatus
 import com.ripostelabs.carlauncher.carlib.CanSignal
 import com.ripostelabs.carlauncher.carlib.CarEvents
 import com.ripostelabs.carlauncher.carlib.HiworldCanDecoder
@@ -59,6 +63,16 @@ fun CanCaptureScreen(
     onBack: () -> Unit,
 ) {
     val frame by carEvents.canRaw.collectAsStateSafe(initial = null)
+
+    // The USB adapter is a second, independent path to the same bus: the vendor broadcast above is
+    // whatever the MCU chose to forward, this is the wire. Started only while the screen is open.
+    val context = LocalContext.current
+    val canable = remember { CanableSource.create(context) }
+    val usb by canable.status.collectAsStateSafe(initial = CanableStatus.Idle)
+    DisposableEffect(canable) {
+        canable.start()
+        onDispose { canable.stop() }
+    }
 
     var capture by remember { mutableStateOf(RadarCapture()) }
     var lastFrame by remember { mutableStateOf<CanFrame?>(null) }
@@ -166,6 +180,75 @@ fun CanCaptureScreen(
                 )
             } else {
                 ByteTable(capture = capture)
+            }
+        }
+
+        SettingsSection(title = "USB CAN adapter (CANable)") {
+            CanableRows(status = usb, onGrant = { canable.requestAccess() })
+        }
+    }
+}
+
+/**
+ * The adapter's own state, kept apart from the vendor broadcast above.
+ *
+ * Three readings, because "nothing is happening" has three different causes and one number cannot
+ * separate them:
+ *   - **Firmware** answered → the USB path works, whatever CAN is doing.
+ *   - **Frames** climbing → CAN-H/CAN-L are on a live bus.
+ *   - **Rejected** climbing → the adapter refused a command, so the channel likely never opened.
+ */
+@Composable
+private fun CanableRows(status: CanableStatus, onGrant: () -> Unit) {
+    when (status) {
+        is CanableStatus.Idle -> Text(
+            text = "Not started.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        is CanableStatus.NoAdapter -> Text(
+            text = "No CANable found on either USB port. This kernel has no CDC-ACM driver, so the " +
+                "adapter never appears as /dev/ttyACM* — it is claimed directly over USB instead.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        is CanableStatus.NoPermission -> ActionRow(
+            label = "Grant USB access",
+            description = "Adapter found. Android needs permission before it can be claimed.",
+            onClick = onGrant,
+        )
+
+        is CanableStatus.Failed -> Text(
+            text = "Adapter found but not usable: ${status.reason}.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.error,
+        )
+
+        is CanableStatus.Running -> {
+            InfoRow(label = "Firmware", value = status.version ?: "no answer yet")
+            InfoRow(label = "Frames", value = "${status.frames}")
+            InfoRow(label = "Rate", value = "${status.ratePerSec} /s")
+            InfoRow(label = "Rejected", value = "${status.rejected}")
+            InfoRow(label = "Distinct IDs", value = "${status.ids.size}")
+
+            Spacer(Modifier.size(8.dp))
+            if (status.frames == 0L) {
+                Text(
+                    text = if (status.version == null) {
+                        "Channel open, adapter silent. Nothing has been read back at all yet."
+                    } else {
+                        "Adapter is talking, but no CAN frames. CAN-H/CAN-L are probably not on the " +
+                            "HiWorld tap (pin 11 H, pin 12 L, pin 1 GND), or the car is off."
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                status.ids.forEach { (id, count) ->
+                    InfoRow(label = "0x%03X".format(id), value = "$count")
+                }
             }
         }
     }
