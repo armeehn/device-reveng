@@ -247,6 +247,13 @@ private fun CanableRows(status: CanableStatus, onGrant: () -> Unit) {
             InfoRow(label = "Unreadable lines", value = "${status.unparsed}")
             InfoRow(label = "Distinct IDs", value = "${status.distinctIds}")
             InfoRow(label = "Captured", value = "${status.captureBytes / 1024} kB")
+            // The ECU's own answer, here and only here. It is the reference the candidate speed
+            // fields are calibrated against, not a candidate itself — but the Vehicle page still
+            // shows no speed until one of them is calibrated, and this row does not change that.
+            InfoRow(
+                label = "ECU speed (OBD 0x0D)",
+                value = status.obdKmh?.let { "$it km/h (${status.obdReplies} replies)" } ?: "no answer yet",
+            )
 
             Spacer(Modifier.size(8.dp))
             if (status.frames == 0L) {

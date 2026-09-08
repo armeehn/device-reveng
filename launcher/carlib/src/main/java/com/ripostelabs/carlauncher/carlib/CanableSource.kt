@@ -41,6 +41,10 @@ sealed class CanableStatus {
         /** Every distinct id on the bus, not just the [ids] the screen shows. */
         val distinctIds: Int = 0,
 
+        /** The ECU's own km/h from OBD PID 0x0D, or null until it answers. Diagnostic only. */
+        val obdKmh: Int? = null,
+        val obdReplies: Long = 0,
+
         /** Where the capture is being written, and how much of it exists so far. */
         val capturePath: String? = null,
         val captureBytes: Long = 0,
@@ -235,6 +239,11 @@ class CanableSource private constructor(
     ) {
         var published = publishedAt
 
+        // The one thing this service transmits: a bounded-rate request for the ECU's own speed,
+        // the reference the candidate speed fields get calibrated against. Every reply is also
+        // in the capture file, since it is just another frame on the bus.
+        val poller = ObdPoller()
+
         while (running) {
             for (event in session.poll()) {
                 stats.record(event)
@@ -244,7 +253,12 @@ class CanableSource private constructor(
                 if (event is SlcanEvent.Received) {
                     capture.record(event.frame)
                     vehicle.onRawFrame(event.frame, System.currentTimeMillis())
+                    ObdSpeed.parse(event.frame)?.let { stats.recordObd(it) }
                 }
+            }
+
+            if (poller.shouldSend(System.currentTimeMillis())) {
+                session.send(ObdSpeed.request())
             }
 
             // Unplugging the adapter mid-session does not fail the reads, it just makes them
@@ -270,6 +284,8 @@ class CanableSource private constructor(
                 rejected = stats.rejected,
                 ids = stats.ids().take(MAX_IDS_SHOWN),
                 distinctIds = stats.distinctIds,
+                obdKmh = stats.obdKmh,
+                obdReplies = stats.obdReplies,
                 unparsed = stats.unparsed,
                 capturePath = capture.path(),
                 captureBytes = capture.bytes,
@@ -304,6 +320,7 @@ class CanableSource private constructor(
         is CanableStatus.Running -> "open firmware=${status.version ?: "-"} " +
             "frames=${status.frames} rate=${status.ratePerSec}/s " +
             "rejected=${status.rejected} unparsed=${status.unparsed} ids=${status.distinctIds} " +
+            "obd=${status.obdKmh?.let { "${it}km/h" } ?: "-"} " +
             "captured=${status.captureBytes}B"
     }
 
