@@ -34,6 +34,7 @@ object HiworldCanDecoder {
     private const val OP_RPM_GEAR_MIRROR = 0x1A // unparsed by OEM; RPM + gear raw found in capture
     private const val OP_HYBRID = 0x1F         // hybrid battery + energy flow
     private const val OP_VEHICLE_INFO = 0x32   // RPM / coolant (NOT road speed — see 2026-08-29 finding)
+    private const val OP_SYS_EVENT = 0x71     // gateway system event; carries the reverse flag
     private const val OP_SIDE_CAMERA = 0x18   // OEM calls it LightInfo; on this car it drives the side cameras
     private const val OP_CLIMATE = 0x31       // full climate state (this car uses 0x31, not the generic one)
     private const val OP_RADAR = 0x41          // PDC ultrasonic front/rear
@@ -81,6 +82,12 @@ object HiworldCanDecoder {
     private const val CAM_RIGHT = 0x80
     private const val CAM_LEFT = 0x40
     private const val CAM_LEFT_FORCE = 0x08
+
+    // 0x71 p[0], from EventService.onCmdSysEvent. Only the bits the gateway names are decoded;
+    // the rest stay in SysEvent.raw rather than being given invented meanings.
+    private const val SYS_DISC = 0x80
+    private const val SYS_USB = 0x40
+    private const val SYS_REVERSE = 0x02
 
     /** OEM climate sentinels: the setpoint byte reads "LO"/"HI" rather than a temperature. */
     private const val TEMP_LO = 0xFE
@@ -139,6 +146,7 @@ object HiworldCanDecoder {
         OP_HYBRID -> decodeHybrid(payload)
         OP_BASIC_STATUS -> decodeBasicStatus(payload)
         OP_TPMS -> decodeTpms(payload)
+        OP_SYS_EVENT -> decodeSysEvent(payload)
         OP_SIDE_CAMERA -> decodeSideCamera(payload)
         OP_CLIMATE -> decodeClimate(payload)
         OP_RADAR -> decodeRadar(payload)
@@ -265,6 +273,36 @@ object HiworldCanDecoder {
             tailgateOpen = (doorBits and DOOR_TAILGATE) != 0,
             hoodOpen = (doorBits and DOOR_HOOD) != 0,
             steerAngleDeg = signed / 14.0,
+        )
+    }
+
+    /**
+     * 0x71 system event — the digest's own reverse flag.
+     *
+     * Traced through the vendor gateway rather than the car parser, which is why it is absent from
+     * `HiworldCanParseToyota`: `EventService.processCmd` reads the opcode from `bArr[0]` and passes
+     * the whole frame on, so its `bArr[1]` is this decoder's `payload[0]`. That offset was derived
+     * hop by hop, not assumed — a wrong assumption about exactly this cost two inverted signals
+     * earlier in the same session.
+     *
+     * `onCmdSysEvent` computes reverse as `(bArr[1] & 2) > 0 && mAccOpenState`.
+     *
+     * **[reverseRaw] is the bit ALONE, without the ACC gate**, because this decoder has no view of
+     * accessory state. The gateway also suppresses the transition entirely while its
+     * `mAppBackcarEnable` flag is set, i.e. when an app asked for the camera itself. A caller that
+     * wants to match the vendor's own behaviour must AND with ACC; a caller that wants to know what
+     * the car said should use the raw bit.
+     *
+     * NOT actuation-verified. The reverse camera was physically disconnected on the day this was
+     * written, so nothing here has been seen to move on a real vehicle.
+     */
+    private fun decodeSysEvent(p: ByteArray): CanSignal.SysEvent {
+        val b = u(p, 0)
+        return CanSignal.SysEvent(
+            reverseRaw = (b and SYS_REVERSE) != 0,
+            discPresent = (b and SYS_DISC) != 0,
+            usbPresent = (b and SYS_USB) != 0,
+            raw = b,
         )
     }
 
@@ -634,6 +672,17 @@ sealed interface CanSignal {
         val hoodOpen: Boolean,
         /** Degrees; positive/negative per steering direction. Scale = raw/14 (OEM). */
         val steerAngleDeg: Double,
+    ) : CanSignal
+
+    /**
+     * 0x71 — gateway system event. [reverseRaw] is the reverse bit WITHOUT the vendor's ACC gate;
+     * see the decoder for why, and [raw] carries the bits nobody has named yet.
+     */
+    data class SysEvent(
+        val reverseRaw: Boolean,
+        val discPresent: Boolean,
+        val usbPresent: Boolean,
+        val raw: Int,
     ) : CanSignal
 
     /**
