@@ -8,6 +8,7 @@ import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbInterface
 import android.hardware.usb.UsbManager
+import android.util.Log
 
 /**
  * CanableUsbLink — the CANable 2.0 Pro as a stream of CAN frames, over Android's USB host API.
@@ -106,12 +107,14 @@ class CanableUsbLink(private val manager: UsbManager) {
                 return false
             }
 
-            // The comm interface is what SET_CONTROL_LINE_STATE is addressed to. A native-USB CDC
-            // device will not transmit until DTR is asserted, so a missing claim here reads as an
-            // adapter that opened and then said nothing.
+            // The comm interface is what the CDC control requests are addressed to. A native-USB
+            // CDC device will not transmit until the host has configured the line and asserted
+            // DTR, so skipping this reads as an adapter that opened and then said nothing.
             pipes.controlInterface?.let {
                 claim(it)
-                setControlLineState(it)
+                val coding = setLineCoding(it)
+                val dtr = setControlLineState(it)
+                Log.i(LOG_TAG, "control iface=$it lineCoding=$coding dtr=$dtr")
             }
 
             for (command in SlcanCodec.startup(bitrate)) {
@@ -133,6 +136,11 @@ class CanableUsbLink(private val manager: UsbManager) {
             val endpoint = endpoint(pipes.bulkIn) ?: return emptyList()
             val read = connection.bulkTransfer(endpoint, buffer, buffer.size, timeoutMs)
             if (read <= 0) {
+                // A timeout is -1 and normal on a quiet bus; anything else is worth seeing once.
+                if (read < -1) {
+                    Log.w(LOG_TAG, "read returned $read")
+                }
+
                 return emptyList()
             }
 
@@ -168,11 +176,38 @@ class CanableUsbLink(private val manager: UsbManager) {
             }
 
             claimed.add(iface)
+            Log.i(LOG_TAG, "claimed iface=$index endpoints=" +
+                (0 until iface.endpointCount).joinToString(",") {
+                    "0x%02X".format(iface.getEndpoint(it).address)
+                })
+
             return true
         }
 
+        /**
+         * USB CDC 1.2 §6.2.12: SET_LINE_CODING. The rate is meaningless to a native-USB adapter,
+         * but the request is not: firmware built on the stock STM32 CDC stack stays silent until
+         * the host has configured the line at least once.
+         *
+         *     dwDTERate (4 bytes, LE) | bCharFormat | bParityType | bDataBits
+         *     115200 = 00 C2 01 00    | 0 = 1 stop  | 0 = none    | 8
+         */
+        private fun setLineCoding(commInterface: Int): Int {
+            val coding = byteArrayOf(0x00, 0xC2.toByte(), 0x01, 0x00, 0x00, 0x00, 0x08)
+
+            return connection.controlTransfer(
+                REQUEST_TYPE_CLASS_INTERFACE_OUT,
+                REQUEST_SET_LINE_CODING,
+                0,
+                commInterface,
+                coding,
+                coding.size,
+                CONTROL_TIMEOUT_MS,
+            )
+        }
+
         /** USB CDC 1.2 §6.2.14: SET_CONTROL_LINE_STATE, DTR and RTS both asserted. */
-        private fun setControlLineState(commInterface: Int) {
+        private fun setControlLineState(commInterface: Int): Int =
             connection.controlTransfer(
                 REQUEST_TYPE_CLASS_INTERFACE_OUT,
                 REQUEST_SET_CONTROL_LINE_STATE,
@@ -182,11 +217,29 @@ class CanableUsbLink(private val manager: UsbManager) {
                 0,
                 CONTROL_TIMEOUT_MS,
             )
-        }
 
+        /**
+         * Send [bytes] on the bulk OUT endpoint.
+         *
+         * A partial transfer is a failure. `bulkTransfer` returns the count it actually moved, and
+         * treating a zero-byte result as success is how a link reports itself open while the
+         * adapter has never received a single command — which is indistinguishable, from the
+         * outside, from an adapter that is simply mute.
+         */
         private fun write(bytes: ByteArray): Boolean {
-            val endpoint = endpoint(pipes.bulkOut) ?: return false
-            return connection.bulkTransfer(endpoint, bytes, bytes.size, WRITE_TIMEOUT_MS) >= 0
+            val endpoint = endpoint(pipes.bulkOut)
+            if (endpoint == null) {
+                Log.w(LOG_TAG, "write: no bulk OUT endpoint 0x%02X".format(pipes.bulkOut))
+                return false
+            }
+
+            val sent = connection.bulkTransfer(endpoint, bytes, bytes.size, WRITE_TIMEOUT_MS)
+            if (sent != bytes.size) {
+                Log.w(LOG_TAG, "write ${String(bytes).trim()} sent=$sent of ${bytes.size}")
+                return false
+            }
+
+            return true
         }
 
         private fun endpoint(address: Int) = claimed
@@ -198,12 +251,15 @@ class CanableUsbLink(private val manager: UsbManager) {
         /** Our own broadcast action; the system echoes it back with the permission verdict. */
         private const val ACTION_USB_PERMISSION = "com.ripostelabs.carlauncher.USB_PERMISSION"
 
+        private const val LOG_TAG = "Canable"
+
         /** CANable 2.0 Pro running the slcan firmware. */
         const val VENDOR_ID = 0x16D0
         const val PRODUCT_ID = 0x117E
 
         /** USB CDC 1.2 constants. */
         private const val REQUEST_TYPE_CLASS_INTERFACE_OUT = 0x21
+        private const val REQUEST_SET_LINE_CODING = 0x20
         private const val REQUEST_SET_CONTROL_LINE_STATE = 0x22
         private const val CONTROL_LINE_DTR_AND_RTS = 0x03
 
