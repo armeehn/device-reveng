@@ -17,14 +17,25 @@
 #   NODE=/dev/ttyACM0   serial node (auto-detected if unset/absent)
 #   BITRATE=S6          slcan bitrate code (S6=500k, S5=250k, S4=125k)
 #   COUNT=50            how many decoded frames to print before exiting
-#   OPENCMD=L           L=listen-only (preferred). Set OPENCMD=O only if your firmware NAKs L.
+#   OPENCMD=O           O=normal open (default). See the warning below before choosing L.
 #   SECONDS_MAX=15      hard time cap
+# WHY THE DEFAULT IS O AND NOT L.
+# Listen-only is the safer-sounding choice and was the default here. On the CANable 2.0 Pro's
+# shipped slcan firmware (build b158aa7) it is a TRAP: slcand's 'L' is accepted without a NAK,
+# the channel never opens, and the adapter delivers ZERO frames while every status looks healthy.
+# Verified in the car on 2026-09-07 -- CAN_MODE=listen-only produced nothing for an hour, and
+# switching to active fixed it instantly. Since this probe's whole job is to answer "does the
+# head unit see the bus at all", defaulting to L makes it answer NO for the wrong reason, and a
+# reader would conclude USB host mode or CDC-ACM was broken.
+#
+# O still never transmits a CAN frame. It only lets the adapter ACK, like every other node on
+# the bus. The transmit guard is unchanged: this script sends no 't'/'T' frames, ever.
 set -u
 
 NODE="${NODE:-}"
 BITRATE="${BITRATE:-S6}"
 COUNT="${COUNT:-50}"
-OPENCMD="${OPENCMD:-L}"
+OPENCMD="${OPENCMD:-O}"
 SECONDS_MAX="${SECONDS_MAX:-15}"
 CR=$(printf '\r')
 
@@ -81,7 +92,7 @@ fi
 CATPID=$!
 trap 'kill "$CATPID" 2>/dev/null; printf "C%s" "$CR" > "$NODE" 2>/dev/null; rm -f "$RAW"' EXIT INT TERM
 
-# slcan init: close (in case open) → set bitrate → open. LISTEN-ONLY unless OPENCMD=O.
+# slcan init: close (in case open) → set bitrate → open. Never transmits either way.
 say "== slcan init: C / $BITRATE / $OPENCMD (listen-only=${OPENCMD}) =="
 printf 'C%s'      "$CR" > "$NODE" 2>/dev/null; sleep 1
 printf '%s%s' "$BITRATE" "$CR" > "$NODE" 2>/dev/null; sleep 1
@@ -131,7 +142,8 @@ if [ "$seen" -eq 0 ]; then
   say "No frames. Checklist:"
   say "  • Is the tap on a LIVE bus? (ignition ON — many buses sleep with the car off.)"
   say "  • Right bitrate? Toyota powertrain = 500k (S6). Try BITRATE=S5 (250k) if silent."
-  say "  • If OPENCMD=L returned a bell (0x07), the firmware may not support listen-only —"
+  say "  • If you set OPENCMD=L, retry with OPENCMD=O: this firmware accepts L silently"
+  say "    and then delivers nothing, which looks identical to a dead bus."
   say "    rerun with OPENCMD=O (still no transmit is issued by this script)."
   say "  • CANH/CANL not swapped, 120Ω termination present on the segment."
 fi
