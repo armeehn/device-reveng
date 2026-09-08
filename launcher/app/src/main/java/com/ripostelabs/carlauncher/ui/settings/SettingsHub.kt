@@ -6,6 +6,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.BrightnessMedium
 import androidx.compose.material.icons.filled.DataObject
+import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.GraphicEq
@@ -151,6 +152,12 @@ fun SettingsHub(
                 title = "Vehicle",
                 subtitle = "Engine, hybrid, doors, tyres — what the car is reporting",
                 onClick = { onOpen(SettingsRoute.Vehicle) },
+            )
+            SettingsCategoryCard(
+                icon = Icons.Filled.Lightbulb,
+                title = "Accessories",
+                subtitle = "Lights, servos and sequences on the car network",
+                onClick = { onOpen(SettingsRoute.Accessories) },
             )
             SettingsCategoryCard(
                 icon = Icons.Filled.SportsEsports,
