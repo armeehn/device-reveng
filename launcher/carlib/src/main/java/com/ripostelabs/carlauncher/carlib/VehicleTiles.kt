@@ -75,6 +75,9 @@ object VehicleTiles {
         s.raw(Field.BRAKE_MPA, now)?.takeIf { it > 0.0 }?.let { out += Tile("Brake", "%.2f MPa".format(it)) }
         dynamicsSummary(s, now)?.let { out += Tile("Dynamics", it) }
         s.int(Field.ODOMETER_KM, now)?.let { out += Tile("Odometer", "$it km") }
+        s.raw(Field.OUTSIDE_C, now)?.let { out += Tile("Outside", "%.1f°C".format(it)) }
+        s.raw(Field.CABIN_C, now)?.let { out += Tile("Cabin", "%.1f°C".format(it)) }
+        s.int(Field.AMBIENT_LIGHT, now)?.let { out += Tile("Ambient light", "$it") }
 
         return out
     }

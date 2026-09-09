@@ -35,6 +35,7 @@ data class VehicleSnapshot(
         STEERING_DEG, RANGE_KM,
         SPEED_KMH, WHEEL_FL_KMH, WHEEL_FR_KMH, WHEEL_RL_KMH, WHEEL_RR_KMH,
         YAW_DEG_S, LATERAL_MS2, LONGITUDINAL_MS2, BRAKE_MPA, INTAKE_C, GEAR, ODOMETER_KM,
+        OUTSIDE_C, CABIN_C, AMBIENT_LIGHT,
         DOOR_BITS, REVERSE, SIDE_CAMERA_LEFT, SIDE_CAMERA_RIGHT,
         CLIMATE_ON, FAN_STEP, TEMP_LEFT_C, TEMP_RIGHT_C,
         RADAR_REAR_MIN_CM, RADAR_FRONT_MIN_CM,
@@ -123,7 +124,12 @@ data class VehicleSnapshot(
         fun VehicleSnapshot.foldRaw(sig: RawCanSignal, atMs: Long): VehicleSnapshot = when (sig) {
             is RawCanSignal.Doors -> put(atMs, Field.DOOR_BITS to packDoors(sig).toDouble())
 
+            // Each climate id carries one of the two temperatures; the other stays as it was.
             is RawCanSignal.Climate -> put(atMs, Field.CLIMATE_ON to if (sig.on) 1.0 else 0.0)
+                .let { s -> sig.outsideC?.let { s.put(atMs, Field.OUTSIDE_C to it) } ?: s }
+                .let { s -> sig.cabinC?.let { s.put(atMs, Field.CABIN_C to it) } ?: s }
+
+            is RawCanSignal.AmbientLight -> put(atMs, Field.AMBIENT_LIGHT to sig.level.toDouble())
 
             // `level` is the raw byte, not a displayed step, and the mapping is unpinned. Only
             // `running` is trustworthy, so a stopped fan is 0 and a running one carries the raw
@@ -209,6 +215,8 @@ data class VehicleSnapshot(
     val speedKmh: Double? get() = raw(Field.SPEED_KMH)
     val gear: RawCanSignal.GearPos? get() = int(Field.GEAR)?.let { RawCanSignal.GearPos.entries[it] }
     val odometerKm: Int? get() = int(Field.ODOMETER_KM)
+    val outsideC: Double? get() = raw(Field.OUTSIDE_C)
+    val cabinC: Double? get() = raw(Field.CABIN_C)
     val coolantC: Int? get() = int(Field.COOLANT_C)
     val hybridBattery: Int? get() = int(Field.HYBRID_BATTERY)
     val steeringDeg: Double? get() = raw(Field.STEERING_DEG)

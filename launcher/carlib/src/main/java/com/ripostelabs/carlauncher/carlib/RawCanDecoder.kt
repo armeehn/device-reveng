@@ -43,6 +43,14 @@ package com.ripostelabs.carlauncher.carlib
  * 0.27 MPa while decelerating and was exactly 0 while accelerating; engine rpm sat at 0 for 83%
  * of the drive (hybrid); the gear flags read D the whole way then R and P while parking; the
  * odometer advanced 4 km against 3.86 km of integrated ECU speed.
+ *
+ * ── Climate and environment ─────────────────────────────────────────────────────────────────────
+ * The two climate messages carry more than on/off. opendbc names an outside-air temperature in
+ * 0x380 (TAMOUT) and a cabin-air temperature in 0x3B0 (TR_TEMP); both moved the right way across
+ * the 2026-09-07 driveway captures (23.1 → 26.3 °C outside over a sunny hour) and the drive
+ * (cabin drifting 20.5 → 22.3 °C with the blower on). Neither is the setpoint: the setpoint, fan
+ * step, vent mode and recirculation are NOT on this bus at all — nothing moved during a 1..6 fan
+ * sweep — and stay on the MCU link. 0x3FC carries the ambient light sensor the cluster dims by.
  */
 sealed class RawCanSignal {
 
@@ -58,8 +66,20 @@ sealed class RawCanSignal {
         val anyOpen: Boolean get() = driver || passenger || rearLeft || rearRight || tailgate || hood
     }
 
-    /** Climate power state. Speed lives in [Fan]; this is only on/off. */
-    data class Climate(val on: Boolean) : RawCanSignal()
+    /**
+     * Climate state. [on] is the A/C request (0x380) or mode (0x3B0); each id also carries one
+     * temperature and leaves the other null, so fold them rather than replace.
+     */
+    data class Climate(
+        val on: Boolean,
+        /** Outside air, °C, from 0x380. */
+        val outsideC: Double? = null,
+        /** Cabin air, °C, from 0x3B0. A sensor reading, not the driver's setpoint. */
+        val cabinC: Double? = null,
+    ) : RawCanSignal()
+
+    /** Ambient light sensor, raw 13-bit units (lux-like: ~830 in shade, ~3300 in September sun). */
+    data class AmbientLight(val level: Int) : RawCanSignal()
 
     /**
      * Blower state. [level] is the raw byte, NOT the displayed step — see [FAN_LEVEL_MIN].
@@ -142,6 +162,8 @@ object RawCanDecoder {
     const val ID_GEAR = 0x3BC
     /** Odometer, ~1 Hz. Unnamed in opendbc; found by the 4 km it gained on a 3.86 km drive. */
     const val ID_ODOMETER = 0x611
+    /** Ambient light + solar sensors, ~20 Hz. opendbc BDB1S19 N_LX. */
+    const val ID_AMBIENT_LIGHT = 0x3FC
 
     // ── Byte offsets ────────────────────────────────────────────────────────────────────────────
     private const val DOOR_BYTE = 3
@@ -197,6 +219,18 @@ object RawCanDecoder {
     /** 24 bits: a 16-bit odometer would wrap at 65 536 km, and this car is past 100 000. */
     private const val ODO_HI = 5
 
+    /** opendbc TAMOUT 55|8@0-: byte 6, signed, 0.625 °C per LSB. */
+    private const val OUTSIDE_BYTE = 6
+    private const val OUTSIDE_SCALE = 0.625
+    /** opendbc TR_TEMP 15|8@0+: byte 1, 0.25 °C per LSB, −6.5 offset. */
+    private const val CABIN_BYTE = 1
+    private const val CABIN_SCALE = 0.25
+    private const val CABIN_OFFSET = -6.5
+    /** opendbc N_LX 55|13@0+: all of byte 6 and the top five bits of byte 7. */
+    private const val LIGHT_HI = 6
+    private const val LIGHT_LO_SHIFT = 3
+    private const val LIGHT_HI_SHIFT = 5
+
     // ── Door bits. Identical to the vendor MCU's cmd 0x11 byte 6, which is a strong mutual check:
     // ours came from opening doors, theirs from decompiling the head unit, and they agree. ────────
     private const val DOOR_DRIVER = 0x80
@@ -237,8 +271,17 @@ object RawCanDecoder {
 
         return when (id) {
             ID_DOOR_STATUS -> decodeDoors(data[DOOR_BYTE].toInt() and 0xFF)
-            ID_CLIMATE_A -> RawCanSignal.Climate(on = (data[CLIMATE_A_BYTE].toInt() and 0xFF) != CLIMATE_A_OFF)
-            ID_CLIMATE_B -> RawCanSignal.Climate(on = (data[CLIMATE_B_BYTE].toInt() and CLIMATE_B_ON) != 0)
+            ID_CLIMATE_A -> RawCanSignal.Climate(
+                on = (data[CLIMATE_A_BYTE].toInt() and 0xFF) != CLIMATE_A_OFF,
+                outsideC = data[OUTSIDE_BYTE].toInt() * OUTSIDE_SCALE,
+            )
+            ID_CLIMATE_B -> RawCanSignal.Climate(
+                on = (data[CLIMATE_B_BYTE].toInt() and CLIMATE_B_ON) != 0,
+                cabinC = u8(data, CABIN_BYTE) * CABIN_SCALE + CABIN_OFFSET,
+            )
+            ID_AMBIENT_LIGHT -> RawCanSignal.AmbientLight(
+                (u8(data, LIGHT_HI) shl LIGHT_HI_SHIFT) or (u8(data, LIGHT_HI + 1) shr LIGHT_LO_SHIFT),
+            )
             ID_FAN -> decodeFan(data[FAN_BYTE].toInt() and 0xFF)
             ID_SPEED_FAST -> RawCanSignal.Speed(u8(data, SPEED_FAST_BYTE).toDouble())
             ID_SPEED_SLOW -> RawCanSignal.Speed(u8(data, SPEED_SLOW_BYTE).toDouble())
