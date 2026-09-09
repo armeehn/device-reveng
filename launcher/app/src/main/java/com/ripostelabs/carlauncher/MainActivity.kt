@@ -31,10 +31,11 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.ripostelabs.carlauncher.carlib.CarEvents
 import com.ripostelabs.carlauncher.data.AccessoryRuntime
+import com.ripostelabs.carlauncher.carlib.RootShell
+import com.ripostelabs.carlauncher.input.WheelGamepad
 import com.ripostelabs.carlauncher.service.CanCaptureService
 import com.ripostelabs.carlauncher.carlib.CarService
 import com.ripostelabs.carlauncher.carlib.GatewayHandshake // v3.0
-import com.ripostelabs.carlauncher.carlib.RootShell
 import com.ripostelabs.carlauncher.carlib.SysVar // v0.4.9 vendor hidden-apps list
 import com.ripostelabs.carlauncher.carlib.VendorBtService
 import com.ripostelabs.carlauncher.carlib.VendorBtState
@@ -297,9 +298,29 @@ class MainActivity : ComponentActivity() {
         // SwcNavigator.resolve (learned slot → function, or CAR_KEY on the panel fallbacks).
         // v2.8: the broadcast carries the press state, so feed the pump both edges rather than
         // dropping the release — held-repeat and long-press both need to know when it ended.
+        // v0.7: while an emulator frontend has the screen, the wheel is its gamepad. The press is
+        // resolved to the same NavKey the launcher would use, then forwarded as a key event by
+        // root instead of driving our screens. The foreground package is read per press rather
+        // than cached: the watcher on x installs RetroArch behind our back, and a stale "no games
+        // installed" would leave the wheel dead in a game until the next launch. HOME is never
+        // forwarded, so there is always a way out.
+        val forwarded = HashSet<NavKey>()
         lifecycleScope.launch {
             carEvents.swcKeys.collect { key ->
                 val nav = SwcNavigator.resolve(key, wheelMap) ?: return@collect
+
+                if (!key.down && forwarded.remove(nav)) {
+                    // The release of a press that went to the game must not reach our screens.
+                    return@collect
+                }
+
+                val code = if (key.down) WheelGamepad.keyCodeFor(nav) else null
+                if (code != null && gameInFront()) {
+                    forwarded.add(nav)
+                    withContext(Dispatchers.IO) { RootShell.exec("input keyevent $code") }
+                    return@collect
+                }
+
                 if (key.down) keyPump.down(nav) else keyPump.up(nav)
             }
         }
@@ -1044,6 +1065,16 @@ class MainActivity : ComponentActivity() {
         data object ContinueWatching : Screen // v2.7
         data class Editor(val theme: CarTheme) : Screen
     }
+    /**
+     * Whether an emulator frontend owns the foreground right now. One root shell per mapped
+     * press, only while a game could be running — cheap against a wheel press, and honest
+     * against the vendor's reverse window or a call, which must never receive a gamepad button.
+     */
+    private suspend fun gameInFront(): Boolean = withContext(Dispatchers.IO) {
+        val line = RootShell.exec("dumpsys activity activities | grep -m1 topResumedActivity").stdout
+        WheelGamepad.isGame(WheelGamepad.packageFromTopResumed(line))
+    }
+
 }
 
 /** v2.6 — the vendor source changes only when the driver changes it; polling it is a courtesy. */
