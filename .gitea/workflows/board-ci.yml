@@ -1,0 +1,30 @@
+# The accessory board firmware carries its contract in plain Python, so it is tested with the
+# stock interpreter and nothing else. Kept out of launcher-ci on purpose: a board change must
+# not run the emulator jobs or cut a launcher release whose APK did not change.
+name: board-ci
+on:
+  push:
+    branches: [main]
+    paths:
+      - "can-integration/board/**"
+      - "can-integration/tools/virtual-board.py"
+      - ".gitea/workflows/board-ci.yml"
+  pull_request:
+    paths:
+      - "can-integration/board/**"
+      - "can-integration/tools/virtual-board.py"
+      - ".gitea/workflows/board-ci.yml"
+  workflow_dispatch:
+concurrency:
+  group: board-ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      # test_wire.py starts serve.py and virtual-board.py as subprocesses; both are stdlib only.
+      - name: Contract and wire tests
+        run: python3 -m unittest -v
+        working-directory: can-integration/board/micropython
