@@ -67,7 +67,15 @@
         </intent>
     </queries>
 
+    <!--
+      Cleartext is on for the accessory board. It is a microcontroller on the car's own private
+      network (behind the MikroTik, reachable only over the LAN or Tailscale), and TLS on that
+      class of device is not a trade worth making for a light switch. Android 9+ blocks plain
+      http by default; without this every board command failed as UNREACHABLE, silently, on the
+      emulator and would have on the car. Everything else the launcher fetches is https anyway.
+    -->
     <application
+        android:usesCleartextTraffic="true"
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
