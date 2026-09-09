@@ -261,6 +261,27 @@ class CarEvents(private val appContext: Context) {
          */
         const val CAN_SPEED_TRUSTED = false
 
+        // ---- Raw body-bus speed (RawCanDecoder) -----------------------------------
+        /**
+         * How long one raw-bus speed stays valid.
+         *
+         * Much tighter than [CAN_SPEED_STALE_MS] because the source is far faster: `0x361` alone
+         * arrives at ~15 Hz and `0x0B4` at ~39 Hz, so 2 s is already ~30 missed frames. Tight is
+         * the safe direction here — expiring early falls back to GPS, while expiring late would
+         * hold a frozen speed after the adapter was unplugged mid-drive.
+         */
+        const val BUS_SPEED_STALE_MS = 2_000L
+
+        /**
+         * Minimum gap between pushes into [onBusSpeed].
+         *
+         * The snapshot updates on every folded frame, which is >100/s across the speed ids. The
+         * gate does not need that: it compares against thresholds ~8 km/h apart. Sampling at 2 Hz
+         * keeps the staleness timer re-armed while a steady cruise holds one value, which
+         * `distinctUntilChanged` alone would not — it would fall silent and look stale.
+         */
+        const val BUS_SPEED_PUSH_MS = 500L
+
         /**
          * Speed arbitration: a fresh, trusted CAN reading wins, otherwise GPS. Pure, so the test
          * can pin the priority without a Context. [canKmh] < 0 means no CAN reading yet.
@@ -270,7 +291,15 @@ class CarEvents(private val appContext: Context) {
             canAgeMs: Long,
             gpsKmh: Int,
             trusted: Boolean = CAN_SPEED_TRUSTED,
+            busKmh: Int = GpsSpeedSource.SPEED_UNKNOWN,
+            busAgeMs: Long = Long.MAX_VALUE,
         ): Pair<Int, SpeedSource> {
+            // The car's own reading wins outright: it is the only source verified against the
+            // ECU, and it is available at power-on and indoors where GPS is not.
+            if (busKmh >= 0 && busAgeMs < BUS_SPEED_STALE_MS) {
+                return busKmh to SpeedSource.BUS
+            }
+
             val canFresh = canKmh >= 0 && canAgeMs < CAN_SPEED_STALE_MS
             if (trusted && canFresh) {
                 return canKmh to SpeedSource.CAN
@@ -364,8 +393,15 @@ class CarEvents(private val appContext: Context) {
      */
     enum class Motion { UNKNOWN, PARKED, MOVING }
 
-    /** Where the current [speedKmh] came from. */
-    enum class SpeedSource { NONE, GPS, CAN }
+    /**
+     * Where the current [speedKmh] came from.
+     *
+     * [BUS] and [CAN] are NOT the same thing and must never be merged. [BUS] is the raw Toyota
+     * body bus read off the CANable, verified against the car's own ECU. [CAN] is the vendor
+     * MCU's repacked digest, whose speed byte a drive disproved. Only [BUS] is trusted for
+     * [motion]; see [CAN_SPEED_TRUSTED].
+     */
+    enum class SpeedSource { NONE, GPS, CAN, BUS }
 
     /** Day/night illumination, from the headlamps ([LAMP_STATUS] + `Sys_LAMP_STAUS_CHECK`). */
     enum class DayNight { DAY, NIGHT }
@@ -569,6 +605,16 @@ class CarEvents(private val appContext: Context) {
     /** Which source [speedKmh] currently reflects. */
     val speedSource: StateFlow<SpeedSource> = _speedSource.asStateFlow()
 
+    private val _busSpeedKmh = MutableStateFlow(GpsSpeedSource.SPEED_UNKNOWN)
+    /**
+     * Road speed from the raw Toyota body bus, or [GpsSpeedSource.SPEED_UNKNOWN].
+     *
+     * Fed by [onBusSpeed] from `RawCanDecoder` via the vehicle snapshot. This is the reading the
+     * safety gate acts on: a 2026-09-09 drive paired it against the ECU's own OBD PID `0x0D`
+     * answer across 0..60 km/h with zero median error, on four independent ids.
+     */
+    val busSpeedKmh: StateFlow<Int> = _busSpeedKmh.asStateFlow()
+
     private val _canSpeedKmh = MutableStateFlow(GpsSpeedSource.SPEED_UNKNOWN)
     /**
      * The raw CAN digest speed (byte[0] of [MCU_CAR_CAN_INFO]), stale-cleared after
@@ -629,11 +675,24 @@ class CarEvents(private val appContext: Context) {
     /** `System.currentTimeMillis()` of the last CAN digest; 0 = none yet. */
     private var canSpeedAtMs = 0L
 
+    /** `System.currentTimeMillis()` of the last raw-bus speed; 0 = none yet. */
+    private var busSpeedAtMs = 0L
+
     private val handler = Handler(Looper.getMainLooper())
 
     /** Fires when CAN digests stop arriving: the CAN reading is unknown, not frozen. */
     private val canSpeedStale = Runnable {
         _canSpeedKmh.value = GpsSpeedSource.SPEED_UNKNOWN
+        republishSpeed()
+    }
+
+    /**
+     * Fires when the raw bus goes quiet — the adapter unplugged, the car switched off, the
+     * capture service stopped. The speed becomes unknown so GPS takes over; holding the last
+     * reading would leave the gate acting on a number from minutes ago.
+     */
+    private val busSpeedStale = Runnable {
+        _busSpeedKmh.value = GpsSpeedSource.SPEED_UNKNOWN
         republishSpeed()
     }
 
@@ -1010,6 +1069,21 @@ class CarEvents(private val appContext: Context) {
         listeners.forEach { it.onDayNight(mode) }
     }
 
+    /**
+     * One raw-bus speed arrived. Call at most every [BUS_SPEED_PUSH_MS]; the caller throttles
+     * because the snapshot updates far faster than the gate needs.
+     *
+     * Rounded rather than truncated: the thresholds are integers and the ECU's own OBD answer
+     * truncates, which is why it reads ~0.6 km/h low against this source.
+     */
+    fun onBusSpeed(kmh: Double, atMs: Long) {
+        _busSpeedKmh.value = Math.round(kmh).toInt()
+        busSpeedAtMs = atMs
+        handler.removeCallbacks(busSpeedStale)
+        handler.postDelayed(busSpeedStale, BUS_SPEED_STALE_MS)
+        republishSpeed()
+    }
+
     /** One CAN digest arrived: record it, re-arm the staleness timer, re-arbitrate. */
     private fun updateCanSpeed(kmh: Int, atMs: Long) {
         _canSpeedKmh.value = kmh
@@ -1021,8 +1095,14 @@ class CarEvents(private val appContext: Context) {
 
     /** v2.5 — pick the speed source, publish it and re-derive [motion] from it. */
     private fun republishSpeed() {
-        val canAge = System.currentTimeMillis() - canSpeedAtMs
-        val (kmh, source) = pickSpeed(_canSpeedKmh.value, canAge, gpsKmh)
+        val now = System.currentTimeMillis()
+        val (kmh, source) = pickSpeed(
+            canKmh = _canSpeedKmh.value,
+            canAgeMs = now - canSpeedAtMs,
+            gpsKmh = gpsKmh,
+            busKmh = _busSpeedKmh.value,
+            busAgeMs = now - busSpeedAtMs,
+        )
         _speedSource.value = source
         _speedKmh.value = kmh
         _motion.value = nextMotion(_motion.value, kmh)
@@ -1092,6 +1172,7 @@ class CarEvents(private val appContext: Context) {
         runCatching { appContext.unregisterReceiver(receiver) }
         gpsSource.stop() // v2.5
         handler.removeCallbacks(canSpeedStale)
+        handler.removeCallbacks(busSpeedStale)
         rootBridge.stop() // v2.9
         registered = false
     }
