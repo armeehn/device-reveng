@@ -11,6 +11,20 @@ vendor gateway `com.szchoiceway.eventcenter` per [`../CAR_API.md`](../CAR_API.md
 > through **root** — the privileged/system-app route is ruled out, since the vendor platform key
 > is confirmed unobtainable. See *Root-native tier (v2.9)* below.
 
+## Screens
+
+Emulator shots are from the farm on LXC 124 at the unit's geometry; the two marked "on the real unit" were pulled from the head unit over Tailscale on 2026-09-08. None is mocked.
+
+| | |
+|---|---|
+| ![Home, on the emulator farm at the head unit's 1920×720](docs/screens/home.png) | Home, on the emulator farm at the head unit's 1920×720 |
+| ![Settings hub on the real unit: Accessories, Games, CAN frame capture](docs/screens/settings-hub-on-the-unit.png) | Settings hub on the real unit: Accessories, Games, CAN frame capture |
+| ![CAN frame capture on the real unit: the adapter's firmware banner read over USB host](docs/screens/can-capture-on-the-unit.png) | CAN frame capture on the real unit: the adapter's firmware banner read over USB host |
+| ![Accessories after loading the pushed config](docs/screens/accessories.png) | Accessories after loading the pushed config |
+| ![A sequence running against the virtual board](docs/screens/accessories-sequence.png) | A sequence running against the virtual board |
+| ![Games, listing the installed RetroArch build](docs/screens/games.png) | Games, listing the installed RetroArch build |
+| ![RetroArch 1.22.2 launched from the Games page](docs/screens/retroarch.png) | RetroArch 1.22.2 launched from the Games page |
+
 ## Module structure
 
 ```
