@@ -51,4 +51,9 @@ sequence, which is the intended behaviour, not a failure.
 ## Tests
 
 `board.py` is plain Python and the whole contract lives in it, so it is tested where a test
-runner exists. `main.py` is not tested: it is 120 lines of glue that only runs on the chip.
+runner exists: `python3 -m unittest -v` here, and in `launcher-ci`.
+
+`sh check-mpy.sh` runs the same three things the chip would, under a real MicroPython: `main.py`
+through `mpy-cross`, `board.py` imported by the unix port, and the contract tests under it with
+micropython-lib's `unittest`. Verified 2026-09-09 on MicroPython v1.25.0 (unix port, LXC 111):
+12 tests pass. Not yet run on a chip; the pins are the one thing the desk cannot check.
