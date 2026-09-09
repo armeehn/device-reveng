@@ -157,6 +157,37 @@ fun StatusIndicators(
  * source is there. Each parameter carries its own "absent" value, and absent means *no chip*:
  * that is the ROADMAP rule the tests exist to hold. A chip that lies is worse than no chip.
  */
+/**
+ * Which of the four invariant chips the strip draws for a given set of sources, as
+ * [StatusIndicatorTags] values. Pure and Android-free, so `:app:testDebugUnitTest` enforces the
+ * rule on every push: the emulator suite (app/src/androidTest) proves the row *draws* what this
+ * returns, but it needs the one KVM runner, and the decision itself lives here.
+ *
+ * The rule, not a fixed picture: a source that cannot answer gets NO chip. An emulator has no
+ * root, no vendor EventService and no car, so volume and brightness are legitimately absent
+ * there — returning them anyway would be the fabricated reading the invariant forbids.
+ */
+internal fun visibleIndicators(
+    bt: BtStatus,
+    volume: VolumeStatus,
+    brightnessPercent: Int?,
+): Set<String> = buildSet {
+    // Wi-Fi is the one source the framework always answers for, radio off included: "off" is a
+    // state, not a missing source, so this chip is unconditional.
+    add(StatusIndicatorTags.WIFI)
+
+    if (bt.present) {
+        add(StatusIndicatorTags.BLUETOOTH)
+    }
+    if (volume.available) {
+        add(StatusIndicatorTags.VOLUME)
+    }
+    // null = brightness unreadable (no WRITE_SETTINGS, no MCU backlight).
+    if (brightnessPercent != null) {
+        add(StatusIndicatorTags.BRIGHTNESS)
+    }
+}
+
 @Composable
 internal fun StatusIndicatorsRow(
     wifi: WifiStatus,
@@ -179,13 +210,17 @@ internal fun StatusIndicatorsRow(
             .then(if (onOpen != null) Modifier.clickable(onClick = onOpen) else Modifier)
             .padding(horizontal = 8.dp, vertical = 4.dp),
     ) {
-        // Wi-Fi is the one source the framework always answers for, radio off included, so this
-        // chip is unconditional — "off" is a state, not a missing source.
-        WifiChip(wifi)
-        if (bt.present) {
+        // Every invariant chip is drawn from one decision, so the JVM test over
+        // [visibleIndicators] and what the row actually renders cannot drift apart.
+        val shown = visibleIndicators(bt, volume, brightnessPercent)
+
+        if (StatusIndicatorTags.WIFI in shown) {
+            WifiChip(wifi)
+        }
+        if (StatusIndicatorTags.BLUETOOTH in shown) {
             BluetoothChip(bt)
         }
-        if (volume.available) {
+        if (StatusIndicatorTags.VOLUME in shown) {
             VolumeChip(volume)
         }
         // RAV4-52: shown only while Zlink reports a live session; silence = no chip.
@@ -198,9 +233,8 @@ internal fun StatusIndicatorsRow(
                 tag = StatusIndicatorTags.CARPLAY,
             )
         }
-        // null = brightness unreadable (no WRITE_SETTINGS, no MCU backlight): the chip goes,
-        // rather than parking on a stale percentage.
-        if (brightnessPercent != null) {
+        // Absent brightness means no chip rather than a stale percentage; see [visibleIndicators].
+        if (StatusIndicatorTags.BRIGHTNESS in shown) {
             StatusChip(
                 icon = Icons.Filled.BrightnessMedium,
                 description = "Brightness $brightnessPercent%",
