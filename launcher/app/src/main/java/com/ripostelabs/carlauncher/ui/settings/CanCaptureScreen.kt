@@ -87,11 +87,14 @@ fun CanCaptureScreen(
     // Latest decoded value per label, from HiworldCanDecoder. Each opcode arrives in its own
     // frame, so we merge rather than replace — the table shows the freshest reading of each.
     var decoded by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    // The wire-checksum tally the service keeps over every MCU body (see McuTrailerTally).
+    var trailer by remember { mutableStateOf("") }
     LaunchedEffect(frame) {
         val f = frame ?: return@LaunchedEffect
         lastFrame = f
         val bytes = f.bytes ?: return@LaunchedEffect
         capture = capture.accept(bytes)
+        trailer = CanCaptureService.mcuTrailerSummary()
         HiworldCanDecoder.decodeFrame(bytes)?.let { sig ->
             val rows = decodedRows(sig)
             if (rows.isNotEmpty()) decoded = decoded + rows
@@ -144,6 +147,16 @@ fun CanCaptureScreen(
                     color = MaterialTheme.colorScheme.error,
                 )
             }
+        }
+
+        // The one claim about /dev/ttyS1 the car can answer without the port being opened: the
+        // last byte of every broadcast body should be McuSerial's outer checksum. Shown as the
+        // tally's own words so the verdict here and in logcat cannot drift apart.
+        SettingsSection(title = "MCU wire checksum (derived, unconfirmed)") {
+            InfoRow(
+                label = "Tally",
+                value = trailer.ifEmpty { "no MCU body seen yet" },
+            )
         }
 
         SettingsSection(title = "Extras (every key, undecoded)") {

@@ -111,6 +111,9 @@ class CanCaptureService : Service() {
             }
         }
 
+        /** The same line the log gets, for the capture screen: the car's verdict without adb. */
+        fun mcuTrailerSummary(): String = mcuTrailer.summary()
+
         fun calibration(): SpeedCalibration = calibration
 
         /**
