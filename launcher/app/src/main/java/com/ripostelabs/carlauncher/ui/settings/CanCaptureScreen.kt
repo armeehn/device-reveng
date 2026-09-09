@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ripostelabs.carlauncher.ui.theme.JetBrainsMono
 import com.ripostelabs.carlauncher.carlib.CanFrame
 import com.ripostelabs.carlauncher.service.CanCaptureService
@@ -257,8 +258,7 @@ private fun CanableRows(status: CanableStatus, onGrant: () -> Unit) {
             // enough paired points span enough range; until then the row says how far along it is.
             // The raw bus answers the question the calibration was built to ask. Shown beside the
             // ECU reference so a divergence is visible here first.
-            val vehicleFlow = CanCaptureService.vehicle().snapshot
-            val vehicle by vehicleFlow.collectAsStateSafe(initial = vehicleFlow.value)
+            val vehicle by CanCaptureService.vehicle().snapshot.collectAsStateWithLifecycle()
             InfoRow(
                 label = "Raw-bus speed",
                 value = vehicle.speedKmh?.let { "%.1f km/h".format(it) } ?: "no frame yet",
