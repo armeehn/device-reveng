@@ -163,7 +163,8 @@ MCU broadcast ──▶ HiworldCanDecoder ────────────�
 Lights, servos and sequences, switched from `Settings → Accessories`. The board is any
 microcontroller on the car's private network speaking the small contract in
 [`../can-integration/docs/ACCESSORY_BOARD.md`](../can-integration/docs/ACCESSORY_BOARD.md);
-`can-integration/tools/virtual-board.py` speaks it too, for testing with no hardware.
+`can-integration/tools/virtual-board.py` speaks it too, for testing with no hardware, and
+`can-integration/board/micropython/` is the real one for an ESP32.
 
 ```
 Accessories screen ──▶ AccessoryRuntime ──▶ AccessoryController ──▶ HttpAccessoryTransport ──▶ board
