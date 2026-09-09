@@ -75,15 +75,15 @@ class RawCanDecoderTest {
 
     @Test
     fun `climate reports on and off from both messages`() {
-        val offA = RawCanDecoder.decode(RawCanDecoder.ID_CLIMATE_A, frame(0, 0, 0x00, 0, 0, 0, 0x25, 0x01))
-        val onA = RawCanDecoder.decode(RawCanDecoder.ID_CLIMATE_A, frame(0, 0, 0x20, 0, 0, 0, 0x25, 0x01))
-        assertEquals(RawCanSignal.Climate(on = false), offA)
-        assertEquals(RawCanSignal.Climate(on = true), onA)
+        val offA = RawCanDecoder.decode(RawCanDecoder.ID_CLIMATE_A, frame(0, 0, 0x00, 0, 0, 0, 0x25, 0x01)) as RawCanSignal.Climate
+        val onA = RawCanDecoder.decode(RawCanDecoder.ID_CLIMATE_A, frame(0, 0, 0x20, 0, 0, 0, 0x25, 0x01)) as RawCanSignal.Climate
+        assertEquals(false, offA.on)
+        assertEquals(true, onA.on)
 
-        val offB = RawCanDecoder.decode(RawCanDecoder.ID_CLIMATE_B, frame(0, 0x7E, 0, 0, 0, 0x10, 0, 0))
-        val onB = RawCanDecoder.decode(RawCanDecoder.ID_CLIMATE_B, frame(0, 0x7E, 0, 0, 0, 0x18, 0, 0))
-        assertEquals(RawCanSignal.Climate(on = false), offB)
-        assertEquals(RawCanSignal.Climate(on = true), onB)
+        val offB = RawCanDecoder.decode(RawCanDecoder.ID_CLIMATE_B, frame(0, 0x7E, 0, 0, 0, 0x10, 0, 0)) as RawCanSignal.Climate
+        val onB = RawCanDecoder.decode(RawCanDecoder.ID_CLIMATE_B, frame(0, 0x7E, 0, 0, 0, 0x18, 0, 0)) as RawCanSignal.Climate
+        assertEquals(false, offB.on)
+        assertEquals(true, onB.on)
     }
 
     /** Byte 6 is 0x00 stopped and 0x52..0x5B running; level is an offset, not the displayed step. */
