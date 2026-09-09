@@ -1,6 +1,6 @@
 # Project status
 
-_Last updated: 2026-09-01. Unit: Choiceway/AiNavi **GT6-EAU**, Qualcomm **QCM6125**, Android 13, in a 2019 Toyota RAV4 (XA50)._
+_Last updated: 2026-09-09. Unit: Choiceway/AiNavi **GT6-EAU**, Qualcomm **QCM6125**, Android 13, in a 2019 Toyota RAV4 (XA50)._
 
 ## Done
 
@@ -38,6 +38,10 @@ _Last updated: 2026-09-01. Unit: Choiceway/AiNavi **GT6-EAU**, Qualcomm **QCM612
   signal, driver profiles, notification shelf, on-screen keyboard, theming, Setup Doctor,
   backup/restore, self-update, and a full reskin of the vendor settings. Fully drivable from the
   steering-wheel keys. GPS-derived speed gates the distracting parts to parked-only.
+- **It reads the car's own bus.** A CANable on the Toyota body bus behind the unit, over the
+  Android USB host API — no kernel driver, no root. Speed, wheel speeds, steering, yaw and
+  acceleration, brake pressure, rpm, gear, odometer, temperatures and ambient light, all verified
+  against the car on 2026-09-09. Captures record unattended and roll at 16 MB.
 - **Root tier is the top tier there will be.** The vendor platform signing key is
   **confirmed unobtainable** ([`CUSTOM_ANDROID.md`](CUSTOM_ANDROID.md) §2b), so a platform-signed
   `/system/priv-app` build is ruled out; Magisk root replaced it. A root helper receives the

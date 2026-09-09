@@ -31,7 +31,7 @@ launcher ──WiFi (mobile-gate)──▶ ESP32 :8765 ──GPIO──▶ MOSFE
 
 Point the launcher's `accessory-config.json` base URL at the board and load it.
 
-No board yet? `python3 serve.py --port 8766 bar:switch spot:level antenna:servo` on x runs the
+No board yet? `python3 serve.py --port 8766 bar:switch spot:level antenna:servo` on any host runs the
 same code path with print in place of pins, so the launcher can be driven against the real
 firmware logic before the ESP32 arrives.
 
@@ -61,5 +61,5 @@ runner exists: `python3 -m unittest -v` here, and in `launcher-ci`.
 
 `sh check-mpy.sh` runs the same three things the chip would, under a real MicroPython: `main.py`
 through `mpy-cross`, `board.py` imported by the unix port, and the contract tests under it with
-micropython-lib's `unittest`. Verified 2026-09-09 on MicroPython v1.25.0 (unix port, LXC 111):
+micropython-lib's `unittest`. Verified 2026-09-09 on MicroPython v1.25.0 (unix port):
 12 tests pass. Not yet run on a chip; the pins are the one thing the desk cannot check.

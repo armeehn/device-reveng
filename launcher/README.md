@@ -13,7 +13,7 @@ vendor gateway `com.szchoiceway.eventcenter` per [`../CAR_API.md`](../CAR_API.md
 
 ## Screens
 
-Emulator shots are from the farm on LXC 124 at the unit's geometry; the two marked "on the real unit" were pulled from the head unit over Tailscale on 2026-09-08. None is mocked.
+Emulator shots are from the emulator farm at the unit's geometry; the two marked "on the real unit" were pulled from the head unit over the private network on 2026-09-08. None is mocked.
 
 | | |
 |---|---|
@@ -186,7 +186,7 @@ Accessories screen ──▶ AccessoryRuntime ──▶ AccessoryController ─�
 `Settings → Games` lists installed emulator frontends and launches them behind the parked-only
 gate. Matching is exact: RetroArch ships `com.retroarch`, `.aarch64` and `.ra32` as separate,
 non-interchangeable installs, and this unit is `arm64-v8a`. The official `aarch64` build is
-staged on the share and installed by the x-side watcher when it is missing.
+staged on the share and installed by an internal watcher when it is missing.
 
 ## Settings suite (v1.1 → v2.0)
 
@@ -231,6 +231,14 @@ and every citation behind it is `OEM_SYSTEM.md` §1.
 (`SHOW_CAR_SPEED_EVENT` is a show/hide toggle, CAR_API §1.3), so `carlib/GpsSpeedSource`
 reads it from the GNSS receiver — the one source a normal app can use — smooths the jitter,
 and reverts to unknown after 5 s without a fix rather than reporting a stationary car.
+
+_Superseded 2026-09-09._ The gate now runs on **raw body-bus speed** (`RawCanDecoder`), the
+only reading verified against the car's own ECU, with GPS as the fallback. It is its own source
+(`SpeedSource.BUS`), not a promoted MCU digest. `pickSpeed` prefers a bus reading under
+`BUS_SPEED_STALE_MS` (2 s — the ids run at 15-39 Hz, so that is already ~30 missed frames) and
+falls back to GPS the moment the adapter is unplugged or the car goes quiet, rather than gating
+on a frozen number. The point of the change is where GPS is blind: a garage, a covered car park,
+and the first seconds after power-on are exactly where a parked-only gate has to be right.
 
 `CarEvents.motion` turns that into the `PARKED` / `MOVING` / `UNKNOWN` verdict behind the
 LAUNCHER_DESIGN §1.4 rules, with an 8 km/h ↑ / 3 km/h ↓ hysteresis band so a car creeping in
@@ -459,7 +467,7 @@ dashboard that renders a guess identically to a confirmed reading is worse than 
 
 | Tile | Source | Status |
 |---|---|---|
-| Speed | `CarEvents.speedKmh`: GPS (v2.5); canbus2's `MCU_CAR_CAN_INFO` byte[0] is decoded too but held back (`CAN_SPEED_TRUSTED`) | the 0x32 field did not track road speed on the 2026-08-29 drive |
+| Speed | `CarEvents.speedKmh`: raw body bus (`SpeedSource.BUS`), GPS as fallback; canbus2's `MCU_CAR_CAN_INFO` byte[0] is decoded too but never wins (`CAN_SPEED_TRUSTED`) | the bus is **confirmed** against the ECU's own PID `0x0D`; the MCU digest is **closed as wrong** |
 | Outside temp | `CAN_CAR_OUT_SIDE_TEMP_EVT` | **confirmed**, one unit-suffixed String extra |
 | Steering | 0x11 decode of `MCU_MSG_CAN_ALL_INFO`, `ZXW_CAN_WHEEL_TRACK_EVT` as fallback | raw/14 scale **confirmed**; which side is negative UNVERIFIED |
 | Ignition | `ACTION_ACC_OPEN_CLOSE_EVT` | **confirmed** |
@@ -632,9 +640,9 @@ new is added to the drawer) and a **parked-only "continue watching" shelf**.
 **What the shelf is, precisely.** It lists what *this head unit* has played, recovered from the
 Jellyfin app's MediaSession metadata and persisted in `data/WatchHistoryStore`. It is **not** the
 server's Continue Watching row. That row is `GET /Users/{id}/Items/Resume` behind authentication,
-and reaching it would mean this APK carrying a tailnet URL and a credential that belong to the
-owner, not to a launcher. **No API client was written and none should be.** The screen says so in
-its own subtitle, because a shelf that implied it had talked to the server would make the first
+and reaching it would mean this APK carrying a private-network URL and a credential that belong
+to the owner, not to a launcher. **No API client was written and none should be.** The screen
+says so in its own subtitle, because a shelf that implied it had talked to the server would make the first
 missing episode read as a bug rather than a boundary.
 
 Consequences, stated once so nobody re-discovers them:
@@ -787,10 +795,16 @@ check.
   every MCU volume/mute report, decoded by `CarEvents.volume`. The status-bar chip's AIDL poll
   stays only until the first push lands. There is no LocalSocket; `SYSTEM_VOLUME:` rides the
   `ZXW_MESSAGE_TO_ICCOMMUNICATION` broadcast as text.
-- **Numeric speed** comes from GPS (v2.5, above). canbus2's `MCU_CAR_CAN_INFO` digest
-  (`[speed, rpmH, rpmL]`) is decoded into `CarEvents.canSpeedKmh` and would outrank GPS via
-  `CarEvents.pickSpeed`, but `CAN_SPEED_TRUSTED` stays false: its speed byte is the 0x32 field
-  that did not track road speed on the 2026-08-29 drive. A steady-cruise capture settles it.
+- **Numeric speed.** `CAN_SPEED_TRUSTED` stays false, and now stays false for good. canbus2's
+  `MCU_CAR_CAN_INFO` digest (`[speed, rpmH, rpmL]`) is decoded into `CarEvents.canSpeedKmh` and
+  would outrank GPS via `CarEvents.pickSpeed`, but the 2026-09-09 drive closed every MCU
+  candidate: `0x32` never tracked road speed, `0x17` never arrived in 996 paired samples, and
+  `0x13` spans 0..175 while the car holds a steady 16 km/h. The verified source is the **raw
+  Toyota body bus** — `RawCanDecoder` on `0x361`, `0x498`, `0x0B4` and `0x0AA`, checked against
+  the car's own ECU over OBD PID `0x0D` from 0 to 60 km/h. `CarEvents.speedKmh` prefers that bus
+  reading and falls back to GPS, and the parked-only gate runs on it — as `SpeedSource.BUS`, its
+  own source, never by promoting the digest. A test pins that: the digest loses to the bus under
+  either trust setting.
 - **Reverse camera feed** — `ReverseOverlay` is a black placeholder; embed a `SurfaceView`
   bound to the reverse video input, or host `com.szchoiceway.view.BackCarActivity`.
 - **Climate widget** — reads the mirrored `CarAirState` parcel; unverified on the car.
