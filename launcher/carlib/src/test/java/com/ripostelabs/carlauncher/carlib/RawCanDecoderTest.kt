@@ -105,6 +105,6 @@ class RawCanDecoderTest {
     fun `ids we do not decode return null`() {
         // 0x0A4 is on this bus at 78 Hz and nothing here reads it.
         assertNull(RawCanDecoder.decode(0x0A4, frame(0, 0, 0, 0, 0, 0, 0, 0)))
-        assertNull(RawCanDecoder.decode(0x025, frame(0, 0, 0, 0, 0, 0, 0, 0)))
+        assertNull(RawCanDecoder.decode(0x0A6, frame(0, 0, 0, 0, 0, 0, 0, 0)))
     }
 }

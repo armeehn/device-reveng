@@ -34,6 +34,7 @@ data class VehicleSnapshot(
         TYRE_FL_KPA, TYRE_FR_KPA, TYRE_RL_KPA, TYRE_RR_KPA, TYRE_SPARE_KPA,
         STEERING_DEG, RANGE_KM,
         SPEED_KMH, WHEEL_FL_KMH, WHEEL_FR_KMH, WHEEL_RL_KMH, WHEEL_RR_KMH,
+        YAW_DEG_S, LATERAL_MS2, LONGITUDINAL_MS2, BRAKE_MPA, INTAKE_C, GEAR, ODOMETER_KM,
         DOOR_BITS, REVERSE, SIDE_CAMERA_LEFT, SIDE_CAMERA_RIGHT,
         CLIMATE_ON, FAN_STEP, TEMP_LEFT_C, TEMP_RIGHT_C,
         RADAR_REAR_MIN_CM, RADAR_FRONT_MIN_CM,
@@ -139,6 +140,16 @@ data class VehicleSnapshot(
                 Field.WHEEL_RL_KMH to sig.rlKmh,
                 Field.WHEEL_RR_KMH to sig.rrKmh)
 
+            // Chassis, all verified against the speed trace of the same drive. Steering and rpm
+            // land in the fields the MCU already feeds; the wire copy arrives far more often.
+            is RawCanSignal.SteeringAngle -> put(atMs, Field.STEERING_DEG to sig.degrees)
+            is RawCanSignal.Inertial -> put(atMs, Field.YAW_DEG_S to sig.yawDegS, Field.LATERAL_MS2 to sig.lateralMs2)
+            is RawCanSignal.LongAccel -> put(atMs, Field.LONGITUDINAL_MS2 to sig.ms2)
+            is RawCanSignal.Brake -> put(atMs, Field.BRAKE_MPA to sig.pressureMpa)
+            is RawCanSignal.Engine -> put(atMs, Field.RPM to sig.rpm.toDouble(), Field.INTAKE_C to sig.intakeC)
+            is RawCanSignal.Gear -> put(atMs, Field.GEAR to sig.position.ordinal.toDouble())
+            is RawCanSignal.Odometer -> put(atMs, Field.ODOMETER_KM to sig.km.toDouble())
+
             // Everything below is declared in RawCanSignal for a future tap but is never emitted
             // by RawCanDecoder on this car. Folding a value nothing produces would put an
             // unverified reading on a screen the moment someone wired the decoder up.
@@ -196,6 +207,8 @@ data class VehicleSnapshot(
 
     val rpm: Int? get() = int(Field.RPM)
     val speedKmh: Double? get() = raw(Field.SPEED_KMH)
+    val gear: RawCanSignal.GearPos? get() = int(Field.GEAR)?.let { RawCanSignal.GearPos.entries[it] }
+    val odometerKm: Int? get() = int(Field.ODOMETER_KM)
     val coolantC: Int? get() = int(Field.COOLANT_C)
     val hybridBattery: Int? get() = int(Field.HYBRID_BATTERY)
     val steeringDeg: Double? get() = raw(Field.STEERING_DEG)
