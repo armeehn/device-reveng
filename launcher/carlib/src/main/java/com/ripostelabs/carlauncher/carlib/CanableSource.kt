@@ -208,14 +208,32 @@ class CanableSource private constructor(
             runCatching { writer?.flush() }
             runCatching { writer?.close() }
             writer = null
+            writeCalibration()
+        }
+
+        /**
+         * The speed-calibration samples, beside the log they came from. Written when a log is
+         * closed rather than per sample: the CSV is small, and the point is that the evidence
+         * leaves the device with the frames. Until this existed `SpeedCalibration.csv()` had no
+         * caller, and a drive's calibration samples died with the process.
+         */
+        private fun writeCalibration() {
+            val target = dir?.let { File(it, rotation.currentCsvName()) } ?: return
+            runCatching { target.writeText(calibration.csv()) }
         }
 
         private fun roll() {
             close()
 
             // Evicting before opening keeps the directory at its bound even if the next open
-            // fails, which matters on a device whose storage is already tight.
-            rotation.roll()?.let { stale -> dir?.let { File(it, stale).delete() } }
+            // fails, which matters on a device whose storage is already tight. The paired CSV
+            // goes with its log, so the directory never holds samples for frames it has lost.
+            rotation.roll()?.let { stale ->
+                dir?.let { d ->
+                    File(d, stale).delete()
+                    rotation.csvFor(stale)?.let { File(d, it).delete() }
+                }
+            }
             open()
         }
 
