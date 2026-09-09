@@ -1,5 +1,6 @@
 package com.ripostelabs.carlauncher.carlib
 
+import android.util.Log
 import org.json.JSONObject
 import java.io.IOException
 import java.net.HttpURLConnection
@@ -72,6 +73,9 @@ class HttpAccessoryTransport(
 
     private data class Reply(val status: Int, val body: String)
 
+    /** Failure causes already logged, so a board that is down does not fill the log at 5 s. */
+    private val reported = java.util.Collections.synchronizedSet(HashSet<String>())
+
     /** One request. Null when nothing answered — the transport-level meaning of UNREACHABLE. */
     private fun exchange(method: String, url: String, body: String?): Reply? {
         var conn: HttpURLConnection? = null
@@ -94,6 +98,12 @@ class HttpAccessoryTransport(
 
             Reply(status, text)
         } catch (e: IOException) {
+            // UNREACHABLE without a reason cost an iteration on the emulator: a cleartext block
+            // looked identical to an unplugged board. Log each distinct cause once, not per poll.
+            val cause = "${e.javaClass.simpleName}: ${e.message}"
+            if (reported.add(cause)) {
+                Log.w(LOG_TAG, "$method $url -> $cause")
+            }
             null
         } finally {
             conn?.disconnect()
@@ -101,6 +111,7 @@ class HttpAccessoryTransport(
     }
 
     companion object {
+        private const val LOG_TAG = "Accessories"
         private const val CONNECT_TIMEOUT_MS = 1_000
         private const val READ_TIMEOUT_MS = 1_000
         private val HTTP_OK_RANGE = HttpURLConnection.HTTP_OK until HttpURLConnection.HTTP_MULT_CHOICE
