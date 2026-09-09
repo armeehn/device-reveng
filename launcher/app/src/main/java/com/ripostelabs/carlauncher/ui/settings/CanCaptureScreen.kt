@@ -134,12 +134,11 @@ fun CanCaptureScreen(
                 decoded.forEach { (label, value) -> InfoRow(label = label, value = value) }
                 Spacer(Modifier.size(8.dp))
                 Text(
-                    text = "Speed is a CANDIDATE, not calibrated: the 2026-08-29 drive proved road " +
-                        "speed is NOT the 0x32 field. The real speed is 0x17 (accurate ~0.1 km/h but " +
-                        "low-rate, scale on 2 points) and 0x13 p[0:1] (live ~10 Hz, scale unconfirmed) " +
-                        "— a steady-cruise capture is needed to finish calibration. Gear: only REVERSE " +
-                        "is in the digest (0x71 bit 0x02); P/N/D are not transmitted, so 0x1A gear bytes " +
-                        "are raw only. None of these feed the motion gate or dashboard.",
+                    text = "No MCU field is road speed. The 2026-09-09 drive paired 0x17 and 0x13 " +
+                        "against the ECU's own OBD answer: 0x17 never arrived, 0x13 wanders 0..175 at " +
+                        "a steady 16 km/h. Speed now comes from the raw bus (0x361, 0x498, 0x0B4, " +
+                        "wheels 0x0AA) and shows on the Vehicle page. Gear: only REVERSE is in the " +
+                        "digest (0x71 bit 0x02); the 0x1A gear bytes are raw only.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                 )
@@ -256,17 +255,16 @@ private fun CanableRows(status: CanableStatus, onGrant: () -> Unit) {
             )
             // The calibration, as evidence rather than as a speedometer. A scale appears only when
             // enough paired points span enough range; until then the row says how far along it is.
-            InfoRow(label = "Calibration samples", value = "${status.calibrationSamples}")
-            val fit = status.fit
+            // The raw bus answers the question the calibration was built to ask. Shown beside the
+            // ECU reference so a divergence is visible here first.
+            val vehicleFlow = CanCaptureService.vehicle().snapshot
+            val vehicle by vehicleFlow.collectAsStateSafe(initial = vehicleFlow.value)
             InfoRow(
-                label = "0x17 scale",
-                value = fit?.scale017?.let { "%.4f km/h per LSB (%d pts, %d bands)".format(it, fit.usable, fit.bands) }
-                    ?: "not yet",
+                label = "Raw-bus speed",
+                value = vehicle.speedKmh?.let { "%.1f km/h".format(it) } ?: "no frame yet",
             )
-            InfoRow(
-                label = "0x13 scale",
-                value = fit?.scale013?.let { "%.4f km/h per LSB".format(it) } ?: "not yet",
-            )
+            // Kept as the record that closed the MCU-candidate question, not as a speedometer.
+            InfoRow(label = "MCU calibration samples", value = "${status.calibrationSamples} (0x17/0x13 are not speed)")
 
             Spacer(Modifier.size(8.dp))
             if (status.frames == 0L) {

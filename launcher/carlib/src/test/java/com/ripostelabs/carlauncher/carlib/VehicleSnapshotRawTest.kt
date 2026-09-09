@@ -104,7 +104,7 @@ class VehicleSnapshotRawTest {
     fun `a signal the decoder never emits is not folded`() {
         // Declared in RawCanSignal for a future tap. Folding it would put an unverified reading
         // on screen the moment someone wired the decoder up.
-        val snap = VehicleSnapshot().foldRaw(RawCanSignal.Speed(88.0), t0)
+        val snap = VehicleSnapshot().foldRaw(RawCanSignal.Cruise(active = true, adaptiveEngaged = false), t0)
 
         assertTrue(VehicleTiles.tilesFor(snap, t0).isEmpty())
     }

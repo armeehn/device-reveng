@@ -26,6 +26,15 @@ package com.ripostelabs.carlauncher.carlib
  *    does report them — its cmd 0x18 handler drives the turn-signal cameras — so that state most
  *    likely arrives over the IEBUS/AVC-LAN pins (TYF2.20 pins 3/4), which CAN hardware cannot read.
  * Neither is emitted here. [Blinkers] stays in the model for the LIN/IEBUS path to fill later.
+ *
+ * ── Speed, settled 2026-09-09 ───────────────────────────────────────────────────────────────────
+ * A real drive with the ECU answering OBD PID 0x0D at 2 Hz (0..60 km/h, three ECUs agreeing on
+ * every sample) is the reference. Four raw-bus fields track it with zero median error:
+ *   0x361 byte 6 and 0x498 byte 5 are integer km/h; 0x0B4 bytes 5-6 are km/h × 0.01 (opendbc
+ *   SP1); 0x0AA carries four 15-bit wheel speeds at 0.01 km/h with a −67.67 offset (opendbc
+ *   VXFR/VXFL/VXRR/VXRL). Residuals are sampling latency during acceleration, not scale.
+ * The MCU candidates were wrong: 0x17 never arrived in 996 paired rows and 0x13 spans 0..175
+ * while the car holds 16 km/h. Speed comes from here now, and needs no request on the bus.
  */
 sealed class RawCanSignal {
 
@@ -53,12 +62,16 @@ sealed class RawCanSignal {
     /** A frame we recognise the id of but do not decode. Carried so callers can log it. */
     data class Unknown(val id: Int) : RawCanSignal()
 
+    /** Road speed. Emitted by three ids at 2, 15 and 39 Hz; the freshest wins downstream. */
+    data class Speed(val kmh: Double) : RawCanSignal()
+
+    /** Per-wheel speed from the stability ECU, ~78 Hz. */
+    data class WheelSpeeds(val flKmh: Double, val frKmh: Double, val rlKmh: Double, val rrKmh: Double) : RawCanSignal()
+
     // ── Not yet verified on this car ────────────────────────────────────────────────────────────
     // Present so VehicleState stays stable and the LIN/IEBUS path can fill them in. Nothing below
     // is emitted by [RawCanDecoder.decode]; adding one means capturing it first.
     enum class GearPos { P, R, N, D, B, UNKNOWN }
-    data class Speed(val kmh: Double) : RawCanSignal()
-    data class WheelSpeeds(val flKmh: Double, val frKmh: Double, val rlKmh: Double, val rrKmh: Double) : RawCanSignal()
     data class Gear(val position: GearPos) : RawCanSignal()
     data class SteeringAngle(val degrees: Double) : RawCanSignal()
     data class GasPedal(val fraction: Double) : RawCanSignal()
@@ -79,12 +92,33 @@ object RawCanDecoder {
     const val ID_CLIMATE_B = 0x3B0
     /** Blower state. opendbc names the message ENG1D59 but gives it no signals. */
     const val ID_FAN = 0x4AD
+    /** Integer km/h in byte 6, ~15 Hz. Not in opendbc. The best speed source on this bus. */
+    const val ID_SPEED_FAST = 0x361
+    /** Integer km/h in byte 5, ~2 Hz. opendbc ENG1D50, field DRENG06. */
+    const val ID_SPEED_SLOW = 0x498
+    /** Stability ECU speed, km/h × 0.01 in bytes 5-6, ~39 Hz. opendbc VSC1S03 SP1. */
+    const val ID_SPEED_VSC = 0x0B4
+    /** Four wheel speeds, ~78 Hz. opendbc VSC1F01. */
+    const val ID_WHEEL_SPEEDS = 0x0AA
 
     // ── Byte offsets ────────────────────────────────────────────────────────────────────────────
     private const val DOOR_BYTE = 3
     private const val CLIMATE_A_BYTE = 2
     private const val CLIMATE_B_BYTE = 5
     private const val FAN_BYTE = 6
+    private const val SPEED_FAST_BYTE = 6
+    private const val SPEED_SLOW_BYTE = 5
+    private const val SPEED_VSC_HI = 5
+    private const val SPEED_VSC_SCALE = 0.01
+
+    /** Wheel order on the wire: FR, FL, RR, RL — each a 15-bit big-endian field. */
+    private const val WHEEL_FR_HI = 0
+    private const val WHEEL_FL_HI = 2
+    private const val WHEEL_RR_HI = 4
+    private const val WHEEL_RL_HI = 6
+    private const val WHEEL_MASK_HI = 0x7F
+    private const val WHEEL_SCALE = 0.01
+    private const val WHEEL_OFFSET_KMH = -67.67
 
     // ── Door bits. Identical to the vendor MCU's cmd 0x11 byte 6, which is a strong mutual check:
     // ours came from opening doors, theirs from decompiling the head unit, and they agree. ────────
@@ -129,6 +163,15 @@ object RawCanDecoder {
             ID_CLIMATE_A -> RawCanSignal.Climate(on = (data[CLIMATE_A_BYTE].toInt() and 0xFF) != CLIMATE_A_OFF)
             ID_CLIMATE_B -> RawCanSignal.Climate(on = (data[CLIMATE_B_BYTE].toInt() and CLIMATE_B_ON) != 0)
             ID_FAN -> decodeFan(data[FAN_BYTE].toInt() and 0xFF)
+            ID_SPEED_FAST -> RawCanSignal.Speed(u8(data, SPEED_FAST_BYTE).toDouble())
+            ID_SPEED_SLOW -> RawCanSignal.Speed(u8(data, SPEED_SLOW_BYTE).toDouble())
+            ID_SPEED_VSC -> RawCanSignal.Speed(s16be(data, SPEED_VSC_HI) * SPEED_VSC_SCALE)
+            ID_WHEEL_SPEEDS -> RawCanSignal.WheelSpeeds(
+                flKmh = wheel(data, WHEEL_FL_HI),
+                frKmh = wheel(data, WHEEL_FR_HI),
+                rlKmh = wheel(data, WHEEL_RL_HI),
+                rrKmh = wheel(data, WHEEL_RR_HI),
+            )
             else -> null
         }
     }
@@ -146,6 +189,16 @@ object RawCanDecoder {
         running = b != FAN_OFF,
         level = if (b >= FAN_LEVEL_MIN) b - FAN_LEVEL_MIN else 0,
     )
+
+    private fun wheel(data: ByteArray, hi: Int): Double =
+        (((u8(data, hi) and WHEEL_MASK_HI) shl 8) or u8(data, hi + 1)) * WHEEL_SCALE + WHEEL_OFFSET_KMH
+
+    // ── Field readers. DBC "@0" big-endian: the high byte comes first. ──────────────────────────
+    internal fun u8(data: ByteArray, at: Int): Int = data[at].toInt() and 0xFF
+
+    internal fun u16be(data: ByteArray, hi: Int): Int = (u8(data, hi) shl 8) or u8(data, hi + 1)
+
+    internal fun s16be(data: ByteArray, hi: Int): Int = u16be(data, hi).toShort().toInt()
 
     /**
      * Self-test over **real frames from the 2026-09-07 captures**, not hand-written bytes. Each
@@ -191,8 +244,18 @@ object RawCanDecoder {
             return "short frame was not refused"
         }
 
+        // can-1.log, 2026-09-09 drive: the ECU answered 42 km/h at the same instant.
+        val fast = decode(ID_SPEED_FAST, frame(0x80, 0x27, 0x56, 0x00, 0x56, 0x00, 0x2A, 0x7B))
+        if (fast != RawCanSignal.Speed(42.0)) {
+            return "0x361 speed vector decoded as $fast"
+        }
+        val wheels = decode(ID_WHEEL_SPEEDS, frame(0x2B, 0x39, 0x2B, 0x34, 0x2B, 0x28, 0x2B, 0x12))
+        if (wheels !is RawCanSignal.WheelSpeeds || wheels.frKmh !in 42.9..43.1) {
+            return "0x0AA wheel vector decoded as $wheels"
+        }
+
         // An id we do not handle must cost nothing.
-        if (decode(0x0B4, frame(0, 0, 0, 0, 0, 0, 0, 0)) != null) {
+        if (decode(0x0A4, frame(0, 0, 0, 0, 0, 0, 0, 0)) != null) {
             return "unhandled id did not return null"
         }
 
