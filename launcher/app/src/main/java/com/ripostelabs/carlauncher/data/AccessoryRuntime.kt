@@ -85,14 +85,21 @@ object AccessoryRuntime {
         }
 
         loop = scope.launch(Dispatchers.IO) {
-            var lastPoll = 0L
-            while (true) {
-                val now = System.currentTimeMillis()
-                step(now, poll = now - lastPoll >= POLL_MS)
-                if (now - lastPoll >= POLL_MS) {
-                    lastPoll = now
+            // Two jobs, not one loop. On the emulator the 5 s poll ran inside the tick's lock,
+            // and three HTTP round trips to the board stretched a 400 ms hold to a second and a
+            // 2 s hold to four. A poll is slow and does not care about timing; a tick is cheap
+            // and is the timing. They no longer wait for each other.
+            launch {
+                while (true) {
+                    step(System.currentTimeMillis())
+                    delay(TICK_MS)
                 }
-                delay(TICK_MS)
+            }
+            launch {
+                while (true) {
+                    poll(System.currentTimeMillis())
+                    delay(POLL_MS)
+                }
             }
         }
     }
@@ -135,11 +142,13 @@ object AccessoryRuntime {
     }
 
     /**
-     * One turn of the loop. Triggers are read from the snapshot the capture service keeps, so a
-     * door opening on either bus can start a sequence. Fired sequences run last-wins, in
-     * registration order, exactly as the engine hands them back.
+     * One tick. Triggers are read from the snapshot the capture service keeps, so a door opening
+     * on either bus can start a sequence. Fired sequences run last-wins, in registration order,
+     * exactly as the engine hands them back. A step that sends a command still does one HTTP
+     * round trip here; that is the one network call a hold has to absorb, and it is bounded by
+     * the transport's 1 s timeouts.
      */
-    private fun step(now: Long, poll: Boolean) {
+    private fun step(now: Long) {
         synchronized(this) {
             val c = controller ?: return
             val r = runner ?: return
@@ -150,14 +159,29 @@ object AccessoryRuntime {
             // A manual start from the page, taken here so its first step runs on this thread.
             pendingStart?.let { r.start(it, now); pendingStart = null }
 
+            val before = r.state
+            val t0 = System.currentTimeMillis()
             r.tick(now)
-            if (poll) {
-                c.refreshAll(now)
+            val after = r.state
+            if (before != after) {
+                Log.d(LOG_TAG, "tick@$now advanced ${before::class.simpleName}->${after::class.simpleName} " +
+                    "in ${System.currentTimeMillis() - t0}ms; next due ${(after as? SequenceState.Running)?.dueAt?.let { it - now } ?: "-"}ms")
             }
 
             _states.value = c.states.value
             _sequence.value = r.state
         }
+    }
+
+    /**
+     * Ask the board what every accessory is doing. Deliberately not under the tick lock: three
+     * accessories at up to 1 s each is three seconds a sequence must not wait for. The controller
+     * merges states atomically, so a reply landing mid-tick cannot lose a command's result.
+     */
+    private fun poll(now: Long) {
+        val c = controller ?: return
+        c.refreshAll(now)
+        _states.value = c.states.value
     }
 
     /** A base URL nothing answers on, so an unconfigured board reads UNREACHABLE, never "off". */
