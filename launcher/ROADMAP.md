@@ -5,7 +5,8 @@ checked by reading the code, not by the presence of a file with the right name._
 
 _The sections "0.7 — the raw bus, read on the head unit" (verified at versionCode 244) and
 "0.7 — accessories and games" (verified at 254) were added 2026-09-08 the same way. The older
-sections were not re-audited on that date._
+sections were not re-audited on that date. The speed, traceability and documentation-truth
+entries were re-audited 2026-09-09 against `main` at PR #108._
 
 Workflow: **one feature = one branch off `main` = one PR**. Versions are derived from git
 (see below) — do not claim, bump, or mention a versionCode in a PR. Only tagged `main`
@@ -163,26 +164,36 @@ port rotates on every reboot, so a crash on the road currently leaves no evidenc
 
 ### Traceability and proof
 
-- **The repo has zero tags** after thirty-plus merges, so nothing identifies which build is in
-  the car. Tag on merge from the build file, publish the APK and its hash against the tag, and
-  make an unchanged version a clean skip.
-- **Release is signed with the debug key.** Debug keystores are per-machine and per-runner, so
-  two builds of one commit can carry different signatures and an update can fail to install
-  over its predecessor. Needs an owner-supplied keystore in CI secrets; do not commit a key.
-- **No screenshot suite and no instrumented test of any kind.** The status indicators were
-  declared a stability invariant through v4.0, and nothing enforces it. Note that on an
-  emulator there is no root, no vendor service and no car, so the brightness and volume chips
-  are *legitimately* absent there — a test asserting all four are always visible would be
-  wrong, and "fixing" it by making the chips always render would destroy the property the
-  invariant exists to protect.
-- **CI renders at the wrong geometry.** The emulator boots a portrait phone profile, so nothing
-  in CI has ever been drawn at the head unit's landscape resolution and density.
+> Audited 2026-09-09. All four were already done — the same staleness this section keeps
+> producing. Kept struck through, because each still records why it was worth doing.
+
+- ~~**The repo has zero tags.**~~ **DONE.** 79 tags, `v0.7.<versionCode>+<versionCode>.g<sha>`,
+  so a build in the car is identifiable from its version alone.
+- ~~**Release is signed with the debug key.**~~ **DONE.** `app/build.gradle.kts` builds a
+  release signing config from CI secrets and falls back to the debug key only when they are
+  absent; `SIGNING.md` is the procedure. No key is committed.
+- ~~**No screenshot suite and no instrumented test of any kind.**~~ **DONE, twice.** The Compose
+  suite in `app/src/androidTest` has pinned the status indicators since 2026-08-28, and PR #108
+  added a JVM half that runs in `./gradlew test` on every push with no emulator. Both assert the
+  *rule* — exactly the chips whose source answers are visible, the rest absent by whole-set
+  equality — because on an emulator there is no root, no vendor service and no car, so the
+  brightness and volume chips are *legitimately* missing. Making every chip render
+  unconditionally is the one "fix" that would destroy the property the invariant protects.
+- ~~**CI renders at the wrong geometry.**~~ **DONE.** Both emulator jobs boot 1920x720 @240dpi
+  landscape via `headunit-avd.sh` and assert the geometry before measuring. The old
+  `profile: pixel_6` was a 1080x2400 portrait phone.
 
 ### Documentation truth
 
-The design doc still promises the signature/system-app tier that was proven impossible, and the
-project status file does not mention that a custom launcher exists at all. Both mislead the next
-reader into re-deriving settled decisions.
+> Audited 2026-09-09. One of the two claims was itself stale, which is the failure this section
+> exists to catch.
+
+- ~~**The design doc promises the signature/system-app tier.**~~ **DONE.** `LAUNCHER_DESIGN.md`
+  §6.4 and §7 already ruled the tier out; the ship-model line and the Settings section still
+  offered a "privileged build" and now name the root tier instead.
+- ~~**The status file does not mention the launcher.**~~ **Already false when written.**
+  `STATUS.md` has carried a Car Launcher section since 2026-09-01. It gained the raw-bus
+  reading in this pass.
 
 ## 0.5 — the suite lands
 
@@ -257,9 +268,9 @@ body bus** on the head unit itself — 1214 frames/s across 111 ids, measured in
   mistake cannot be made from code.
 - **Recording survives the screen** (`CanCaptureService`, `CanableRecorder`, `CaptureRotation`).
   A foreground service owns the one reader; captures are candump-format, roll at 16 MB, keep the
-  most recent six files, and start hands-free on USB attach via a no-UI trampoline activity. x
-  pulls them over Tailscale every two minutes. A drive is exactly when nobody holds a settings
-  screen open.
+  most recent six files, and start hands-free on USB attach via a no-UI trampoline activity. A
+  capture host on the private network pulls them every two minutes. A drive is exactly when
+  nobody holds a settings screen open.
 - **The raw bus and the MCU fold into one snapshot** (`VehicleState`, `VehicleSnapshot.foldRaw`).
   The Vehicle screen shows doors, climate and fan from either source and does not care which.
   The door layouts differ — the vendor swaps bits 6/7 and 4/5 while repacking — so packing goes
@@ -274,8 +285,9 @@ body bus** on the head unit itself — 1214 frames/s across 111 ids, measured in
 What the car taught, and where it is written down: a **badly grounded CANable enumerates,
 prints its banner, and ignores every command** — the tell is bytes out with nothing in, and reads
 that time out cleanly rather than failing fast. `can-integration/docs/CANABLE_INTEGRATION.md`
-carries the full account. **Not yet exercised in the car:** the recorder, rotation, background
-service and the Vehicle screen. All desk-tested only; the first drive is their real test.
+carries the full account. **Exercised in the car on 2026-09-09:** the background service
+recorded a whole drive unattended, rotation produced several 16 MiB files, the Vehicle screen
+read the drive, and the capture host pulled the files off the car by itself.
 
 ## 0.7 — accessories and games
 
@@ -304,7 +316,7 @@ exercised on the emulator farm against real software before touching the car.
 - **Games screen** (`GameApps`, `GamesRepository`). Lists installed emulator frontends behind the
   existing parked-only gate, with exact package matching because RetroArch's ABI builds differ by
   a suffix and are not interchangeable. The unit is `arm64-v8a` (probed 2026-09-08), so the
-  official `RetroArch_aarch64` build is staged on the share and installed by the x-side watcher
+  official `RetroArch_aarch64` build is staged on the share and installed by an internal watcher
   when absent.
 
 **What the emulator found that unit tests could not**, all fixed before merge: Android's default
@@ -322,31 +334,36 @@ request from inside it takes ~530 ms) and is to be re-measured on the car.
 
 Not blocked forever, just not buildable from here. Each needs one session at the vehicle.
 
-- **The Accessories page on the real unit.** Config is pushed and the virtual board on x answers
-  over Tailscale; nobody has tapped the page in the car yet.
+- **The Accessories page on the real unit.** Config is pushed and a virtual board answers over
+  the private network; nobody has tapped the page in the car yet.
 - **The MCU wire checksum.** `McuSerial` derives the `/dev/ttyS1` framing from the decompile; the
   vendor's broadcast bodies carry the outer CK, so the launcher tallies agree/disagree and logs it
   under `Canable`. The first pull with the car on answers it; grep `mcu-trailer`.
 - **RetroArch input from the wheel.** `WheelGamepad` forwards the presses; whether RetroArch
   accepts the injected key events is a question only the car answers.
 
-- **CAN bulk-frame speed decode**, preferred over GPS. This is what makes the safety gate work
-  in a garage and at power-on, where GPS cannot. _Progress (vc72, 2026-08-29): `HiworldCanDecoder`
-  is now wired into the CAN capture screen, decoding the live CANBOX digest — RPM, hybrid battery,
-  SWC, doors, steering and range are confirmed and shown. **Speed and gear are NOT finished:** a real
-  drive (0→54.8 km/h vs head-unit GPS) proved road speed is not the `0x32` field the decoder assumed
-  (that correlation was an interpolation artifact across a 5.7-min GPS dropout). The true speed is
-  `0x17 p[0:1]` (accurate, ~0.1 km/h/LSB — raw 540 = 54.0 km/h — but low-rate and calibrated on only
-  2 points) and `0x13 p[0:1]` (live ~10 Hz, scale unconfirmed, R²≈0.66). Both are decoded and shown as
-  **candidates**, kept out of the motion gate. Gear: only **reverse** is in the digest (`0x71` bit
-  `0x02`); P/N/D are not transmitted (the `0x1A` byte is a shift transient — D reads the same as N
-  while driving). Remaining work: a **steady-cruise capture** (hold 20/40/60/80 km/h ~10 s each, with
-  continuous 5–10 Hz GPS, no dropout) to calibrate `SPEED_017_SCALE_KMH` / the `0x13` scale; P/N/D
-  likely must be inferred (reverse from `0x71`, "in-gear & moving" from speed)._
-  _Update (vc244, 2026-09-08): the reference for that calibration is no longer GPS. The CANable
-  can transmit, so the plan is to poll OBD PID `0x0D` (vehicle speed, integer km/h, a real ECU
-  answer) on `0x7DF` and fit the `0x17`/`0x13` scales against it — `DriveLog` already refuses to
-  calibrate across a gap. Needs one drive with the adapter grounded properly; no speed holding._
+- ~~**CAN bulk-frame speed decode**, preferred over GPS.~~ **SETTLED 2026-09-09, release
+  0.7 (270)** — and not where this entry was looking. Road speed comes from the **raw Toyota
+  body bus**, not the MCU digest: `0x361` byte 6 and `0x498` byte 5 are integer km/h, `0x0B4`
+  bytes 5-6 are km/h × 0.01, and `0x0AA` carries four 15-bit wheel speeds at 0.01 km/h with a
+  −67.67 offset. The reference was the car's own ECU answering OBD PID `0x0D` across a real
+  drive, 0–60 km/h, at zero median error — so the steady-cruise GPS calibration this entry
+  planned is obsolete and must not be revived. The MCU candidates are closed as wrong: `0x17`
+  never arrived in 996 paired samples, and `0x13` spans 0..175 while the car holds a steady
+  16 km/h. Decoded and checked against the same drive: steering angle, yaw rate, lateral and
+  longitudinal acceleration, brake pressure, engine rpm, intake air temperature, gear, odometer,
+  outside and cabin air temperature, ambient light.
+
+  The **motion safety gate now runs on it** (PR #106): `SpeedSource.BUS` is its own source, not
+  a promoted digest, and it goes stale after 2 s so an unplugged adapter falls back to GPS rather
+  than freezing the gate. `CAN_SPEED_TRUSTED` stays `false` permanently and still guards the
+  vendor digest alone.
+
+  _Still open._ **P/N/D from the MCU digest** is still absent — only reverse is in it (`0x71`
+  bit `0x02`) — though the raw bus now gives gear from `0x3BC`.
+
+  _Not on the raw bus, and still MCU-only._ Climate setpoint, fan step, vent mode and
+  recirculation. Nothing moved during a 1..6 fan sweep, so do not hunt for them there.
 - **Radar byte layout confirmation**, which unblocks radar history on the dashboard.
 - **The LHD/RHD auto table.** The manual override works; the automatic side detection is inert
   because the vendor car-type values are unknown. One device read, then one line.

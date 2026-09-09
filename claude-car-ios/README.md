@@ -4,7 +4,7 @@ iPhone client for Claude, ported from the head-unit app (`../claude-car-app`,
 Compose → SwiftUI). Thin client, no third-party deps, two backends:
 
 ```
-                    ┌─ claude-car ──tailnet──▶ x:8799 server.py ──▶ headless Claude Code
+                    ┌─ claude-car ──private net──▶ backend:8799 server.py ──▶ headless Claude Code
 iPhone (this app) ──┤
                     └─ Anthropic ──https────▶ api.anthropic.com/v1/messages
 ```
@@ -17,7 +17,7 @@ which one is selected.
 |---|---|---|
 | Conversation lives | on the server, keyed by client id | on the phone (`Transcript`) |
 | Tools | yes, on the host | none |
-| Auth | none (tailnet) | your key, in the keychain |
+| Auth | none (private network) | your key, in the keychain |
 | "New chat" | `POST /new` | clears the local transcript |
 | Health dot | `GET /health` | `GET /v1/models` (free) |
 
@@ -62,9 +62,9 @@ Voice: the mic button and Siri, below.
 - **Phone layout**: portrait-first, system type sizes. The head-unit sizing
   (1920x720 @240dpi, everything one step larger) does not apply. The warm dark
   palette carries over unchanged and is forced dark — same reason, night driving.
-- No Tailscale/gost shim. The iOS Tailscale app is a real tunnel, so the app
-  talks to `x:8799` directly. The head unit needs the SOCKS5 forwarder because
-  its static `tailscaled` only runs in userspace mode.
+- No VPN/gost shim. A phone VPN client is a real tunnel, so the app
+  talks to the backend directly. The head unit needs the SOCKS5 forwarder because
+  its static VPN client only runs in userspace mode.
 
 ## Config
 
@@ -81,7 +81,7 @@ The backend address is entered on the phone. A bare `host:port` works; the
 client prepends `http://` when no scheme is given.
 
 Plain HTTP to a claude-car server needs the ATS opt-out in `Info.plist`.
-`NSAllowsLocalNetworking` would not cover a tailnet address — 100.64/10 is
+`NSAllowsLocalNetworking` would not cover a CGNAT VPN address — 100.64/10 is
 CGNAT, not LAN.
 
 ## Build
@@ -156,7 +156,7 @@ Button, in Control Center, or in a driving automation.
 
 ## Prereqs
 
-The phone must be on the tailnet, and the backend running on x
+The phone must be on the same private network as the backend, and the backend running
 (`~/claude-car/run.sh start`).
 
 ## Not ported

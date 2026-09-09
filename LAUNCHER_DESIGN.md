@@ -8,8 +8,8 @@ authoritative source for every event, service, and setting referenced here (cite
 - **Input:** finger touch (gloved, moving vehicle) + steering-wheel keys (SWC).
 - **OS:** Android 13, rooted.
 - **Ship model:** COMPANION home first (coexists with vendor `com.szchoiceway.customerui`;
-  user chooses the default via the Android home-resolver), with a documented path to FULL
-  REPLACEMENT as a privileged/system app.
+  user chooses the default via the Android home-resolver). The FULL REPLACEMENT tier as a
+  privileged/system app is ruled out for good (§6.4); the ROOT TIER replaced it and shipped.
 
 Throughout, **all sizes are in dp** on the ~1280 × 480 dp canvas unless a px value is stated.
 
@@ -69,8 +69,10 @@ A 1280 dp-wide panel is far wider than any reach arc. Treat reach as **two thumb
 - **Modality is reserved for safety.** The only screen allowed to seize the foreground
   unprompted is the **Reverse overlay** (§3.6). Everything else is user-initiated.
 - **No text entry while moving.** Search in the App Drawer and any keyboard field is disabled
-  above a speed threshold (speed read per CAR_API §1.3 note: CAN bulk frame / GPS / AIDL — there
-  is no clean speed extra). When locked out, show a large "Available when parked" state.
+  above a speed threshold. The vendor gateway has no numeric speed extra (CAR_API §1.3), so the
+  reading is the raw body bus (`carlib/RawCanDecoder`, verified against the car's own ECU on
+  2026-09-09) with GPS as the fallback. When locked out, show a large "Available when parked"
+  state.
 - **Confirmations are non-blocking.** Use brief inline toasts/snackbars anchored bottom-center,
   auto-dismissing, never a modal that blocks the road-facing content.
 - **Haptics + optional MCU beep** (`IEventService.beep()`, CAR_API §3.2) on every successful
@@ -208,8 +210,8 @@ As laid out in §2. Root destination; SWC HOME key always returns here (§4).
   editor, default-home helper (deep-link to Android home resolver), display brightness passthrough.
 - Advanced (parked-only): SysVar inspector/editor (writes require root/system — §6), radio
   presets, reverse options (`Sys_Reverse_Assist_Line_Key`, `Sys_TrackLineType`,
-  `Sys_BackCar_Display_Radar_Key`). Reads open; writes gated behind the privileged build or a
-  root `content update` shim.
+  `Sys_BackCar_Display_Radar_Key`). Reads open; writes go through the root `content update`
+  shim (§6.3) — there is no privileged build.
 
 ---
 

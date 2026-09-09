@@ -73,8 +73,8 @@ adb push accessory-config.json /sdcard/Android/data/com.ripostelabs.carlauncher/
 
 then `Settings → Accessories → Load config from file`. Every problem the parser finds is listed on
 the page; a file with problems is still loaded minus the parts it could not use. A ready-made
-example with three accessories, four sequences and three triggers lives on the share at
-`\\x.hq\share\canable\accessory-config.json`, pointed at the virtual board on x.
+example with three accessories, four sequences and three triggers lives on the file share,
+pointed at the virtual board.
 
 ## Reference firmware
 
