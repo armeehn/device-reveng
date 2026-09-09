@@ -1,0 +1,9 @@
+{
+  "wifi": {"ssid": "mobile-gate", "password": "change-me"},
+  "port": 8765,
+  "accessories": {
+    "bar": {"kind": "switch", "pin": 4},
+    "spot": {"kind": "level", "pin": 5},
+    "antenna": {"kind": "servo", "pin": 18, "min_us": 500, "max_us": 2500}
+  }
+}

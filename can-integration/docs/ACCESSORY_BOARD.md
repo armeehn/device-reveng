@@ -76,6 +76,13 @@ the page; a file with problems is still loaded minus the parts it could not use.
 example with three accessories, four sequences and three triggers lives on the share at
 `\\x.hq\share\canable\accessory-config.json`, pointed at the virtual board on x.
 
+## Reference firmware
+
+[`../board/micropython/`](../board/micropython/) is the board itself: MicroPython for an ESP32,
+`board.py` carrying this contract with no hardware in it (tested under CPython, negative controls
+included) and `main.py` adding WiFi and pins. `tools/virtual-board.py` remains the no-hardware
+stand-in on x.
+
 ## Not in the contract
 
 - Authentication. The board is on the car's private network behind the MikroTik; nothing on the
