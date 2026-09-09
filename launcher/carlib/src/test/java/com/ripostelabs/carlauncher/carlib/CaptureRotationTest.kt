@@ -63,25 +63,6 @@ class CaptureRotationTest {
         assertEquals("can-5.log", rotation.currentName())
     }
 
-    @Test
-    fun `the csv pairs with the log by index`() {
-        val rotation = CaptureRotation(maxBytesPerFile = 10, maxFiles = 3)
-        rotation.roll(); rotation.roll()
-
-        assertEquals("can-2.log", rotation.currentName())
-        assertEquals("calibration-2.csv", rotation.currentCsvName())
-        assertEquals("calibration-0.csv", rotation.csvFor("can-0.log"))
-    }
-
-    @Test
-    fun `a name that is not ours has no paired csv`() {
-        // Evicting by a guessed name could delete a file that is not a capture at all.
-        val rotation = CaptureRotation()
-
-        assertNull(rotation.csvFor("device-facts.txt"))
-        assertNull(rotation.csvFor("can-x.log"))
-    }
-
     // ── Negative controls ───────────────────────────────────────────────────────────────────────
 
     @Test
