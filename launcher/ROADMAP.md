@@ -324,6 +324,9 @@ Not blocked forever, just not buildable from here. Each needs one session at the
 
 - **The Accessories page on the real unit.** Config is pushed and the virtual board on x answers
   over Tailscale; nobody has tapped the page in the car yet.
+- **The MCU wire checksum.** `McuSerial` derives the `/dev/ttyS1` framing from the decompile; the
+  vendor's broadcast bodies carry the outer CK, so the launcher tallies agree/disagree and logs it
+  under `Canable`. The first pull with the car on answers it; grep `mcu-trailer`.
 - **RetroArch input from the wheel.** `WheelGamepad` forwards the presses; whether RetroArch
   accepts the injected key events is a question only the car answers.
 
