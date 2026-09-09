@@ -295,6 +295,12 @@ exercised on the emulator farm against real software before touching the car.
 - **Accessories screen.** No toggle, by design: each accessory shows what the board last
   confirmed and offers the two commands. Config is one JSON file pushed with `adb` and loaded
   from the page; every parser problem is listed. An example config lives on the share.
+- **The wheel as a gamepad** (`WheelGamepad`). While an emulator frontend owns the foreground,
+  the wheel presses the launcher already resolves to UP/DOWN/LEFT/RIGHT/CENTER/BACK are
+  forwarded to it as D-pad, A, B and START by root. HOME is never forwarded, so there is always
+  a way out; the gate is the foreground *package* being a known frontend, read per press, so a
+  press never lands in the vendor's reverse window or a call. The emulator has no wheel, so
+  whether RetroArch accepts the injected keys is deferred to the car.
 - **Games screen** (`GameApps`, `GamesRepository`). Lists installed emulator frontends behind the
   existing parked-only gate, with exact package matching because RetroArch's ABI builds differ by
   a suffix and are not interchangeable. The unit is `arm64-v8a` (probed 2026-09-08), so the
@@ -306,7 +312,10 @@ cleartext block made every board command "unreachable" with no reason logged; st
 from the page threw `NetworkOnMainThreadException`; and the board poll running inside the runner's
 tick stretched a 2 s hold to 4 s. With those fixed, on the emulator: a light turned on and read
 back, a three-step sequence ran with its 2 s hold exact, and RetroArch 1.22.2 launched from the
-Games page. The remaining ~1 s per HTTP step is the emulator's own networking (a raw socket
+Games page. The negative control ran there too: against a virtual board started with `--lie`,
+which answers 200 and changes nothing, the page stayed "off" after *Turn on* while the board
+logged the command it ignored. The no-optimistic-update rule holds on a running launcher, not
+only in unit tests. The remaining ~1 s per HTTP step is the emulator's own networking (a raw socket
 request from inside it takes ~530 ms) and is to be re-measured on the car.
 
 ## Deferred — needs the car, not the desk
@@ -315,8 +324,8 @@ Not blocked forever, just not buildable from here. Each needs one session at the
 
 - **The Accessories page on the real unit.** Config is pushed and the virtual board on x answers
   over Tailscale; nobody has tapped the page in the car yet.
-- **RetroArch input from the wheel.** The launcher already maps the steering-wheel keys; whether
-  RetroArch sees them as a gamepad is a question only the car answers.
+- **RetroArch input from the wheel.** `WheelGamepad` forwards the presses; whether RetroArch
+  accepts the injected key events is a question only the car answers.
 
 - **CAN bulk-frame speed decode**, preferred over GPS. This is what makes the safety gate work
   in a garage and at power-on, where GPS cannot. _Progress (vc72, 2026-08-29): `HiworldCanDecoder`
