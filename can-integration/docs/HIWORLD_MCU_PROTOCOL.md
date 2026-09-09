@@ -15,6 +15,18 @@ Observed live in logcat on the "SendCmdLstToCanbus" line (that is the
 head-unit -> MCU direction). Byte indices below are into the frame as the
 handler receives it, i.e. bArr[2] is the first payload byte.
 
+WIRE FRAMING ON /dev/ttyS1 (from the port owner, not yet from the port)
+The frame above is the CAN box's. On the serial line itself it travels
+inside eventcenter's framing, written by SerialPortManager.sendDataEx and
+read by SerialReadThread.parseRxData:
+    0D 0A | LEN | OPCODE | payload[LEN-1] | CK | 00
+LEN counts opcode + payload. CK = ~(LEN + OPCODE + payload) low byte. The
+00 is a pad. OPCODE 0xA5 is onCmdCanEvent, and its payload is the
+5A A5 frame above, which is why canbus2 sees "A5 5A A5": opcode, then
+the box's header. Codec + stream reassembly: launcher McuSerial.kt.
+No byte has been captured off the port; the inbound CK formula is an
+assumption the reader reports on rather than enforces silently.
+
 COMMAND TABLE (from the dispatch switch)
     0x11  17   BasicStatus      <-- also carries DOORS, keys, wheel track
     0x12  18   CarInfo
