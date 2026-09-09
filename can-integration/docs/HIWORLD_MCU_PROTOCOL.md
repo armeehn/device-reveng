@@ -27,6 +27,26 @@ the box's header. Codec + stream reassembly: launcher McuSerial.kt.
 No byte has been captured off the port; the inbound CK formula is an
 assumption the reader reports on rather than enforces silently.
 
+INBOUND OPCODES ON THE WIRE (EventService.processCmd, decompiled 2026-09-08)
+The OPCODE byte of the outer frame selects a handler in eventcenter. Kept
+in code as launcher McuOpcode, with the vendor handler names. These are
+NOT the 5A A5 command bytes below: 0xA5 carries that whole frame.
+    0x6D radar (plug-in)   0x86 8825 value     0x96 sleep state
+    0x70 mode ack          0x88 wheel state    0x97 test state
+    0x71 sys event         0x8D radar (IR)     0x98 encode state
+    0x72 key event         0x8E 3DH data       0x99 send 99
+    0x73 radio event       0x94 8836 value     0xA1 car air
+    0x74 wheel event       0x95 HDMI res       0xA5 CAN box frame
+    0x75 TV event          0x7E press key      0xA6 ATA data
+    0x76 BMT volume        0x7F upgrade ack
+    0x77 EQ                0x80 freq select
+    0x78 mute              0x81 mode power on
+    0x79 main volume       0x82 disc auto in
+    0x7A balance           0x83 sys RTC time
+    0x7B loudness          0x84 camera single
+    0x7C MCU init
+None of these is confirmed by a byte from the port; see WIRE FRAMING.
+
 COMMAND TABLE (from the dispatch switch)
     0x11  17   BasicStatus      <-- also carries DOORS, keys, wheel track
     0x12  18   CarInfo
