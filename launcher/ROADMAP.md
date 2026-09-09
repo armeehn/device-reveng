@@ -3,8 +3,9 @@
 _Last verified against `main` on 2026-08-28 at versionCode 61. Every "shipped" claim below was
 checked by reading the code, not by the presence of a file with the right name._
 
-_The section "0.7 — the raw bus, read on the head unit" was added 2026-09-08 and verified at
-versionCode 244 the same way. The older sections were not re-audited on that date._
+_The sections "0.7 — the raw bus, read on the head unit" (verified at versionCode 244) and
+"0.7 — accessories and games" (verified at 254) were added 2026-09-08 the same way. The older
+sections were not re-audited on that date._
 
 Workflow: **one feature = one branch off `main` = one PR**. Versions are derived from git
 (see below) — do not claim, bump, or mention a versionCode in a PR. Only tagged `main`
@@ -276,9 +277,46 @@ that time out cleanly rather than failing fast. `can-integration/docs/CANABLE_IN
 carries the full account. **Not yet exercised in the car:** the recorder, rotation, background
 service and the Vehicle screen. All desk-tested only; the first drive is their real test.
 
+## 0.7 — accessories and games
+
+Two things the owner asked for by name: switching lights and servos from the screen, with
+sequences and automation; and playing games on the unit. Both shipped desk-first and were
+exercised on the emulator farm against real software before touching the car.
+
+- **Accessory control** (`Accessory`, `AccessoryController`, `AccessorySequence`,
+  `AccessoryTrigger`, `HttpAccessoryTransport`, `AccessoryRuntime`). An accessory whose state is
+  unconfirmed is *unknown*, never off, and there is no optimistic update: a switch moves only on
+  a confirmed reply, and a board that answers 200 while doing nothing reads as refused because
+  the state is read back and compared. Sequences are tick-driven with holds; a refused step voids
+  the plan. Triggers fire on rising edges of the vehicle snapshot and never on a gap in the data.
+  The transport is plain HTTP to a board on the car's private network; the contract is
+  `can-integration/docs/ACCESSORY_BOARD.md`, and `can-integration/tools/virtual-board.py` speaks
+  it for testing, with a `--lie` mode.
+- **Accessories screen.** No toggle, by design: each accessory shows what the board last
+  confirmed and offers the two commands. Config is one JSON file pushed with `adb` and loaded
+  from the page; every parser problem is listed. An example config lives on the share.
+- **Games screen** (`GameApps`, `GamesRepository`). Lists installed emulator frontends behind the
+  existing parked-only gate, with exact package matching because RetroArch's ABI builds differ by
+  a suffix and are not interchangeable. The unit is `arm64-v8a` (probed 2026-09-08), so the
+  official `RetroArch_aarch64` build is staged on the share and installed by the x-side watcher
+  when absent.
+
+**What the emulator found that unit tests could not**, all fixed before merge: Android's default
+cleartext block made every board command "unreachable" with no reason logged; starting a sequence
+from the page threw `NetworkOnMainThreadException`; and the board poll running inside the runner's
+tick stretched a 2 s hold to 4 s. With those fixed, on the emulator: a light turned on and read
+back, a three-step sequence ran with its 2 s hold exact, and RetroArch 1.22.2 launched from the
+Games page. The remaining ~1 s per HTTP step is the emulator's own networking (a raw socket
+request from inside it takes ~530 ms) and is to be re-measured on the car.
+
 ## Deferred — needs the car, not the desk
 
 Not blocked forever, just not buildable from here. Each needs one session at the vehicle.
+
+- **The Accessories page on the real unit.** Config is pushed and the virtual board on x answers
+  over Tailscale; nobody has tapped the page in the car yet.
+- **RetroArch input from the wheel.** The launcher already maps the steering-wheel keys; whether
+  RetroArch sees them as a gamepad is a question only the car answers.
 
 - **CAN bulk-frame speed decode**, preferred over GPS. This is what makes the safety gate work
   in a garage and at power-on, where GPS cannot. _Progress (vc72, 2026-08-29): `HiworldCanDecoder`

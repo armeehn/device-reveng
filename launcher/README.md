@@ -118,6 +118,8 @@ head unit and match its `sha256sum` against the release body.
 | Bind `EventService`, read-only AIDL | ✅ | exported service |
 | AIDL control side-effects | ⚠️ | not recovered by root either; see *Root-native tier* |
 | Read the raw vehicle CAN bus | ✅ no root | over the USB host API to a CANable; there is no CDC-ACM driver on this kernel, so no serial node — see *Raw vehicle bus* below |
+| Switch lights and servos on an accessory board | ✅ no root | plain HTTP to a board on the car's private network; cleartext is enabled for it in the manifest — see *Accessories* below |
+| Launch emulator frontends | ✅ | behind the parked-only gate; RetroArch `aarch64` is the build for this unit — see *Games* below |
 
 ## Raw vehicle bus (USB CAN)
 
@@ -141,6 +143,35 @@ MCU broadcast ──▶ HiworldCanDecoder ────────────�
   command. If it talks and never answers, check GND first.
 - Where the wire, the pinout and the decoded ids are documented:
   [`../can-integration/docs/CANABLE_INTEGRATION.md`](../can-integration/docs/CANABLE_INTEGRATION.md).
+
+## Accessories (car network)
+
+Lights, servos and sequences, switched from `Settings → Accessories`. The board is any
+microcontroller on the car's private network speaking the small contract in
+[`../can-integration/docs/ACCESSORY_BOARD.md`](../can-integration/docs/ACCESSORY_BOARD.md);
+`can-integration/tools/virtual-board.py` speaks it too, for testing with no hardware.
+
+```
+Accessories screen ──▶ AccessoryRuntime ──▶ AccessoryController ──▶ HttpAccessoryTransport ──▶ board
+                            │  ▲
+   VehicleSnapshot ──▶ TriggerEngine ──▶ SequenceRunner   (reverse → work lights, door → welcome)
+```
+
+- **Unknown is drawn as unknown.** The page has no toggle: a switch drawn off claims the thing is
+  off, and a board that has not answered has not said that. State changes only on a confirmed
+  reply; a 200 with the wrong state is a refusal.
+- **Config is a file.** Push it, then *Load config from file*:
+  `adb push accessory-config.json /sdcard/Android/data/com.ripostelabs.carlauncher/files/`
+  An example with three accessories, four sequences and three triggers is on the share.
+- **Runs without the screen.** Triggers evaluate for the life of the launcher, so "reverse → work
+  lights" works with no settings page open.
+
+## Games
+
+`Settings → Games` lists installed emulator frontends and launches them behind the parked-only
+gate. Matching is exact: RetroArch ships `com.retroarch`, `.aarch64` and `.ra32` as separate,
+non-interchangeable installs, and this unit is `arm64-v8a`. The official `aarch64` build is
+staged on the share and installed by the x-side watcher when it is missing.
 
 ## Settings suite (v1.1 → v2.0)
 
