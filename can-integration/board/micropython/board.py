@@ -16,6 +16,9 @@ Plain MicroPython-compatible Python: no f-strings with `=`, no dataclasses, no t
 """
 import json
 
+RECV_CHUNK = 512
+CLIENT_TIMEOUT_S = 1.0
+
 OK = 200
 BAD_REQUEST = 400
 NOT_FOUND = 404
@@ -149,3 +152,31 @@ def render(code, body):
         head += "Content-Type: application/json\r\n"
     head += "Content-Length: %d\r\nConnection: close\r\n\r\n" % len(data)
     return head.encode() + data
+
+
+def serve_connection(conn, brd, log=print):
+    """Answer one accepted connection, then close it. Never raises: a bad client costs nothing.
+
+    Bytes are read until parse_request has a whole request; the launcher's 1 s budget is also
+    the client timeout, so a stalled sender is dropped rather than waited for.
+    """
+    conn.settimeout(CLIENT_TIMEOUT_S)
+    raw = b""
+    try:
+        while True:
+            chunk = conn.recv(RECV_CHUNK)
+            if not chunk:
+                break
+            raw += chunk
+            parsed = parse_request(raw)
+            if parsed is None:
+                continue
+            method, path, body = parsed
+            code, reply = brd.handle(method, path, body)
+            conn.send(render(code, reply))
+            log(method, path, code, reply)
+            break
+    except OSError:
+        pass
+    finally:
+        conn.close()

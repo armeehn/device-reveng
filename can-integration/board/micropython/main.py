@@ -20,8 +20,6 @@ import network
 import board
 
 CONFIG_PATH = "config.json"
-RECV_CHUNK = 512
-CLIENT_TIMEOUT_S = 1.0
 ACCEPT_TIMEOUT_S = 2.0
 WIFI_CHECK_EVERY_S = 5
 WIFI_JOIN_WAIT_S = 20
@@ -115,28 +113,6 @@ def join_wifi(cfg):
     return wlan
 
 
-def serve_one(conn, brd):
-    conn.settimeout(CLIENT_TIMEOUT_S)
-    raw = b""
-    try:
-        while True:
-            chunk = conn.recv(RECV_CHUNK)
-            if not chunk:
-                break
-            raw += chunk
-            parsed = board.parse_request(raw)
-            if parsed is not None:
-                method, path, body = parsed
-                code, reply = brd.handle(method, path, body)
-                conn.send(board.render(code, reply))
-                print(method, path, code, reply)
-                break
-    except OSError:
-        pass
-    finally:
-        conn.close()
-
-
 def main():
     cfg = load_config()
     brd = board.Board(build_outputs(cfg))
@@ -153,7 +129,7 @@ def main():
     while True:
         try:
             conn, _ = srv.accept()
-            serve_one(conn, brd)
+            board.serve_connection(conn, brd)
         except OSError:
             pass
 
