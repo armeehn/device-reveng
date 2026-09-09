@@ -45,7 +45,7 @@ for n in /dev/ttyS1 /dev/ttyHS1; do
 done
 
 say ""
-say "reading ${SECS}s from each candidate, looking for 5A A5 or A5 5A A5 framing"
+say "reading ${SECS}s from each candidate, looking for 0D 0A LEN framing (5A A5 rides inside opcode A5)"
 mkdir -p "$OUT" 2>/dev/null
 found=0
 for n in /dev/ttyS1 /dev/ttyHS1 /dev/ttyS3; do
