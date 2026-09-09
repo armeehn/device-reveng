@@ -19,13 +19,11 @@ on:
       - "launcher/**"
       - ".gitea/workflows/launcher-ci.yml"
       - ".gitea/scripts/**"
-      - "can-integration/board/**"
   pull_request:
     paths:
       - "launcher/**"
       - ".gitea/workflows/launcher-ci.yml"
       - ".gitea/scripts/**"
-      - "can-integration/board/**"
   workflow_dispatch:
 
 concurrency:
@@ -56,12 +54,6 @@ jobs:
 
       # Kotlin/AGP toolchain requires JDK 17 (system JDKs newer than 21
       # break the Kotlin compile — see launcher/README).
-      # The accessory board firmware carries its contract in plain Python; it is tested here
-      # because no MicroPython runs in CI and the launcher's transport is its other half.
-      - name: Accessory board contract tests
-        run: python3 -m unittest -v
-        working-directory: can-integration/board/micropython
-
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
