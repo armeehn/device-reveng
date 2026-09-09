@@ -17,7 +17,9 @@ launcher ──WiFi (mobile-gate)──▶ ESP32 :8765 ──GPIO──▶ MOSFE
 | `board.py` | the contract: paths, state JSON, refusals. No hardware; tested under CPython |
 | `main.py` | WiFi, pins, the socket server. MicroPython only |
 | `config.example.json` | copy to `config.json`, edit |
-| `test_board.py` | `python3 -m unittest -v` in this directory |
+| `serve.py` | the firmware's brain on a desk: `board.py` behind a CPython socket, pins replaced by print |
+| `test_board.py` | the contract, `python3 -m unittest -v` in this directory |
+| `test_wire.py` | `serve.py` and `tools/virtual-board.py` answer one request script identically; a `--lie` board must differ |
 
 ## Install
 
@@ -28,6 +30,10 @@ launcher ──WiFi (mobile-gate)──▶ ESP32 :8765 ──GPIO──▶ MOSFE
 4. `curl http://<board>:8765/state/bar` → `{"power": "off"}`.
 
 Point the launcher's `accessory-config.json` base URL at the board and load it.
+
+No board yet? `python3 serve.py --port 8766 bar:switch spot:level antenna:servo` on x runs the
+same code path with print in place of pins, so the launcher can be driven against the real
+firmware logic before the ESP32 arrives.
 
 ## Kinds
 
