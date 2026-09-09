@@ -50,7 +50,7 @@ fun VehicleScreen(
     }
 
     // MCU frames are folded by MainActivity for the life of the launcher, not here. Folding them
-    // here as well would mint every speed-calibration sample twice while this page is open.
+    // here as well would fold every MCU frame twice while this page is open.
 
     // Staleness expires on read, so the screen has to re-read even when no frame arrives —
     // otherwise a bus that goes silent leaves its last values on screen forever.

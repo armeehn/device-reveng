@@ -4,11 +4,11 @@ package com.ripostelabs.carlauncher.carlib
  * ObdSpeed — ask the car how fast it is going, and believe only a well-formed answer.
  *
  * ── Why this exists ─────────────────────────────────────────────────────────────────────────────
- * Every speed the launcher has is a candidate. `0x32` was disproved by a real drive, `0x17` and
- * `0x13` are decoded but uncalibrated, and GPS — the old reference — drops out for minutes at a
- * time. The calibration needs a number the car itself vouches for. OBD PID `0x0D` is exactly
- * that: the ECU's own integer km/h, answered on request. No speed holding is needed to fit
- * against it; [DriveLog] pairs samples and refuses to fit across a gap.
+ * Every speed the launcher decodes is a candidate. `0x32`, `0x17` and `0x13` were all disproved
+ * by real drives, and GPS — the old reference — drops out for minutes at a time. Checking a
+ * candidate needs a number the car itself vouches for. OBD PID `0x0D` is exactly that: the ECU's
+ * own integer km/h, answered on request. It is the reference the raw-bus decode was validated
+ * against, and the one any future decode gets validated against.
  *
  * ── The one frame the launcher transmits ────────────────────────────────────────────────────────
  * This is the only code path that puts anything on the vehicle bus. It sends one functional
@@ -109,7 +109,7 @@ object ObdSpeed {
  *
  * Bounded on purpose. A read loop turns ~1215 times a second, and asking the ECU on every turn
  * would put more traffic on the bus than the car's own body modules do. One request every
- * [intervalMs] is plenty for a calibration fit and invisible to everything else on the wire.
+ * [intervalMs] is plenty for a cross-check and invisible to everything else on the wire.
  */
 class ObdPoller(private val intervalMs: Long = DEFAULT_INTERVAL_MS) {
 

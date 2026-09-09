@@ -327,9 +327,8 @@ class MainActivity : ComponentActivity() {
 
         // Every MCU frame folds into the one vehicle snapshot the capture service owns, for as
         // long as this activity exists — which, for the HOME app, is the whole drive. Before this
-        // the Vehicle screen folded them itself, so the speed calibration only collected MCU
-        // candidates while someone was looking at that page. This is the ONLY place MCU frames
-        // are folded: a second fold of the same frame would mint a second calibration sample.
+        // the Vehicle screen folded them itself, so nothing accumulated unless someone was
+        // looking at that page. This is the ONLY place MCU frames are folded.
         lifecycleScope.launch {
             carEvents.canRaw.collect { frame ->
                 val bytes = frame?.bytes ?: return@collect

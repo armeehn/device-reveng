@@ -260,25 +260,19 @@ private fun CanableRows(status: CanableStatus, onGrant: () -> Unit) {
             InfoRow(label = "Unreadable lines", value = "${status.unparsed}")
             InfoRow(label = "Distinct IDs", value = "${status.distinctIds}")
             InfoRow(label = "Captured", value = "${status.captureBytes / 1024} kB")
-            // The ECU's own answer, here and only here. It is the reference the candidate speed
-            // fields are calibrated against, not a candidate itself — but the Vehicle page still
-            // shows no speed until one of them is calibrated, and this row does not change that.
+            // The ECU's own answer, here and only here. Kept as the independent reference the
+            // raw-bus decode is checked against, not as a candidate itself.
             InfoRow(
                 label = "ECU speed (OBD 0x0D)",
                 value = status.obdKmh?.let { "$it km/h (${status.obdReplies} replies)" } ?: "no answer yet",
             )
-            // The calibration, as evidence rather than as a speedometer. A scale appears only when
-            // enough paired points span enough range; until then the row says how far along it is.
-            // The raw bus answers the question the calibration was built to ask. Shown beside the
-            // ECU reference so a divergence is visible here first.
+            // Where road speed actually comes from. Shown beside the ECU reference so a
+            // divergence is visible here first.
             val vehicle by CanCaptureService.vehicle().snapshot.collectAsStateWithLifecycle()
             InfoRow(
                 label = "Raw-bus speed",
                 value = vehicle.speedKmh?.let { "%.1f km/h".format(it) } ?: "no frame yet",
             )
-            // Kept as the record that closed the MCU-candidate question, not as a speedometer.
-            InfoRow(label = "MCU calibration samples", value = "${status.calibrationSamples} (0x17/0x13 are not speed)")
-
             Spacer(Modifier.size(8.dp))
             if (status.frames == 0L) {
                 Text(

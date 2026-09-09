@@ -22,13 +22,7 @@ import kotlinx.coroutines.flow.asStateFlow
  * late rather than by a timer running in this class. That keeps the whole path free of clocks
  * and testable without sleeping.
  */
-class VehicleState(
-    /**
-     * Where speed candidates go. The snapshot itself never holds a speed; the calibration does,
-     * paired with the ECU's answer, until a scale is actually established.
-     */
-    private val calibration: SpeedCalibration? = null,
-) {
+class VehicleState {
 
     private val _snapshot = MutableStateFlow(VehicleSnapshot())
     val snapshot: StateFlow<VehicleSnapshot> = _snapshot.asStateFlow()
@@ -45,7 +39,6 @@ class VehicleState(
 
     /** Absorb one already-decoded signal. */
     fun onSignal(signal: CanSignal, atMs: Long) {
-        calibration?.onCandidate(signal, atMs)
         _snapshot.value = _snapshot.value.fold(signal, atMs)
     }
 

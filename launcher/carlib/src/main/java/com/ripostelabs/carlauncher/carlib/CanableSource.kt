@@ -45,10 +45,6 @@ sealed class CanableStatus {
         val obdKmh: Int? = null,
         val obdReplies: Long = 0,
 
-        /** What the paired samples support so far. Null until they support a calibration. */
-        val fit: SpeedCalibration.Fit? = null,
-        val calibrationSamples: Int = 0,
-
         /** Where the capture is being written, and how much of it exists so far. */
         val capturePath: String? = null,
         val captureBytes: Long = 0,
@@ -75,9 +71,6 @@ class CanableSource private constructor(
      * has to know which protocol a reading arrived on.
      */
     private val vehicle: VehicleState,
-
-    /** Where the ECU's own speed goes, to be paired with the MCU candidates. */
-    private val calibration: SpeedCalibration,
 ) {
 
     private val _status = MutableStateFlow<CanableStatus>(CanableStatus.Idle)
@@ -208,31 +201,15 @@ class CanableSource private constructor(
             runCatching { writer?.flush() }
             runCatching { writer?.close() }
             writer = null
-            writeCalibration()
-        }
-
-        /**
-         * The speed-calibration samples, beside the log they came from. Written when a log is
-         * closed rather than per sample: the CSV is small, and the point is that the evidence
-         * leaves the device with the frames. Until this existed `SpeedCalibration.csv()` had no
-         * caller, and a drive's calibration samples died with the process.
-         */
-        private fun writeCalibration() {
-            val target = dir?.let { File(it, rotation.currentCsvName()) } ?: return
-            runCatching { target.writeText(calibration.csv()) }
         }
 
         private fun roll() {
             close()
 
             // Evicting before opening keeps the directory at its bound even if the next open
-            // fails, which matters on a device whose storage is already tight. The paired CSV
-            // goes with its log, so the directory never holds samples for frames it has lost.
+            // fails, which matters on a device whose storage is already tight.
             rotation.roll()?.let { stale ->
-                dir?.let { d ->
-                    File(d, stale).delete()
-                    rotation.csvFor(stale)?.let { File(d, it).delete() }
-                }
+                dir?.let { d -> File(d, stale).delete() }
             }
             open()
         }
@@ -265,7 +242,7 @@ class CanableSource private constructor(
         var published = publishedAt
 
         // The one thing this service transmits: a bounded-rate request for the ECU's own speed,
-        // the reference the candidate speed fields get calibrated against. Every reply is also
+        // the independent reference the raw-bus decode is checked against. Every reply is also
         // in the capture file, since it is just another frame on the bus.
         val poller = ObdPoller()
 
@@ -278,12 +255,7 @@ class CanableSource private constructor(
                 if (event is SlcanEvent.Received) {
                     capture.record(event.frame)
                     vehicle.onRawFrame(event.frame, System.currentTimeMillis())
-                    ObdSpeed.parse(event.frame)?.let { reply ->
-                        stats.recordObd(reply)
-                        if (reply is ObdSpeed.Reply.Speed) {
-                            calibration.onReference(reply.kmh, System.currentTimeMillis())
-                        }
-                    }
+                    ObdSpeed.parse(event.frame)?.let { stats.recordObd(it) }
                 }
             }
 
@@ -316,8 +288,6 @@ class CanableSource private constructor(
                 distinctIds = stats.distinctIds,
                 obdKmh = stats.obdKmh,
                 obdReplies = stats.obdReplies,
-                fit = calibration.fit(),
-                calibrationSamples = calibration.sampleCount(),
                 unparsed = stats.unparsed,
                 capturePath = capture.path(),
                 captureBytes = capture.bytes,
@@ -353,10 +323,6 @@ class CanableSource private constructor(
             "frames=${status.frames} rate=${status.ratePerSec}/s " +
             "rejected=${status.rejected} unparsed=${status.unparsed} ids=${status.distinctIds} " +
             "obd=${status.obdKmh?.let { "${it}km/h" } ?: "-"} " +
-            "fit=${status.fit?.let { f ->
-                "017:%.4f 013:%.4f n=%d bands=%d".format(
-                    f.scale017 ?: Double.NaN, f.scale013 ?: Double.NaN, f.usable, f.bands)
-            } ?: "-(${status.calibrationSamples})"} " +
             "captured=${status.captureBytes}B"
     }
 
@@ -370,9 +336,9 @@ class CanableSource private constructor(
         private const val MAX_IDS_SHOWN = 16
 
         /** Build a source for [context]. Callers never see the driver or [UsbManager]. */
-        fun create(context: Context, vehicle: VehicleState, calibration: SpeedCalibration): CanableSource {
+        fun create(context: Context, vehicle: VehicleState): CanableSource {
             val manager = context.getSystemService(Context.USB_SERVICE) as UsbManager
-            return CanableSource(CanableUsbLink(manager), context.applicationContext, vehicle, calibration)
+            return CanableSource(CanableUsbLink(manager), context.applicationContext, vehicle)
         }
     }
 }

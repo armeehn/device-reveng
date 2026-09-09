@@ -93,19 +93,6 @@ class VehicleStateTest {
         assertTrue(state.tiles(t0).isEmpty())
     }
 
-    @Test
-    fun `one fold mints exactly one calibration sample`() {
-        // Two call sites folding the same MCU frame would double every calibration point and make
-        // a thin log look twice as convincing. There is one fold, in MainActivity, and this pins
-        // that a single call produces a single sample.
-        val calibration = SpeedCalibration()
-        val state = VehicleState(calibration)
-
-        state.onSignal(CanSignal.TripInfo(rangeToEmptyKm = null, speedCandidateRaw = 280), t0)
-
-        assertEquals(1, calibration.sampleCount())
-    }
-
     private fun info(rpm: Int, coolant: Int?) =
         CanSignal.VehicleInfo(rpm = rpm, speedRaw = 0, speedKmh = 0.0, coolantC = coolant)
 

@@ -28,23 +28,6 @@ class CaptureRotation(
     /** Name of the file currently being written. */
     fun currentName(): String = nameFor(index)
 
-    /**
-     * The calibration CSV that belongs beside [currentName]. Same index, so the samples and the
-     * frames they were minted from are always pulled off the car as a pair and evicted as a pair.
-     */
-    fun currentCsvName(): String = csvFor(index)
-
-    /** The CSV paired with a log name, for eviction. Null for a name that is not one of ours. */
-    fun csvFor(logName: String): String? {
-        if (!logName.startsWith(PREFIX) || !logName.endsWith(SUFFIX)) {
-            return null
-        }
-        val i = logName.removePrefix(PREFIX).removeSuffix(SUFFIX).toIntOrNull() ?: return null
-        return csvFor(i)
-    }
-
-    private fun csvFor(i: Int): String = "$CSV_PREFIX$i$CSV_SUFFIX"
-
     /** Whether [bytes] in the current file means it is time to open the next one. */
     fun shouldRoll(bytes: Long): Boolean = bytes >= maxBytesPerFile
 
@@ -64,9 +47,6 @@ class CaptureRotation(
     companion object {
         private const val PREFIX = "can-"
         private const val SUFFIX = ".log"
-        private const val CSV_PREFIX = "calibration-"
-        private const val CSV_SUFFIX = ".csv"
-
         /** About 5 minutes of this bus: small enough to pull mid-drive over Tailscale. */
         const val MAX_BYTES_PER_FILE = 16L * 1024 * 1024
 
