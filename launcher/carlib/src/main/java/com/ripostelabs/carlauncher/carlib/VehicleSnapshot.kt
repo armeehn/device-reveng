@@ -33,6 +33,7 @@ data class VehicleSnapshot(
         RPM, COOLANT_C, HYBRID_BATTERY, ENERGY_FLOW,
         TYRE_FL_KPA, TYRE_FR_KPA, TYRE_RL_KPA, TYRE_RR_KPA, TYRE_SPARE_KPA,
         STEERING_DEG, RANGE_KM,
+        SPEED_KMH, WHEEL_FL_KMH, WHEEL_FR_KMH, WHEEL_RL_KMH, WHEEL_RR_KMH,
         DOOR_BITS, REVERSE, SIDE_CAMERA_LEFT, SIDE_CAMERA_RIGHT,
         CLIMATE_ON, FAN_STEP, TEMP_LEFT_C, TEMP_RIGHT_C,
         RADAR_REAR_MIN_CM, RADAR_FRONT_MIN_CM,
@@ -128,6 +129,16 @@ data class VehicleSnapshot(
             // value for whoever is still working the scale out.
             is RawCanSignal.Fan -> put(atMs, Field.FAN_STEP to if (sig.running) sig.level.toDouble() else 0.0)
 
+            // Verified against the ECU's own OBD speed on a real drive (2026-09-09). The first speed
+            // the dashboard has ever been allowed to show.
+            is RawCanSignal.Speed -> put(atMs, Field.SPEED_KMH to sig.kmh)
+
+            is RawCanSignal.WheelSpeeds -> put(atMs,
+                Field.WHEEL_FL_KMH to sig.flKmh,
+                Field.WHEEL_FR_KMH to sig.frKmh,
+                Field.WHEEL_RL_KMH to sig.rlKmh,
+                Field.WHEEL_RR_KMH to sig.rrKmh)
+
             // Everything below is declared in RawCanSignal for a future tap but is never emitted
             // by RawCanDecoder on this car. Folding a value nothing produces would put an
             // unverified reading on a screen the moment someone wired the decoder up.
@@ -184,6 +195,7 @@ data class VehicleSnapshot(
     fun bool(field: Field, now: Long = atMs): Boolean? = raw(field, now)?.let { it != 0.0 }
 
     val rpm: Int? get() = int(Field.RPM)
+    val speedKmh: Double? get() = raw(Field.SPEED_KMH)
     val coolantC: Int? get() = int(Field.COOLANT_C)
     val hybridBattery: Int? get() = int(Field.HYBRID_BATTERY)
     val steeringDeg: Double? get() = raw(Field.STEERING_DEG)

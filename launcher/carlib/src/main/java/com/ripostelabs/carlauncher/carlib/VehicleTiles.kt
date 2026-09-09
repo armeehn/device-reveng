@@ -44,6 +44,9 @@ object VehicleTiles {
     fun tilesFor(s: VehicleSnapshot, now: Long = s.atMs): List<Tile> {
         val out = mutableListOf<Tile>()
 
+        // Rounded, not truncated: the ECU's own OBD reading truncates and reads 0.6 km/h low.
+        s.raw(Field.SPEED_KMH, now)?.let { out += Tile("Speed", "${Math.round(it)} km/h") }
+        wheelSummary(s, now)?.let { out += Tile("Wheels", it) }
         s.int(Field.RPM, now)?.let { out += Tile("Engine", "$it rpm") }
         s.int(Field.COOLANT_C, now)?.let { out += Tile("Coolant", "$it°C") }
         s.int(Field.HYBRID_BATTERY, now)?.let { out += Tile("Hybrid battery", "$it/15") }
@@ -72,6 +75,13 @@ object VehicleTiles {
         val bits = s.int(Field.DOOR_BITS, now) ?: return null
         val open = OPENINGS.filter { (mask, _) -> bits and mask != 0 }.map { it.second }
         return if (open.isEmpty()) null else open.joinToString(", ")
+    }
+
+    /** FL / FR / RL / RR to a tenth, the order a driver pictures them. */
+    private fun wheelSummary(s: VehicleSnapshot, now: Long): String? {
+        val vals = listOf(Field.WHEEL_FL_KMH, Field.WHEEL_FR_KMH, Field.WHEEL_RL_KMH, Field.WHEEL_RR_KMH)
+            .map { s.raw(it, now) ?: return null }
+        return vals.joinToString(" / ") { "%.1f".format(it) } + " km/h"
     }
 
     /**

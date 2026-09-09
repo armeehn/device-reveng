@@ -103,8 +103,8 @@ class RawCanDecoderTest {
 
     @Test
     fun `ids we do not decode return null`() {
-        // 0x0B4 is road speed and 0x025 steering; both are on this bus but not decoded here yet.
-        assertNull(RawCanDecoder.decode(0x0B4, frame(0, 0, 0, 0, 0, 0, 0, 0)))
+        // 0x0A4 is on this bus at 78 Hz and nothing here reads it.
+        assertNull(RawCanDecoder.decode(0x0A4, frame(0, 0, 0, 0, 0, 0, 0, 0)))
         assertNull(RawCanDecoder.decode(0x025, frame(0, 0, 0, 0, 0, 0, 0, 0)))
     }
 }
