@@ -33,6 +33,13 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+
+    // android.util.Log is a stub on the JVM and throws unless told to return defaults. The
+    // transport logs why a board is unreachable, and a unit test exercising that path must not
+    // fail on the logging rather than the logic.
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
 }
 
 dependencies {

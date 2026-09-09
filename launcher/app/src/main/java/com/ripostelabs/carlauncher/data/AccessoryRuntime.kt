@@ -110,13 +110,22 @@ object AccessoryRuntime {
         result
     }
 
-    /** Start a sequence by hand. Anything running is cancelled, as the runner documents. */
+    /**
+     * Start a sequence by hand. Anything running is cancelled, as the runner documents.
+     *
+     * Deferred to the IO loop rather than started here. [SequenceRunner.start] runs the first
+     * step at once, and a step is an HTTP call; on the emulator, tapping "Welcome" from the page
+     * threw NetworkOnMainThreadException and took the launcher down. Single commands already
+     * went through Dispatchers.IO; this path did not. The loop picks the request up within one
+     * tick, which is faster than a finger can notice.
+     */
     fun run(sequence: AccessorySequence) {
-        synchronized(this) {
-            runner?.start(sequence, System.currentTimeMillis())
-            _sequence.value = runner?.state ?: SequenceState.Idle
-        }
+        pendingStart = sequence
     }
+
+    /** A sequence handed to [run], waiting for the IO loop to start it off the main thread. */
+    @Volatile
+    private var pendingStart: AccessorySequence? = null
 
     fun cancel() {
         synchronized(this) {
@@ -137,6 +146,10 @@ object AccessoryRuntime {
             val e = engine ?: return
 
             e.evaluate(CanCaptureService.vehicle().snapshot.value, now).forEach { r.start(it, now) }
+
+            // A manual start from the page, taken here so its first step runs on this thread.
+            pendingStart?.let { r.start(it, now); pendingStart = null }
+
             r.tick(now)
             if (poll) {
                 c.refreshAll(now)
