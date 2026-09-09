@@ -179,8 +179,10 @@ private fun SpeedTile(
     source: CarEvents.SpeedSource,
     modifier: Modifier = Modifier,
 ) {
-    // Provenance: the value may come from the CAN digest or GPS (CarEvents.pickSpeed).
+    // Provenance: the value may come from the raw bus, the CAN digest or GPS
+    // (CarEvents.pickSpeed). "bus" and "CAN" are different sources, not synonyms.
     val origin = when (source) {
+        CarEvents.SpeedSource.BUS -> "bus"
         CarEvents.SpeedSource.CAN -> "CAN"
         CarEvents.SpeedSource.GPS -> "GPS"
         CarEvents.SpeedSource.NONE -> "no source"

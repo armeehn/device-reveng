@@ -338,6 +338,24 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        // The safety gate's speed. GPS alone cannot see a car moving in a garage or at power-on,
+        // which is exactly where the parked-only gate has to be right; the raw bus can, and is the
+        // only speed verified against the car's own ECU. Throttled to BUS_SPEED_PUSH_MS because
+        // the snapshot updates on every folded frame, far faster than a threshold comparison needs.
+        lifecycleScope.launch {
+            var lastPushMs = 0L
+            CanCaptureService.vehicle().snapshot.collect { snapshot ->
+                val kmh = snapshot.speedKmh ?: return@collect
+                val now = System.currentTimeMillis()
+                if (now - lastPushMs < CarEvents.BUS_SPEED_PUSH_MS) {
+                    return@collect
+                }
+
+                lastPushMs = now
+                carEvents.onBusSpeed(kmh, now)
+            }
+        }
+
         // Accessories run for the life of the launcher, like the frame fold above: a trigger such
         // as "reverse → work lights" has to work with no settings screen open. Rebuilt whole on
         // every change of the stored blob.
