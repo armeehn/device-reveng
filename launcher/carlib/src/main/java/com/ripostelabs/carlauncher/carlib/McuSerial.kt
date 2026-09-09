@@ -85,6 +85,23 @@ object McuSerial {
     /** Bytes that framed nothing: junk between frames, or a frame abandoned mid-resync. */
     data class Skipped(val bytes: Int) : Event
 
+    /** What the last byte of a broadcast body turned out to be; see [trailer]. */
+    enum class Trailer { AGREES, DISAGREES, SHORT }
+
+    /**
+     * Check a body as eventcenter re-broadcasts it, `OPCODE | payload | CK`, against the wire
+     * formula. LEN is not in the body, but LEN counts exactly these bytes, so it is the body's own
+     * size. This is the one claim here the car can answer without the port: [McuTrailerTally].
+     */
+    fun trailer(body: ByteArray): Trailer {
+        if (body.size < LEN_MIN) {
+            return Trailer.SHORT
+        }
+        val expected = (body.size + sum(body, 0, body.size - 1)).inv() and 0xFF
+        val actual = body[body.size - 1].toInt() and 0xFF
+        return if (expected == actual) Trailer.AGREES else Trailer.DISAGREES
+    }
+
     /**
      * Build a frame for [opcode] carrying [payload], byte for byte what `sendDataEx` writes.
      *
@@ -108,12 +125,15 @@ object McuSerial {
     }
 
     /** `~(LEN + OPCODE + payload)` low byte, over `bytes[from until until]`. */
-    private fun checksum(bytes: ByteArray, from: Int, until: Int): Int {
+    private fun checksum(bytes: ByteArray, from: Int, until: Int): Int =
+        sum(bytes, from, until).inv() and 0xFF
+
+    private fun sum(bytes: ByteArray, from: Int, until: Int): Int {
         var sum = 0
         for (i in from until until) {
             sum += bytes[i].toInt() and 0xFF
         }
-        return sum.inv() and 0xFF
+        return sum
     }
 
     private fun isHeader(bytes: ByteArray, at: Int): Boolean =

@@ -334,6 +334,7 @@ class MainActivity : ComponentActivity() {
             carEvents.canRaw.collect { frame ->
                 val bytes = frame?.bytes ?: return@collect
                 CanCaptureService.vehicle().onFrame(bytes, System.currentTimeMillis())
+                CanCaptureService.onMcuBody(bytes)
             }
         }
 

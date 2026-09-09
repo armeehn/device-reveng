@@ -12,6 +12,7 @@ import android.util.Log
 import com.ripostelabs.carlauncher.carlib.CanableSource
 import com.ripostelabs.carlauncher.carlib.CanableStatus
 import com.ripostelabs.carlauncher.carlib.SpeedCalibration
+import com.ripostelabs.carlauncher.carlib.McuTrailerTally
 import com.ripostelabs.carlauncher.carlib.VehicleState
 
 /**
@@ -96,6 +97,19 @@ class CanCaptureService : Service() {
         private val vehicleState = VehicleState(calibration)
 
         fun vehicle(): VehicleState = vehicleState
+
+        /**
+         * Every MCU body the vendor broadcasts is a free test of McuSerial's wire checksum (its
+         * C2). Counted here, logged under the tag the watcher on x already pulls, so the car
+         * answers the desk's derivation on the next pull without a port being touched.
+         */
+        private val mcuTrailer = McuTrailerTally()
+
+        fun onMcuBody(body: ByteArray) {
+            if (mcuTrailer.onBody(body) == McuTrailerTally.Report.DUE) {
+                Log.i(LOG_TAG, mcuTrailer.summary())
+            }
+        }
 
         fun calibration(): SpeedCalibration = calibration
 
