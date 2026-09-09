@@ -47,7 +47,10 @@ object VehicleTiles {
         // Rounded, not truncated: the ECU's own OBD reading truncates and reads 0.6 km/h low.
         s.raw(Field.SPEED_KMH, now)?.let { out += Tile("Speed", "${Math.round(it)} km/h") }
         wheelSummary(s, now)?.let { out += Tile("Wheels", it) }
+        s.gear?.takeIf { s.raw(Field.GEAR, now) != null && it != RawCanSignal.GearPos.UNKNOWN }
+            ?.let { out += Tile("Gear", it.name) }
         s.int(Field.RPM, now)?.let { out += Tile("Engine", "$it rpm") }
+        s.int(Field.INTAKE_C, now)?.let { out += Tile("Intake air", "$it°C") }
         s.int(Field.COOLANT_C, now)?.let { out += Tile("Coolant", "$it°C") }
         s.int(Field.HYBRID_BATTERY, now)?.let { out += Tile("Hybrid battery", "$it/15") }
         s.int(Field.RANGE_KM, now)?.let { out += Tile("Range", "$it km") }
@@ -67,6 +70,12 @@ object VehicleTiles {
 
         climateSummary(s, now)?.let { out += Tile("Climate", it) }
 
+        s.raw(Field.STEERING_DEG, now)?.let { out += Tile("Steering", "%.1f°".format(it)) }
+        // Only while the pedal is down: a permanent "0.00 MPa" tile is noise, not information.
+        s.raw(Field.BRAKE_MPA, now)?.takeIf { it > 0.0 }?.let { out += Tile("Brake", "%.2f MPa".format(it)) }
+        dynamicsSummary(s, now)?.let { out += Tile("Dynamics", it) }
+        s.int(Field.ODOMETER_KM, now)?.let { out += Tile("Odometer", "$it km") }
+
         return out
     }
 
@@ -75,6 +84,16 @@ object VehicleTiles {
         val bits = s.int(Field.DOOR_BITS, now) ?: return null
         val open = OPENINGS.filter { (mask, _) -> bits and mask != 0 }.map { it.second }
         return if (open.isEmpty()) null else open.joinToString(", ")
+    }
+
+    /** Yaw and the two accelerations on one line; whichever of the three are live. */
+    private fun dynamicsSummary(s: VehicleSnapshot, now: Long): String? {
+        val parts = listOfNotNull(
+            s.raw(Field.YAW_DEG_S, now)?.let { "yaw %.1f°/s".format(it) },
+            s.raw(Field.LATERAL_MS2, now)?.let { "lat %.2f".format(it) },
+            s.raw(Field.LONGITUDINAL_MS2, now)?.let { "long %.2f m/s²".format(it) },
+        )
+        return parts.takeIf { it.isNotEmpty() }?.joinToString(", ")
     }
 
     /** FL / FR / RL / RR to a tenth, the order a driver pictures them. */
