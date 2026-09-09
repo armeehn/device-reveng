@@ -3,6 +3,7 @@ package com.ripostelabs.carlauncher.carlib
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 
 /**
  * How an accessory is actually reached. The one place that knows about wires.
@@ -104,7 +105,12 @@ class AccessoryController(
         )
     }
 
+    /**
+     * Atomic, because a poll and a command can now land at the same moment from different
+     * coroutines. `value = value + entry` read-modify-writes and would let one of them vanish;
+     * `update` retries on contention so both entries survive.
+     */
     private fun put(id: String, state: AccessoryState) {
-        _states.value = _states.value + (id to state)
+        _states.update { it + (id to state) }
     }
 }

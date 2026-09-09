@@ -85,6 +85,12 @@ class HttpAccessoryTransport(
                 connectTimeout = connectTimeoutMs
                 readTimeout = readTimeoutMs
                 setRequestProperty("Accept", CONTENT_JSON)
+                // One request per connection, said out loud. A microcontroller board answers
+                // HTTP/1.0 and closes; letting the client pool that socket means the next
+                // command first fails on a dead connection and then retries. Say close, and
+                // there is nothing to pool.
+                setRequestProperty("Connection", "close")
+                useCaches = false
                 if (body != null) {
                     doOutput = true
                     setRequestProperty("Content-Type", CONTENT_JSON)
