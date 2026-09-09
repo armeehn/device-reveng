@@ -4,7 +4,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ripostelabs.carlauncher.carlib.AccessoryCommand
 import com.ripostelabs.carlauncher.carlib.AccessoryConfig
@@ -17,6 +21,7 @@ import com.ripostelabs.carlauncher.data.SettingsStore
 import com.ripostelabs.carlauncher.ui.keyboard.CarTextField
 import com.ripostelabs.carlauncher.ui.keyboard.CommitMode
 import kotlinx.coroutines.launch
+import java.io.File
 
 /**
  * Lights, servos and sequences.
@@ -39,6 +44,8 @@ fun AccessoriesScreen(
 ) {
     val settings by settingsStore.settings.collectAsStateWithLifecycle()
     val config by AccessoryRuntime.config.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    var loadResult by remember { mutableStateOf<String?>(null) }
     val states by AccessoryRuntime.states.collectAsStateWithLifecycle()
     val running by AccessoryRuntime.sequence.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
@@ -60,6 +67,24 @@ fun AccessoriesScreen(
                 placeholder = "http://accessories.car",
                 commit = CommitMode.ON_DONE,
             )
+            // The blob is edited off the car and arrives as a file, because DataStore is not
+            // something adb can write and a JSON form on this screen is not something anyone
+            // should fill in while parked. The app's external files dir is reachable by
+            // `adb push` on the car and on the emulator alike, with no root.
+            ActionRow(
+                label = "Load config from file",
+                description = "Reads ${CONFIG_FILE} from this app's external files directory.",
+                onClick = {
+                    loadResult = loadConfigFile(context)?.let { json ->
+                        val parsed = AccessoryConfig.parse(json)
+                        settingsStore.setAccessoryConfig(json)
+                        "Loaded: ${parsed.accessories.size} accessories, ${parsed.sequences.size} sequences, " +
+                            "${parsed.triggers.size} triggers" +
+                            if (parsed.problems.isEmpty()) "" else ", ${parsed.problems.size} problems (listed below)"
+                    } ?: "No ${CONFIG_FILE} found. Push one with adb: see ACCESSORY_BOARD.md."
+                },
+            )
+            loadResult?.let { InfoRow(label = "Last load", value = it) }
             if (config.problems.isNotEmpty()) {
                 config.problems.forEach { InfoRow(label = "Config", value = it) }
             }
@@ -118,6 +143,16 @@ fun AccessoriesScreen(
             }
         }
     }
+}
+
+/** Where a pushed blob lands: `/sdcard/Android/data/<pkg>/files/accessory-config.json`. */
+private const val CONFIG_FILE = "accessory-config.json"
+
+/** The blob, or null when there is none. A file that exists but is junk still comes back, so the
+ *  parser can list what is wrong with it rather than the screen saying "not found". */
+private fun loadConfigFile(context: android.content.Context): String? {
+    val file = File(context.getExternalFilesDir(null) ?: return null, CONFIG_FILE)
+    return if (file.isFile) runCatching { file.readText() }.getOrNull() else null
 }
 
 private fun describe(s: AccessoryState): String = when {

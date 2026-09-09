@@ -62,6 +62,20 @@ mapping and the limits; the launcher never sends an angle. If a position cannot 
 reply with the position actually held — the launcher will treat it as refused and stop the
 sequence rather than send the next step to an antenna that is still halfway.
 
+## Getting the launcher's config onto the unit
+
+The launcher's side of this — which accessories exist, the sequences, the triggers, and the
+board's base URL — is one JSON file. It is edited off the car and pushed:
+
+```sh
+adb push accessory-config.json /sdcard/Android/data/com.ripostelabs.carlauncher/files/accessory-config.json
+```
+
+then `Settings → Accessories → Load config from file`. Every problem the parser finds is listed on
+the page; a file with problems is still loaded minus the parts it could not use. A ready-made
+example with three accessories, four sequences and three triggers lives on the share at
+`\\x.hq\share\canable\accessory-config.json`, pointed at the virtual board on x.
+
 ## Not in the contract
 
 - Authentication. The board is on the car's private network behind the MikroTik; nothing on the
