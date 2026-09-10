@@ -1,5 +1,6 @@
 package com.ripostelabs.carlauncher.ui.settings
 
+import android.content.Intent
 import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -30,6 +31,7 @@ import com.ripostelabs.carlauncher.carlib.CanableStatus
 import com.ripostelabs.carlauncher.carlib.CanSignal
 import com.ripostelabs.carlauncher.carlib.CarEvents
 import com.ripostelabs.carlauncher.carlib.HiworldCanDecoder
+import com.ripostelabs.carlauncher.carlib.McuCommand
 import com.ripostelabs.carlauncher.carlib.ObdPid
 import com.ripostelabs.carlauncher.carlib.RadarCapture
 import com.ripostelabs.carlauncher.ui.collectAsStateSafe
@@ -83,6 +85,9 @@ fun CanCaptureScreen(
         onDispose { }
     }
 
+    // The vendor link test. Idle until someone asks, because it transmits.
+    var linkState by remember { mutableStateOf(LinkTest.IDLE) }
+
     var capture by remember { mutableStateOf(RadarCapture()) }
     var lastFrame by remember { mutableStateOf<CanFrame?>(null) }
     // Latest decoded value per label, from HiworldCanDecoder. Each opcode arrives in its own
@@ -96,6 +101,13 @@ fun CanCaptureScreen(
         val bytes = f.bytes ?: return@LaunchedEffect
         capture = capture.accept(bytes)
         trailer = CanCaptureService.mcuTrailerSummary()
+
+        // A settings reply is how the link test learns the car answered. Checked here rather than
+        // in its own collector so one frame is read once.
+        if (linkState == LinkTest.WAITING && McuCommand.inboundOpcode(bytes) == McuCommand.REPLY_OPCODE_CAR_SET) {
+            linkState = LinkTest.REPLIED
+        }
+
         HiworldCanDecoder.decodeFrame(bytes)?.let { sig ->
             val rows = decodedRows(sig)
             if (rows.isNotEmpty()) decoded = decoded + rows
@@ -204,6 +216,24 @@ fun CanCaptureScreen(
             }
         }
 
+        SettingsSection(title = "Vendor link test") {
+            LinkTestRows(state = linkState)
+            ActionRow(
+                label = "Ask the car for its settings",
+                description = "Sends the vendor's own read-only settings poll. It actuates " +
+                    "nothing; the head unit already sends it whenever its settings screen is " +
+                    "open. A reply proves the broadcast reaches the vendor stack, that the stack " +
+                    "will transmit for us, and that the ignition gate is open.",
+                onClick = {
+                    linkState = LinkTest.WAITING
+                    context.sendBroadcast(
+                        Intent(McuCommand.ACTION).putExtra(McuCommand.EXTRA_DATA, McuCommand.settingsQuery()),
+                    )
+                    Log.i(LOG_TAG, "vendor-link sent settings query")
+                },
+            )
+        }
+
         SettingsSection(title = "USB CAN adapter (CANable)") {
             CanableRows(status = usb, onGrant = { canable.requestAccess() })
             ActionRow(
@@ -225,6 +255,47 @@ fun CanCaptureScreen(
  *   - **Frames** climbing → CAN-H/CAN-L are on a live bus.
  *   - **Rejected** climbing → the adapter refused a command, so the channel likely never opened.
  */
+/** Where the vendor link test has got to. */
+private enum class LinkTest { IDLE, WAITING, REPLIED }
+
+/**
+ * The link test's state, in the language of what it proves.
+ *
+ * Silence is reported as silence, not as failure. The reply may ride a broadcast this screen does
+ * not observe, so "no reply seen here" and "the command did not arrive" are different claims and
+ * only the first one is ours to make.
+ */
+@Composable
+private fun LinkTestRows(state: LinkTest) {
+    val text = when (state) {
+        LinkTest.IDLE -> "Not sent. This is the only thing the launcher transmits to the vendor " +
+            "stack, and it is read-only."
+        LinkTest.WAITING -> "Sent. Waiting for a settings reply."
+        LinkTest.REPLIED -> "The car answered. The broadcast reaches the vendor stack, it will " +
+            "transmit for us, and the ignition gate is open."
+    }
+
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodyMedium,
+        color = if (state == LinkTest.REPLIED) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        },
+    )
+    if (state == LinkTest.WAITING) {
+        Spacer(Modifier.size(8.dp))
+        Text(
+            text = "No reply yet. That is not the same as a refusal: the answer may arrive on a " +
+                "broadcast this screen does not watch. Check the decoded rows above, and try " +
+                "again with the ignition on.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
 @Composable
 private fun CanableRows(status: CanableStatus, onGrant: () -> Unit) {
     when (status) {
