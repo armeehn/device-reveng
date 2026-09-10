@@ -298,6 +298,18 @@ class CanableSource private constructor(
                 return
             }
 
+            // The adapter is still attached and has stopped delivering anyway. Returning here
+            // closes the session and the outer loop opens a new one: a fresh connection, a fresh
+            // interface claim and a fresh channel open, which is what a physical replug does.
+            //
+            // Gated on having received frames THIS session, so it only fires on a link that
+            // demonstrably worked and then stopped. A link that never delivered is not stalled,
+            // and reopening it would just spin.
+            if (stats.frames > 0 && watchdog.shouldReclaim()) {
+                Log.i(LOG_TAG, "link silent with the adapter still attached after ${stats.frames} frames; reopening")
+                return
+            }
+
             // Repainting per frame would push ~1215 recompositions a second at the UI.
             val now = System.currentTimeMillis()
             if (now - published < PUBLISH_MS) {
