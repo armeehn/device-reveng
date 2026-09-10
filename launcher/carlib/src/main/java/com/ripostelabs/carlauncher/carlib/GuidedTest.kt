@@ -241,6 +241,53 @@ object GuidedTestJudge {
     }
 
     /**
+     * One line recording what a run concluded, for the log.
+     *
+     * The verdict is read in a car and then the driver leaves. Without this the result exists
+     * only on a screen nobody is looking at any more, and the answer would have to be
+     * remembered, or photographed, and typed in later. That is exactly the transcription step
+     * this harness was built to remove.
+     *
+     * The tag is the one the desk-side watcher already pulls, so a run answers itself: press the
+     * control in the car, and the finding is waiting at a desk without anyone reporting it.
+     *
+     * Kept beside the judge rather than in the screen so the wording is pinned by a test. A log
+     * line that silently changes shape breaks whatever reads it.
+     */
+    fun summary(test: GuidedTest, verdict: TestVerdict): String {
+        val head = "guided-test key=" + test.key
+        return when (verdict) {
+            is TestVerdict.Responded ->
+                head + " verdict=RESPONDED signal=\"" + verdict.label + "\"" +
+                    " direction=" + (if (verdict.set) "set" else "cleared") +
+                    " delta=" + fmt(verdict.delta) +
+                    " alsoMoved=" + verdict.alsoMoved.size
+
+            is TestVerdict.NoResponse ->
+                head + " verdict=NO_RESPONSE signal=\"" + verdict.label + "\"" +
+                    " delta=" + (verdict.observedDelta?.let { fmt(it) } ?: "unseen") +
+                    " movers=[" + verdict.topMovers.joinToString(" ") { describe(it) } + "]" +
+                    " disjoint=" + verdict.disjointBytes.size
+
+            is TestVerdict.Observed ->
+                head + " verdict=OBSERVED" +
+                    " movers=[" + verdict.topMovers.joinToString(" ") { describe(it) } + "]" +
+                    " disjoint=" + verdict.disjointBytes.size
+
+            is TestVerdict.NotEnoughData ->
+                head + " verdict=NO_DATA baselineFrames=" + verdict.baselineFrames +
+                    " actionFrames=" + verdict.actionFrames
+        }
+    }
+
+    private fun describe(c: SignalProbe.Candidate): String =
+        "%03X/%d/%02X:%s->%s".format(
+            c.id, c.byteIndex, c.bitMask, fmt(c.baselineFraction), fmt(c.actionFraction),
+        )
+
+    private fun fmt(v: Double): String = "%.2f".format(v)
+
+    /**
      * Movement below this is not worth a human's attention. Deliberately low: the point of the
      * list is to surface a candidate nobody predicted, and a floor set for tidiness would hide
      * exactly the weak first sighting that is worth a second run.
