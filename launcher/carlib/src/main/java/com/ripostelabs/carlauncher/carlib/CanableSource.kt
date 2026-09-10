@@ -306,7 +306,15 @@ class CanableSource private constructor(
             // demonstrably worked and then stopped. A link that never delivered is not stalled,
             // and reopening it would just spin.
             if (stats.frames > 0 && watchdog.shouldReclaim()) {
-                Log.i(LOG_TAG, "link silent with the adapter still attached after ${stats.frames} frames; reopening")
+                // The read result and its duration go in the line because they say WHY it
+                // stalled, and the answer decides what to try next: an instant failure is a
+                // halted endpoint, which reopening clears, while a failure at the full timeout
+                // is a link that is up and receiving nothing.
+                Log.i(
+                    LOG_TAG,
+                    "link silent with the adapter still attached after ${stats.frames} frames; " +
+                        "lastRead=${session.lastRead} in ${session.lastReadMs}ms; reopening",
+                )
                 return
             }
 
