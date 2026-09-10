@@ -1,6 +1,7 @@
 package com.ripostelabs.carlauncher.carlib
 
 import com.ripostelabs.carlauncher.carlib.VehicleSnapshot.Companion.fold
+import com.ripostelabs.carlauncher.carlib.VehicleSnapshot.Companion.foldObd
 import com.ripostelabs.carlauncher.carlib.VehicleSnapshot.Companion.foldRaw
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -53,6 +54,22 @@ class VehicleState {
     fun onRawFrame(id: Int, data: ByteArray, atMs: Long) {
         val signal = RawCanDecoder.decode(id, data) ?: return
         _snapshot.value = _snapshot.value.foldRaw(signal, atMs)
+    }
+
+    /**
+     * Absorb one answer to a standard OBD query.
+     *
+     * Kept separate from the two decoders because it is a different kind of knowledge: these
+     * values are defined by a published standard and answered by the ECU, not attributed by
+     * watching a byte. A refusal changes nothing — it says the ECU declined to answer, which is
+     * not evidence about the value.
+     */
+    fun onObd(reply: Obd.Reply, atMs: Long) {
+        if (reply !is Obd.Reply.Value) {
+            return
+        }
+
+        _snapshot.value = _snapshot.value.foldObd(reply, atMs)
     }
 
     /**

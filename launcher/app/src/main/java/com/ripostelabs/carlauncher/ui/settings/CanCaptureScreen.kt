@@ -30,6 +30,7 @@ import com.ripostelabs.carlauncher.carlib.CanableStatus
 import com.ripostelabs.carlauncher.carlib.CanSignal
 import com.ripostelabs.carlauncher.carlib.CarEvents
 import com.ripostelabs.carlauncher.carlib.HiworldCanDecoder
+import com.ripostelabs.carlauncher.carlib.ObdPid
 import com.ripostelabs.carlauncher.carlib.RadarCapture
 import com.ripostelabs.carlauncher.ui.collectAsStateSafe
 import com.ripostelabs.carlauncher.ui.theme.carShape
@@ -266,6 +267,11 @@ private fun CanableRows(status: CanableStatus, onGrant: () -> Unit) {
                 label = "ECU speed (OBD 0x0D)",
                 value = status.obdKmh?.let { "$it km/h (${status.obdReplies} replies)" } ?: "no answer yet",
             )
+            // Everything else the ECU has answered. These need no decoding argument: the values
+            // are defined by the standard, so they are shown plainly rather than as candidates.
+            status.obdReadings.forEach { (pid, value) ->
+                InfoRow(label = "OBD 0x%02X".format(pid.code), value = "%.1f".format(value))
+            }
             // Where road speed actually comes from. Shown beside the ECU reference so a
             // divergence is visible here first.
             val vehicle by CanCaptureService.vehicle().snapshot.collectAsStateWithLifecycle()

@@ -45,6 +45,9 @@ sealed class CanableStatus {
         val obdKmh: Int? = null,
         val obdReplies: Long = 0,
 
+        /** Latest value for every standard parameter the car has answered. */
+        val obdReadings: Map<ObdPid, Double> = emptyMap(),
+
         /** Where the capture is being written, and how much of it exists so far. */
         val capturePath: String? = null,
         val captureBytes: Long = 0,
@@ -246,6 +249,10 @@ class CanableSource private constructor(
         // in the capture file, since it is just another frame on the bus.
         val poller = ObdPoller()
 
+        // Several parameters, but no more transmit than one: the questions take turns rather than
+        // each getting its own timer. See ObdRotation.
+        val rotation = ObdRotation()
+
         while (running) {
             for (event in session.poll()) {
                 stats.record(event)
@@ -255,12 +262,15 @@ class CanableSource private constructor(
                 if (event is SlcanEvent.Received) {
                     capture.record(event.frame)
                     vehicle.onRawFrame(event.frame, System.currentTimeMillis())
-                    ObdSpeed.parse(event.frame)?.let { stats.recordObd(it) }
+                    Obd.parse(event.frame)?.let { reply ->
+                        stats.recordObd(reply)
+                        vehicle.onObd(reply, System.currentTimeMillis())
+                    }
                 }
             }
 
             if (poller.shouldSend(System.currentTimeMillis())) {
-                session.send(ObdSpeed.request())
+                session.send(Obd.request(rotation.next()))
             }
 
             // Unplugging the adapter mid-session does not fail the reads, it just makes them
@@ -288,6 +298,7 @@ class CanableSource private constructor(
                 distinctIds = stats.distinctIds,
                 obdKmh = stats.obdKmh,
                 obdReplies = stats.obdReplies,
+                obdReadings = stats.obdReadings(),
                 unparsed = stats.unparsed,
                 capturePath = capture.path(),
                 captureBytes = capture.bytes,
