@@ -167,6 +167,12 @@ fun SettingsHub(
             )
             SettingsCategoryCard(
                 icon = Icons.Filled.DataObject,
+                title = "Guided car tests",
+                subtitle = "Operate one control; the car answers or it does not",
+                onClick = { onOpen(SettingsRoute.GuidedTests) },
+            )
+            SettingsCategoryCard(
+                icon = Icons.Filled.DataObject,
                 title = "CAN frame capture",
                 subtitle = "Raw CAN bulk frame — the route to real speed (diagnostic)",
                 onClick = { onOpen(SettingsRoute.CanCapture) },

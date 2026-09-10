@@ -179,6 +179,9 @@ fun SettingsHost(
 
             // v0.4.3: the instrument that confirms the CAN bulk-frame action + payload layout,
             // the route to a real speed reading (README "Known TODOs").
+            // The instrument for attributing a signal to a control, with a human in the loop.
+            SettingsRoute.GuidedTests -> GuidedTestScreen(onBack = ::pop)
+
             SettingsRoute.CanCapture -> CanCaptureScreen(
                 carEvents = carEvents,
                 onBack = ::pop,
@@ -318,6 +321,7 @@ sealed interface SettingsRoute {
     data object Games : SettingsRoute
     data object Accessories : SettingsRoute
     data object CanCapture : SettingsRoute // v0.4.3
+    data object GuidedTests : SettingsRoute
     data object RadioInfoCapture : SettingsRoute // v0.4.3
     data object VehicleDataCapture : SettingsRoute // v0.4.3
     data object Audio : SettingsRoute

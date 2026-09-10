@@ -81,6 +81,21 @@ class CanableSource private constructor(
 
     private var worker: Thread? = null
 
+    /**
+     * A probe watching every frame, or null. Set while a guided test runs and cleared after.
+     *
+     * A hook rather than a frame flow: at ~1215 frames/s a shared flow means an allocation and a
+     * dispatch per frame whether or not anyone is listening, and nobody is listening almost all
+     * of the time. A null check costs nothing.
+     */
+    @Volatile
+    private var probe: SignalProbe? = null
+
+    /** Watch, or stop watching, every frame. Passing null detaches. */
+    fun attachProbe(watcher: SignalProbe?) {
+        probe = watcher
+    }
+
     @Volatile
     private var running = false
 
@@ -261,6 +276,7 @@ class CanableSource private constructor(
                 // capture held in RAM until the screen closes is both large and lost on a crash.
                 if (event is SlcanEvent.Received) {
                     capture.record(event.frame)
+                    probe?.accept(event.frame.id, ByteArray(event.frame.data.size) { event.frame.data[it].toByte() })
                     vehicle.onRawFrame(event.frame, System.currentTimeMillis())
                     Obd.parse(event.frame)?.let { reply ->
                         stats.recordObd(reply)
