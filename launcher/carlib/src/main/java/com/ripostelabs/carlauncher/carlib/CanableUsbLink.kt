@@ -106,6 +106,17 @@ class CanableUsbLink(private val manager: UsbManager) {
         var lastRead: Int = 0
             private set
 
+        /**
+         * How long the last [poll] took.
+         *
+         * The pair (result, duration) is what separates the two ways a read returns nothing, and
+         * neither one alone can. A failure at the full timeout is an idle bus. The same failure
+         * returning at once is a halted endpoint. Only the first twelve reads of a session were
+         * ever logged, so a link that stalled later left no trace of which it was.
+         */
+        var lastReadMs: Long = 0
+            private set
+
         /** Claim the interfaces, raise DTR, then close/set-bitrate/open the CAN channel. */
         internal fun start(bitrate: SlcanBitrate): Boolean {
             if (!claim(pipes.dataInterface)) {
@@ -151,6 +162,7 @@ class CanableUsbLink(private val manager: UsbManager) {
             val startedAt = System.currentTimeMillis()
             val read = connection.bulkTransfer(endpoint, buffer, buffer.size, timeoutMs)
             lastRead = read
+            lastReadMs = System.currentTimeMillis() - startedAt
 
             // Log the first few reads whatever they say. A -1 after the full timeout is an idle
             // bus; a -1 that returns immediately is a failing transfer, and the two are impossible
