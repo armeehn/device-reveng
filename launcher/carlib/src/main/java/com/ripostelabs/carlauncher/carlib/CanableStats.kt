@@ -91,7 +91,7 @@ class CanableStats(private val clock: () -> Long = System::currentTimeMillis) {
 
                     // First volunteered line only. Later text is noise, and letting it overwrite
                     // the banner would make the identity flap.
-                    banner == null && event.text.length >= MIN_BANNER -> banner = event.text
+                    banner == null && looksLikeBanner(event.text) -> banner = event.text
                 }
             }
 
@@ -99,6 +99,28 @@ class CanableStats(private val clock: () -> Long = System::currentTimeMillis) {
         }
 
         rollWindow()
+    }
+
+    /**
+     * Whether a volunteered line is plausibly the adapter identifying itself.
+     *
+     * A length floor alone is not enough. On 2026-09-09 the car reported
+     * `firmware=402AA028800AE` — a mangled frame line, 13 characters of hex, accepted as the
+     * adapter's identity. That matters more than it looks: this field is the reading that
+     * separates *the USB path works* from *the adapter never answered at all*, so a stray frame
+     * landing here makes the diagnostic claim health it has not observed.
+     *
+     * A frame line is hex digits only. The real banner is
+     * `16e7497-dirty github.com/normaldotcom/canable2.git`, which cannot be — it carries spaces,
+     * dots and slashes. So requiring one non-hex character separates them without pinning the
+     * text of a string the vendor may change.
+     */
+    private fun looksLikeBanner(text: String): Boolean {
+        if (text.length < MIN_BANNER) {
+            return false
+        }
+
+        return text.any { it !in HEX_DIGITS }
     }
 
     /** Frames per second over the last completed window. Zero until a full window has elapsed. */
@@ -141,6 +163,9 @@ class CanableStats(private val clock: () -> Long = System::currentTimeMillis) {
 
         /** Shorter than this is a stray line, not an identity. The real banner is 51 characters. */
         const val MIN_BANNER = 8
+
+        /** A frame line rendered as text is only these; the banner is not. See [looksLikeBanner]. */
+        val HEX_DIGITS = ('0'..'9') + ('a'..'f') + ('A'..'F')
         const val WINDOW_MS = 1_000L
         const val MS_PER_SEC = 1_000L
     }

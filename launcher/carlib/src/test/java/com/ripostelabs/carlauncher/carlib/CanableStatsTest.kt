@@ -133,4 +133,40 @@ class CanableStatsTest {
     }
 
     private fun frame(id: Int) = SlcanEvent.Received(SlcanFrame(id, listOf(0)))
+
+    /**
+     * Regression: on 2026-09-09 the car reported `firmware=402AA028800AE`, a mangled frame line
+     * accepted as the adapter's identity because it cleared the length floor. The identity field
+     * is what separates "the USB path works" from "the adapter never answered", so a frame
+     * landing there makes that diagnostic claim health nobody observed.
+     */
+    @Test
+    fun `a mangled frame line is not mistaken for the banner`() {
+        val stats = CanableStats()
+
+        stats.record(SlcanEvent.Text("402AA028800AE"))
+
+        assertNull(stats.banner)
+        assertNull(stats.version)
+    }
+
+    @Test
+    fun `the real connect banner is still accepted`() {
+        val stats = CanableStats()
+        val real = "16e7497-dirty github.com/normaldotcom/canable2.git"
+
+        stats.record(SlcanEvent.Text(real))
+
+        assertEquals(real, stats.banner)
+    }
+
+    /** Hex with any punctuation is a banner; the discriminator is the non-hex character. */
+    @Test
+    fun `a short hex-only line is refused whatever its length`() {
+        val stats = CanableStats()
+
+        stats.record(SlcanEvent.Text("0123456789abcdefABCDEF0123456789"))
+
+        assertNull(stats.banner)
+    }
 }
