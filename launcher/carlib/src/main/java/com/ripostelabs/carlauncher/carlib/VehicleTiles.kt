@@ -51,7 +51,9 @@ object VehicleTiles {
             ?.let { out += Tile("Gear", it.name) }
         s.int(Field.RPM, now)?.let { out += Tile("Engine", "$it rpm") }
         s.int(Field.INTAKE_C, now)?.let { out += Tile("Intake air", "$it°C") }
-        s.int(Field.COOLANT_C, now)?.let { out += Tile("Coolant", "$it°C") }
+        coolant(s, now)?.let { out += Tile("Coolant", it) }
+        s.raw(Field.OBD_LOAD_PCT, now)?.let { out += Tile("Engine load", "%.0f%%".format(it)) }
+        s.raw(Field.OBD_THROTTLE_PCT, now)?.let { out += Tile("Throttle", "%.0f%%".format(it)) }
         s.int(Field.HYBRID_BATTERY, now)?.let { out += Tile("Hybrid battery", "$it/15") }
         s.int(Field.RANGE_KM, now)?.let { out += Tile("Range", "$it km") }
 
@@ -87,6 +89,22 @@ object VehicleTiles {
         val bits = s.int(Field.DOOR_BITS, now) ?: return null
         val open = OPENINGS.filter { (mask, _) -> bits and mask != 0 }.map { it.second }
         return if (open.isEmpty()) null else open.joinToString(", ")
+    }
+
+    /**
+     * Coolant, preferring the ECU's own answer over the vendor digest.
+     *
+     * Not a style choice. The digest's coolant has never been checked against anything, and the
+     * one time a coolant reading on this project WAS checked — `0x1C4` byte 4 — it was wrong by
+     * 14 degrees and moving the wrong way. A standard PID answered by the ECU needs no such
+     * defence, so when it is live it wins.
+     */
+    private fun coolant(s: VehicleSnapshot, now: Long): String? {
+        s.raw(Field.OBD_COOLANT_C, now)?.let {
+            return "%.0f°C".format(it)
+        }
+
+        return s.int(Field.COOLANT_C, now)?.let { "$it°C" }
     }
 
     /** Yaw and the two accelerations on one line; whichever of the three are live. */

@@ -36,6 +36,7 @@ data class VehicleSnapshot(
         SPEED_KMH, WHEEL_FL_KMH, WHEEL_FR_KMH, WHEEL_RL_KMH, WHEEL_RR_KMH,
         YAW_DEG_S, LATERAL_MS2, LONGITUDINAL_MS2, BRAKE_MPA, INTAKE_C, GEAR, ODOMETER_KM,
         OUTSIDE_C, CABIN_C, AMBIENT_LIGHT,
+        OBD_COOLANT_C, OBD_LOAD_PCT, OBD_THROTTLE_PCT,
         DOOR_BITS, REVERSE, SIDE_CAMERA_LEFT, SIDE_CAMERA_RIGHT,
         CLIMATE_ON, FAN_STEP, TEMP_LEFT_C, TEMP_RIGHT_C,
         RADAR_REAR_MIN_CM, RADAR_FRONT_MIN_CM,
@@ -103,6 +104,22 @@ data class VehicleSnapshot(
             is CanSignal.RpmGearMirror -> this
             is CanSignal.Version -> this
             is CanSignal.Unknown -> this
+        }.copy(atMs = atMs)
+
+        /**
+         * Fold one standard OBD answer into a snapshot.
+         *
+         * **Speed is deliberately not folded.** The raw bus owns that field, at 15-39 Hz and
+         * verified; this reply arrives every couple of seconds as a cross-check. Letting both
+         * write one field would make the safety gate alternate between two sources at different
+         * ages for no gain. The ECU's speed stays on the capture screen, where it is read as
+         * evidence rather than acted on.
+         */
+        fun VehicleSnapshot.foldObd(reply: Obd.Reply.Value, atMs: Long): VehicleSnapshot = when (reply.pid) {
+            ObdPid.COOLANT_C -> put(atMs, Field.OBD_COOLANT_C to reply.value)
+            ObdPid.ENGINE_LOAD -> put(atMs, Field.OBD_LOAD_PCT to reply.value)
+            ObdPid.THROTTLE_PCT -> put(atMs, Field.OBD_THROTTLE_PCT to reply.value)
+            ObdPid.SPEED_KMH -> this
         }.copy(atMs = atMs)
 
         /**

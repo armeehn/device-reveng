@@ -57,14 +57,23 @@ class CanableStats(private val clock: () -> Long = System::currentTimeMillis) {
     var obdRefusals: Long = 0
         private set
 
-    fun recordObd(reply: ObdSpeed.Reply) {
+    /** The latest answer for each parameter the car has replied about. */
+    private val readings = LinkedHashMap<ObdPid, Double>()
+
+    /** Latest OBD readings, in the order the parameters were first answered. */
+    fun obdReadings(): Map<ObdPid, Double> = LinkedHashMap(readings)
+
+    fun recordObd(reply: Obd.Reply) {
         when (reply) {
-            is ObdSpeed.Reply.Speed -> {
-                obdKmh = reply.kmh
+            is Obd.Reply.Value -> {
+                readings[reply.pid] = reply.value
+                if (reply.pid == ObdPid.SPEED_KMH) {
+                    obdKmh = reply.value.toInt()
+                }
                 obdReplies++
             }
 
-            is ObdSpeed.Reply.Refused -> obdRefusals++
+            is Obd.Reply.Refused -> obdRefusals++
         }
     }
 
