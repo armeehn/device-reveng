@@ -39,7 +39,7 @@ class McuTrailerTallyTest {
         assertEquals(1, tally.agrees)
         assertEquals(1, tally.disagrees)
         assertTrue(tally.summary(), tally.summary().contains("DISAGREES"))
-        assertTrue(tally.summary(), tally.summary().contains("sample=A5 5A A5 04 32"))
+        assertTrue(tally.summary(), tally.summary().contains("samples=[A5 5A A5 04 32"))
     }
 
     @Test
@@ -90,5 +90,63 @@ class McuTrailerTallyTest {
     @Test
     fun `nothing seen is not a verdict`() {
         assertTrue(McuTrailerTally().summary().contains("no bodies yet"))
+    }
+
+    /**
+     * The car sent back 861 agreements, 139 disagreements, and `00 00 00` as the disagreeing
+     * body. That body carries no opcode, no payload and no checksum. It cleared the length gate,
+     * failed arithmetic it was never part of, and counted against the formula.
+     *
+     * Counting padding as evidence is the more dangerous of the two possible errors here: it
+     * would send someone to rewrite arithmetic that works.
+     */
+    @Test
+    fun `an all-zero body is not evidence against the formula`() {
+        val tally = McuTrailerTally()
+
+        repeat(5) { tally.onBody(byteArrayOf(0, 0, 0)) }
+
+        assertEquals(0, tally.disagrees)
+        assertEquals(0, tally.agrees)
+        assertEquals(5, tally.blank)
+    }
+
+    /** Padding is reported, not hidden: a stream that is mostly padding is worth knowing about. */
+    @Test
+    fun `blank bodies are reported in the summary`() {
+        val tally = McuTrailerTally()
+
+        tally.onBody(byteArrayOf(0, 0, 0))
+
+        assertTrue(tally.summary(), tally.summary().contains("blank=1"))
+    }
+
+    /** A real body still counts, and one zero byte inside it does not make it padding. */
+    @Test
+    fun `a body with any non-zero byte is still judged`() {
+        val tally = McuTrailerTally()
+
+        tally.onBody(byteArrayOf(0x11, 0x00, 0x00))
+
+        assertEquals(0, tally.blank)
+        assertEquals(1, tally.agrees + tally.disagrees)
+    }
+
+    /**
+     * Every kept sample reaches the log, not just the first. One body says the formula disagreed
+     * somewhere; several say whether the disagreements look alike, which is the difference
+     * between a bug to fix and a stream to filter.
+     */
+    @Test
+    fun `the summary carries every kept sample`() {
+        val tally = McuTrailerTally()
+
+        tally.onBody(byteArrayOf(0x11, 0x22, 0x33))
+        tally.onBody(byteArrayOf(0x44, 0x55, 0x66))
+        val line = tally.summary()
+
+        assertTrue(line, line.contains("11 22 33"))
+        assertTrue(line, line.contains("44 55 66"))
+        assertTrue(line, line.contains("samples=["))
     }
 }
