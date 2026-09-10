@@ -237,4 +237,48 @@ class GuidedTestJudgeTest {
 
         assertTrue(firstKnown < firstSearch)
     }
+
+    /**
+     * The log line is the only form of a verdict that survives the driver walking away, so its
+     * shape is pinned here. Anything reading it at a desk depends on these keys.
+     */
+    @Test
+    fun `a verdict logs as one parseable line`() {
+        val line = GuidedTestJudge.summary(driverDoorTest, GuidedTestJudge.judge(driverDoorTest, probeOfDoors()))
+
+        assertTrue(line, line.startsWith("guided-test key=driver-door"))
+        assertTrue(line, line.contains("verdict=RESPONDED"))
+        assertTrue(line, line.contains("direction=set"))
+        assertTrue(line, !line.contains("\n"))
+    }
+
+    /** A failed prediction must carry the real movers into the log, not just the failure. */
+    @Test
+    fun `a no-response line carries what did move`() {
+        val wrong = driverDoorTest.copy(
+            expected = GuidedTest.Expected(0x4A5, 3, 0x01, "a bit that does nothing"),
+        )
+
+        val line = GuidedTestJudge.summary(wrong, GuidedTestJudge.judge(wrong, probeOfDoors()))
+
+        assertTrue(line, line.contains("verdict=NO_RESPONSE"))
+        assertTrue(line, line.contains("4A5/3/80"))
+    }
+
+    /** Every verdict type must produce a line; a silent one loses the run entirely. */
+    @Test
+    fun `every verdict type produces a line`() {
+        val starved = SignalProbe()
+        val verdicts = listOf(
+            GuidedTestJudge.judge(driverDoorTest, probeOfDoors()),
+            GuidedTestJudge.judge(GuidedTest.CATALOGUE.first { it.expected == null }, probeOfDoors()),
+            GuidedTestJudge.judge(driverDoorTest, starved),
+        )
+
+        verdicts.forEach {
+            val line = GuidedTestJudge.summary(driverDoorTest, it)
+            assertTrue(line, line.startsWith("guided-test key="))
+            assertTrue(line, line.contains("verdict="))
+        }
+    }
 }

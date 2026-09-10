@@ -1,5 +1,6 @@
 package com.ripostelabs.carlauncher.ui.settings
 
+import android.util.Log
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
@@ -70,7 +71,12 @@ fun GuidedTestScreen(onBack: () -> Unit) {
         }
 
         source.attachProbe(null)
-        verdict = test to GuidedTestJudge.judge(test, probe)
+        val result = GuidedTestJudge.judge(test, probe)
+
+        // The driver reads the screen and then leaves. Logging under the tag the desk-side
+        // watcher already pulls means the finding travels on its own.
+        Log.i(LOG_TAG, GuidedTestJudge.summary(test, result))
+        verdict = test to result
         phase = null
         running = null
     }
@@ -219,6 +225,9 @@ private fun describe(d: SignalProbe.DisjointByte): String =
         d.baselineValues.sorted().joinToString(",") { "0x%02X".format(it) },
         d.actionValues.sorted().joinToString(",") { "0x%02X".format(it) },
     )
+
+/** The tag the capture service already uses, so one pull collects both. */
+private const val LOG_TAG = "Canable"
 
 private const val BASELINE_SECONDS = 12
 private const val ACTION_SECONDS = 20
