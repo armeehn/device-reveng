@@ -77,4 +77,70 @@ class ReadWatchdogTest {
 
         assertFalse(watchdog.shouldVerifyDevice())
     }
+
+    /**
+     * The failure the owner described: unplugging the adapter and plugging it back in makes it
+     * work again. That means the fault survives the handle, not the device, so "is it still
+     * attached" answers yes forever while nothing arrives.
+     */
+    @Test
+    fun `silence outliving several attachment checks escalates to a reopen`() {
+        val watchdog = ReadWatchdog(patience = 2, reclaimAfter = 3)
+
+        // Two checks' worth of silence is not yet enough to distrust the handle.
+        repeat(2) { watchdog.record(0) }
+        assertTrue(watchdog.shouldVerifyDevice())
+        assertFalse(watchdog.shouldReclaim())
+
+        repeat(2) { watchdog.record(0) }
+        assertTrue(watchdog.shouldVerifyDevice())
+        assertFalse(watchdog.shouldReclaim())
+
+        repeat(2) { watchdog.record(0) }
+        assertTrue(watchdog.shouldVerifyDevice())
+        assertTrue(watchdog.shouldReclaim())
+    }
+
+    /** One byte proves the link is alive, and the escalation has to start over. */
+    @Test
+    fun `any data resets the escalation`() {
+        val watchdog = ReadWatchdog(patience = 1, reclaimAfter = 2)
+
+        watchdog.record(0)
+        assertTrue(watchdog.shouldVerifyDevice())
+        watchdog.record(0)
+        assertTrue(watchdog.shouldVerifyDevice())
+        assertTrue(watchdog.shouldReclaim())
+
+        watchdog.record(64)
+
+        assertFalse(watchdog.shouldReclaim())
+    }
+
+    /**
+     * Reopening must never pre-empt the cheaper question. A device that has actually been
+     * unplugged should be reported as absent, not reopened in a loop.
+     */
+    @Test
+    fun `a reopen is never suggested before the attachment check has fired`() {
+        val watchdog = ReadWatchdog(patience = 10, reclaimAfter = 1)
+
+        repeat(9) { watchdog.record(0) }
+
+        assertFalse(watchdog.shouldVerifyDevice())
+        assertFalse(watchdog.shouldReclaim())
+    }
+
+    /** A link that is delivering is left alone however long the test runs. */
+    @Test
+    fun `a healthy link never asks to be reopened`() {
+        val watchdog = ReadWatchdog(patience = 2, reclaimAfter = 2)
+
+        repeat(100) {
+            watchdog.record(64)
+            watchdog.shouldVerifyDevice()
+        }
+
+        assertFalse(watchdog.shouldReclaim())
+    }
 }
