@@ -40,3 +40,6 @@ camera-config-backup/
 screenshots/
 __pycache__/
 *.pyc
+
+# ARTEMIS e2e suite virtualenv (launcher/e2e/run.sh)
+launcher/e2e/.venv/
