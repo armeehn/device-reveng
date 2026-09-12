@@ -29,6 +29,21 @@ class CanableUsbLink(private val manager: UsbManager) {
         it.vendorId == VENDOR_ID && it.productId == PRODUCT_ID
     }
 
+    /**
+     * Find a serial adapter that is NOT the CANable, for listening to the vendor MCU link.
+     *
+     * Matched by having CDC-ACM pipes rather than by a vendor id, because the adapter is whatever
+     * gets wired in. Note the practical consequence: most cheap USB-serial parts (FTDI, CP210x,
+     * CH340) are vendor-specific and present no CDC-ACM interface at all, so they will not be
+     * found here however well they work on a desk. A microcontroller board presenting USB CDC
+     * will be.
+     */
+    fun findSerialListener(): UsbDevice? = manager.deviceList.values.firstOrNull {
+        val isCanable = it.vendorId == VENDOR_ID && it.productId == PRODUCT_ID
+
+        !isCanable && CdcAcm.findPipes(describe(it)) != null
+    }
+
     /** Whether the launcher may already claim [device], without prompting. */
     fun hasPermission(device: UsbDevice): Boolean = manager.hasPermission(device)
 
@@ -50,7 +65,20 @@ class CanableUsbLink(private val manager: UsbManager) {
      * Returns null when the app has no USB permission for the device, when its descriptors carry
      * no usable bulk pair, or when the interface is already claimed by something else.
      */
-    fun open(device: UsbDevice, bitrate: SlcanBitrate): Session? {
+    /**
+     * What a session is for, which decides whether it is allowed to write.
+     *
+     * [LISTEN] exists because the two uses share every byte of setup and differ on exactly one
+     * thing that matters enormously: whether anything goes out. A CANable needs slcan commands
+     * to open its channel. A tap on the vendor MCU wire must send NOTHING — those same command
+     * bytes would land on a live serial link between the head unit and the car's decoder box,
+     * and an adapter wired to the box's transmit line has no business talking at all.
+     *
+     * An enum rather than a boolean so a call site says which it means.
+     */
+    enum class SessionMode { SLCAN, LISTEN }
+
+    fun open(device: UsbDevice, bitrate: SlcanBitrate, mode: SessionMode = SessionMode.SLCAN): Session? {
         if (!manager.hasPermission(device)) {
             return null
         }
@@ -59,7 +87,7 @@ class CanableUsbLink(private val manager: UsbManager) {
         val connection = manager.openDevice(device) ?: return null
 
         val session = Session(device, connection, pipes)
-        if (!session.start(bitrate)) {
+        if (!session.start(bitrate, mode)) {
             session.close()
             return null
         }
@@ -101,6 +129,7 @@ class CanableUsbLink(private val manager: UsbManager) {
         private val buffer = ByteArray(READ_BUFFER_BYTES)
         private val claimed = ArrayList<UsbInterface>()
         private var polls = 0
+        private var mode = SessionMode.SLCAN
 
         /** Bytes the last [poll] moved: > 0 data, 0 empty, < 0 the transfer failed. */
         var lastRead: Int = 0
@@ -117,8 +146,11 @@ class CanableUsbLink(private val manager: UsbManager) {
         var lastReadMs: Long = 0
             private set
 
-        /** Claim the interfaces, raise DTR, then close/set-bitrate/open the CAN channel. */
-        internal fun start(bitrate: SlcanBitrate): Boolean {
+        /**
+         * Claim the interfaces and raise DTR, then open the CAN channel — unless this session is
+         * only listening, in which case nothing is written at all. See [SessionMode].
+         */
+        internal fun start(bitrate: SlcanBitrate, mode: SessionMode = SessionMode.SLCAN): Boolean {
             if (!claim(pipes.dataInterface)) {
                 return false
             }
@@ -141,7 +173,8 @@ class CanableUsbLink(private val manager: UsbManager) {
             val haltOut = clearHalt(pipes.bulkOut)
             Log.i(LOG_TAG, "clearHalt in=$haltIn out=$haltOut")
 
-            for (command in SlcanCodec.startup(bitrate)) {
+            this.mode = mode
+            for (command in startupFor(mode, bitrate)) {
                 if (!write(command)) {
                     return false
                 }
@@ -150,6 +183,29 @@ class CanableUsbLink(private val manager: UsbManager) {
             }
 
             return true
+        }
+
+        /**
+         * Read whatever has arrived and hand back the bytes themselves.
+         *
+         * [poll] decodes slcan, which is right for a CAN adapter and wrong for every other use of
+         * a serial link. A tap on the vendor MCU wire carries a different protocol entirely, so it
+         * takes the bytes and frames them itself. Null means the transfer failed; an empty array
+         * means the line was simply quiet, and those are not the same thing.
+         */
+        fun readRaw(timeoutMs: Int = READ_TIMEOUT_MS): ByteArray? {
+            val endpoint = endpoint(pipes.bulkIn) ?: return null
+
+            val startedAt = System.currentTimeMillis()
+            val read = connection.bulkTransfer(endpoint, buffer, buffer.size, timeoutMs)
+            lastRead = read
+            lastReadMs = System.currentTimeMillis() - startedAt
+
+            if (read < 0) {
+                return ByteArray(0)
+            }
+
+            return buffer.copyOf(read)
         }
 
         /**
@@ -204,7 +260,9 @@ class CanableUsbLink(private val manager: UsbManager) {
 
         /** Close the CAN channel and release the device. Safe to call more than once. */
         fun close() {
-            runCatching { write(SlcanCodec.shutdown()) }
+            if (mode == SessionMode.SLCAN) {
+                runCatching { write(SlcanCodec.shutdown()) }
+            }
 
             for (iface in claimed) {
                 connection.releaseInterface(iface)
@@ -311,6 +369,15 @@ class CanableUsbLink(private val manager: UsbManager) {
     }
 
     companion object {
+        /**
+         * The bytes a session writes at startup, by mode. Pure so a test can assert the one
+         * property that matters: a listening session writes nothing whatsoever.
+         */
+        internal fun startupFor(mode: SessionMode, bitrate: SlcanBitrate): List<ByteArray> = when (mode) {
+            SessionMode.SLCAN -> SlcanCodec.startup(bitrate)
+            SessionMode.LISTEN -> emptyList()
+        }
+
         /** Our own broadcast action; the system echoes it back with the permission verdict. */
         private const val ACTION_USB_PERMISSION = "com.ripostelabs.carlauncher.USB_PERMISSION"
 
