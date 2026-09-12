@@ -3,6 +3,9 @@ package com.ripostelabs.carlauncher.carlib
 import android.content.Context
 import android.hardware.usb.UsbManager
 import android.util.Log
+import java.io.BufferedWriter
+import java.io.File
+import java.io.FileWriter
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -129,9 +132,98 @@ class McuTapSource private constructor(
         }
     }
 
+    /**
+     * A rolling record of the digest, beside the vehicle-bus captures the same drive produces.
+     *
+     * Counting messages proves the tap works. Recording them is what makes the drive useful
+     * afterwards: paired with the bus capture from the same minutes, the two files are a test
+     * fixture for any replacement box, because the same input must produce the same output.
+     *
+     * One line per message, timestamp first, in the same shape as the bus capture so the two can
+     * be read side by side without a tool.
+     */
+    private inner class Record(dir: File?) {
+
+        private val rotation = CaptureRotation(prefix = CaptureRotation.PREFIX_MCU)
+        private val dir = dir
+        private var writer: BufferedWriter? = null
+        private var bytes = 0L
+
+        init {
+            open()
+        }
+
+        fun write(atMs: Long, opcode: Int, payload: ByteArray) {
+            val hex = payload.joinToString("") { "%02X".format(it) }
+            val line = "(%d.%03d) %02X %s".format(atMs / 1000, atMs % 1000, opcode, hex)
+
+            runCatching {
+                writer?.appendLine(line)
+                bytes += line.length + 1
+            }
+
+            if (rotation.shouldRoll(bytes)) {
+                roll()
+            }
+        }
+
+        fun close() {
+            runCatching { writer?.flush() }
+            runCatching { writer?.close() }
+            writer = null
+        }
+
+        private fun roll() {
+            close()
+            rotation.roll()?.let { stale -> dir?.let { File(it, stale).delete() } }
+            bytes = 0
+            open()
+        }
+
+        private fun open() {
+            val target = dir?.let { File(it, rotation.currentName()) } ?: return
+            writer = runCatching { BufferedWriter(FileWriter(target)) }.getOrNull()
+        }
+    }
+
+    /**
+     * Where a recording goes: the same directory the vehicle-bus captures use, so whatever
+     * collects one collects the other, and a drive arrives as a matched pair.
+     */
+    private fun recordDir(): File? {
+        val dir = context.getExternalFilesDir(CAPTURE_DIR) ?: return null
+        dir.mkdirs()
+
+        return dir
+    }
+
     private fun read(session: CanableUsbLink.Session) {
         val reader = McuSerial.Reader()
         val counts = LinkedHashMap<Int, Int>()
+        var frames = 0L
+        var bad = 0L
+        var skipped = 0L
+        var published = 0L
+        val record = Record(recordDir())
+
+        try {
+            pump(session, reader, counts, record) { f, b, s ->
+                frames = f
+                bad = b
+                skipped = s
+            }
+        } finally {
+            record.close()
+        }
+    }
+
+    private inline fun pump(
+        session: CanableUsbLink.Session,
+        reader: McuSerial.Reader,
+        counts: LinkedHashMap<Int, Int>,
+        record: Record,
+        report: (Long, Long, Long) -> Unit,
+    ) {
         var frames = 0L
         var bad = 0L
         var skipped = 0L
@@ -147,8 +239,10 @@ class McuTapSource private constructor(
                     is McuSerial.Command -> {
                         frames++
                         counts[event.opcode] = (counts[event.opcode] ?: 0) + 1
-                        val signal = HiworldCanDecoder.decodePayload(event.opcode, event.payload)
-                        vehicle.onSignal(signal, System.currentTimeMillis())
+
+                        val now = System.currentTimeMillis()
+                        record.write(now, event.opcode, event.payload)
+                        vehicle.onSignal(HiworldCanDecoder.decodePayload(event.opcode, event.payload), now)
                     }
 
                     is McuSerial.BadChecksum -> bad++
@@ -169,12 +263,18 @@ class McuTapSource private constructor(
                 opcodes = counts.entries.sortedByDescending { it.value }.map { it.key to it.value },
             )
             Log.i(LOG_TAG, "mcu-tap frames=$frames badCk=$bad skipped=$skipped opcodes=${counts.size}")
+            report(frames, bad, skipped)
         }
+
+        report(frames, bad, skipped)
     }
 
     companion object {
         private const val LOG_TAG = "Canable"
         private const val RETRY_MS = 2_000L
+
+        /** The same directory the vehicle-bus captures use, so one collector fetches both. */
+        private const val CAPTURE_DIR = "can"
         private const val PUBLISH_MS = 1_000L
 
         fun create(context: Context, vehicle: VehicleState): McuTapSource {

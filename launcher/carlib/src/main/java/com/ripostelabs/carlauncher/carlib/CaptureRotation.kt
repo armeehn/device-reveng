@@ -21,6 +21,14 @@ package com.ripostelabs.carlauncher.carlib
 class CaptureRotation(
     private val maxBytesPerFile: Long = MAX_BYTES_PER_FILE,
     private val maxFiles: Int = MAX_FILES,
+
+    /**
+     * Filename stem. Parameterised because there are now two things worth recording from a
+     * drive, and they have to be told apart on arrival: the vehicle bus, and the digest the
+     * vendor box makes of it. Pairing those two recordings is the whole basis for checking a
+     * replacement box, so they cannot share a name.
+     */
+    private val prefix: String = PREFIX_CAN,
 ) {
 
     private var index = 0
@@ -42,10 +50,13 @@ class CaptureRotation(
         return if (oldest < 0) null else nameFor(oldest)
     }
 
-    private fun nameFor(i: Int): String = "$PREFIX$i$SUFFIX"
+    private fun nameFor(i: Int): String = "$prefix$i$SUFFIX"
 
     companion object {
-        private const val PREFIX = "can-"
+        const val PREFIX_CAN = "can-"
+
+        /** The vendor box's serial digest, recorded alongside the bus it was made from. */
+        const val PREFIX_MCU = "mcu-"
         private const val SUFFIX = ".log"
         /** About 5 minutes of this bus: small enough to pull mid-drive over Tailscale. */
         const val MAX_BYTES_PER_FILE = 16L * 1024 * 1024
