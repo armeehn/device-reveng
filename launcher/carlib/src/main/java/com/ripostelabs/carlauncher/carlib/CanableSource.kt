@@ -99,6 +99,22 @@ class CanableSource private constructor(
     @Volatile
     private var running = false
 
+    /**
+     * Whether an adapter is attached AND already permitted, so recording can begin unattended.
+     *
+     * Both halves matter and only together. An attached adapter with no permission cannot be
+     * claimed, and asking for permission needs a dialog, which is the one thing a car at
+     * power-on must not produce. So this is deliberately false in that case rather than
+     * optimistic: the capture screen is where a human grants it, once.
+     *
+     * Kept here so nothing above carlib has to import the USB API to answer the question.
+     */
+    fun adapterReady(): Boolean {
+        val device = link.find() ?: return false
+
+        return link.hasPermission(device)
+    }
+
     /** Start reading. Safe to call twice; the second call does nothing. */
     fun start(bitrate: SlcanBitrate = SlcanBitrate.KBIT_500) {
         if (running) {
