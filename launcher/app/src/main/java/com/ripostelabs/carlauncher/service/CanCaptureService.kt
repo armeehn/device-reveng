@@ -118,6 +118,29 @@ class CanCaptureService : Service() {
             context.startForegroundService(Intent(context, CanCaptureService::class.java))
         }
 
+        /**
+         * Start recording only if an adapter is attached and already permitted.
+         *
+         * Why this exists: USB_DEVICE_ATTACHED fires when a device is plugged into a running
+         * system. An adapter that is permanently wired in is already enumerated by the time the
+         * head unit finishes booting, so no attach event is ever delivered and nothing starts.
+         * The owner reported exactly that — recording began only after opening the capture
+         * screen, which is the other thing that calls [start].
+         *
+         * Starting unconditionally would be worse than the bug: on a unit with no adapter it
+         * pins a foreground notification to a service that can never read anything.
+         *
+         * @return whether the service was started.
+         */
+        fun startIfAdapterReady(context: Context): Boolean {
+            if (!shared(context).adapterReady()) {
+                return false
+            }
+
+            start(context)
+            return true
+        }
+
         fun stop(context: Context) {
             context.stopService(Intent(context, CanCaptureService::class.java))
         }

@@ -3,6 +3,7 @@ package com.ripostelabs.carlauncher
 import android.Manifest // v2.5
 import android.content.Intent
 import android.content.pm.PackageManager // v2.5
+import android.util.Log
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.WindowManager
@@ -335,6 +336,14 @@ class MainActivity : ComponentActivity() {
                 CanCaptureService.vehicle().onFrame(bytes, System.currentTimeMillis())
                 CanCaptureService.onMcuBody(bytes)
             }
+        }
+
+        // A permanently wired adapter is already enumerated before the launcher exists, so the
+        // USB attach event never arrives and nothing starts recording. The launcher is the home
+        // app and therefore runs at every power-on, which makes it the one place that reliably
+        // notices. Refuses quietly when there is no adapter or no permission yet.
+        if (CanCaptureService.startIfAdapterReady(this)) {
+            Log.i("Canable", "capture started at launcher start: adapter attached and permitted")
         }
 
         // The safety gate's speed. GPS alone cannot see a car moving in a garage or at power-on,
