@@ -32,6 +32,7 @@ import com.ripostelabs.carlauncher.carlib.CanSignal
 import com.ripostelabs.carlauncher.carlib.CarEvents
 import com.ripostelabs.carlauncher.carlib.HiworldCanDecoder
 import com.ripostelabs.carlauncher.carlib.McuCommand
+import com.ripostelabs.carlauncher.carlib.McuTapSource
 import com.ripostelabs.carlauncher.carlib.ObdPid
 import com.ripostelabs.carlauncher.carlib.RadarCapture
 import com.ripostelabs.carlauncher.ui.collectAsStateSafe
@@ -87,6 +88,11 @@ fun CanCaptureScreen(
 
     // The vendor link test. Idle until someone asks, because it transmits.
     var linkState by remember { mutableStateOf(LinkTest.IDLE) }
+
+    // The MCU wire tap. Started on request, not automatically: no adapter has ever been wired
+    // to that link, and a reader scanning for one it will never find is just a warm thread.
+    val mcuTap = remember { CanCaptureService.mcuTap(context) }
+    val tapStatus by mcuTap.status.collectAsStateWithLifecycle()
 
     var capture by remember { mutableStateOf(RadarCapture()) }
     var lastFrame by remember { mutableStateOf<CanFrame?>(null) }
@@ -216,6 +222,24 @@ fun CanCaptureScreen(
             }
         }
 
+        SettingsSection(title = "MCU wire tap") {
+            McuTapRows(status = tapStatus)
+            ActionRow(
+                label = "Start listening",
+                description = "Reads the wire between the car's decoder box and this unit. It " +
+                    "only listens and never transmits. Needs a second serial adapter on the " +
+                    "box's transmit line: 3.3 V, and one that enumerates as standard USB serial.",
+                onClick = { mcuTap.start() },
+            )
+            if (tapStatus is McuTapSource.Status.NoPermission) {
+                ActionRow(
+                    label = "Grant USB access to the adapter",
+                    description = "Found, but Android needs permission before it can be claimed.",
+                    onClick = { mcuTap.requestAccess() },
+                )
+            }
+        }
+
         SettingsSection(title = "Vendor link test") {
             LinkTestRows(state = linkState)
             ActionRow(
@@ -255,6 +279,69 @@ fun CanCaptureScreen(
  *   - **Frames** climbing → CAN-H/CAN-L are on a live bus.
  *   - **Rejected** climbing → the adapter refused a command, so the channel likely never opened.
  */
+/**
+ * What the wire tap has heard.
+ *
+ * The two failures that look alike from a distance are separated here, because they send you to
+ * opposite places. Bytes arriving that never frame is a wrong baud rate or the wrong wire. Frames
+ * arriving that fail their own checksum is the right wire and a wrong assumption about the
+ * protocol. A frame count alone cannot tell you which you have.
+ */
+@Composable
+private fun McuTapRows(status: McuTapSource.Status) {
+    when (status) {
+        is McuTapSource.Status.Idle -> Text(
+            text = "Not started. Untested against hardware: no adapter has ever been wired to " +
+                "this link.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        is McuTapSource.Status.NoAdapter -> Text(
+            text = "No second serial adapter found. Note that FTDI, CP210x and CH340 parts are " +
+                "vendor-specific and present no standard serial interface, so they will not be " +
+                "found here however well they work on a desk.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        is McuTapSource.Status.NoPermission -> Text(
+            text = "Adapter found, waiting for USB permission.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        is McuTapSource.Status.Failed -> Text(
+            text = "Adapter found but not usable: ${status.reason}.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.error,
+        )
+
+        is McuTapSource.Status.Running -> {
+            InfoRow(label = "Messages", value = "${status.frames}")
+            InfoRow(label = "Bad checksum", value = "${status.badChecksum}")
+            InfoRow(label = "Bytes skipped", value = "${status.skipped}")
+            status.opcodes.take(MAX_OPCODES_SHOWN).forEach { (opcode, count) ->
+                InfoRow(label = "cmd 0x%02X".format(opcode), value = "$count")
+            }
+            Spacer(Modifier.size(8.dp))
+            Text(
+                text = when {
+                    status.frames > 0 -> "Framing. This is the decoded view the vendor stack sees."
+                    status.skipped > 0 -> "Bytes are arriving but nothing frames: wrong baud rate " +
+                        "or the wrong wire."
+                    else -> "Claimed, and the line is silent. Check the ground and that this is " +
+                        "the box's transmit pin."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+private const val MAX_OPCODES_SHOWN = 12
+
 /** Where the vendor link test has got to. */
 private enum class LinkTest { IDLE, WAITING, REPLIED }
 

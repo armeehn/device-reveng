@@ -11,6 +11,7 @@ import android.os.IBinder
 import android.util.Log
 import com.ripostelabs.carlauncher.carlib.CanableSource
 import com.ripostelabs.carlauncher.carlib.CanableStatus
+import com.ripostelabs.carlauncher.carlib.McuTapSource
 import com.ripostelabs.carlauncher.carlib.McuTrailerTally
 import com.ripostelabs.carlauncher.carlib.VehicleState
 
@@ -89,6 +90,19 @@ class CanCaptureService : Service() {
         private val vehicleState = VehicleState()
 
         fun vehicle(): VehicleState = vehicleState
+
+        private var tap: McuTapSource? = null
+
+        /**
+         * The one tap on the vendor MCU wire.
+         *
+         * Shared for the same reason the CAN reader is: two readers on one USB device would each
+         * claim the same bulk endpoint and split the byte stream between them. It folds into the
+         * same [VehicleState], so a screen never has to know which wire a reading arrived on.
+         */
+        @Synchronized
+        fun mcuTap(context: Context): McuTapSource =
+            tap ?: McuTapSource.create(context, vehicleState).also { tap = it }
 
         /**
          * Every MCU body the vendor broadcasts is a free test of McuSerial's wire checksum (its
