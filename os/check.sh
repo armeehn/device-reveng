@@ -27,7 +27,7 @@ while [ $# -gt 0 ]; do
 done
 [ -n "$BASE" ] && [ -n "$OUT" ] || die "need --base --out"
 [ "$(id -u)" = 0 ] || die "run as root"
-AAPT2=${AAPT2:-$(ls /home/*/Android/Sdk/build-tools/*/aapt2 /opt/android-sdk/build-tools/*/aapt2 2>/dev/null | sort -V | tail -1)}
+AAPT2=${AAPT2:-$(find_aapt2)}
 
 WORK=$(mktemp -d "${TMPDIR:-/var/tmp}/riposte-chk.XXXXXX")
 trap 'rm -rf "$WORK"' EXIT
@@ -74,6 +74,12 @@ echo "first boot"
 check "[ -f $T/system/etc/init/riposte.rc ]" "init rc present"
 check "[ \"\$(stat -c %a $T/system/bin/riposte-firstboot.sh)\" = 755 ]" "first-boot script executable"
 check "grep -q '^ro.riposte.os.version=0\.' $T/system/build.prop" "ro.riposte.os.version in build.prop"
+# The owner flag may only be 1 when eventcenter is not in the image.
+if grep -q '^ro.riposte.os.car_owner=1' "$T/system/build.prop"; then
+  check "! has_pkg $T com.szchoiceway.eventcenter" "car_owner=1 only without eventcenter"
+else
+  check "grep -q '^ro.riposte.os.car_owner=0' $T/system/build.prop" "ro.riposte.os.car_owner=0 on a stock-derived build"
+fi
 
 echo "boot animation"
 if [ -f "$T/product/media/bootanimation.zip" ]; then
