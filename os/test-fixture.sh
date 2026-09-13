@@ -68,8 +68,15 @@ if "$HERE/check.sh" --base "$W/base" --out "$W/base" --profile tier2 >/dev/null 
 fi
 echo "negative control failed as expected"
 
-echo "== gsi profile: a stand-in GSI (.img.xz) as system, the whole OEM stack out of product"
-xz -kc "$W/base/system.img" > "$W/gsi.img.xz"
+echo "== gsi profile: a system-as-root stand-in GSI (.img.xz), the whole OEM stack out of product"
+# A GSI nests /system under system/ and leaves absolute symlinks at the root (etc -> /system/etc),
+# which a naive mkdir -p writes through. The stand-in has both.
+mkdir -p "$W/sar/system"
+cp -a "$W/sys/." "$W/sar/system/"
+ln -s /system/etc "$W/sar/etc"
+ln -s /system/bin "$W/sar/bin"
+repack_image ext4 "$W/sar" "$W/sar.img" system
+xz -c "$W/sar.img" > "$W/gsi.img.xz"
 "$HERE/build.sh" --base "$W/base" --system "$W/gsi.img.xz" --apps "$W/apps" --out "$W/out-gsi" --profile gsi
 grep -q '^car_owner=1$' "$W/out-gsi/MANIFEST" || die "gsi profile did not imply --car-owner"
 "$HERE/check.sh" --base "$W/base" --system "$W/gsi.img.xz" --out "$W/out-gsi" --profile gsi --suite "$N"

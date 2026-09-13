@@ -80,6 +80,17 @@ unpack_image() { # img tree
   echo "$kind"
 }
 
+# Where /system's content lives inside an unpacked system image. A stock non-system-as-root
+# image puts build.prop at the root; a GSI is system-as-root and nests it under system/, with
+# absolute symlinks (etc -> /system/etc) at the root that must not be written through.
+system_root() { # tree-of-system-image -> path
+  if [ -f "$1/system/build.prop" ] && [ ! -L "$1/system" ]; then
+    echo "$1/system"
+  else
+    echo "$1"
+  fi
+}
+
 # Bytes a tree will need as ext4: content + 15 % metadata/slack, rounded to blocks.
 ext4_size_for() { # tree
   local used
