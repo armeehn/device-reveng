@@ -56,6 +56,8 @@ class CarEvents(private val appContext: Context) {
         /** Unprotected raw MCU-level reverse events — the normal-app fallback. */
         const val MCU_MSG_BACKCAR_START = "com.choiceway.eventcenter.EventUtils.MCU_MSG_BACKCAR_START"
         const val MCU_MSG_BACKCAR_END = "com.choiceway.eventcenter.EventUtils.MCU_MSG_BACKCAR_END"
+        /** Handbrake line changed (EventService.java:547); no extras, the state is a SysVar. */
+        const val MCU_MSG_BRAKE_EVT = "com.choiceway.eventcenter.EventUtils.MCU_MSG_BRAKE_EVT"
 
         // ---- ACC power (CAR_API §1.3) — unprotected (EventUtils.java:42,44) -----
         const val ACTION_ACC_OPEN_CLOSE_EVT =
@@ -822,8 +824,10 @@ class CarEvents(private val appContext: Context) {
                 }
 
                 // Headlamps changed; the state itself is in the SysVar the gateway wrote first.
+                // On 0.2 the launcher re-emits LAMP_STATUS itself and no SysVar exists: the
+                // owner listener already applied the bit, so a missing row must not read as DAY.
                 LAMP_STATUS -> {
-                    val on = sysVar.getString(SYSVAR_LAMP_STATUS) == LAMP_ON
+                    val on = (sysVar.getString(SYSVAR_LAMP_STATUS) ?: return) == LAMP_ON
                     updateDayNight(if (on) DayNight.NIGHT else DayNight.DAY)
                 }
 

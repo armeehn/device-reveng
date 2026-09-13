@@ -70,6 +70,21 @@ class McuOwner(
         fun onOther(command: McuSerial.Command) {}
     }
 
+    /** One port, several consumers: every callback goes to each of [targets], in order. */
+    class FanOut(private vararg val targets: Listener) : Listener {
+        override fun onSysEvent(event: McuOwnerProtocol.SysEvent) = targets.forEach { it.onSysEvent(event) }
+
+        override fun onMainVolume(volume: McuOwnerProtocol.MainVolume) = targets.forEach { it.onMainVolume(volume) }
+
+        override fun onMute(mute: McuOwnerProtocol.Mute) = targets.forEach { it.onMute(mute) }
+
+        override fun onKey(key: Int) = targets.forEach { it.onKey(key) }
+
+        override fun onCanSignal(signal: CanSignal, atMs: Long) = targets.forEach { it.onCanSignal(signal, atMs) }
+
+        override fun onOther(command: McuSerial.Command) = targets.forEach { it.onOther(command) }
+    }
+
     sealed class Status {
         object Idle : Status()
 

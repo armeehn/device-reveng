@@ -39,6 +39,7 @@ import com.ripostelabs.carlauncher.carlib.AndroidOwnerGate
 import com.ripostelabs.carlauncher.carlib.CarService
 import com.ripostelabs.carlauncher.carlib.McuOwner
 import com.ripostelabs.carlauncher.carlib.SlcanLinkSource
+import com.ripostelabs.carlauncher.carlib.VendorBroadcastReemitter
 import com.ripostelabs.carlauncher.carlib.GatewayHandshake // v3.0
 import com.ripostelabs.carlauncher.carlib.SysVar // v0.4.9 vendor hidden-apps list
 import com.ripostelabs.carlauncher.carlib.VendorBtService
@@ -238,11 +239,16 @@ class MainActivity : ComponentActivity() {
         carService = CarService(applicationContext)
         val ownerGate = AndroidOwnerGate(applicationContext)
         if (ownerGate.ownerEnabled() && !ownerGate.eventcenterPresent()) {
+            // The suite still listens for eventcenter's actions; the re-emitter replays them.
             // The carrier comes from `riposte.mcu.link`: the vendor UART on the car, a QEMU
             // virtio port or a socket on the emulator farm, where carsim plays the vehicle.
+            val ownerListener = McuOwner.FanOut(
+                carEvents.ownerListener(CanCaptureService.vehicle()),
+                VendorBroadcastReemitter(applicationContext),
+            )
             mcuOwner = McuOwner(
                 ownerGate,
-                carEvents.ownerListener(CanCaptureService.vehicle()),
+                ownerListener,
                 openLink = { ownerGate.mcuLink().open() },
             ).also {
                 carService.attachOwner(it)
