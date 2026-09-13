@@ -74,6 +74,8 @@
         pm grant com.ripostelabs.carlauncher android.permission.CAMERA
     -->
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Not required: a stock or 0.1 slot never opens a camera (lint PermissionImpliesUnsupportedChromeOsHardware). -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <!-- Narrow visibility fallback if QUERY_ALL_PACKAGES is ever stripped. -->
     <queries>
