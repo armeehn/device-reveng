@@ -21,6 +21,15 @@ produces the base directory below. Exit EDL with `edl reset` or a power cycle.
 - [ ] `os/flash.sh --images share/carlauncher/os/0.1` dry run prints the plan; note the target slot.
 - [ ] Laptop has `adb` + `fastboot` ≥ 34 and can `adb connect` the unit.
 
+## Base from the vendor OTA (no car needed)
+
+`GT6-Hangrui-8March2025.zip` → `update13.zip` is an A/B OTA whose `payload.bin` holds every stock
+partition image. `payload-dumper-go -o base-ota update13.zip` yields the base directly; the
+2025-03-08 build is one step newer than the unit's 2024-12-27 system, same product line. Its
+`boot.img` is stock: a slot flashed from it has no Magisk, so the launcher's root helper is
+absent there until the boot image is patched (Magisk app → patch a file) or replaced by the
+unit's own `boot_<slot>` from an adb dump.
+
 ## Step 1: flash to the inactive slot (RAV4-82)
 
 ```

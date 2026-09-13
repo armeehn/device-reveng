@@ -2,8 +2,9 @@
 # Flash a Riposte OS build to the INACTIVE slot and switch to it. Dry-run by
 # default: prints every command, runs nothing until --yes.
 #
-#   active slot _b (stock, daily driver)     inactive slot _a  ◄── system/product/boot/vbmeta
-#                                                                    set_active a, reboot
+#   active slot _b (stock, daily driver)     inactive slot _a  ◄── the whole matched set:
+#                                                system, system_ext, product, vendor, boot,
+#                                                dtbo, vbmeta, vbmeta_system; set_active a
 #   rollback: fastboot set_active b   (or hold the unit in fastboot and re-run this with --slot b)
 #
 # Runs on the laptop at the car, over the 4PIN USB port (USB-A to USB-A data
@@ -37,10 +38,12 @@ echo "active slot: $ACTIVE   target (inactive): $TARGET   version: $(grep ^versi
 
 run "${ADB[@]}" reboot fastboot                       # fastbootd, needed for logical partitions
 run "${FB[@]}" getvar is-userspace
-for part in system product; do
-  run "${FB[@]}" flash "${part}_$TARGET" "$IMAGES/$part.img"
+# Logical partitions first (fastbootd resizes them); every image the set carries goes, so the
+# slot never mixes a system from one build with a vendor from another.
+for part in system system_ext product vendor; do
+  [ -f "$IMAGES/$part.img" ] && run "${FB[@]}" flash "${part}_$TARGET" "$IMAGES/$part.img"
 done
-run "${FB[@]}" flash "boot_$TARGET" "$IMAGES/boot.img"         # the active slot's Magisk-patched boot
+run "${FB[@]}" flash "boot_$TARGET" "$IMAGES/boot.img"         # Magisk-patched if the base came off the unit; stock if from an OTA
 [ -f "$IMAGES/dtbo.img" ] && run "${FB[@]}" flash "dtbo_$TARGET" "$IMAGES/dtbo.img"
 run "${FB[@]}" --disable-verity --disable-verification flash "vbmeta_$TARGET" "$IMAGES/vbmeta.img"
 [ -f "$IMAGES/vbmeta_system.img" ] && run "${FB[@]}" --disable-verity --disable-verification flash "vbmeta_system_$TARGET" "$IMAGES/vbmeta_system.img"

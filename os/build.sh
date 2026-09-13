@@ -24,7 +24,7 @@ readonly LAUNCHER_NAME=CarLauncher
 readonly SUITE_DIR=product/app
 readonly PRIVAPP_XML=etc/permissions/privapp-permissions-ripostelabs.xml
 readonly BOOTANIM=product/media/bootanimation.zip   # bootanimation looks in /product before /system
-readonly PASSTHROUGH="vendor boot dtbo vbmeta vbmeta_system"
+readonly PASSTHROUGH="vendor system_ext boot dtbo vbmeta vbmeta_system"   # one matched set, never mixed across builds
 readonly EDITED="system product"
 
 BASE="" APPS="" OUT="" PROFILE=tier1 VERSION="" CAR_OWNER=0 SYSTEM=""
