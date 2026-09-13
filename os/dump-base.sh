@@ -8,7 +8,9 @@
 # again. Re-run until `assemble` reports every partition complete. Every adb
 # call is bounded: an unplugged unit leaves adb half-open, not refused.
 #
-# Usage: dump-base.sh [--serial S] [--out DIR] [--parts "system product boot ..."] [assemble]
+# Usage: dump-base.sh [--serial S] [--out DIR] [--parts "system product boot ..."] [--all] [assemble]
+#   --all: every named partition except userdata and super (super holds the logical ones we
+#   already fetch by name), the default set first so a short visit still banks the useful part.
 
 set -euo pipefail
 readonly CHUNK_MIB=64
@@ -28,6 +30,7 @@ while [ $# -gt 0 ]; do
     --serial) SERIAL=$2; shift 2 ;;
     --out) OUT=$2; shift 2 ;;
     --parts) PARTS=$2; shift 2 ;;
+    --all) PARTS=all; shift ;;
     assemble) MODE=assemble; shift ;;
     *) echo "unknown arg $1" >&2; exit 2 ;;
   esac
@@ -42,7 +45,14 @@ su_() { a shell su -c "$*" | tr -d '\r'; }
 blockdev_for() { # part slot
   case "$1" in
     system|product|vendor|system_ext|odm) echo "/dev/block/mapper/$1$2" ;;
-    *) echo "/dev/block/by-name/$1$2" ;;
+    *)
+      # Slotted partitions carry the suffix; the rest (modem, persist, metadata …) do not.
+      if [ -n "$(su_ "ls /dev/block/by-name/$1$2 2>/dev/null")" ]; then
+        echo "/dev/block/by-name/$1$2"
+      else
+        echo "/dev/block/by-name/$1"
+      fi
+      ;;
   esac
 }
 
@@ -75,6 +85,18 @@ if [ ! -f "$OUT/BASE-INFO" ]; then
     echo "incremental=$(su_ getprop ro.build.version.incremental)"; echo "dumped=$(date -u +%F)"; } > "$OUT/BASE-INFO"
 fi
 grep -q "^slot=$SLOT$" "$OUT/BASE-INFO" || { log "slot changed since the dump began ($SLOT); refusing to mix"; exit 1; }
+
+# --all: the default set, then every other named partition on the active slot or unslotted,
+# skipping userdata. Listed once per dump and cached so a later visit needs no device call.
+if [ "$PARTS" = all ]; then
+  if [ ! -f "$OUT/PARTS" ]; then
+    su_ "ls /dev/block/by-name" | tr -s ' \n' '\n' | sed -n "s/${SLOT}\$//p; /_[ab]\$/!p" | sort -u \
+      | grep -vxE 'userdata|super' | grep -v '^$' > "$OUT/PARTS.tmp" && mv "$OUT/PARTS.tmp" "$OUT/PARTS"
+  fi
+  extra=$(grep -vxF -f <(tr ' ' '\n' <<<"$DEFAULT_PARTS") "$OUT/PARTS" | tr '\n' ' ')
+  PARTS="$DEFAULT_PARTS $extra"
+  log "all partitions: $(wc -w <<<"$PARTS") to fetch"
+fi
 
 for part in $PARTS; do
   dev=$(blockdev_for "$part" "$SLOT")
