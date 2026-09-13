@@ -49,4 +49,14 @@ object GameApps {
 
     /** Whether anything at all is available to launch. */
     fun anyInstalled(installed: Collection<String>): Boolean = installed(installed).isNotEmpty()
+
+    /**
+     * The frontend that can play a [Rom] handed to it, or null. Only RetroArch takes a ROM plus
+     * core on its launch intent; the standalone emulators do not, so the library stays hidden
+     * when RetroArch is absent rather than listing titles nothing can open.
+     */
+    fun libretroFrontend(installed: List<GameApp>): GameApp? =
+        installed.firstOrNull { it.packageName in LIBRETRO }
+
+    private val LIBRETRO = setOf("com.retroarch.aarch64", "com.retroarch", "com.retroarch.ra32")
 }
