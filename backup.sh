@@ -58,3 +58,12 @@ ls -la "$OUT" | head -60
 echo ">> Backup dir: $OUT"
 echo ">> Verify boot_a/boot_b, abl, vbmeta, dtbo, modem/nvram etc. are present and non-zero."
 echo ">> When satisfied, exit EDL:  $SUDO $PY $EDL reset   (or just power-cycle the unit)."
+
+# Optional: copy the dump to the build host so os/from-edl.sh can turn it into a base
+# without the laptop. RAV4_UPLOAD is an rsync destination (user@host:/path or a mounted
+# share path). Checksums first, so a partial copy is visible.
+if [ -n "${RAV4_UPLOAD:-}" ]; then
+  echo; echo "=== 4. upload to $RAV4_UPLOAD ==="
+  (cd "$OUT" && sha256sum ./*.bin ./*.xml > SHA256SUMS 2>/dev/null)
+  rsync -a --info=progress2 "$OUT/" "$RAV4_UPLOAD/$(basename "$OUT")/" && echo ">> uploaded; on the build host: os/from-edl.sh --edl <that dir> --out <base>"
+fi
