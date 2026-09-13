@@ -1,0 +1,11 @@
+# Riposte OS first-boot hook. Runs once per /data, after the framework is up.
+service riposte_firstboot /system/bin/sh /system/bin/riposte-firstboot.sh
+    class late_start
+    user shell
+    group shell
+    seclabel u:r:shell:s0
+    oneshot
+    disabled
+
+on property:sys.boot_completed=1
+    start riposte_firstboot
