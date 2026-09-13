@@ -111,6 +111,9 @@ object McuOwnerProtocol {
     /** `79` MAIN_VOLUME: bit 7 set means the change was silent (onCmdMainVolEvent, :2943-2964). */
     data class MainVolume(val level: Int, val silent: Boolean)
 
+    /** `78` MUTE: same shape, low bits non-zero = muted (onCmdMuteEvent, EventService.java:2921). */
+    data class Mute(val muted: Boolean, val silent: Boolean)
+
     fun mode(mode: Mode): ByteArray = McuSerial.encode(OP_MODE, bytes(mode.code))
 
     fun setup(index: Int, value: Int): ByteArray = McuSerial.encode(OP_SETUP, bytes(index, value))
@@ -189,6 +192,15 @@ object McuOwnerProtocol {
 
         val raw = command.payload[0].toInt() and BYTE
         return MainVolume(level = raw and BIT7.inv(), silent = raw and BIT7 != 0)
+    }
+
+    fun mute(command: McuSerial.Command): Mute? {
+        if (command.opcode != McuOpcode.MUTE.code || command.payload.isEmpty()) {
+            return null
+        }
+
+        val raw = command.payload[0].toInt() and BYTE
+        return Mute(muted = raw and BIT7.inv() != 0, silent = raw and BIT7 != 0)
     }
 
     /** `72` KEY_EVENT: the panel key code (onCmdKeyEvent, EventService.java:2401; codes in EventUtils.java:1470-1651). */

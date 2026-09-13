@@ -1056,6 +1056,44 @@ class CarEvents(private val appContext: Context) {
         )
     }
 
+    /**
+     * Riposte OS 0.2: the same state, fed by our own port owner instead of eventcenter's
+     * broadcasts. Reverse, ACC and headlamps come from the `71` SYS_EVENT bits, volume and mute
+     * from `79`/`78`; the CAN relay goes to [vehicle]. Nothing else in the launcher changes.
+     */
+    fun ownerListener(vehicle: VehicleState?): McuOwner.Listener = object : McuOwner.Listener {
+        override fun onSysEvent(event: McuOwnerProtocol.SysEvent) {
+            updateReverse(event.reverse)
+            if (_accOn.value != event.accLine) {
+                _accOn.value = event.accLine
+                listeners.forEach { it.onAcc(event.accLine) }
+            }
+            updateDayNight(if (event.illumination) DayNight.NIGHT else DayNight.DAY)
+        }
+
+        override fun onMainVolume(volume: McuOwnerProtocol.MainVolume) {
+            _volume.value = VolumeReading(
+                level = volume.level,
+                muted = _volume.value?.muted ?: false,
+                showWindow = !volume.silent,
+                atMs = System.currentTimeMillis(),
+            )
+        }
+
+        override fun onMute(mute: McuOwnerProtocol.Mute) {
+            _volume.value = VolumeReading(
+                level = _volume.value?.level ?: 0,
+                muted = mute.muted,
+                showWindow = !mute.silent,
+                atMs = System.currentTimeMillis(),
+            )
+        }
+
+        override fun onCanSignal(signal: CanSignal, atMs: Long) {
+            vehicle?.onSignal(signal, atMs)
+        }
+    }
+
     private fun updateReverse(engaged: Boolean) {
         if (_reverse.value != engaged) {
             _reverse.value = engaged
