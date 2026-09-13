@@ -52,6 +52,8 @@ head -c 65536 /dev/urandom > "$W/base/vbmeta.img"   # passthrough sample
 cp "$LAUNCHER_APK" "$W/apps/carlauncher.apk"
 cp "$WEBROOT"/suite/*.apk "$W/apps/suite/"
 N=$(ls "$W/apps/suite" | wc -l)
+# A stand-in animation: Pillow is not on x, and only the packaging is checked here.
+python3 -c 'import zipfile,sys; z=zipfile.ZipFile(sys.argv[1],"w",zipfile.ZIP_STORED); z.writestr("desc.txt","1920 720 30\np 0 0 part0\n"); z.writestr("part0/0000.png","x")' "$W/apps/bootanimation.zip"
 
 echo "== build (tier2) with $(basename "$LAUNCHER_APK") + $N suite apps"
 "$HERE/build.sh" --base "$W/base" --apps "$W/apps" --out "$W/out" --profile tier2
