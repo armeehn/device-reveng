@@ -25,7 +25,9 @@ import androidx.compose.ui.unit.dp
 import com.ripostelabs.carlauncher.carlib.CarEvents
 import com.ripostelabs.carlauncher.ui.theme.carShape
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.StateFlow
 import com.ripostelabs.carlauncher.carlib.CarService
+import com.ripostelabs.carlauncher.carlib.McuOwner
 import com.ripostelabs.carlauncher.data.AppDirectoryStore
 import com.ripostelabs.carlauncher.data.CarSettingsController
 import com.ripostelabs.carlauncher.data.RadioPresetsStore
@@ -61,6 +63,8 @@ fun SettingsHost(
     // Optional deep link: open with this route pushed above the hub, so Back still pops
     // to the hub (status-bar power chip → Power & sleep).
     initialRoute: SettingsRoute? = null,
+    // Riposte OS 0.2: the McuOwner status when this slot owns the port; null = vendor binder.
+    mcuStatus: StateFlow<McuOwner.Status>? = null,
 ) {
     val backStack = remember {
         mutableStateListOf<SettingsRoute>(SettingsRoute.Hub).also { stack ->
@@ -130,6 +134,7 @@ fun SettingsHost(
                 onBack = ::pop,
                 settingsStore = settingsStore,
                 carService = carService,
+                mcuStatus = mcuStatus,
             )
 
             // v0.4.2: back up / restore the whole launcher state (DataStore file snapshot).
