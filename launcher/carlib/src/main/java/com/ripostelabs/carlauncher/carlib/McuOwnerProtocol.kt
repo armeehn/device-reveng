@@ -35,6 +35,7 @@ object McuOwnerProtocol {
     private const val OP_SETUP = 0x05         // sendSetup, :6389; index 05 = main volume, :4384
     private const val OP_SYSTEM_KEY = 0x08    // sendSystemKey, :4263-4268: the VOL/MUTE key echo
     private const val OP_MUTE = 0x0A          // sendMuteState, :4319
+    private const val OP_BT_STATE = 0x0B      // sendBTState, :4336-4342
     private const val OP_USER_FREQ = 0x0C     // sendUserFreq, :4300
     private const val OP_RTC = 0x13           // sendRTCTimer, :9469
     private const val OP_BACKLIGHT = 0x2E     // sendBacklight, :9639-9659
@@ -55,8 +56,12 @@ object McuOwnerProtocol {
     const val ACK_TIMEOUT_MS = 500L
     const val ACK_ATTEMPTS = 3
 
+    /** `sendBTState((byte) 0)` on ACC off (EventService.java:3559); higher values are call states. */
+    const val BT_DISCONNECTED = 0
+
     private const val RTC_EPOCH_YEAR = 2000
     private const val BYTE = 0xFF
+    private const val SLEEP_STATE_WAKE = 0x01
     private const val BIT7 = 0x80
 
     /**
@@ -157,6 +162,31 @@ object McuOwnerProtocol {
      */
     fun powerOff(now: LocalDateTime): List<ByteArray> =
         listOf(rtc(now)) + List(POWER_OFF_REPEATS) { mode(Mode.POWER_OFF) }
+
+    /** `0B state` (sendBTState, EventService.java:4336-4342). */
+    fun btState(state: Int): ByteArray = McuSerial.encode(OP_BT_STATE, bytes(state))
+
+    /**
+     * What ACC_CHANGE_EVENT sends 3 s after wake (EventService.java:465-469): `reloadParam`
+     * (:3622-3643) minus the config blocks named in the header, then the same two modes again and
+     * the mode to resume. The vendor resumes `mValidMode`, reset to SRC_NONE at sleep (:3556), and
+     * relies on the mode's activity to switch source later (msg 290); we resume the last mode set,
+     * or NONE when none was.
+     */
+    fun reload(config: StartupConfig, lastMode: Mode?): List<ByteArray> = listOf(
+        mode(Mode.POWER_ON),
+        mode(Mode.MCU_VERSION),
+        backlight(config.backlightDay, config.backlightNight),
+        mode(Mode.POWER_ON),
+        mode(Mode.MCU_VERSION),
+        mode(lastMode ?: Mode.NONE),
+    )
+
+    /** `96 01`: the MCU says it woke (onCmdMcuSleepState, EventService.java:2270-2280). */
+    fun isWake(command: McuSerial.Command): Boolean =
+        command.opcode == McuOpcode.SLEEP_STATE.code &&
+            command.payload.isNotEmpty() &&
+            (command.payload[0].toInt() and BYTE) == SLEEP_STATE_WAKE
 
     /** MODE_ACK carries the mode it acknowledges in its first byte (onCmdModeAck, :2186-2190). */
     fun isModeAck(command: McuSerial.Command, mode: Mode): Boolean =

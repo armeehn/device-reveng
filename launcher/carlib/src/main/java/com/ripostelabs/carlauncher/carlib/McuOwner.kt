@@ -68,6 +68,9 @@ class McuOwner(
 
         /** A framed body no handler claims; logged by the caller, never dropped silently. */
         fun onOther(command: McuSerial.Command) {}
+
+        /** RX `96 01`: the MCU reports it woke (onCmdMcuSleepState, EventService.java:2270-2280). */
+        fun onWake() {}
     }
 
     /** One port, several consumers: every callback goes to each of [targets], in order. */
@@ -116,6 +119,10 @@ class McuOwner(
     /** Mirrors `mBackcarConnected`: while set, most panel keys are dropped as the vendor drops them. */
     @Volatile
     private var reversing = false
+    /** The last [setMode] argument, so a wake can resume it ([McuOwnerProtocol.reload]). */
+    @Volatile
+    var lastMode: McuOwnerProtocol.Mode? = null
+        private set
 
     fun start() {
         if (running) {
@@ -167,6 +174,7 @@ class McuOwner(
 
     fun setMode(mode: McuOwnerProtocol.Mode): Boolean {
         val l = link ?: return false
+        lastMode = mode
         return sendWithAck(l, mode)
     }
 
@@ -251,6 +259,10 @@ class McuOwner(
         McuOwnerProtocol.mute(command)?.let { listener.onMute(it); return }
         McuOwnerProtocol.panelKey(command)?.let { onPanelKey(it); return }
         McuOwnerProtocol.wheelKey(command)?.let { listener.onWheelKey(it); return }
+        if (McuOwnerProtocol.isWake(command)) {
+            listener.onWake()
+            return
+        }
 
         // 0xA5 relays the CAN box's own frame; the decoder keys on the box's cmd, not the relay opcode.
         when (val inner = command.innerFrame()) {
