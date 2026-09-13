@@ -154,10 +154,21 @@ there is no framework artefact or EDL backup on the build host to inspect. **Ans
 anything else**: pull `/system/framework/framework.jar` and `services.jar` off the unit and look
 for Choiceway classes. It is a five-minute check that decides whether the rest is worth planning.
 
-### Standing recommendation is unchanged
+### Answered 2026-09-08, re-verified 2026-09-13: the framework is stock `[confirmed]`
 
-Stay stock + Magisk. This section lowers the estimated cost of the alternative; it does not argue
-for paying it. A daily-driven car is a bad place to discover the remaining unknown the hard way.
+`framework.jar` (4 dex, 36 MiB) and `services.jar` (2 dex, 19 MiB) pulled off the unit contain
+no `com.szchoiceway`, `com.choiceway`, `hiworld`, `zxw`, `syu` or `com.tw` class, with
+`android.os.SystemProperties` present as the positive control. Choiceway shipped an unmodified
+AOSP 13 platform and put everything of theirs in APKs. There is no blocker left in this section.
+
+### Recommendation as of 2026-09-13: a re-mastered stock system, then a GSI
+
+See `os/README.md`. 0.1 keeps the stock framework (so the platform-signed `SysVarProvider` and
+the OEM car apps keep working) and bakes our launcher and suite in as priv-apps, with the
+phone-home packages deleted from the image. 0.2 moves the base to an AOSP 14 GSI once our own
+MCU owner process replaces eventcenter. Both flash to the inactive slot; rollback is
+`fastboot set_active`. The stock slot stays the daily driver until the car-side acceptance list
+passes on the other one.
 
 ## 3. Ranked realistic paths
 
