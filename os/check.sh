@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Static verification of a built Riposte OS output, without a car.
 #
-# Usage: check.sh --base DIR --out DIR [--profile tier1|tier2] [--suite N]
+# Usage: check.sh --base DIR --out DIR [--profile tier1|tier2|gsi] [--system IMG] [--suite N]
 # Exit 0 when every assertion holds; each failure is printed, nothing is hidden.
 # Runs as root on x (loop mounts).
 
@@ -15,13 +15,14 @@ readonly LAUNCHER_APK=system/priv-app/CarLauncher/CarLauncher.apk
 readonly PRIVAPP_XML=system/etc/permissions/privapp-permissions-ripostelabs.xml
 readonly FRAMEWORK=system/framework/framework.jar
 
-BASE="" OUT="" PROFILE=tier1 SUITE=""
+BASE="" OUT="" PROFILE=tier1 SUITE="" SYSTEM=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --base) BASE=$2; shift 2 ;;
     --out) OUT=$2; shift 2 ;;
     --profile) PROFILE=$2; shift 2 ;;
     --suite) SUITE=$2; shift 2 ;;
+    --system) SYSTEM=$2; shift 2 ;;
     *) die "unknown arg $1" ;;
   esac
 done
@@ -38,9 +39,10 @@ check() { if eval "$1"; then ok "$2"; else bad "$2"; fi; }
 
 for part in system product; do
   for side in base out; do
-    src=$([ $side = base ] && echo "$BASE" || echo "$OUT")
-    [ -f "$src/$part.img" ] || die "$src/$part.img missing"
-    unsparse "$src/$part.img" "$WORK/$side-$part.raw"
+    src=$([ $side = base ] && echo "$BASE" || echo "$OUT")/$part.img
+    [ $side = base ] && [ $part = system ] && [ -n "$SYSTEM" ] && src=$SYSTEM
+    [ -f "$src" ] || die "$src missing"
+    unsparse "$src" "$WORK/$side-$part.raw"
     unpack_image "$WORK/$side-$part.raw" "$WORK/$side/$part" >/dev/null
   done
 done
@@ -56,6 +58,19 @@ has_pkg() { # tree pkg
   return 1
 }
 pkgs_in() { sed 's/#.*//' "$1" | awk 'NF{print $1}'; }
+# Every package in a tree matching a list entry (exact or `prefix.*`).
+pkgs_matching() { # tree listfile
+  local apk pkg line
+  while read -r apk; do
+    pkg=$(pkg_of "$apk"); [ -n "$pkg" ] || continue
+    while read -r line; do
+      case "$line" in
+        *'*') [[ "$pkg" == "${line%\*}"* ]] && { echo "$pkg"; break; } ;;
+        *) [ "$pkg" = "$line" ] && { echo "$pkg"; break; } ;;
+      esac
+    done < <(pkgs_in "$2")
+  done < <(find "$1" -name '*.apk' -path '*app/*')
+}
 
 echo "launcher"
 check "[ -f $T/$LAUNCHER_APK ]" "launcher APK at $LAUNCHER_APK"
@@ -89,17 +104,21 @@ else
 fi
 
 echo "removed"
-LISTS="$HERE/overlay/remove.tier1"; [ "$PROFILE" = tier2 ] && LISTS+=" $HERE/overlay/remove.tier2"
-for p in $(cat $LISTS | sed 's/#.*//' | awk 'NF{print $1}'); do
-  if has_pkg "$WORK/base" "$p"; then
+if [ "$PROFILE" = gsi ]; then
+  LISTS="$HERE/overlay/remove.gsi"; KEEPFILE="$HERE/overlay/keep.gsi"
+else
+  LISTS="$HERE/overlay/remove.tier1"; KEEPFILE="$HERE/overlay/keep"
+  [ "$PROFILE" = tier2 ] && LISTS+=" $HERE/overlay/remove.tier2"
+fi
+for list in $LISTS; do
+  for p in $(pkgs_matching "$WORK/base" "$list"); do
     check "! has_pkg $T $p" "$p gone"
-  else
-    ok "$p (not in base, nothing to remove)"
-  fi
+  done
 done
+[ "$PROFILE" = gsi ] && check "[ -z \"\$(pkgs_matching $T $HERE/overlay/remove.gsi)\" ]" "no OEM package left in the image"
 
 echo "kept"
-for p in $(pkgs_in "$HERE/overlay/keep"); do
+for p in $(pkgs_in "$KEEPFILE"); do
   if has_pkg "$WORK/base" "$p"; then
     check "has_pkg $T $p" "$p still present"
   else

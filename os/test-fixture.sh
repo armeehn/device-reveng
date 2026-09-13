@@ -68,6 +68,12 @@ if "$HERE/check.sh" --base "$W/base" --out "$W/base" --profile tier2 >/dev/null 
 fi
 echo "negative control failed as expected"
 
+echo "== gsi profile: a stand-in GSI (.img.xz) as system, the whole OEM stack out of product"
+xz -kc "$W/base/system.img" > "$W/gsi.img.xz"
+"$HERE/build.sh" --base "$W/base" --system "$W/gsi.img.xz" --apps "$W/apps" --out "$W/out-gsi" --profile gsi
+grep -q '^car_owner=1$' "$W/out-gsi/MANIFEST" || die "gsi profile did not imply --car-owner"
+"$HERE/check.sh" --base "$W/base" --system "$W/gsi.img.xz" --out "$W/out-gsi" --profile gsi --suite "$N"
+
 echo "== negative control: --car-owner with eventcenter in the base must refuse"
 if "$HERE/build.sh" --base "$W/base" --apps "$W/apps" --out "$W/out-owner" --car-owner >/dev/null 2>&1; then
   die "--car-owner built beside eventcenter: the guard is gone"
