@@ -15,6 +15,14 @@
         tools:ignore="QueryAllPackagesPermission" />
 
     <!--
+      Games library. The ROM tree under /sdcard/RetroArch is not media, so Android 13 hides it
+      from any app without "All files access". Granted once from Settings > Games (or by
+      `appops set ... MANAGE_EXTERNAL_STORAGE allow` over adb); never needed for anything else.
+    -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+        tools:ignore="ScopedStorage" />
+
+    <!--
       Protected car broadcasts (reverse / SWC / day-night) ride this vendor permission
       (CAR_API §1.1). Very likely protectionLevel="signature": a normal app will not be
       granted it and silently misses those events; as a privileged/system app it starts
