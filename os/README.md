@@ -33,6 +33,7 @@ serial link behind a public API, and the framework check closed the last unknown
 
 | Script | Runs where | Does |
 |---|---|---|
+| `from-edl.sh` | build host | Turns an EDL dump (`backup.sh` output) into the same base directory: logical partitions out of `super.bin` with a checksum-pinned `lpunpack.py`, physical ones copied. The faster route when someone is at the car with the 4PIN cable. |
 | `dump-base.sh` | x, as `sasha` | Pulls the active slot's `system product boot dtbo vbmeta vbmeta_system` over adb + su, in 64 MiB chunks that resume across the car's short appearances. Output `share/carlauncher/os/base/`. |
 | `build.sh` | x, as root | Unpacks (ext4 loop mount / `fsck.erofs --extract`), removes packages, adds apps, writes the privapp allowlist, first-boot hook and props, repacks in the base's format. |
 | `check.sh` | x, as root | Static proof of an output against its base. Framework byte-identical, kept packages present, removed ones gone, allowlist == the APK's permissions, labels preserved. |

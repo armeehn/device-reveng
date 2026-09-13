@@ -4,10 +4,19 @@ One sitting, laptop on the 4PIN USB port (USB-A to USB-A data cable into a USB-A
 see `STATUS.md`), unit on ACC. Each step names what it proves and how to undo it. Stop at the
 first step that fails; the rest is not worth the seat time.
 
+## Step 0 (optional, at the car): full EDL image over the 4PIN port
+
+The unit's USB port only speaks EDL/fastboot. `adb reboot edl` (screen goes black but backlit),
+plug the USB-A-to-A cable into a USB-A port on the laptop, then `backup.sh` with
+`RAV4_UPLOAD=<rsync destination on the build host>`. Minutes, versus hours of car-on time for the
+over-the-air dump. Afterwards `os/from-edl.sh --edl <dump> --out share/carlauncher/os/base`
+produces the base directory below. Exit EDL with `edl reset` or a power cycle.
+
 ## Before leaving the desk
 
 - [ ] `share/carlauncher/os/base/` has `system.img product.img boot.img vbmeta.img` with
-      `.sha256` sidecars and `BASE-INFO` (`dump-base.sh assemble` reports every partition).
+      `.sha256` sidecars and `BASE-INFO` (`dump-base.sh assemble` reports every partition, or
+      `from-edl.sh` ran).
 - [ ] `os/build.sh --base … --profile tier2` and `os/check.sh` PASS → `share/carlauncher/os/0.1/`.
 - [ ] `os/flash.sh --images share/carlauncher/os/0.1` dry run prints the plan; note the target slot.
 - [ ] Laptop has `adb` + `fastboot` ≥ 34 and can `adb connect` the unit.
