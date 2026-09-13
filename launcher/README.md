@@ -188,6 +188,13 @@ gate. Matching is exact: RetroArch ships `com.retroarch`, `.aarch64` and `.ra32`
 non-interchangeable installs, and this unit is `arm64-v8a`. The official `aarch64` build is
 staged on the share and installed by an internal watcher when it is missing.
 
+Below the frontends, **Library** lists the ROMs under `/sdcard/RetroArch/roms/<system>/` and
+starts each one in RetroArch with its core already chosen (`nes` → fceumm, `gb`/`gbc` → gambatte,
+`gba` → mgba, `genesis` → genesis_plus_gx, `snes` → snes9x; download the core once inside
+RetroArch). The folder is not media, so the first visit asks for "All files access". Only
+homebrew that its authors publish for free redistribution is staged; the `SOURCES.md` next to
+the ROMs records origin, licence and checksum for every file.
+
 ## Settings suite (v1.1 → v2.0)
 
 A full, reskinned mirror of the vendor GT6 settings — see

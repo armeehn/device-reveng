@@ -36,6 +36,13 @@ class GameAppsTest {
         assertEquals(ids.size, ids.toSet().size)
     }
 
+    @Test
+    fun `the library plays through RetroArch, whichever build is present`() {
+        val installed = GameApps.installed(listOf("org.ppsspp.ppsspp", "com.retroarch.ra32"))
+
+        assertEquals("com.retroarch.ra32", GameApps.libretroFrontend(installed)?.packageName)
+    }
+
     // ── Negative controls ───────────────────────────────────────────────────────────────────────
 
     @Test
@@ -51,6 +58,13 @@ class GameAppsTest {
         val found = GameApps.installed(listOf("com.retroarch.clone", "org.ppsspp.ppsspp.beta"))
 
         assertTrue(found.isEmpty())
+    }
+
+    @Test
+    fun `a standalone emulator alone gives the library nothing to play through`() {
+        val installed = GameApps.installed(listOf("org.ppsspp.ppsspp", "com.dsemu.drastic"))
+
+        assertEquals(null, GameApps.libretroFrontend(installed))
     }
 
     @Test
