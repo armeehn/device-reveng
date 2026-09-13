@@ -870,26 +870,7 @@ class CarEvents(private val appContext: Context) {
                 // STEER_WHEEL_INFOR form, and pushed through the SAME dedupe: on a rooted unit
                 // the protected capture delivers the same press, and exactly one of the
                 // co-arriving copies may reach handleProtected.
-                MCU_KEY_INFOR_ACTION -> {
-                    // The echo of a long press we already acted on is dropped here, before the
-                    // tap is synthesised (see keySwallow).
-                    val code = intExtra(intent, EXTRA_MCU_KEY_VALUE)
-                    val wheelKey = WheelKey.fromMcuKey(code)
-                    if (wheelKey != null &&
-                        keySwallow.swallowBroadcast(wheelKey, SystemClock.elapsedRealtime())
-                    ) {
-                        return
-                    }
-
-                    // No press state on this path: one broadcast is one complete tap, so
-                    // synthesise the down and up edges back to back. KeyPump treats that as a
-                    // normal short press on every key class.
-                    val index = SwcFallback.mcuKey(code)
-                    if (index != null) {
-                        applyFallbackEdge(SwcFallback.Edge(index, down = true))
-                        applyFallbackEdge(SwcFallback.Edge(index, down = false))
-                    }
-                }
+                MCU_KEY_INFOR_ACTION -> applyMcuKey(intExtra(intent, EXTRA_MCU_KEY_VALUE))
 
                 // v0.7: parking-radar frame → distance codes → proximity bands (RadarState).
                 MCU_CAR_CAN_RADAR_INFO -> {
@@ -1010,6 +991,24 @@ class CarEvents(private val appContext: Context) {
     }
 
     /**
+     * One `MCU_KEY_*` code, whatever carried it: the vendor's MCU_KEY_INFOR broadcast or, on
+     * Riposte OS 0.2, the `72` frame our own port owner decoded. The echo of a long press we
+     * already acted on is dropped first (see keySwallow). No press state on either carrier: one
+     * code is one complete tap, so the down and up edges are synthesised back to back, which
+     * KeyPump treats as a normal short press on every key class.
+     */
+    private fun applyMcuKey(code: Int?) {
+        val wheelKey = WheelKey.fromMcuKey(code)
+        if (wheelKey != null && keySwallow.swallowBroadcast(wheelKey, SystemClock.elapsedRealtime())) {
+            return
+        }
+
+        val index = SwcFallback.mcuKey(code) ?: return
+        applyFallbackEdge(SwcFallback.Edge(index, down = true))
+        applyFallbackEdge(SwcFallback.Edge(index, down = false))
+    }
+
+    /**
      * v0.4.9 — deliver one unprotected-fallback key edge through the protected pipeline: same
      * canonical action, same dedupe, same [handleProtected], so the two sources cannot drift
      * apart in how a press is applied (and a rooted unit's duplicate copy is dropped).
@@ -1059,7 +1058,8 @@ class CarEvents(private val appContext: Context) {
     /**
      * Riposte OS 0.2: the same state, fed by our own port owner instead of eventcenter's
      * broadcasts. Reverse, ACC and headlamps come from the `71` SYS_EVENT bits, volume and mute
-     * from `79`/`78`; the CAN relay goes to [vehicle]. Nothing else in the launcher changes.
+     * from `79`/`78`, panel and wheel keys from `72`/`74`; the CAN relay goes to [vehicle].
+     * Nothing else in the launcher changes.
      */
     fun ownerListener(vehicle: VehicleState?): McuOwner.Listener = object : McuOwner.Listener {
         override fun onSysEvent(event: McuOwnerProtocol.SysEvent) {
@@ -1091,6 +1091,21 @@ class CarEvents(private val appContext: Context) {
 
         override fun onCanSignal(signal: CanSignal, atMs: Long) {
             vehicle?.onSignal(signal, atMs)
+        }
+
+        // `72` panel keys take the MCU_KEY_INFOR route; the owner already did the vendor's own
+        // share (volume echo, power-off), so only the CAR_KEY-mapped codes have work left here.
+        override fun onPanelKey(key: McuOwnerProtocol.PanelKey) {
+            applyMcuKey(key.code)
+        }
+
+        // `74` wheel edges are the STEER_WHEEL_INFOR extras the vendor would have broadcast,
+        // pushed through the same dedupe and handler as the root capture (see rootBridge).
+        override fun onWheelKey(key: McuOwnerProtocol.WheelKey) {
+            val ints = SwcFallback.wheelInts(key)
+            if (protectedDedupe.accept(STEER_WHEEL_INFOR, swcDedupeInts(STEER_WHEEL_INFOR, ints), System.currentTimeMillis())) {
+                handleProtected(STEER_WHEEL_INFOR, ints)
+            }
         }
     }
 

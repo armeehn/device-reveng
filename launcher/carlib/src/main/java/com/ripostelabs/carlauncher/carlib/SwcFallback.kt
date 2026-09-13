@@ -63,6 +63,18 @@ internal object SwcFallback {
     }
 
     /**
+     * Riposte OS 0.2: the extras `onCmdWheelEvent` would have broadcast for a `74` frame
+     * (`EventService.java:2847-2859`): LPARAM = slot + 1, WPARAM 3 down / 4 up, VOLTAGE as read.
+     * Built here so the owner path and the broadcast path dedupe and dispatch as one.
+     */
+    fun wheelInts(key: McuOwnerProtocol.WheelKey): Map<String, Int> = mapOf(
+        CarEvents.EXTRA_SWC_LPARAM to key.slot + 1,
+        CarEvents.EXTRA_SWC_WPARAM to
+            if (key.down) CarEvents.SWC_STATE_DOWN else CarEvents.SWC_STATE_UP,
+        CarEvents.EXTRA_SWC_VOLTAGE to key.voltage,
+    )
+
+    /**
      * The canonical int-extra map an edge dedupes and dispatches under. Same key set as
      * [CarEvents.swcDedupeInts] keeps for the protected path — that identity is what lets
      * [ProtectedEventDedupe] drop the duplicate when the protected capture (root/system) and

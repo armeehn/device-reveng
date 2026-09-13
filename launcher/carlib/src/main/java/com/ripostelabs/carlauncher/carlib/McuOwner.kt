@@ -58,6 +58,12 @@ class McuOwner(
 
         fun onKey(key: Int) {}
 
+        /** A `72` panel key, after the owner applied what eventcenter did with it (see [onPanelKey]). */
+        fun onPanelKey(key: McuOwnerProtocol.PanelKey) {}
+
+        /** A `74` resistive-wheel edge; the vendor's STEER_WHEEL_INFOR, unbroadcast. */
+        fun onWheelKey(key: McuOwnerProtocol.WheelKey) {}
+
         fun onCanSignal(signal: CanSignal, atMs: Long) {}
 
         /** A framed body no handler claims; logged by the caller, never dropped silently. */
@@ -91,6 +97,10 @@ class McuOwner(
 
     @Volatile
     private var ackReceived = false
+
+    /** Mirrors `mBackcarConnected`: while set, most panel keys are dropped as the vendor drops them. */
+    @Volatile
+    private var reversing = false
 
     fun start() {
         if (running) {
@@ -221,10 +231,11 @@ class McuOwner(
             return
         }
 
-        McuOwnerProtocol.sysEvent(command)?.let { listener.onSysEvent(it); return }
+        McuOwnerProtocol.sysEvent(command)?.let { reversing = it.reverse; listener.onSysEvent(it); return }
         McuOwnerProtocol.mainVolume(command)?.let { listener.onMainVolume(it); return }
         McuOwnerProtocol.mute(command)?.let { listener.onMute(it); return }
-        McuOwnerProtocol.key(command)?.let { listener.onKey(it); return }
+        McuOwnerProtocol.panelKey(command)?.let { onPanelKey(it); return }
+        McuOwnerProtocol.wheelKey(command)?.let { listener.onWheelKey(it); return }
 
         // 0xA5 relays the CAN box's own frame; the decoder keys on the box's cmd, not the relay opcode.
         when (val inner = command.innerFrame()) {
@@ -243,6 +254,33 @@ class McuOwner(
 
         Log.i(LOG_TAG, "unhandled opcode 0x%02X (%d bytes)".format(command.opcode, command.payload.size))
         listener.onOther(command)
+    }
+
+    /**
+     * The port owner's share of a `72` key, before the apps hear of it (onCmdKeyEvent,
+     * EventService.java:2401-2699). With the camera up only [McuOwnerProtocol.panelKeyPassesReverse]
+     * keys count. VOL+/VOL-/MUTE go back to the MCU as `08 xx` (sendSystemKey, :4263), which is
+     * what moves the amplifier; the MCU then reports the result on `79`/`78`. POWER runs
+     * [powerOff] after the notify: the dex confirms the switch's default arm falls through to
+     * notifyValidModeEvt(4098) and then powerOff() (:2695-2698), which jadx renders as unreachable.
+     */
+    private fun onPanelKey(key: McuOwnerProtocol.PanelKey) {
+        if (reversing && !McuOwnerProtocol.panelKeyPassesReverse(key.code)) {
+            return
+        }
+
+        listener.onKey(key.code)
+        listener.onPanelKey(key)
+
+        val echo = McuOwnerProtocol.panelSystemKey(key.code)
+        if (echo != null) {
+            send(McuOwnerProtocol.systemKey(echo))
+            return
+        }
+
+        if (key.code == McuOwnerProtocol.Key.POWER) {
+            powerOff()
+        }
     }
 
     companion object {

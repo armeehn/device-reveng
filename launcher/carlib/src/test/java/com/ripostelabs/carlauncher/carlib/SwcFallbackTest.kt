@@ -64,6 +64,86 @@ class SwcFallbackTest {
         assertNull(SwcFallback.mcuKey(null))
     }
 
+    // ---- Riposte OS 0.2: the owner's 72/74 frames ----------------------------------------------
+
+    /** The two transcriptions of EventUtils' table must agree, or a `72` code maps to the wrong key. */
+    @Test
+    fun ownerKeyCodesMatchTheFallbackTable() {
+        assertEquals(SwcFallback.MCU_KEY_POWER, McuOwnerProtocol.Key.POWER)
+        assertEquals(SwcFallback.MCU_KEY_NEXT, McuOwnerProtocol.Key.NEXT)
+        assertEquals(SwcFallback.MCU_KEY_PREV, McuOwnerProtocol.Key.PREV)
+        assertEquals(SwcFallback.MCU_KEY_PLAYPAUSE, McuOwnerProtocol.Key.PLAY_PAUSE)
+        assertEquals(SwcFallback.MCU_KEY_MENU, McuOwnerProtocol.Key.MENU)
+        assertEquals(SwcFallback.MCU_KEY_MODE, McuOwnerProtocol.Key.MODE)
+        assertEquals(SwcFallback.MCU_KEY_MUTE, McuOwnerProtocol.Key.MUTE)
+        assertEquals(SwcFallback.MCU_KEY_VOL_ADD, McuOwnerProtocol.Key.VOLUME_UP)
+        assertEquals(SwcFallback.MCU_KEY_VOL_SUB, McuOwnerProtocol.Key.VOLUME_DOWN)
+        assertEquals(SwcFallback.MCU_KEY_HANGUP, McuOwnerProtocol.Key.HANGUP)
+        assertEquals(SwcFallback.MCU_KEY_TALK, McuOwnerProtocol.Key.TALK)
+        assertEquals(SwcFallback.MCU_KEY_RETURN, McuOwnerProtocol.Key.RETURN)
+        assertEquals(SwcFallback.MCU_KEY_TASK_LIST, McuOwnerProtocol.Key.TASK_LIST)
+        assertEquals(SwcFallback.MCU_KEY_VOICE, McuOwnerProtocol.Key.VOICE)
+    }
+
+    /** Every `72` code the launcher acts on, keyed by the owner's constants, lands on its CAR_KEY. */
+    @Test
+    fun ownerPanelCodesMapToCarKeys() {
+        val expected = mapOf(
+            McuOwnerProtocol.Key.MENU to CarEvents.CAR_KEY_HOME,
+            McuOwnerProtocol.Key.RETURN to CarEvents.CAR_KEY_BACK,
+            McuOwnerProtocol.Key.NEXT to CarEvents.CAR_KEY_NEXT,
+            McuOwnerProtocol.Key.PREV to CarEvents.CAR_KEY_PREV,
+            McuOwnerProtocol.Key.TALK to CarEvents.CAR_KEY_PHONE,
+            McuOwnerProtocol.Key.MODE to CarEvents.CAR_KEY_MEDIA,
+        )
+        for ((code, carKey) in expected) {
+            assertEquals("code $code", carKey, SwcFallback.mcuKey(code))
+        }
+
+        // The owner does the vendor's share of these itself; nothing is left for the key pipeline.
+        for (code in listOf(McuOwnerProtocol.Key.POWER, McuOwnerProtocol.Key.VOLUME_UP, McuOwnerProtocol.Key.VOLUME_DOWN, McuOwnerProtocol.Key.MUTE)) {
+            assertNull("code $code", SwcFallback.mcuKey(code))
+        }
+    }
+
+    @Test
+    fun unknownPanelCodeIsIgnoredNotThrown() {
+        for (code in listOf(0, 0x7F, 0xEE, 0xFF, 300)) {
+            assertNull("code $code", SwcFallback.mcuKey(code))
+        }
+    }
+
+    /** LPARAM = slot + 1, WPARAM 3 down / 4 up, voltage as read (onCmdWheelEvent, :2847-2859). */
+    @Test
+    fun wheelIntsAreTheVendorExtras() {
+        assertEquals(
+            mapOf(
+                CarEvents.EXTRA_SWC_LPARAM to 3,
+                CarEvents.EXTRA_SWC_WPARAM to CarEvents.SWC_STATE_DOWN,
+                CarEvents.EXTRA_SWC_VOLTAGE to 0x5A,
+            ),
+            SwcFallback.wheelInts(McuOwnerProtocol.WheelKey(slot = 2, down = true, voltage = 0x5A)),
+        )
+        assertEquals(
+            mapOf(
+                CarEvents.EXTRA_SWC_LPARAM to 1,
+                CarEvents.EXTRA_SWC_WPARAM to CarEvents.SWC_STATE_UP,
+                CarEvents.EXTRA_SWC_VOLTAGE to 0,
+            ),
+            SwcFallback.wheelInts(McuOwnerProtocol.WheelKey(slot = 0, down = false, voltage = 0)),
+        )
+    }
+
+    /** The owner's wheel edge dedupes against the root capture of the same press, like the fallback does. */
+    @Test
+    fun ownerWheelEdgeMatchesTheProtectedCopy() {
+        val dedupe = ProtectedEventDedupe()
+        val ints = SwcFallback.wheelInts(McuOwnerProtocol.WheelKey(slot = 4, down = true, voltage = 100))
+
+        assertTrue(dedupe.accept(CarEvents.STEER_WHEEL_INFOR, protectedKey(5, CarEvents.SWC_STATE_DOWN), now))
+        assertFalse(dedupe.accept(CarEvents.STEER_WHEEL_INFOR, CarEvents.swcDedupeInts(CarEvents.STEER_WHEEL_INFOR, ints), now + 3))
+    }
+
     // ---- dedupe interaction -------------------------------------------------
 
     private val now = 10_000L

@@ -60,12 +60,16 @@ class McuOwnerTest {
         val sys = CopyOnWriteArrayList<McuOwnerProtocol.SysEvent>()
         val volume = CopyOnWriteArrayList<McuOwnerProtocol.MainVolume>()
         val keys = CopyOnWriteArrayList<Int>()
+        val panel = CopyOnWriteArrayList<McuOwnerProtocol.PanelKey>()
+        val wheel = CopyOnWriteArrayList<McuOwnerProtocol.WheelKey>()
         val signals = CopyOnWriteArrayList<CanSignal>()
         val other = CopyOnWriteArrayList<McuSerial.Command>()
 
         override fun onSysEvent(event: McuOwnerProtocol.SysEvent) { sys.add(event) }
         override fun onMainVolume(volume: McuOwnerProtocol.MainVolume) { this.volume.add(volume) }
         override fun onKey(key: Int) { keys.add(key) }
+        override fun onPanelKey(key: McuOwnerProtocol.PanelKey) { panel.add(key) }
+        override fun onWheelKey(key: McuOwnerProtocol.WheelKey) { wheel.add(key) }
         override fun onCanSignal(signal: CanSignal, atMs: Long) { signals.add(signal) }
         override fun onOther(command: McuSerial.Command) { other.add(command) }
     }
@@ -142,9 +146,10 @@ class McuOwnerTest {
         owner.start()
         waitFor("running") { owner.status.value as? McuOwner.Status.Running }
 
+        // The key goes first: once the reverse bit is seen, POWER is dropped like the vendor drops it.
+        link.feed(McuSerial.encode(McuOpcode.KEY_EVENT.code, bytes(McuOwnerProtocol.Key.MODE, 0x00)))
         link.feed(McuSerial.encode(McuOpcode.SYS_EVENT.code, bytes(0x02, 0x00)))
         link.feed(McuSerial.encode(McuOpcode.MAIN_VOLUME.code, bytes(0x15)))
-        link.feed(McuSerial.encode(McuOpcode.KEY_EVENT.code, bytes(McuOwnerProtocol.Key.POWER, 0x00)))
         // The CAN box's 0x32 vehicle-info frame, relayed under 0xA5.
         link.feed(McuSerial.encode(McuSerial.OP_CAN, McuFrame.encode(0x32, bytes(0x00, 0x00, 0x05, 0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF))))
         link.feed(McuSerial.encode(0x97, bytes(0x01)))
@@ -157,10 +162,93 @@ class McuOwnerTest {
 
         assertTrue(recorder.sys[0].reverse)
         assertEquals(McuOwnerProtocol.MainVolume(21, silent = false), recorder.volume[0])
-        assertEquals(McuOwnerProtocol.Key.POWER, recorder.keys[0])
+        assertEquals(McuOwnerProtocol.Key.MODE, recorder.keys[0])
         assertFalse("0x32 must decode to a real signal, not Unknown", recorder.signals[0] is CanSignal.Unknown)
         assertEquals(0x97, recorder.other[0].opcode)
         assertEquals(0L, counted.badChecksum)
+    }
+
+    /** A started owner with the handshake's own writes already counted. */
+    private fun runningOwner(link: FakeLink, recorder: Recorder): Pair<McuOwner, Int> {
+        val owner = owner(link, recorder = recorder)
+        owner.start()
+        waitFor("running") { owner.status.value as? McuOwner.Status.Running }
+        return owner to link.written.size
+    }
+
+    /** VOL+ is echoed to the MCU as `08 00` (sendSystemKey) and still reaches the listener. */
+    @Test
+    fun volumeKeyIsEchoedAsSystemKey() {
+        val link = FakeLink(ackNull = true)
+        val recorder = Recorder()
+        val (owner, handshake) = runningOwner(link, recorder)
+
+        link.feed(McuSerial.encode(McuOpcode.KEY_EVENT.code, bytes(McuOwnerProtocol.Key.VOLUME_UP, 0x00)))
+        waitFor("echo written") { link.written.getOrNull(handshake) }
+        owner.stop()
+
+        assertArrayEquals(McuOwnerProtocol.systemKey(McuOwnerProtocol.SystemKey.VOLUME_UP), link.written[handshake])
+        assertEquals(handshake + 1, link.written.size)
+        assertEquals(McuOwnerProtocol.PanelKey(McuOwnerProtocol.Key.VOLUME_UP, 0), recorder.panel.single())
+        assertEquals(McuOwnerProtocol.Key.VOLUME_UP, recorder.keys.single())
+    }
+
+    /** POWER: notify first, then the vendor's clock stamp and five SRC_POWEROFF frames. */
+    @Test
+    fun powerKeyRunsPowerOffAfterNotify() {
+        val link = FakeLink(ackNull = true)
+        val recorder = Recorder()
+        val (owner, handshake) = runningOwner(link, recorder)
+
+        link.feed(McuSerial.encode(McuOpcode.KEY_EVENT.code, bytes(McuOwnerProtocol.Key.POWER, 0x00)))
+        val expected = 1 + McuOwnerProtocol.POWER_OFF_REPEATS
+        waitFor("power-off frames written") { link.written.takeIf { it.size >= handshake + expected } }
+        owner.stop()
+
+        assertEquals(handshake + expected, link.written.size)
+        assertEquals(0x13, link.written[handshake][3].toInt())
+        for (i in 1..McuOwnerProtocol.POWER_OFF_REPEATS) {
+            assertArrayEquals(McuOwnerProtocol.mode(McuOwnerProtocol.Mode.POWER_OFF), link.written[handshake + i])
+        }
+        assertEquals(McuOwnerProtocol.Key.POWER, recorder.panel.single().code)
+    }
+
+    /** With the camera up (71 reverse bit) MODE is dropped and VOL- still passes, as in onCmdKeyEvent. */
+    @Test
+    fun reverseDropsAllButAudioAndTrackKeys() {
+        val link = FakeLink(ackNull = true)
+        val recorder = Recorder()
+        val (owner, handshake) = runningOwner(link, recorder)
+
+        link.feed(McuSerial.encode(McuOpcode.SYS_EVENT.code, bytes(0x02, 0x00)))
+        link.feed(McuSerial.encode(McuOpcode.KEY_EVENT.code, bytes(McuOwnerProtocol.Key.MODE, 0x00)))
+        link.feed(McuSerial.encode(McuOpcode.KEY_EVENT.code, bytes(McuOwnerProtocol.Key.VOLUME_DOWN, 0x00)))
+        waitFor("echo written") { link.written.getOrNull(handshake) }
+        link.feed(McuSerial.encode(McuOpcode.SYS_EVENT.code, bytes(0x00, 0x00)))
+        link.feed(McuSerial.encode(McuOpcode.KEY_EVENT.code, bytes(McuOwnerProtocol.Key.MODE, 0x00)))
+        waitFor("mode after reverse") { recorder.panel.takeIf { it.size == 2 } }
+        owner.stop()
+
+        assertEquals(listOf(McuOwnerProtocol.Key.VOLUME_DOWN, McuOwnerProtocol.Key.MODE), recorder.panel.map { it.code })
+        assertArrayEquals(McuOwnerProtocol.systemKey(McuOwnerProtocol.SystemKey.VOLUME_DOWN), link.written[handshake])
+    }
+
+    /** `74` goes to onWheelKey and writes nothing back; an unknown `72` code is surfaced, not thrown. */
+    @Test
+    fun wheelEdgeAndUnknownPanelCodeAreSurfaced() {
+        val link = FakeLink(ackNull = true)
+        val recorder = Recorder()
+        val (owner, handshake) = runningOwner(link, recorder)
+
+        link.feed(McuSerial.encode(McuOpcode.WHEEL_EVENT.code, bytes(0x02, 0x01, 0x00, 0x5A)))
+        link.feed(McuSerial.encode(McuOpcode.KEY_EVENT.code, bytes(0xEE, 0x00)))
+        waitFor("both dispatched") { recorder.panel.takeIf { it.size == 1 && recorder.wheel.size == 1 } }
+        owner.stop()
+
+        assertEquals(McuOwnerProtocol.WheelKey(slot = 2, down = true, voltage = 0x5A), recorder.wheel.single())
+        assertEquals(0xEE, recorder.panel.single().code)
+        assertEquals(handshake, link.written.size)
+        assertTrue(recorder.other.isEmpty())
     }
 
     @Test
