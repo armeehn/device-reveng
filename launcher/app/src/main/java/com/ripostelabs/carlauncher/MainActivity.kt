@@ -247,7 +247,7 @@ class MainActivity : ComponentActivity() {
             // The carrier comes from `riposte.mcu.link`: the vendor UART on the car, a QEMU
             // virtio port or a socket on the emulator farm, where carsim plays the vehicle.
             val ownerListener = McuOwner.FanOut(
-                carEvents.ownerListener(CanCaptureService.vehicle()),
+                carEvents.ownerListener(CanCaptureService.vehicle(), carService.radioState),
                 VendorBroadcastReemitter(applicationContext),
             )
             mcuOwner = McuOwner(

@@ -62,6 +62,7 @@ class McuOwnerTest {
         val keys = CopyOnWriteArrayList<Int>()
         val panel = CopyOnWriteArrayList<McuOwnerProtocol.PanelKey>()
         val wheel = CopyOnWriteArrayList<McuOwnerProtocol.WheelKey>()
+        val radio = CopyOnWriteArrayList<McuOwnerProtocol.RadioEvent>()
         val signals = CopyOnWriteArrayList<CanSignal>()
         val other = CopyOnWriteArrayList<McuSerial.Command>()
         val wakes = CopyOnWriteArrayList<Long>()
@@ -71,6 +72,7 @@ class McuOwnerTest {
         override fun onKey(key: Int) { keys.add(key) }
         override fun onPanelKey(key: McuOwnerProtocol.PanelKey) { panel.add(key) }
         override fun onWheelKey(key: McuOwnerProtocol.WheelKey) { wheel.add(key) }
+        override fun onRadio(event: McuOwnerProtocol.RadioEvent) { radio.add(event) }
         override fun onCanSignal(signal: CanSignal, atMs: Long) { signals.add(signal) }
         override fun onOther(command: McuSerial.Command) { other.add(command) }
         override fun onWake() { wakes.add(System.currentTimeMillis()) }
@@ -251,6 +253,28 @@ class McuOwnerTest {
         assertEquals(0xEE, recorder.panel.single().code)
         assertEquals(handshake, link.written.size)
         assertTrue(recorder.other.isEmpty())
+    }
+
+    /** `73 03 25 9E` is 96.30 MHz; a sub-command the vendor has no case for (9) is an "other". */
+    @Test
+    fun dispatchesRadioEventsAndLogsUnknownSubCommand() {
+        val link = FakeLink(ackNull = true)
+        val recorder = Recorder()
+        val owner = owner(link, recorder = recorder)
+        owner.start()
+        waitFor("running") { owner.status.value as? McuOwner.Status.Running }
+
+        link.feed(McuSerial.encode(McuOpcode.RADIO_EVENT.code, bytes(0x03, 0x25, 0x9E)))
+        link.feed(McuSerial.encode(McuOpcode.RADIO_EVENT.code, bytes(0x09, 0x01)))
+
+        waitFor("three frames counted") {
+            (owner.status.value as? McuOwner.Status.Running)?.takeIf { it.frames == 3L }
+        }
+        owner.stop()
+
+        assertEquals(McuOwnerProtocol.RadioEvent.Frequency(9630), recorder.radio[0])
+        assertEquals(1, recorder.radio.size)
+        assertEquals(McuOpcode.RADIO_EVENT.code, recorder.other[0].opcode)
     }
 
     @Test

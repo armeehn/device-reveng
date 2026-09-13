@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.asStateFlow
  *
  * ── Where this sits ─────────────────────────────────────────────────────────────────────────────
  *
- *     MCU ◀──/dev/ttyHS1──▶ McuLink ──▶ McuSerial.Reader ──▶ Command ──┬─▶ Listener (sys/volume/key)
+ *     MCU ◀──/dev/ttyHS1──▶ McuLink ──▶ McuSerial.Reader ──▶ Command ──┬─▶ Listener (sys/volume/key/radio)
  *                                                                    └─▶ 0xA5: HiworldCanDecoder ──▶ CanSignal
  *
  * This is the portability layer of Riposte OS: the launcher and the suite consume [Listener] and
@@ -63,6 +63,8 @@ class McuOwner(
 
         /** A `74` resistive-wheel edge; the vendor's STEER_WHEEL_INFOR, unbroadcast. */
         fun onWheelKey(key: McuOwnerProtocol.WheelKey) {}
+        /** One `73` RADIO_EVENT; [RadioStateHolder] folds them into what the tuner screen reads. */
+        fun onRadio(event: McuOwnerProtocol.RadioEvent) {}
 
         fun onCanSignal(signal: CanSignal, atMs: Long) {}
 
@@ -259,6 +261,7 @@ class McuOwner(
         McuOwnerProtocol.mute(command)?.let { listener.onMute(it); return }
         McuOwnerProtocol.panelKey(command)?.let { onPanelKey(it); return }
         McuOwnerProtocol.wheelKey(command)?.let { listener.onWheelKey(it); return }
+        McuOwnerProtocol.radioEvent(command)?.let { listener.onRadio(it); return }
         if (McuOwnerProtocol.isWake(command)) {
             listener.onWake()
             return
