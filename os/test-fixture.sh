@@ -67,4 +67,10 @@ if "$HERE/check.sh" --base "$W/base" --out "$W/base" --profile tier2 >/dev/null 
   die "negative control PASSED: check.sh proves nothing"
 fi
 echo "negative control failed as expected"
+
+echo "== negative control: --car-owner with eventcenter in the base must refuse"
+if "$HERE/build.sh" --base "$W/base" --apps "$W/apps" --out "$W/out-owner" --car-owner >/dev/null 2>&1; then
+  die "--car-owner built beside eventcenter: the guard is gone"
+fi
+echo "refused as expected"
 echo "FIXTURE PASS"

@@ -4,8 +4,10 @@
 #   base/{system,product}.img ──unpack──► trees ──overlay──► trees ──repack──► out/{system,product}.img
 #   base/{vendor,boot,dtbo,vbmeta*}.img ─────────────────── copied verbatim ──► out/
 #
-# Usage: build.sh --base DIR --apps DIR --out DIR [--profile tier1|tier2] [--version V]
+# Usage: build.sh --base DIR --apps DIR --out DIR [--profile tier1|tier2] [--version V] [--car-owner]
 #   --apps holds carlauncher.apk (release-signed) and suite/*.apk.
+#   --car-owner sets ro.riposte.os.car_owner=1: McuOwner may take /dev/ttyHS1. ONLY for a
+#   build without eventcenter (0.2); on a stock-derived image two readers split the stream.
 # Runs as root on x (loop mounts). See README.md for why each step exists.
 
 set -euo pipefail
@@ -22,7 +24,7 @@ readonly BOOTANIM=product/media/bootanimation.zip   # bootanimation looks in /pr
 readonly PASSTHROUGH="vendor boot dtbo vbmeta vbmeta_system"
 readonly EDITED="system product"
 
-BASE="" APPS="" OUT="" PROFILE=tier1 VERSION=""
+BASE="" APPS="" OUT="" PROFILE=tier1 VERSION="" CAR_OWNER=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --base) BASE=$2; shift 2 ;;
@@ -30,13 +32,14 @@ while [ $# -gt 0 ]; do
     --out) OUT=$2; shift 2 ;;
     --profile) PROFILE=$2; shift 2 ;;
     --version) VERSION=$2; shift 2 ;;
+    --car-owner) CAR_OWNER=1; shift ;;
     *) die "unknown arg $1" ;;
   esac
 done
 [ -n "$BASE" ] && [ -n "$APPS" ] && [ -n "$OUT" ] || die "need --base --apps --out"
 [ "$(id -u)" = 0 ] || die "run as root (loop mounts)"
 [ -f "$APPS/carlauncher.apk" ] || die "$APPS/carlauncher.apk missing"
-AAPT2=${AAPT2:-$(ls /home/*/Android/Sdk/build-tools/*/aapt2 /opt/android-sdk/build-tools/*/aapt2 2>/dev/null | sort -V | tail -1)}
+AAPT2=${AAPT2:-$(find_aapt2)}
 [ -x "${AAPT2:-/nonexistent}" ] || die "aapt2 not found; set AAPT2"
 
 WORK=$(mktemp -d "${TMPDIR:-/var/tmp}/riposte-os.XXXXXX")
@@ -77,6 +80,10 @@ while IFS=$'\t' read -r pkg dir; do
   rm -rf "${WORK:?}/tree/$dir"
   log "removed $pkg ($dir)"
 done <<<"$REMOVE"
+
+if [ "$CAR_OWNER" = 1 ] && grep -q "^com.szchoiceway.eventcenter	" <<<"$KEEP"; then
+  die "--car-owner with eventcenter in the image: two readers on one tty split the stream"
+fi
 
 # ---- 3. add apps ---------------------------------------------------------------
 [ "$(apk_package "$APPS/carlauncher.apk")" = "$LAUNCHER_PKG" ] || die "carlauncher.apk is not $LAUNCHER_PKG"
@@ -120,7 +127,7 @@ label_system_file "$WORK/tree/$PRIVAPP_XML"
   case "$f" in system/bin/*) chmod 0755 "$WORK/tree/$f" ;; esac
 done
 VERSION=${VERSION:-0.1+$(date -u +%Y%m%d).vc$("$AAPT2" dump badging "$APPS/carlauncher.apk" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p")}
-RIPOSTE_OS_VERSION=$VERSION envsubst < "$HERE/overlay/props" >> "$WORK/tree/system/build.prop"
+RIPOSTE_OS_VERSION=$VERSION RIPOSTE_CAR_OWNER=$CAR_OWNER envsubst < "$HERE/overlay/props" >> "$WORK/tree/system/build.prop"
 log "version $VERSION"
 
 # ---- 6. repack + passthrough ---------------------------------------------------
@@ -132,7 +139,7 @@ for part in $PASSTHROUGH; do
   [ -f "$BASE/$part.img" ] && cp --reflink=auto "$BASE/$part.img" "$OUT/$part.img"
 done
 {
-  echo "version=$VERSION"; echo "profile=$PROFILE"; echo "built=$(date -u +%FT%TZ)"
+  echo "version=$VERSION"; echo "profile=$PROFILE"; echo "car_owner=$CAR_OWNER"; echo "built=$(date -u +%FT%TZ)"
   echo "launcher=$(apk_package "$APPS/carlauncher.apk") vc$("$AAPT2" dump badging "$APPS/carlauncher.apk" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p")"
   echo "suite=$SUITE_N"; echo "removed=$(awk -F'\t' 'NF{print $1}' <<<"$REMOVE" | paste -sd,)"
 } > "$OUT/MANIFEST"
