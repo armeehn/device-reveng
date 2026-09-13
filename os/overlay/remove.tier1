@@ -1,0 +1,9 @@
+# Packages whose APK directory is deleted from the image (profile tier1 and up).
+# Resolved against every APK in the image at build time, so directory names
+# never need to be known. Source: debloat-plan.md Tier 1 (phone-home / adware).
+com.szchoiceway.logcatupload        # uploads logcat to the vendor
+com.choiceway.logcapture            # companion of the above
+com.szchoiceway.update              # vendor OTA; can push EDL-locking updates
+com.es.file.explorer.manager        # bundled adware
+com.syu.market                      # third-party market
+com.google.android.partnersetup     # partner telemetry

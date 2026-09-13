@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+# Shared helpers for the Riposte OS image pipeline. Sourced, not run.
+#
+#   image (ext4 | erofs | sparse-wrapped) ──unpack──► tree/ ──overlay──► tree/ ──repack──► image
+#
+# Everything here runs as root on a Linux host with loop devices (x), never inside
+# an unprivileged container: unpacking ext4 needs a loop mount.
+
+set -euo pipefail
+
+# Magic numbers from the on-disk formats.
+readonly SPARSE_MAGIC="ed26ff3a"      # Android sparse header, offset 0, little-endian 0x3AFF26ED
+readonly EXT4_MAGIC="53ef"            # ext4 superblock s_magic, offset 0x438
+readonly EROFS_MAGIC="e2e1f5e0"       # EROFS super_block magic, offset 0x400
+readonly BLOCK=4096
+readonly SELINUX_SYSTEM_FILE="u:object_r:system_file:s0"
+
+log() { printf '[os] %s\n' "$*" >&2; }
+die() { log "ERROR: $*"; exit 1; }
+
+hex_at() { # file offset length -> lowercase hex bytes as stored
+  od -An -tx1 -j "$2" -N "$3" "$1" | tr -d ' \n'
+}
+
+# Prints ext4 | erofs | sparse | unknown.
+image_kind() {
+  local img=$1
+  [ "$(hex_at "$img" 0 4)" = "$SPARSE_MAGIC" ] && { echo sparse; return; }
+  [ "$(hex_at "$img" $((0x438)) 2)" = "$EXT4_MAGIC" ] && { echo ext4; return; }
+  [ "$(hex_at "$img" $((0x400)) 4)" = "$EROFS_MAGIC" ] && { echo erofs; return; }
+  echo unknown
+}
+
+# Sparse images (what `fastboot` and OTA zips carry) become raw first.
+unsparse() { # in out
+  if [ "$(image_kind "$1")" = sparse ]; then
+    simg2img "$1" "$2"
+  else
+    cp --reflink=auto "$1" "$2"
+  fi
+}
+
+# Extract an image to a directory, preserving mode, owner and xattrs
+# (security.selinux, security.capability). The tree is what the overlay edits.
+unpack_image() { # img tree
+  local img=$1 tree=$2 kind mnt
+  kind=$(image_kind "$img")
+  mkdir -p "$tree"
+  case "$kind" in
+    ext4)
+      mnt=$(mktemp -d)
+      mount -o loop,ro "$img" "$mnt"
+      # --preserve=all carries xattrs; --one-file-system keeps a nested mount out.
+      cp -a --one-file-system "$mnt/." "$tree/"
+      umount "$mnt"; rmdir "$mnt"
+      ;;
+    erofs)
+      fsck.erofs --extract="$tree" --overwrite --preserve-perms --preserve-owner "$img" >/dev/null
+      ;;
+    *) die "unpack: $img is $kind" ;;
+  esac
+  echo "$kind"
+}
+
+# Bytes a tree will need as ext4: content + 15 % metadata/slack, rounded to blocks.
+ext4_size_for() { # tree
+  local used
+  used=$(du -sB1 --apparent-size "$1" | cut -f1)
+  echo $(( (used * 115 / 100 / BLOCK + 2048) * BLOCK ))
+}
+
+# Rebuild an image from a tree in the same format the base used. ext4 output is
+# the plain AOSP shape (no journal, 256-byte inodes, 0 % reserved) so fastbootd
+# accepts it as a logical partition image; xattrs come from the tree.
+repack_image() { # kind tree out mountpoint(label, e.g. system)
+  local kind=$1 tree=$2 out=$3 name=$4
+  rm -f "$out"
+  case "$kind" in
+    ext4)
+      mke2fs -q -t ext4 -b $BLOCK -I 256 -m 0 -O ^has_journal -L "$name" -M "/$name" \
+        -d "$tree" "$out" $(( $(ext4_size_for "$tree") / BLOCK ))
+      e2fsck -fy "$out" >/dev/null 2>&1 || [ $? -le 1 ]
+      ;;
+    erofs)
+      mkfs.erofs -zlz4hc --mount-point="/$name" "$out" "$tree" >/dev/null
+      ;;
+    *) die "repack: unsupported $kind" ;;
+  esac
+}
+
+# A file we add must look like it was built into the image.
+label_system_file() { # path...
+  local p
+  for p in "$@"; do
+    chown root:root "$p"
+    if [ -d "$p" ]; then chmod 0755 "$p"; else chmod 0644 "$p"; fi
+    setfattr -n security.selinux -v "$SELINUX_SYSTEM_FILE" "$p" 2>/dev/null || true
+  done
+}
+
+# Install an APK as <part>/<dir>/<Name>/<Name>.apk, the shape PackageManager scans.
+install_apk() { # tree appdir Name apk
+  local tree=$1 appdir=$2 name=$3 apk=$4 dst
+  dst="$tree/$appdir/$name"
+  mkdir -p "$dst"
+  cp "$apk" "$dst/$name.apk"
+  label_system_file "$dst" "$dst/$name.apk"
+}

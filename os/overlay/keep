@@ -1,0 +1,10 @@
+# Packages the build REFUSES to remove and check.sh asserts present.
+# debloat-plan.md Tier 3: the car link and the platform-signed settings store.
+com.szchoiceway.providers.settings  # SysVarProvider: every car setting
+com.szchoiceway.eventcenter         # MCU serial owner, reverse cam, SWC
+com.szchoiceway.canbus2
+com.szchoiceway.customerui          # windows inflated by eventcenter
+com.szchoiceway.auxcamera
+com.szchoiceway.radio
+com.szchoiceway.btsuite
+com.zjinnova.zlink                  # CarPlay / Android Auto

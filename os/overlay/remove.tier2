@@ -1,0 +1,8 @@
+# Profile tier2 = tier1 + these: OEM apps the suite replaces (debloat-plan.md Tier 2).
+# CustomerUI (the OEM home) is NOT here: eventcenter inflates its windows by name.
+com.mmbox.xbrowser                  # suite: com.ripostelabs.browser
+com.choiceway.weather               # suite: com.ripostelabs.weather
+com.szchoiceway.photoreader         # suite: com.ripostelabs.gallery
+com.szchoiceway.videoplayer         # suite: com.ripostelabs.video
+com.szchoiceway.musicplayer         # suite: com.ripostelabs.music
+com.szchoiceway.instructions        # manual for the OEM UI

@@ -1,0 +1,3 @@
+# Appended to system/build.prop. ${RIPOSTE_OS_VERSION} is filled by build.sh.
+ro.riposte.os.version=${RIPOSTE_OS_VERSION}
+ro.riposte.os.base=gt6-eau
