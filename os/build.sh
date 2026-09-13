@@ -18,6 +18,7 @@ readonly LAUNCHER_DIR=system/priv-app
 readonly LAUNCHER_NAME=CarLauncher
 readonly SUITE_DIR=product/app
 readonly PRIVAPP_XML=system/etc/permissions/privapp-permissions-ripostelabs.xml
+readonly BOOTANIM=product/media/bootanimation.zip   # bootanimation looks in /product before /system
 readonly PASSTHROUGH="vendor boot dtbo vbmeta vbmeta_system"
 readonly EDITED="system product"
 
@@ -88,6 +89,12 @@ for apk in "$APPS"/suite/*.apk; do
   SUITE_N=$((SUITE_N + 1))
 done
 log "installed $LAUNCHER_NAME + $SUITE_N suite apps"
+if [ -f "$APPS/bootanimation.zip" ]; then      # rendered by bootanim/make.py where Pillow lives
+  mkdir -p "$WORK/tree/$(dirname "$BOOTANIM")"
+  cp "$APPS/bootanimation.zip" "$WORK/tree/$BOOTANIM"
+  label_system_file "$WORK/tree/$(dirname "$BOOTANIM")" "$WORK/tree/$BOOTANIM"
+  log "installed boot animation"
+fi
 
 # ---- 4. privapp allowlist ------------------------------------------------------
 # ro.control_privapp_permissions=enforce: a priv-app requesting a privileged

@@ -44,7 +44,7 @@ os/build.sh --base share/carlauncher/os/base --apps APPS --out share/carlauncher
 os/check.sh --base share/carlauncher/os/base --out share/carlauncher/os/0.1 --profile tier2 --suite 26
 ```
 `APPS/carlauncher.apk` is a release-signed launcher from launcher.hq; `APPS/suite/*.apk`
-the served suite. Version is `0.1+<date>.vc<launcher versionCode>`, written to
+the served suite; `APPS/bootanimation.zip` optional. Version is `0.1+<date>.vc<launcher versionCode>`, written to
 `ro.riposte.os.version`.
 
 ## Overlay
@@ -55,6 +55,9 @@ the served suite. Version is `0.1+<date>.vc<launcher versionCode>`, written to
 - `overlay/keep` — the build refuses to remove these and `check.sh` asserts them.
 - `overlay/system/etc/init/riposte.rc` + `bin/riposte-firstboot.sh` — once per `/data`,
   hands the HOME role to CarLauncher.
+- `bootanim/make.py` renders `bootanimation.zip` (wordmark + marigold bar, RL-BRAND-001 night
+  palette, JetBrains Mono from the launcher) with Pillow, which lives in LXC 111, not on x.
+  Drop the zip in `APPS/` and `build.sh` puts it at `product/media/`.
 - The privapp allowlist is generated from the launcher APK. The unit runs
   `ro.control_privapp_permissions=enforce`: a priv-app requesting an unlisted
   privileged permission stops the boot, so every requested permission is listed.
