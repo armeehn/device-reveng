@@ -43,9 +43,19 @@ serial link behind a public API, and the framework check closed the last unknown
 os/build.sh --base share/carlauncher/os/base --apps APPS --out share/carlauncher/os/0.1 --profile tier2
 os/check.sh --base share/carlauncher/os/base --out share/carlauncher/os/0.1 --profile tier2 --suite 26
 ```
+```
+os/build.sh --base BASE --system share/carlauncher/os/gsi/system-td-arm64-ab-vanilla.img.xz \
+            --apps APPS --out share/carlauncher/os/0.2 --profile gsi
+```
 `APPS/carlauncher.apk` is a release-signed launcher from launcher.hq; `APPS/suite/*.apk`
-the served suite; `APPS/bootanimation.zip` optional. Version is `0.1+<date>.vc<launcher versionCode>`, written to
-`ro.riposte.os.version`.
+the served suite; `APPS/bootanimation.zip` optional. Version is `0.1+<date>.vc<launcher
+versionCode>` (stock base) or `0.2+…` (GSI base), written to `ro.riposte.os.version`.
+
+Profile `gsi` takes an AOSP GSI as `--system` (`.img` or `.img.xz`), keeps `product` from the
+stock dump minus every OEM package (`overlay/remove.gsi`, prefix matches), and implies
+`--car-owner`. The staged GSI is TrebleDroid `ci-20240508` (Android 14, fixes for old kernels;
+the unit runs 4.14.190), both `arm64-ab-vanilla` and `-vndklite`, at
+`share/carlauncher/os/gsi/` with `SHA256SUMS`. Try plain first, `vndklite` if it bootloops.
 
 ## Overlay
 

@@ -45,11 +45,17 @@ image_kind() {
 
 # Sparse images (what `fastboot` and OTA zips carry) become raw first.
 unsparse() { # in out
-  if [ "$(image_kind "$1")" = sparse ]; then
-    simg2img "$1" "$2"
-  else
-    cp --reflink=auto "$1" "$2"
-  fi
+  case "$1" in
+    *.xz) xz -dc "$1" > "$2" ;;    # GSI releases ship as .img.xz
+    *)
+      if [ "$(image_kind "$1")" = sparse ]; then
+        simg2img "$1" "$2"
+      else
+        cp --reflink=auto "$1" "$2"
+      fi
+      ;;
+  esac
+  [ "$(image_kind "$2")" != sparse ] || { simg2img "$2" "$2.raw" && mv "$2.raw" "$2"; }
 }
 
 # Extract an image to a directory, preserving mode, owner and xattrs
