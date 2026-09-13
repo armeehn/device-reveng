@@ -75,6 +75,13 @@ check "[ -f $T/system/etc/init/riposte.rc ]" "init rc present"
 check "[ \"\$(stat -c %a $T/system/bin/riposte-firstboot.sh)\" = 755 ]" "first-boot script executable"
 check "grep -q '^ro.riposte.os.version=0\.' $T/system/build.prop" "ro.riposte.os.version in build.prop"
 
+echo "boot animation"
+if [ -f "$T/product/media/bootanimation.zip" ]; then
+  check "python3 -c 'import zipfile,sys; z=zipfile.ZipFile(sys.argv[1]); assert {i.compress_type for i in z.infolist()}=={0}; assert \"desc.txt\" in z.namelist()' $T/product/media/bootanimation.zip" "bootanimation.zip is stored (uncompressed) with desc.txt"
+else
+  ok "none shipped"
+fi
+
 echo "removed"
 LISTS="$HERE/overlay/remove.tier1"; [ "$PROFILE" = tier2 ] && LISTS+=" $HERE/overlay/remove.tier2"
 for p in $(cat $LISTS | sed 's/#.*//' | awk 'NF{print $1}'); do
