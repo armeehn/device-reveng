@@ -94,6 +94,8 @@ import com.ripostelabs.carlauncher.ui.ProfilesScreen // v3.0
 import com.ripostelabs.carlauncher.ui.ProvideParkedOnlyLock // v2.5
 import com.ripostelabs.carlauncher.ui.ShadeOverlay // v2.5 shade
 import com.ripostelabs.carlauncher.ui.RadarSideStrip // v2.8
+import com.ripostelabs.carlauncher.ui.ReverseCameraGate
+import com.ripostelabs.carlauncher.ui.ReverseCameraScreen
 import com.ripostelabs.carlauncher.ui.PhoneScreen // RAV4-50
 import com.ripostelabs.carlauncher.ui.RadioScreen // v2.6
 import com.ripostelabs.carlauncher.ui.rememberClockNight // v2.7
@@ -129,6 +131,9 @@ class MainActivity : ComponentActivity() {
 
     /** Riposte OS 0.2 only: our MCU port owner. Null on a stock or 0.1 slot. */
     private var mcuOwner: McuOwner? = null
+
+    /** Riposte OS 0.2 only: whether CAMERA is granted, so the reverse screen can say why not. */
+    private var cameraGranted by mutableStateOf(false)
     private lateinit var carService: CarService
     private lateinit var vendorBtService: VendorBtService
     private lateinit var appRepository: AppRepository
@@ -198,6 +203,18 @@ class MainActivity : ComponentActivity() {
         if (granted && ::carEvents.isInitialized) {
             carEvents.startSpeedSource()
         }
+    }
+
+    /**
+     * Riposte OS 0.2: the grant behind [ReverseCameraScreen]. Requested only when the MCU owner
+     * is ours, because on any other slot the vendor's camera app shows the feed and a launcher
+     * asking for a camera it never opens would be a puzzling dialog. A denial is not fatal: the
+     * reverse screen still appears, saying the permission is missing.
+     */
+    private val cameraPermission = registerForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        cameraGranted = granted
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -304,6 +321,11 @@ class MainActivity : ComponentActivity() {
 
         // v2.5: ask once for the location permission behind the parked-only gate.
         requestLocationPermissionIfNeeded()
+
+        // Riposte OS 0.2: the reverse camera is ours only when the MCU owner is; ask only then.
+        if (mcuOwner != null) {
+            requestCameraPermissionIfNeeded()
+        }
 
         keyPump = KeyPump(lifecycleScope, ::onNavEvent) // v2.8
 
@@ -563,6 +585,15 @@ class MainActivity : ComponentActivity() {
                 speedKmh <= MANEUVER_MAX_KMH &&
                 shownScreen != Screen.Onboarding
 
+            // Riposte OS 0.2: the vendor camera app is gone, so the launcher shows the feed itself.
+            // On a stock or 0.1 slot the owner is null and the gate stays HIDDEN whatever reverse
+            // says — the vendor window still composites over us there.
+            val reverseCamera = ReverseCameraGate.decide(
+                reverse = reverse,
+                ownerActive = mcuOwner != null,
+                permissionGranted = cameraGranted,
+            )
+
             // v0.5: republish the palette for the com.ripostelabs.* suite whenever it changes.
             // Keyed on both inputs because a night crossing changes the colours without changing
             // the theme. The write is small and synchronous-to-memory (SharedPreferences.apply),
@@ -758,6 +789,7 @@ class MainActivity : ComponentActivity() {
                                 onExit = { screen = Screen.Home },
                                 appDirectoryStore = appDirectoryStore,
                                 initialRoute = s.initialRoute,
+                                mcuStatus = mcuOwner?.status,
                             )
 
                             Screen.Themes -> ThemesScreen(
@@ -868,6 +900,9 @@ class MainActivity : ComponentActivity() {
                     if (maneuvering) {
                         RadarSideStrip(state = radar)
                     }
+
+                    // Riposte OS 0.2: the reverse feed sits above everything, strips included.
+                    ReverseCameraScreen(verdict = reverseCamera)
                   }
                 }
                }
@@ -888,6 +923,16 @@ class MainActivity : ComponentActivity() {
             return
         }
         locationPermission.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+    }
+
+    /** Riposte OS 0.2: the camera grant behind the reverse screen; see [cameraPermission]. */
+    private fun requestCameraPermissionIfNeeded() {
+        cameraGranted = checkSelfPermission(Manifest.permission.CAMERA) ==
+            PackageManager.PERMISSION_GRANTED
+        if (cameraGranted) {
+            return
+        }
+        cameraPermission.launch(Manifest.permission.CAMERA)
     }
 
     /**

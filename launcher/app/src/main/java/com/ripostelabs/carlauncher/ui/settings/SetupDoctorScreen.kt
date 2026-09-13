@@ -37,6 +37,8 @@ import androidx.compose.ui.unit.dp
 import com.ripostelabs.carlauncher.ui.AutoSizeText
 import com.ripostelabs.carlauncher.ui.theme.JetBrainsMono
 import com.ripostelabs.carlauncher.carlib.CarService
+import com.ripostelabs.carlauncher.carlib.McuOwner
+import com.ripostelabs.carlauncher.data.CarLink
 import com.ripostelabs.carlauncher.data.CarSettingsController
 import com.ripostelabs.carlauncher.data.CrashLog // v0.4.3.7
 import com.ripostelabs.carlauncher.data.CrashRecord // v0.4.3.7
@@ -52,6 +54,7 @@ import com.ripostelabs.carlauncher.ui.collectAsStateSafe
 import com.ripostelabs.carlauncher.ui.theme.carShape
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -68,6 +71,9 @@ import java.util.Locale
  * v0.4.3.7 — also the reader for [CrashLog]. Same reason it lives here: this is the screen someone
  * opens when the launcher is misbehaving, and "it died at 07:12 with this trace" belongs next to
  * "the notification listener is not enabled".
+ *
+ * Riposte OS 0.2 — also the reader for [McuOwner.status]. The first session at the car has to
+ * tell "MCU silent" from "ACK formula wrong" on the panel; logcat is not a given there.
  */
 @Composable
 fun SetupDoctorScreen(
@@ -75,6 +81,7 @@ fun SetupDoctorScreen(
     onBack: () -> Unit,
     settingsStore: SettingsStore? = null, // OEM-shadow policy (null keeps previews working)
     carService: CarService? = null, // live source mode; null = "gateway not bound"
+    mcuStatus: StateFlow<McuOwner.Status>? = null, // owner status; null = vendor binder owns the link
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -170,6 +177,7 @@ fun SetupDoctorScreen(
         }
 
         VendorAppsSection(report = vendorApps)
+        CarLinkSection(carService = carService, mcuStatus = mcuStatus)
         GatewayStateSection(controller = controller, carService = carService)
 
         SettingsSection(title = "Crashes") {
@@ -280,6 +288,24 @@ private fun VendorAppsSection(report: OemApps.Report?) {
 }
 
 /**
+ * Who carries the car link and how it is doing: the vendor binder (stock / 0.1 slot) or our
+ * [McuOwner] (0.2 slot). The verdict text comes from [CarLink] so the same words sit in the
+ * acceptance checklist, this row and the unit test.
+ */
+@Composable
+private fun CarLinkSection(carService: CarService?, mcuStatus: StateFlow<McuOwner.Status>?) {
+    val connected by (carService?.connected?.collectAsStateSafe(initial = false)
+        ?: remember { mutableStateOf(false) })
+    val status by (mcuStatus?.collectAsStateSafe(initial = McuOwner.Status.Idle)
+        ?: remember { mutableStateOf<McuOwner.Status?>(null) })
+    val reading = remember(status, connected) { CarLink.read(status, connected) }
+
+    SettingsSection(title = "Car link") {
+        StatusRow(ok = reading.ok, title = reading.title, detail = reading.detail)
+    }
+}
+
+/**
  * Live gateway state, read-only. Every value is a plain row: the driver reports them, the
  * launcher writes none of them. Source mode is polled off the main thread like Home does
  * (a blocking AIDL read in a composition body once spun a main-thread IPC loop).
@@ -329,15 +355,19 @@ private fun MutedText(text: String) {
 
 /** Same shape as a failing [DoctorCheckRow], without a command: there is nothing to run. */
 @Composable
-private fun WarningRow(title: String, detail: String) {
+private fun WarningRow(title: String, detail: String) = StatusRow(ok = false, title = title, detail = detail)
+
+/** The [DoctorCheckRow] header on its own: a pass/fail icon, a title and a detail line. */
+@Composable
+private fun StatusRow(ok: Boolean, title: String, detail: String) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
-            imageVector = Icons.Filled.ErrorOutline,
-            contentDescription = "Needs attention",
-            tint = MaterialTheme.colorScheme.error,
+            imageVector = if (ok) Icons.Filled.CheckCircle else Icons.Filled.ErrorOutline,
+            contentDescription = if (ok) "OK" else "Needs attention",
+            tint = if (ok) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
             modifier = Modifier.size(24.dp),
         )
         Spacer(Modifier.width(12.dp))
