@@ -22,6 +22,18 @@ hex_at() { # file offset length -> lowercase hex bytes as stored
   od -An -tx1 -j "$2" -N "$3" "$1" | tr -d ' \n'
 }
 
+# Newest aapt2 from any SDK on the host, or nothing. A plain `ls glob` here exits 2 when a
+# glob has no match, and under `set -e` that kills the caller mid-assignment.
+find_aapt2() {
+  local candidates=()
+  local p
+  for p in /home/*/Android/Sdk/build-tools/*/aapt2 /opt/android-sdk/build-tools/*/aapt2; do
+    [ -x "$p" ] && candidates+=("$p")
+  done
+  [ ${#candidates[@]} -gt 0 ] || return 0
+  printf '%s\n' "${candidates[@]}" | sort -V | tail -1
+}
+
 # Prints ext4 | erofs | sparse | unknown.
 image_kind() {
   local img=$1
