@@ -38,6 +38,7 @@ import com.ripostelabs.carlauncher.service.CanCaptureService
 import com.ripostelabs.carlauncher.carlib.AndroidOwnerGate
 import com.ripostelabs.carlauncher.carlib.CarService
 import com.ripostelabs.carlauncher.carlib.McuOwner
+import com.ripostelabs.carlauncher.carlib.VendorBroadcastReemitter
 import com.ripostelabs.carlauncher.carlib.GatewayHandshake // v3.0
 import com.ripostelabs.carlauncher.carlib.SysVar // v0.4.9 vendor hidden-apps list
 import com.ripostelabs.carlauncher.carlib.VendorBtService
@@ -234,7 +235,12 @@ class MainActivity : ComponentActivity() {
         carService = CarService(applicationContext)
         val ownerGate = AndroidOwnerGate(applicationContext)
         if (ownerGate.ownerEnabled() && !ownerGate.eventcenterPresent()) {
-            mcuOwner = McuOwner(ownerGate, carEvents.ownerListener(CanCaptureService.vehicle())).also {
+            // The suite still listens for eventcenter's actions; the re-emitter replays them.
+            val ownerListener = McuOwner.FanOut(
+                carEvents.ownerListener(CanCaptureService.vehicle()),
+                VendorBroadcastReemitter(applicationContext),
+            )
+            mcuOwner = McuOwner(ownerGate, ownerListener).also {
                 carService.attachOwner(it)
                 it.start()
             }
