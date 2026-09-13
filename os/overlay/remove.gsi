@@ -1,0 +1,13 @@
+# Profile gsi: the system is an AOSP GSI, so the Choiceway car layer cannot run (its settings
+# store is platform-signed to a key the GSI does not have). Everything of theirs leaves the
+# product image and McuOwner takes the port. A trailing * removes every package with that prefix.
+com.szchoiceway.*
+com.choiceway.*
+com.lfg.szchoiceway.*
+com.ivicar.*
+com.zjinnova.*
+com.android.atslcarconsole
+com.syu.*
+com.mmbox.*
+com.es.*
+com.google.android.partnersetup
