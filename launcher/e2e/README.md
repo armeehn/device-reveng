@@ -36,3 +36,16 @@ models and the API keys; this side needs only Python 3.10+.
 - Coordinates, if a goal must use them, are in the 1920x720 panel space.
 
 Not part of CI: the suite needs a booted head unit and model credit.
+
+## Car link cases (carsim)
+
+`test_carsim.py` needs no model: it starts `carsim/carsim.py` (the simulated
+vehicle on the emulator's virtio ports) and asserts over adb on what the
+launcher logged and drew. It runs where adb and the QEMU sockets are local:
+
+```
+CARSIM_SERIAL=emulator-5554 CARSIM_MCU=127.0.0.1:5700 CARSIM_CAN=127.0.0.1:5701 \
+python3 -m pytest -m carsim -v
+```
+
+Unset `CARSIM_SERIAL` skips the cases. See `carsim/README.md`.

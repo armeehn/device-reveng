@@ -27,7 +27,13 @@ from dataclasses import dataclass
 from typing import Any
 
 import pytest
-from artemis_client import ArtemisClient
+
+# The carsim cases (test_carsim.py) drive the panel over plain adb and run where no
+# artemis-client is installed; the ARTEMIS fixtures below skip instead of failing to import.
+try:
+    from artemis_client import ArtemisClient
+except ImportError:  # pragma: no cover - environment, not logic
+    ArtemisClient = None  # type: ignore[assignment,misc]
 
 LAUNCHER_PACKAGE = os.environ.get("ARTEMIS_LAUNCHER_PACKAGE", "com.ripostelabs.carlauncher")
 DEFAULT_TASK_TIMEOUT_S = 600.0
@@ -87,6 +93,8 @@ def artemis() -> ArtemisClient:
     url = os.environ.get("ARTEMIS_URL")
     if not url:
         pytest.skip("ARTEMIS_URL is not set; nothing to drive")
+    if ArtemisClient is None:
+        pytest.skip("artemis-client is not installed here; run.sh builds a venv that has it")
     client = ArtemisClient(
         url,
         token=os.environ.get("ARTEMIS_TOKEN"),

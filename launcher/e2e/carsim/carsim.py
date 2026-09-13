@@ -1,0 +1,724 @@
+#!/usr/bin/env python3
+"""carsim — the vehicle side of the RAV4 head unit, on the wire.
+
+The vendor's Android cannot be emulated (Qualcomm SoC, arm64 vendor HALs,
+platform-signed apps), so the desk rig emulates the CAR instead: everything
+vehicle-side reaches Android through one UART, and this program is what sits
+on the far end of it. It plays the MCU (the head unit's own microcontroller)
+and the HiWorld CAN box behind it, plus the raw body bus a CANable would tap.
+
+    scenario ──▶ Timeline ──▶ Vehicle ──▶ McuSide  (0D 0A framing) ──TCP──▶ QEMU vport "carsim.mcu" ──▶ McuOwner
+                                     └──▶ CanSide  (slcan text)    ──TCP──▶ QEMU vport "carsim.can" ──▶ SlcanLinkSource
+
+Every byte layout is transcribed from the launcher's own decoders, which were
+themselves transcribed from the vendor decompile; the file and symbol are
+named next to each constant so a change on either side is a one-line diff.
+
+Wire formats (launcher/carlib):
+  McuSerial.kt   outer frame   0D 0A | LEN | OPCODE | payload | CK | 00
+                               LEN = 1 + len(payload) + 1, CK = ~(LEN + OPCODE + Σpayload) & 0xFF
+  McuFrame.kt    inner frame   5A A5 | len | cmd | payload | ck
+                               len = len(payload), ck = Σ(all preceding bytes) & 0xFF
+                               relayed by the MCU under outer opcode 0xA5 (McuSerial.OP_CAN)
+  SlcanCodec.kt  raw bus       tIIIL<hex bytes>\\r   (standard id, DLC L)
+
+Stdlib only. Run with --help for the scenario grammar.
+"""
+
+from __future__ import annotations
+
+import argparse
+import re
+import socket
+import sys
+import threading
+import time
+from dataclasses import dataclass, field
+from pathlib import Path
+
+# ── Outer framing: McuSerial.kt ───────────────────────────────────────────────────────────────
+OUTER_HEADER = b"\x0d\x0a"
+OUTER_PAD = b"\x00"
+OUTER_LEN_MIN = 2  # opcode + CK
+
+# Opcodes Android sends (McuOwnerProtocol.kt OP_*), named for the log.
+TX_OPCODES = {
+    0x01: "MODE", 0x02: "RADIO_KEY", 0x05: "SETUP", 0x08: "SYSTEM_KEY",
+    0x0A: "MUTE", 0x0C: "USER_FREQ", 0x13: "RTC", 0x2E: "BACKLIGHT",
+}
+OP_MODE = 0x01
+OP_SYSTEM_KEY = 0x08
+SYSTEM_KEY_VOLUME_UP = 0     # McuOwnerProtocol.SystemKey
+SYSTEM_KEY_VOLUME_DOWN = 1
+SYSTEM_KEY_MUTE = 12
+
+# Opcodes the MCU sends (McuOpcode.kt).
+RX_MODE_ACK = 0x70
+RX_SYS_EVENT = 0x71
+RX_KEY_EVENT = 0x72
+RX_MUTE = 0x78
+RX_MAIN_VOLUME = 0x79
+RX_CAN = 0xA5
+
+# SYS_EVENT bits, byte 1 then byte 2 (McuOwnerProtocol.sysEvent).
+SYS1_DISC, SYS1_USB, SYS1_RIGHT_TURN, SYS1_ILLUMINATION = 0x80, 0x40, 0x10, 0x08
+SYS1_BRAKE, SYS1_REVERSE, SYS1_ACC = 0x04, 0x02, 0x01
+SYS2_MCAN, SYS2_START_STOP, SYS2_HDMI, SYS2_LEFT_TURN = 0x80, 0x40, 0x08, 0x01
+
+# `79`/`78`: bit 7 = silent (no volume window), low bits = level / muted.
+SILENT_BIT = 0x80
+VOLUME_MAX = 40
+
+# Panel key codes (McuOwnerProtocol.Key).
+PANEL_KEYS = {
+    "POWER": 0x01, "NEXT": 0x02, "PREV": 0x03, "PLAY": 0x04, "STOP": 0x05,
+    "PLAY_PAUSE": 0x06, "MENU": 0x09, "MODE": 0x10, "MUTE": 0x11,
+    "VOL_UP": 0x12, "VOL_DOWN": 0x13, "SETUP": 0x14, "HANGUP": 0x16,
+    "TALK": 0x17, "EQ": 0x33, "RADIO": 0x36, "RETURN": 0x55,
+    "TASK_LIST": 0x71, "VOICE": 0x74,
+}
+
+# CAN steering-wheel button ids (HiworldCanDecoder.swcAction, car-verified 2026-09-07).
+SWC_BUTTONS = {
+    "VOL_UP": 1, "VOL_DOWN": 2, "MUTE": 3, "VOICE": 4, "CALL": 5, "HANGUP": 6,
+    "NEXT": 8, "PREV": 9, "MODE": 12, "PLAY_PAUSE": 15, "BACK": 16,
+}
+SWC_PRESS_MS = 120
+
+# ── Inner framing: McuFrame.kt, cmd set: HiworldCanDecoder.kt ────────────────────────────────
+INNER_HEADER = b"\x5a\xa5"
+CMD_BASIC_STATUS = 0x11    # SWC key p[2:3], doors p[4], steering p[6:7]
+CMD_TRIP_INFO = 0x13       # range p[2:3], speed candidate p[0:1]
+CMD_SPEED = 0x17           # p[0:1] BE × 0.1 km/h
+CMD_RPM_GEAR = 0x1A        # gear code p[5], rpm mirror p[9:10]
+CMD_HYBRID = 0x1F
+CMD_CLIMATE = 0x31         # OnHandleCanAirCmdVertical layout
+CMD_VEHICLE_INFO = 0x32    # rpm p[2:3], coolant p[9] (−40)
+CMD_RADAR = 0x41           # rear p[0..3], front p[4..7], steps of 30 cm
+CMD_TPMS = 0x48            # FL/FR/RL/RR/spare = p[i] + p[i+5], i = 2..6
+CMD_SYS_EVENT = 0x71       # the box's own reverse flag, p[0] & 0x02
+
+SPEED_017_SCALE = 10       # raw = km/h × 10 (SPEED_017_SCALE_KMH = 0.1)
+GEAR_CODES_1A = {"D": 0, "P": 1, "N": 2, "R": 3}   # gearFromCode, 2026-08-29 drive
+COOLANT_OFFSET_C = 40
+TEMP_SCALE_HALF_C = 2      # climate setpoint byte = °C × 2 (TEMP_SCALE_C = 0.5)
+RADAR_STEP_CM = 30
+TPMS_NONE = 0xFE
+
+# Door bits, shared by inner 0x11 p[4] and raw 0x4A5 byte 3 (RawCanDecoder DOOR_*).
+DOOR_BITS = {"FL": 0x80, "FR": 0x40, "RR": 0x20, "RL": 0x10, "TAIL": 0x08, "HOOD": 0x04}
+# HiworldCanDecoder.decodeBasicStatus names FL=0x40 and FR=0x80; RawCanDecoder, verified by
+# opening the doors, has driver=0x80. The raw decoder is the car-checked one, so it wins here.
+
+# ── Raw body bus: RawCanDecoder.kt ───────────────────────────────────────────────────────────
+ID_SPEED_FAST = 0x361      # byte 6 = km/h
+ID_GEAR = 0x3BC            # byte 1: 0x20 P, 0x10 R; byte 5: 0x80 D; else N
+ID_DOOR_STATUS = 0x4A5     # byte 3 = door bits
+RAW_DLC = 8                # RawCanDecoder.DLC_MIN: shorter frames are ignored
+GEAR_P_BIT, GEAR_R_BIT, GEAR_D_BIT = 0x20, 0x10, 0x80
+BUS_TICK_S = 0.1           # CarEvents.BUS_SPEED_STALE_MS is 2 s; 10 Hz keeps the gate fed
+RELAY_TICK_S = 1.0         # HiWorld speed/gear relay cadence (the real box is slower)
+
+CANDUMP_LINE = re.compile(r"^\s*\((?P<ts>[\d.]+)\)\s+\S+\s+(?P<id>[0-9A-Fa-f]+)\s+\[(?P<dlc>\d+)\]\s*(?P<data>(?:[0-9A-Fa-f]{2}\s*)*)$")
+
+SOCKET_TIMEOUT_S = 0.2
+CONNECT_RETRY_S = 0.5
+CONNECT_ATTEMPTS = 20
+
+
+def outer_encode(opcode: int, payload: bytes = b"") -> bytes:
+    body = bytes([len(payload) + OUTER_LEN_MIN, opcode]) + payload
+    ck = (~sum(body)) & 0xFF
+    return OUTER_HEADER + body + bytes([ck]) + OUTER_PAD
+
+
+def outer_decode(buf: bytearray) -> list[tuple[int, bytes]]:
+    """Pull every complete outer frame off the front of `buf`; a bad CK is logged and skipped."""
+    frames = []
+    while True:
+        start = buf.find(OUTER_HEADER)
+        if start < 0:
+            buf.clear()
+            return frames
+        if start:
+            del buf[:start]
+        if len(buf) < len(OUTER_HEADER) + 1:
+            return frames
+        length = buf[2]
+        end = 3 + length
+        if len(buf) < end:
+            return frames
+        body = bytes(buf[2:end])
+        del buf[:end]
+        expected = (~sum(body[:-1])) & 0xFF
+        if body[-1] != expected:
+            log(f"mcu rx bad CK {body.hex()} (want {expected:02x})")
+            continue
+        frames.append((body[1], body[2:-1]))
+
+
+def inner_encode(cmd: int, payload: bytes) -> bytes:
+    head = INNER_HEADER + bytes([len(payload), cmd]) + payload
+    return head + bytes([sum(head) & 0xFF])
+
+
+def slcan_frame(can_id: int, data: bytes) -> bytes:
+    return f"t{can_id:03X}{len(data):d}{data.hex().upper()}\r".encode("ascii")
+
+
+def u16(value: int) -> bytes:
+    return bytes([(value >> 8) & 0xFF, value & 0xFF])
+
+
+_log_lock = threading.Lock()
+_log_file = sys.stderr
+_t0 = time.monotonic()
+
+
+def log(msg: str) -> None:
+    with _log_lock:
+        _log_file.write(f"[{time.monotonic() - _t0:7.2f}] {msg}\n")
+        _log_file.flush()
+
+
+# ── The vehicle: state and the frames that describe it ───────────────────────────────────────
+@dataclass
+class Climate:
+    on: bool = True
+    ac: bool = True
+    auto: bool = True
+    recirc: bool = False
+    fan: int = 2
+    temp_c: float = 21.0
+
+
+@dataclass
+class Vehicle:
+    acc: bool = True
+    reverse: bool = False
+    lamp: bool = False
+    brake: bool = False
+    left_turn: bool = False
+    right_turn: bool = False
+    volume: int = 12
+    muted: bool = False
+    speed_kmh: float = 0.0
+    gear: str = "P"
+    doors: int = 0
+    rpm: int = 0
+    climate: Climate = field(default_factory=Climate)
+
+    # ── MCU-native frames (McuOwnerProtocol) ──
+    def sys_event(self) -> bytes:
+        b1 = (SYS1_ACC if self.acc else 0) | (SYS1_REVERSE if self.reverse else 0) \
+            | (SYS1_ILLUMINATION if self.lamp else 0) | (SYS1_BRAKE if self.brake else 0) \
+            | (SYS1_RIGHT_TURN if self.right_turn else 0)
+        b2 = SYS2_MCAN | (SYS2_LEFT_TURN if self.left_turn else 0)
+        return outer_encode(RX_SYS_EVENT, bytes([b1, b2]))
+
+    def main_volume(self, silent: bool = False) -> bytes:
+        return outer_encode(RX_MAIN_VOLUME, bytes([(self.volume & ~SILENT_BIT) | (SILENT_BIT if silent else 0)]))
+
+    def mute(self, silent: bool = False) -> bytes:
+        return outer_encode(RX_MUTE, bytes([(1 if self.muted else 0) | (SILENT_BIT if silent else 0)]))
+
+    @staticmethod
+    def panel_key(code: int) -> bytes:
+        return outer_encode(RX_KEY_EVENT, bytes([code, 0]))
+
+    # ── CAN box frames, relayed under 0xA5 ──
+    @staticmethod
+    def relay(cmd: int, payload: bytes) -> bytes:
+        return outer_encode(RX_CAN, inner_encode(cmd, payload))
+
+    def basic_status(self, swc_id: int = 0, pressed: bool = False, steer_deg: float = 0.0) -> bytes:
+        raw = int(steer_deg * 14) & 0xFFFF
+        return self.relay(CMD_BASIC_STATUS, bytes([0, 0, swc_id, 1 if pressed else 0, self.doors, 0]) + u16(raw))
+
+    def speed_relay(self) -> bytes:
+        return self.relay(CMD_SPEED, u16(int(self.speed_kmh * SPEED_017_SCALE)))
+
+    def gear_relay(self) -> bytes:
+        p = bytearray(11)
+        p[1] = 0x03 if self.gear == "R" else 0x01
+        p[5] = GEAR_CODES_1A[self.gear]
+        p[9:11] = u16(self.rpm)
+        return self.relay(CMD_RPM_GEAR, bytes(p))
+
+    def vehicle_info(self, coolant_c: int = 78) -> bytes:
+        p = bytearray(14)
+        p[2:4] = u16(self.rpm)
+        p[9] = coolant_c + COOLANT_OFFSET_C
+        return self.relay(CMD_VEHICLE_INFO, bytes(p))
+
+    def climate_relay(self) -> bytes:
+        c = self.climate
+        b0 = (0x40 if c.on else 0) | (0x08 if c.auto else 0) | 0x04   # 0x04 clear = dual; set = single
+        b1 = (0x40 if c.ac else 0) | (0x10 if c.recirc else 0)
+        setpoint = int(c.temp_c * TEMP_SCALE_HALF_C)
+        return self.relay(CMD_CLIMATE, bytes([b0, b1, 0, 0, 0, c.fan & 0x0F, setpoint, setpoint, 0, 0]))
+
+    def radar_relay(self, rear_steps: list[int], front_steps: list[int]) -> bytes:
+        return self.relay(CMD_RADAR, bytes(rear_steps + front_steps))
+
+    def tpms_relay(self, kpa: list[int]) -> bytes:
+        p = bytearray(12)
+        for i, value in enumerate(kpa):
+            p[2 + i] = min(value, TPMS_NONE - 1) if value else TPMS_NONE
+            p[7 + i] = max(value - (TPMS_NONE - 1), 0) if value else 0
+        return self.relay(CMD_TPMS, bytes(p))
+
+    # ── Raw body bus (what a CANable would hear) ──
+    def raw_speed(self) -> bytes:
+        d = bytearray(RAW_DLC)
+        d[6] = int(round(self.speed_kmh)) & 0xFF
+        return slcan_frame(ID_SPEED_FAST, bytes(d))
+
+    def raw_gear(self) -> bytes:
+        d = bytearray(RAW_DLC)
+        d[1] = {"P": GEAR_P_BIT, "R": GEAR_R_BIT}.get(self.gear, 0)
+        d[5] = GEAR_D_BIT if self.gear == "D" else 0
+        return slcan_frame(ID_GEAR, bytes(d))
+
+    def raw_doors(self) -> bytes:
+        d = bytearray(RAW_DLC)
+        d[3] = self.doors
+        return slcan_frame(ID_DOOR_STATUS, bytes(d))
+
+
+# ── Transport ────────────────────────────────────────────────────────────────────────────────
+class Link:
+    """One TCP client to a QEMU chardev (or anything that speaks bytes). Reconnects on start only."""
+
+    def __init__(self, name: str, hostport: str) -> None:
+        host, _, port = hostport.rpartition(":")
+        self.name = name
+        self.addr = (host or "127.0.0.1", int(port))
+        self.sock: socket.socket | None = None
+        self.lock = threading.Lock()
+
+    def connect(self) -> None:
+        for attempt in range(CONNECT_ATTEMPTS):
+            try:
+                self.sock = socket.create_connection(self.addr, timeout=5)
+                self.sock.settimeout(SOCKET_TIMEOUT_S)
+                log(f"{self.name}: connected to {self.addr[0]}:{self.addr[1]}")
+                return
+            except OSError as exc:
+                if attempt == CONNECT_ATTEMPTS - 1:
+                    raise SystemExit(f"{self.name}: cannot connect to {self.addr}: {exc}")
+                time.sleep(CONNECT_RETRY_S)
+
+    def send(self, data: bytes) -> None:
+        if self.sock is None:
+            return
+        with self.lock:
+            self.sock.sendall(data)
+
+    def recv(self) -> bytes:
+        try:
+            return self.sock.recv(4096) if self.sock else b""
+        except socket.timeout:
+            return b""
+
+    def close(self) -> None:
+        if self.sock:
+            self.sock.close()
+            self.sock = None
+
+
+class McuSide:
+    """The MCU's half of the conversation: ACK every mode, act on the system-key echo."""
+
+    def __init__(self, link: Link, vehicle: Vehicle) -> None:
+        self.link = link
+        self.vehicle = vehicle
+        self.acks = 0
+        self.rx_frames = 0
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._pump, name="mcu-rx", daemon=True)
+
+    def start(self) -> None:
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop.set()
+
+    def send(self, frame: bytes, what: str) -> None:
+        log(f"mcu tx {what}: {frame.hex()}")
+        self.link.send(frame)
+
+    def _pump(self) -> None:
+        buf = bytearray()
+        while not self._stop.is_set():
+            chunk = self.link.recv()
+            if not chunk:
+                continue
+            buf += chunk
+            for opcode, payload in outer_decode(buf):
+                self.rx_frames += 1
+                self._handle(opcode, payload)
+
+    def _handle(self, opcode: int, payload: bytes) -> None:
+        name = TX_OPCODES.get(opcode, f"0x{opcode:02X}")
+        log(f"mcu rx {name} {payload.hex()}")
+        if opcode == OP_MODE and payload:
+            # sendDataWaitAck expects `70 <mode>` within 500 ms (McuOwnerProtocol.isModeAck).
+            self.acks += 1
+            self.send(outer_encode(RX_MODE_ACK, payload[:1]), f"MODE_ACK {payload[0]:02x}")
+            return
+        if opcode == OP_SYSTEM_KEY and payload:
+            self._system_key(payload[0])
+
+    def _system_key(self, code: int) -> None:
+        # The launcher echoes VOL+/VOL-/MUTE as `08 xx`; the real MCU moves the amplifier and
+        # reports back on `79`/`78` (McuOwner.onPanelKey). Same here, so the chip follows.
+        v = self.vehicle
+        if code == SYSTEM_KEY_VOLUME_UP:
+            v.volume = min(v.volume + 1, VOLUME_MAX)
+            self.send(v.main_volume(), f"MAIN_VOLUME {v.volume}")
+        elif code == SYSTEM_KEY_VOLUME_DOWN:
+            v.volume = max(v.volume - 1, 0)
+            self.send(v.main_volume(), f"MAIN_VOLUME {v.volume}")
+        elif code == SYSTEM_KEY_MUTE:
+            v.muted = not v.muted
+            self.send(v.mute(), f"MUTE {v.muted}")
+
+
+class CanSide:
+    """The raw body bus in slcan text. Optional: without it, replays degrade to relay frames."""
+
+    def __init__(self, link: Link | None) -> None:
+        self.link = link
+        self.frames = 0
+
+    @property
+    def present(self) -> bool:
+        return self.link is not None
+
+    def send(self, line: bytes) -> None:
+        if self.link is None:
+            return
+        self.frames += 1
+        self.link.send(line)
+
+
+# ── Scenario grammar ─────────────────────────────────────────────────────────────────────────
+GRAMMAR = """\
+Timeline lines: `<t> <verb> [args]`; t is seconds from start, or `+d` after the previous line.
+  acc on|off                 SYS_EVENT accLine (71)        lamp on|off        illumination bit
+  reverse on|off             SYS_EVENT reverse bit         brake on|off       turn left|right|off
+  volume <0-40>              MAIN_VOLUME (79)              mute on|off        MUTE (78)
+  key <NAME>                 panel key (72): VOL_UP, VOL_DOWN, MUTE, NEXT, PREV, MENU, RETURN, POWER ...
+  wheel <NAME>               CAN wheel button press+release (0x11 relay): NEXT, PREV, VOL_UP, CALL ...
+  speed <kmh>                held; 0x361 on the bus at 10 Hz, 0x17 relay at 1 Hz
+  ramp <from> <to> <secs>    speed ramp, linear
+  gear P|R|N|D               0x3BC on the bus, 0x1A relay
+  doors <FL|FR|RL|RR|TAIL|HOOD> open|closed     0x4A5 on the bus, 0x11 relay
+  climate temp=21 fan=3 ac=on auto=off recirc=on   0x31 relay
+  rpm <n>                    0x32 relay (and the 0x1A mirror)
+  radar rear=<a,b,c,d> front=<a,b,c,d>   steps 1-5 (30 cm each), 0 = clear; 0x41 relay
+  tpms <fl,fr,rl,rr,spare>   kPa, 0 = no reading; 0x48 relay
+  can-replay <file> [speedup] candump lines on the bus; without a bus, known ids become relays
+  say <text>                 log a marker
+"""
+
+SCENARIOS: dict[str, list[str]] = {
+    # Handshake, then one of everything the launcher decodes.
+    "smoke": [
+        "0.0 say smoke: handshake window",
+        "3.0 acc on",
+        "4.0 volume 21",
+        "5.0 reverse on",
+        "12.0 reverse off",
+        "10.0 lamp on",
+        "11.0 key VOL_UP",
+        "12.0 wheel NEXT",
+        "13.0 gear D",
+        "13.5 ramp 0 43 4",
+        "19.0 climate temp=21 fan=3 ac=on",
+        "20.0 doors FL open",
+        "21.0 doors FL closed",
+        "22.0 rpm 1450",
+        "23.0 radar rear=0,2,2,0 front=0,0,0,0",
+        "24.0 tpms 230,232,228,229,0",
+        "25.0 mute on",
+        "26.0 mute off",
+        "27.0 ramp 43 0 3",
+        "30.5 gear P",
+        "31.0 lamp off",
+        "32.0 say smoke: done",
+    ],
+    # ACC on, drive with a speed ramp, reverse in and out, lamps on.
+    "commute": [
+        "0.0 say commute: key on",
+        "3.0 acc on",
+        "4.0 rpm 900",
+        "5.0 doors FL open",
+        "8.0 doors FL closed",
+        "9.0 gear R",
+        "9.2 reverse on",
+        "10.0 ramp 0 6 3",
+        "14.0 ramp 6 0 2",
+        "16.5 reverse off",
+        "16.6 gear D",
+        "17.0 ramp 0 50 10",
+        "20.0 rpm 2100",
+        "28.0 lamp on",
+        "30.0 wheel VOL_UP",
+        "32.0 wheel NEXT",
+        "40.0 ramp 50 0 8",
+        "49.0 gear P",
+        "50.0 lamp off",
+        "51.0 acc off",
+        "52.0 say commute: done",
+    ],
+    # The 2026-09-07 door-cycle capture, as the CANable heard it.
+    "replay-door-cycle": [
+        "0.0 say replay: door cycle capture",
+        "3.0 acc on",
+        "4.0 can-replay {capture} {speedup}",
+        "+1.0 say replay: done",
+    ],
+}
+
+
+@dataclass
+class Event:
+    at: float
+    verb: str
+    args: list[str]
+
+
+def parse_timeline(lines: list[str], subst: dict[str, str]) -> list[Event]:
+    events: list[Event] = []
+    last = 0.0
+    for raw in lines:
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        for key, value in subst.items():
+            line = line.replace("{" + key + "}", value)
+        when, verb, *args = line.split()
+        at = last + float(when[1:]) if when.startswith("+") else float(when)
+        events.append(Event(at, verb, args))
+        last = at
+    return sorted(events, key=lambda e: e.at)
+
+
+class Simulator:
+    def __init__(self, mcu: McuSide, can: CanSide, vehicle: Vehicle, speedup: float) -> None:
+        self.mcu = mcu
+        self.can = can
+        self.v = vehicle
+        self.speedup = speedup
+        self.ramp: tuple[float, float, float, float] | None = None   # t_start, t_end, from, to
+        self._stop = threading.Event()
+
+    # ── background: the bus is never silent while the car is on ──
+    def ticker(self) -> None:
+        last_relay = 0.0
+        while not self._stop.is_set():
+            now = time.monotonic()
+            if self.ramp:
+                t0, t1, a, b = self.ramp
+                frac = min(max((now - t0) / (t1 - t0), 0.0), 1.0)
+                self.v.speed_kmh = a + (b - a) * frac
+                if frac >= 1.0:
+                    log(f"ramp done at {self.v.speed_kmh:.0f} km/h")
+                    self.ramp = None
+            if self.v.acc:
+                self.can.send(self.v.raw_speed())
+                self.can.send(self.v.raw_gear())
+                self.can.send(self.v.raw_doors())
+                if now - last_relay >= RELAY_TICK_S:
+                    last_relay = now
+                    self.mcu.link.send(self.v.speed_relay())
+                    self.mcu.link.send(self.v.gear_relay())
+            time.sleep(BUS_TICK_S)
+
+    def run(self, events: list[Event]) -> None:
+        tick = threading.Thread(target=self.ticker, name="bus-tick", daemon=True)
+        tick.start()
+        start = time.monotonic()
+        for ev in events:
+            due = start + ev.at / self.speedup
+            while (delay := due - time.monotonic()) > 0 and not self._stop.is_set():
+                time.sleep(min(delay, 0.05))
+            if self._stop.is_set():
+                break
+            try:
+                self.apply(ev)
+            except (KeyError, ValueError, IndexError) as exc:
+                log(f"event '{ev.verb} {' '.join(ev.args)}' refused: {exc!r}")
+
+    def stop(self) -> None:
+        self._stop.set()
+
+    # ── one event ──
+    def apply(self, ev: Event) -> None:
+        v, a = self.v, ev.args
+        log(f"event {ev.verb} {' '.join(a)}")
+        on = a[0] == "on" if a else False
+        if ev.verb == "say":
+            return
+        if ev.verb in ("acc", "reverse", "lamp", "brake"):
+            setattr(v, ev.verb, on)
+            self.mcu.send(v.sys_event(), f"SYS_EVENT {ev.verb}={on}")
+            if ev.verb == "reverse":
+                self.mcu.send(v.relay(CMD_SYS_EVENT, bytes([SYS1_REVERSE if on else 0, 0])), "relay 0x71 reverse")
+        elif ev.verb == "turn":
+            v.left_turn, v.right_turn = a[0] == "left", a[0] == "right"
+            self.mcu.send(v.sys_event(), f"SYS_EVENT turn={a[0]}")
+        elif ev.verb == "volume":
+            v.volume = int(a[0])
+            self.mcu.send(v.main_volume(), f"MAIN_VOLUME {v.volume}")
+        elif ev.verb == "mute":
+            v.muted = on
+            self.mcu.send(v.mute(), f"MUTE {on}")
+        elif ev.verb == "key":
+            self.mcu.send(v.panel_key(PANEL_KEYS[a[0]]), f"KEY_EVENT {a[0]}")
+        elif ev.verb == "wheel":
+            self.mcu.send(v.basic_status(SWC_BUTTONS[a[0]], True), f"relay 0x11 wheel {a[0]} down")
+            time.sleep(SWC_PRESS_MS / 1000)
+            self.mcu.send(v.basic_status(SWC_BUTTONS[a[0]], False), f"relay 0x11 wheel {a[0]} up")
+        elif ev.verb == "speed":
+            self.ramp = None
+            v.speed_kmh = float(a[0])
+            self.mcu.send(v.speed_relay(), f"relay 0x17 speed {v.speed_kmh:.1f}")
+        elif ev.verb == "ramp":
+            now = time.monotonic()
+            self.ramp = (now, now + float(a[2]) / self.speedup, float(a[0]), float(a[1]))
+        elif ev.verb == "gear":
+            v.gear = a[0].upper()
+            self.mcu.send(v.gear_relay(), f"relay 0x1A gear {v.gear}")
+            self.can.send(v.raw_gear())
+        elif ev.verb == "doors":
+            bit = DOOR_BITS[a[0].upper()]
+            v.doors = (v.doors | bit) if a[1] == "open" else (v.doors & ~bit)
+            self.mcu.send(v.basic_status(), f"relay 0x11 doors=0x{v.doors:02x}")
+            self.can.send(v.raw_doors())
+        elif ev.verb == "climate":
+            for kv in a:
+                key, _, val = kv.partition("=")
+                if key == "temp":
+                    v.climate.temp_c = float(val)
+                elif key == "fan":
+                    v.climate.fan = int(val)
+                else:
+                    setattr(v.climate, key, val == "on")
+            self.mcu.send(v.climate_relay(), f"relay 0x31 climate {a}")
+        elif ev.verb == "rpm":
+            v.rpm = int(a[0])
+            self.mcu.send(v.vehicle_info(), f"relay 0x32 rpm {v.rpm}")
+        elif ev.verb == "radar":
+            fields = {k: [int(x) for x in s.split(",")] for k, _, s in (kv.partition("=") for kv in a)}
+            self.mcu.send(v.radar_relay(fields.get("rear", [0] * 4), fields.get("front", [0] * 4)), "relay 0x41 radar")
+        elif ev.verb == "tpms":
+            self.mcu.send(v.tpms_relay([int(x) for x in a[0].split(",")]), "relay 0x48 tpms")
+        elif ev.verb == "can-replay":
+            self.replay(Path(a[0]), float(a[1]) if len(a) > 1 else 1.0)
+        else:
+            raise KeyError(f"unknown verb {ev.verb}")
+
+    # ── candump replay ──
+    def replay(self, path: Path, speedup: float) -> None:
+        sent = converted = 0
+        first_ts: float | None = None
+        start = time.monotonic()
+        with path.open() as f:
+            for line in f:
+                m = CANDUMP_LINE.match(line)
+                if not m:
+                    continue
+                ts, can_id = float(m["ts"]), int(m["id"], 16)
+                data = bytes.fromhex(m["data"].replace(" ", ""))
+                if first_ts is None:
+                    first_ts = ts
+                due = start + (ts - first_ts) / speedup
+                while (delay := due - time.monotonic()) > 0:
+                    time.sleep(min(delay, 0.05))
+                if self._stop.is_set():
+                    break
+                if self.can.present:
+                    self.can.send(slcan_frame(can_id, data))
+                    sent += 1
+                elif self.convert(can_id, data):
+                    converted += 1
+        log(f"replay {path.name}: {sent} frames on the bus, {converted} converted to relays")
+
+    def convert(self, can_id: int, data: bytes) -> bool:
+        """No bus channel: turn the ids RawCanDecoder knows into the HiWorld relay the MCU would send."""
+        if len(data) < RAW_DLC:
+            return False
+        v = self.v
+        if can_id == ID_SPEED_FAST:
+            v.speed_kmh = float(data[6])
+            self.mcu.link.send(v.speed_relay())
+        elif can_id == ID_GEAR:
+            v.gear = "P" if data[1] & GEAR_P_BIT else "R" if data[1] & GEAR_R_BIT else "D" if data[5] & GEAR_D_BIT else "N"
+            self.mcu.link.send(v.gear_relay())
+        elif can_id == ID_DOOR_STATUS:
+            if data[3] != v.doors:
+                v.doors = data[3]
+                self.mcu.send(v.basic_status(), f"relay 0x11 doors=0x{v.doors:02x} (from 0x4A5)")
+        else:
+            return False
+        return True
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0], epilog=GRAMMAR,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("scenario", help="smoke | commute | replay-door-cycle | a timeline file")
+    ap.add_argument("--mcu", default="127.0.0.1:5590", help="host:port of the MCU carrier (default %(default)s)")
+    ap.add_argument("--can", default="", help="host:port of the raw-bus carrier; omit to convert replays into relays")
+    ap.add_argument("--capture", default="", help="candump file for {capture} in a scenario")
+    ap.add_argument("--speedup", type=float, default=1.0, help="timeline and replay speed factor")
+    ap.add_argument("--log", default="", help="log file (default stderr)")
+    ap.add_argument("--hold", type=float, default=-1, help="seconds to keep the bus alive after the last event; <0 = until killed")
+    args = ap.parse_args()
+
+    global _log_file
+    if args.log:
+        _log_file = open(args.log, "a", buffering=1)
+
+    if args.scenario in SCENARIOS:
+        lines = SCENARIOS[args.scenario]
+    else:
+        lines = Path(args.scenario).read_text().splitlines()
+    events = parse_timeline(lines, {"capture": args.capture, "speedup": str(args.speedup)})
+
+    vehicle = Vehicle()
+    mcu_link = Link("mcu", args.mcu)
+    mcu_link.connect()
+    can_link = None
+    if args.can:
+        can_link = Link("can", args.can)
+        can_link.connect()
+
+    mcu = McuSide(mcu_link, vehicle)
+    can = CanSide(can_link)
+    sim = Simulator(mcu, can, vehicle, args.speedup)
+    mcu.start()
+    log(f"scenario {args.scenario}: {len(events)} events, bus={'yes' if can.present else 'converted relays'}")
+    try:
+        sim.run(events)
+        log(f"timeline done: mcu rx={mcu.rx_frames} acks={mcu.acks} bus frames={can.frames}")
+        if args.hold < 0:
+            while True:
+                time.sleep(1)
+        time.sleep(args.hold)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        sim.stop()
+        mcu.stop()
+        mcu_link.close()
+        if can_link:
+            can_link.close()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
