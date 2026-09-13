@@ -56,6 +56,9 @@ stock dump minus every OEM package (`overlay/remove.gsi`, prefix matches), and i
 `--car-owner`. The staged GSI is TrebleDroid `ci-20240508` (Android 14, fixes for old kernels;
 the unit runs 4.14.190), both `arm64-ab-vanilla` and `-vndklite`, at
 `share/carlauncher/os/gsi/` with `SHA256SUMS`. Try plain first, `vndklite` if it bootloops.
+A GSI is system-as-root (`/system` content under `system/`, absolute symlinks at the root);
+`system_root()` in `lib.sh` finds the right directory for either layout. The vanilla image went
+through build + check on 2026-09-13 (2.4 GB rebuilt in 10 s, PASS) with a stand-in product.
 
 ## Overlay
 
