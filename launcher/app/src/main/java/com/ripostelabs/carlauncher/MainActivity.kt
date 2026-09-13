@@ -752,6 +752,7 @@ class MainActivity : ComponentActivity() {
                                 onExit = { screen = Screen.Home },
                                 appDirectoryStore = appDirectoryStore,
                                 initialRoute = s.initialRoute,
+                                mcuStatus = mcuOwner?.status,
                             )
 
                             Screen.Themes -> ThemesScreen(
