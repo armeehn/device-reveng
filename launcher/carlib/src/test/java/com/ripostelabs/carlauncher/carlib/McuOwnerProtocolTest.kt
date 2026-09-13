@@ -113,6 +113,14 @@ class McuOwnerProtocolTest {
         assertNull(McuOwnerProtocol.mainVolume(command(0x79)))
     }
 
+    /** `78`: low bits are the mute value, bit 7 the silent flag, same shape as volume. */
+    @Test
+    fun muteBits() {
+        assertEquals(McuOwnerProtocol.Mute(muted = true, silent = false), McuOwnerProtocol.mute(command(0x78, 0x01)))
+        assertEquals(McuOwnerProtocol.Mute(muted = false, silent = true), McuOwnerProtocol.mute(command(0x78, 0x80)))
+        assertNull(McuOwnerProtocol.mute(command(0x79, 0x01)))
+    }
+
     @Test
     fun keyIsFirstPayloadByte() {
         assertEquals(McuOwnerProtocol.Key.POWER, McuOwnerProtocol.key(command(0x72, 0x01, 0x00)))

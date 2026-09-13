@@ -54,6 +54,8 @@ class McuOwner(
 
         fun onMainVolume(volume: McuOwnerProtocol.MainVolume) {}
 
+        fun onMute(mute: McuOwnerProtocol.Mute) {}
+
         fun onKey(key: Int) {}
 
         fun onCanSignal(signal: CanSignal, atMs: Long) {}
@@ -221,6 +223,7 @@ class McuOwner(
 
         McuOwnerProtocol.sysEvent(command)?.let { listener.onSysEvent(it); return }
         McuOwnerProtocol.mainVolume(command)?.let { listener.onMainVolume(it); return }
+        McuOwnerProtocol.mute(command)?.let { listener.onMute(it); return }
         McuOwnerProtocol.key(command)?.let { listener.onKey(it); return }
 
         // 0xA5 relays the CAN box's own frame; the decoder keys on the box's cmd, not the relay opcode.

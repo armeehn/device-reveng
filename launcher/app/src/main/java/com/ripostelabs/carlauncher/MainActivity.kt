@@ -35,7 +35,9 @@ import com.ripostelabs.carlauncher.data.AccessoryRuntime
 import com.ripostelabs.carlauncher.carlib.RootShell
 import com.ripostelabs.carlauncher.input.WheelGamepad
 import com.ripostelabs.carlauncher.service.CanCaptureService
+import com.ripostelabs.carlauncher.carlib.AndroidOwnerGate
 import com.ripostelabs.carlauncher.carlib.CarService
+import com.ripostelabs.carlauncher.carlib.McuOwner
 import com.ripostelabs.carlauncher.carlib.GatewayHandshake // v3.0
 import com.ripostelabs.carlauncher.carlib.SysVar // v0.4.9 vendor hidden-apps list
 import com.ripostelabs.carlauncher.carlib.VendorBtService
@@ -123,6 +125,9 @@ import com.ripostelabs.carlauncher.ui.theme.CarTheme
 class MainActivity : ComponentActivity() {
 
     private lateinit var carEvents: CarEvents
+
+    /** Riposte OS 0.2 only: our MCU port owner. Null on a stock or 0.1 slot. */
+    private var mcuOwner: McuOwner? = null
     private lateinit var carService: CarService
     private lateinit var vendorBtService: VendorBtService
     private lateinit var appRepository: AppRepository
@@ -207,7 +212,17 @@ class MainActivity : ComponentActivity() {
         carEvents = CarEvents(applicationContext).also { it.register() }
         // v0.4.7.1: activity-scoped so opening the Dashboard doesn't restart the session timer.
         ignitionSession = IgnitionSession(lifecycleScope, carEvents.accOn)
-        carService = CarService(applicationContext).also { it.bind() }
+        // Riposte OS 0.2: when the OS says we own the MCU port and eventcenter is gone, the car
+        // link is our McuOwner; otherwise the vendor binder as before. The gate decides, not us.
+        carService = CarService(applicationContext)
+        val ownerGate = AndroidOwnerGate(applicationContext)
+        if (ownerGate.ownerEnabled() && !ownerGate.eventcenterPresent()) {
+            mcuOwner = McuOwner(ownerGate, carEvents.ownerListener(CanCaptureService.vehicle())).also {
+                carService.attachOwner(it)
+                it.start()
+            }
+        }
+        carService.bind()
         appRepository = AppRepository(this)
         nowPlaying = NowPlayingRepository(applicationContext).also { it.start(lifecycleScope) }
         themeStore = ThemeStore(applicationContext)
