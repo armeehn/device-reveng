@@ -1,0 +1,308 @@
+package com.ripostelabs.carlauncher.ui
+
+import android.Manifest
+import android.annotation.SuppressLint
+import android.content.Context
+import android.content.pm.PackageManager
+import android.graphics.SurfaceTexture
+import android.hardware.camera2.CameraAccessException
+import android.hardware.camera2.CameraCaptureSession
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CameraDevice
+import android.hardware.camera2.CameraManager
+import android.os.Handler
+import android.os.Looper
+import android.util.Log
+import android.util.Size
+import android.view.Surface
+import android.view.TextureView
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import com.ripostelabs.carlauncher.ui.theme.carShape
+
+/**
+ * ReverseCameraScreen — the launcher's own reverse feed, Riposte OS 0.2 only.
+ *
+ * ── Where this sits ─────────────────────────────────────────────────────────────────────────────
+ *
+ *     MCU SYS_EVENT 71 ─▶ McuOwner ─▶ CarEvents.reverse ─▶ ReverseCameraGate ─▶ this (top overlay)
+ *                                                                                    ▲
+ *     AIS camera HAL (/vendor/etc/camera) ─▶ camera2 id "1" ─▶ TextureView ──────────┘
+ *
+ * The vendor's AUXCamera reaches the reverse camera with `Camera.open(1)` against the AIS
+ * automotive-camera HAL (CUSTOM_ANDROID.md §2d): a public API on a HAL the OS keeps. On a 0.2
+ * slot that app is gone, so we open the same id through camera2. A [TextureView], not a
+ * SurfaceView: it composes like any view, so the label draws over it with no hole-punching, and
+ * on 0.2 there is no vendor window above us to yield to (contrast [ReverseOverlay]).
+ *
+ * Deliberately dumb: no guide lines, no radar, no controls. One label so the driver can tell the
+ * launcher is showing the picture, and a one-line reason whenever there is none — permission
+ * missing, camera absent, or the [CameraAccessException] reason. The camera is released on
+ * dispose, i.e. the moment reverse disengages.
+ */
+@Composable
+fun ReverseCameraScreen(verdict: ReverseCameraGate.Verdict, modifier: Modifier = Modifier) {
+    if (verdict == ReverseCameraGate.Verdict.HIDDEN) {
+        return
+    }
+
+    Box(modifier = modifier.fillMaxSize().background(Color.Black)) {
+        when (verdict) {
+            ReverseCameraGate.Verdict.PREVIEW -> CameraPreview(modifier = Modifier.fillMaxSize())
+            ReverseCameraGate.Verdict.NO_PERMISSION -> Notice(NO_PERMISSION_MESSAGE)
+            ReverseCameraGate.Verdict.HIDDEN -> Unit
+        }
+
+        ReverseLabel(modifier = Modifier.align(Alignment.TopStart).padding(LABEL_INSET_DP.dp))
+    }
+}
+
+/** The camera2 preview. Failures replace the picture with their reason; nothing throws out. */
+@Composable
+private fun CameraPreview(modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    var failure by remember { mutableStateOf<String?>(null) }
+    val session = remember { ReverseCameraSession(context) { failure = it } }
+
+    // Reverse disengaged → this leaves the composition → the camera is handed back.
+    DisposableEffect(session) {
+        onDispose { session.close() }
+    }
+
+    AndroidView(
+        factory = { ctx ->
+            TextureView(ctx).apply {
+                surfaceTextureListener = object : TextureView.SurfaceTextureListener {
+                    override fun onSurfaceTextureAvailable(texture: SurfaceTexture, width: Int, height: Int) {
+                        session.open(texture)
+                    }
+
+                    override fun onSurfaceTextureSizeChanged(texture: SurfaceTexture, width: Int, height: Int) {}
+
+                    override fun onSurfaceTextureDestroyed(texture: SurfaceTexture): Boolean {
+                        session.close()
+                        return true
+                    }
+
+                    override fun onSurfaceTextureUpdated(texture: SurfaceTexture) {}
+                }
+            }
+        },
+        modifier = modifier,
+    )
+
+    failure?.let { Notice(it) }
+}
+
+/** One centred line on the black bed. White on purpose: the bed is black in every theme. */
+@Composable
+private fun Notice(text: String) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.titleMedium,
+            color = Color.White,
+        )
+    }
+}
+
+/** Small themed chip, same recipe as [ReverseOverlay]'s guide-line toggle. */
+@Composable
+private fun ReverseLabel(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier.background(
+            color = MaterialTheme.colorScheme.surface.copy(alpha = LABEL_ALPHA),
+            shape = carShape(50),
+        ),
+    ) {
+        Text(
+            text = "REVERSE",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+        )
+    }
+}
+
+/**
+ * One camera2 session: open → preview session → repeating request, and [close] tears it all
+ * down in reverse order. Callbacks run on the main looper; the preview is the only work.
+ *
+ *     open(texture) ─▶ openCamera ─▶ onOpened ─▶ createCaptureSession ─▶ onConfigured ─▶ setRepeatingRequest
+ *                                                                                              │
+ *     close() ◀── session.close, device.close, surface.release ◀──────────────────────────────┘
+ */
+private class ReverseCameraSession(
+    private val context: Context,
+    private val onFailure: (String) -> Unit,
+) {
+    private val handler = Handler(Looper.getMainLooper())
+    private var device: CameraDevice? = null
+    private var session: CameraCaptureSession? = null
+    private var surface: Surface? = null
+
+    /** Set by [close]; an [onOpened] that lands afterwards must hand the camera straight back. */
+    private var closed = false
+
+    // Lint cannot follow the checkSelfPermission below through a field-held context.
+    @SuppressLint("MissingPermission")
+    fun open(texture: SurfaceTexture) {
+        closed = false
+
+        val granted = context.checkSelfPermission(Manifest.permission.CAMERA) ==
+            PackageManager.PERMISSION_GRANTED
+        if (!granted) {
+            onFailure(NO_PERMISSION_MESSAGE)
+            return
+        }
+
+        val manager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
+        try {
+            val ids = manager.cameraIdList
+            if (REVERSE_CAMERA_ID !in ids) {
+                onFailure("Camera $REVERSE_CAMERA_ID absent (present: ${ids.joinToString().ifEmpty { "none" }})")
+                return
+            }
+
+            // The HAL streams at its own sizes; ask for the largest it lists for a texture so the
+            // buffer is never a size it refuses. No list at all → keep the view's default.
+            previewSize(manager)?.let { texture.setDefaultBufferSize(it.width, it.height) }
+            surface = Surface(texture)
+            manager.openCamera(REVERSE_CAMERA_ID, deviceCallback, handler)
+        } catch (e: CameraAccessException) {
+            fail(describe(e), e)
+        } catch (e: SecurityException) {
+            fail(NO_PERMISSION_MESSAGE, e)
+        } catch (e: IllegalArgumentException) {
+            fail("Camera $REVERSE_CAMERA_ID rejected: ${e.message}", e)
+        }
+    }
+
+    fun close() {
+        closed = true
+
+        session?.close()
+        session = null
+
+        device?.close()
+        device = null
+
+        surface?.release()
+        surface = null
+    }
+
+    private val deviceCallback = object : CameraDevice.StateCallback() {
+        override fun onOpened(camera: CameraDevice) {
+            if (closed) {
+                camera.close()
+                return
+            }
+
+            device = camera
+            startPreview(camera)
+        }
+
+        override fun onDisconnected(camera: CameraDevice) {
+            camera.close()
+            device = null
+            onFailure("Camera disconnected")
+        }
+
+        override fun onError(camera: CameraDevice, error: Int) {
+            camera.close()
+            device = null
+            onFailure("Camera error $error")
+        }
+    }
+
+    private fun startPreview(camera: CameraDevice) {
+        val target = surface ?: return
+
+        try {
+            val request = camera.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
+                .apply { addTarget(target) }
+                .build()
+
+            @Suppress("DEPRECATION") // SessionConfiguration buys nothing for one preview surface.
+            camera.createCaptureSession(
+                listOf(target),
+                object : CameraCaptureSession.StateCallback() {
+                    override fun onConfigured(configured: CameraCaptureSession) {
+                        if (closed) {
+                            configured.close()
+                            return
+                        }
+
+                        session = configured
+                        try {
+                            configured.setRepeatingRequest(request, null, handler)
+                        } catch (e: CameraAccessException) {
+                            fail(describe(e), e)
+                        }
+                    }
+
+                    override fun onConfigureFailed(configured: CameraCaptureSession) {
+                        onFailure("Preview configuration failed")
+                    }
+                },
+                handler,
+            )
+        } catch (e: CameraAccessException) {
+            fail(describe(e), e)
+        }
+    }
+
+    private fun previewSize(manager: CameraManager): Size? {
+        val map = manager.getCameraCharacteristics(REVERSE_CAMERA_ID)
+            .get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP) ?: return null
+
+        return map.getOutputSizes(SurfaceTexture::class.java)?.maxByOrNull { it.width * it.height }
+    }
+
+    private fun fail(message: String, cause: Exception) {
+        Log.w(TAG, message, cause)
+        onFailure(message)
+    }
+
+    private fun describe(e: CameraAccessException): String {
+        val reason = when (e.reason) {
+            CameraAccessException.CAMERA_DISABLED -> "disabled by policy"
+            CameraAccessException.CAMERA_DISCONNECTED -> "disconnected"
+            CameraAccessException.CAMERA_ERROR -> "device error"
+            CameraAccessException.CAMERA_IN_USE -> "in use"
+            CameraAccessException.MAX_CAMERAS_IN_USE -> "too many cameras open"
+            else -> "reason ${e.reason}"
+        }
+
+        return "Camera unavailable: $reason"
+    }
+}
+
+private const val TAG = "ReverseCamera"
+
+/** The id AUXCamera opens (`Camera.open(1)`); camera2 addresses the same device by "1". */
+private const val REVERSE_CAMERA_ID = "1"
+
+private const val NO_PERMISSION_MESSAGE = "Camera permission not granted"
+
+/** Chip inset from the screen corner, and its translucency over the feed. */
+private const val LABEL_INSET_DP = 16
+private const val LABEL_ALPHA = 0.6f
