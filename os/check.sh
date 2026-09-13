@@ -11,9 +11,10 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 . "$HERE/lib.sh"
 
 readonly LAUNCHER_PKG=com.ripostelabs.carlauncher
-readonly LAUNCHER_APK=system/priv-app/CarLauncher/CarLauncher.apk
-readonly PRIVAPP_XML=system/etc/permissions/privapp-permissions-ripostelabs.xml
-readonly FRAMEWORK=system/framework/framework.jar
+# Relative to the system root (system_root): system/ on stock, system/system/ on a GSI.
+readonly LAUNCHER_APK=priv-app/CarLauncher/CarLauncher.apk
+readonly PRIVAPP_XML=etc/permissions/privapp-permissions-ripostelabs.xml
+readonly FRAMEWORK=framework/framework.jar
 
 BASE="" OUT="" PROFILE=tier1 SUITE="" SYSTEM=""
 while [ $# -gt 0 ]; do
@@ -47,6 +48,8 @@ for part in system product; do
   done
 done
 T=$WORK/out
+S=$(system_root "$WORK/out/system")
+SB=$(system_root "$WORK/base/system")
 
 pkg_of() { "$AAPT2" dump packagename "$1" 2>/dev/null || true; }
 # package -> present in tree?
@@ -73,27 +76,27 @@ pkgs_matching() { # tree listfile
 }
 
 echo "launcher"
-check "[ -f $T/$LAUNCHER_APK ]" "launcher APK at $LAUNCHER_APK"
-check "[ \"\$(pkg_of $T/$LAUNCHER_APK)\" = $LAUNCHER_PKG ]" "launcher package is $LAUNCHER_PKG"
-check "[ \"\$(stat -c %U:%G:%a $T/$LAUNCHER_APK)\" = root:root:644 ]" "launcher APK root:root 0644"
-check "[ \"\$(getfattr --absolute-names -n security.selinux --only-values $T/$LAUNCHER_APK 2>/dev/null)\" = $SELINUX_SYSTEM_FILE ]" "launcher APK labelled system_file"
+check "[ -f $S/$LAUNCHER_APK ]" "launcher APK at $LAUNCHER_APK"
+check "[ \"\$(pkg_of $S/$LAUNCHER_APK)\" = $LAUNCHER_PKG ]" "launcher package is $LAUNCHER_PKG"
+check "[ \"\$(stat -c %U:%G:%a $S/$LAUNCHER_APK)\" = root:root:644 ]" "launcher APK root:root 0644"
+check "[ \"\$(getfattr --absolute-names -n security.selinux --only-values $S/$LAUNCHER_APK 2>/dev/null)\" = $SELINUX_SYSTEM_FILE ]" "launcher APK labelled system_file"
 
 echo "privapp allowlist"
-check "python3 -c 'import xml.etree.ElementTree as E; t=E.parse(\"$T/$PRIVAPP_XML\"); assert t.find(\"privapp-permissions\").get(\"package\")==\"$LAUNCHER_PKG\"'" "allowlist parses and names the launcher"
-WANT=$("$AAPT2" dump permissions "$T/$LAUNCHER_APK" | sed -n "s/^uses-permission: name='\([^']*\)'.*/\1/p" | sort)
+check "python3 -c 'import xml.etree.ElementTree as E; t=E.parse(\"$S/$PRIVAPP_XML\"); assert t.find(\"privapp-permissions\").get(\"package\")==\"$LAUNCHER_PKG\"'" "allowlist parses and names the launcher"
+WANT=$("$AAPT2" dump permissions "$S/$LAUNCHER_APK" | sed -n "s/^uses-permission: name='\([^']*\)'.*/\1/p" | sort)
 # shellcheck disable=SC2034  # used inside the eval below
-HAVE=$(python3 -c 'import xml.etree.ElementTree as E,sys; print("\n".join(sorted(p.get("name") for p in E.parse(sys.argv[1]).iter("permission"))))' "$T/$PRIVAPP_XML")
+HAVE=$(python3 -c 'import xml.etree.ElementTree as E,sys; print("\n".join(sorted(p.get("name") for p in E.parse(sys.argv[1]).iter("permission"))))' "$S/$PRIVAPP_XML")
 check "[ \"\$WANT\" = \"\$HAVE\" ]" "allowlist == every permission the APK requests ($(wc -l <<<"$WANT") entries)"
 
 echo "first boot"
-check "[ -f $T/system/etc/init/riposte.rc ]" "init rc present"
-check "[ \"\$(stat -c %a $T/system/bin/riposte-firstboot.sh)\" = 755 ]" "first-boot script executable"
-check "grep -q '^ro.riposte.os.version=0\.' $T/system/build.prop" "ro.riposte.os.version in build.prop"
+check "[ -f $S/etc/init/riposte.rc ]" "init rc present"
+check "[ \"\$(stat -c %a $S/bin/riposte-firstboot.sh)\" = 755 ]" "first-boot script executable"
+check "grep -q '^ro.riposte.os.version=0\.' $S/build.prop" "ro.riposte.os.version in build.prop"
 # The owner flag may only be 1 when eventcenter is not in the image.
-if grep -q '^ro.riposte.os.car_owner=1' "$T/system/build.prop"; then
+if grep -q '^ro.riposte.os.car_owner=1' "$S/build.prop"; then
   check "! has_pkg $T com.szchoiceway.eventcenter" "car_owner=1 only without eventcenter"
 else
-  check "grep -q '^ro.riposte.os.car_owner=0' $T/system/build.prop" "ro.riposte.os.car_owner=0 on a stock-derived build"
+  check "grep -q '^ro.riposte.os.car_owner=0' $S/build.prop" "ro.riposte.os.car_owner=0 on a stock-derived build"
 fi
 
 echo "boot animation"
@@ -125,17 +128,17 @@ for p in $(pkgs_in "$KEEPFILE"); do
     ok "$p (not in base)"
   fi
 done
-check "cmp -s $WORK/base/$FRAMEWORK $T/$FRAMEWORK" "framework.jar byte-identical to base"
+check "cmp -s $SB/$FRAMEWORK $S/$FRAMEWORK" "framework.jar byte-identical to base"
 
 echo "suite"
 N=$(find "$T/product/app" -name '*.apk' -exec "$AAPT2" dump packagename {} \; 2>/dev/null | grep -c '^com.ripostelabs\.' || true)
 if [ -n "$SUITE" ]; then check "[ $N -eq $SUITE ]" "$N suite apps (expected $SUITE)"; else ok "$N suite apps"; fi
 
 echo "xattrs survive the round trip"
-sample=$(find "$WORK/base/system" -type f -name '*.jar' | head -1)
+sample=$(find "$SB/framework" -type f -name '*.jar' | head -1)
 if [ -n "$sample" ] && getfattr -n security.selinux "$sample" >/dev/null 2>&1; then
-  rel=${sample#"$WORK"/base/}
-  check "[ \"\$(getfattr --absolute-names -n security.selinux --only-values $sample)\" = \"\$(getfattr --absolute-names -n security.selinux --only-values $T/$rel)\" ]" "$rel keeps its label"
+  rel=${sample#"$SB"/}
+  check "[ \"\$(getfattr --absolute-names -n security.selinux --only-values $sample | tr -d '\0')\" = \"\$(getfattr --absolute-names -n security.selinux --only-values $S/$rel | tr -d '\0')\" ]" "$rel keeps its label"
 else
   ok "base carries no labels, nothing to preserve"
 fi
