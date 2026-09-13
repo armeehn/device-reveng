@@ -62,6 +62,15 @@ the served suite; `APPS/bootanimation.zip` optional. Version is `0.1+<date>.vc<l
   `ro.control_privapp_permissions=enforce`: a priv-app requesting an unlisted
   privileged permission stops the boot, so every requested permission is listed.
 
+## The car owner (0.2)
+
+`launcher/carlib` `McuOwner` is our process on `/dev/ttyHS1`: `McuLink` (toybox `stty` at
+115200 + file streams, no native code) → `McuSerial.Reader` → `McuOwnerProtocol` (the vendor's
+startup handshake, SYS_EVENT/volume/key decode, power-off) → listener + `CanSignal` for the
+`0xA5` relay. It refuses to start while `com.szchoiceway.eventcenter` is installed or
+`ro.riposte.os.car_owner` is not `1`, because two readers on one tty split the stream. There is
+no keepalive to send: the MCU never times out, and ACC comes from `sys.gotoSleep.state`.
+
 ## What the desk cannot prove
 
 The fixture proves the pipeline, not the phone. Boot, reverse camera, wheel keys,
