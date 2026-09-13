@@ -147,8 +147,20 @@ class CarService(private val appContext: Context) {
         override fun checkIsActive(): Boolean = true
     }
 
+    /** Riposte OS 0.2: our own port owner. While set, commands go to it and the binder is never bound. */
+    @Volatile
+    private var owner: McuOwner? = null
+
+    fun attachOwner(mcuOwner: McuOwner) {
+        owner = mcuOwner
+        _connected.value = true
+    }
+
     /** Bind the service. Idempotent-ish; returns false if the bind request was rejected. */
     fun bind(): Boolean {
+        if (owner != null) {
+            return true
+        }
         val intent = Intent(BIND_ACTION).apply { setPackage(BIND_PACKAGE) }
         return try {
             // 4-arg overload: callbacks land on [connectionExecutor] instead of the main thread.
@@ -167,6 +179,7 @@ class CarService(private val appContext: Context) {
     }
 
     fun unbind() {
+        owner?.let { it.stop(); owner = null; _connected.value = false; return }
         runCatching { appContext.unbindService(connection) }
         service = null
         _connected.value = false
@@ -206,9 +219,15 @@ class CarService(private val appContext: Context) {
     /** Vendor factory reset (sendFactorySet, ordinal 76). ⚠ Destructive — confirm before calling. */
     fun factoryReset() { call { sendFactorySet() } }
 
-    fun sendMode(mode: Int, flag: Boolean) { call { sendMode(mode, flag) } }
+    fun sendMode(mode: Int, flag: Boolean) {
+        owner?.let { o -> McuOwnerProtocol.Mode.entries.firstOrNull { it.code == mode }?.let { o.setMode(it) }; return }
+        call { sendMode(mode, flag) }
+    }
     fun sendWheelKey(key: Int) { call { sendWheelKey(key) } }
-    fun setMute(mute: Boolean) { call { sendMuteState(mute) } }
+    fun setMute(mute: Boolean) {
+        owner?.let { it.send(McuOwnerProtocol.mute(mute)); return }
+        call { sendMuteState(mute) }
+    }
 
     // ---- v0.6: volume set (QuickControls) ----------------------------------
     /**
@@ -224,6 +243,7 @@ class CarService(private val appContext: Context) {
      */
     fun setVolume(level: Int) {
         val clamped = level.coerceIn(0, MAX_VOLUME)
+        owner?.let { it.send(McuOwnerProtocol.mainVolume(clamped)); return }
         // sendVolState carries the mute flag too, so we must preserve the real mute state.
         // A failed/errored IsMuteOn() read must NOT be coerced to `false` — that would silently
         // unmute the car as a side effect of a volume change. Bail if the state is unknown.
@@ -232,14 +252,20 @@ class CarService(private val appContext: Context) {
     }
 
     // ---- Radio control (CAR_API §3.2). All guarded. ---------------------------
-    fun sendRadioKey(key: Int) { call { sendRadioKey(key) } }
+    fun sendRadioKey(key: Int) {
+        owner?.let { it.send(McuOwnerProtocol.radioKey(key)); return }
+        call { sendRadioKey(key) }
+    }
 
     /**
      * Tune to an absolute frequency in the units getRadioFreq() reports. [fm] is the band
      * class: the gateway packs the call as MCU frame {0x0C, hi, lo, fm ? 0 : 1}, so an AM
      * value sent with [fm] = true lands in the FM band at whatever that number means there.
      */
-    fun sendUserFreq(freq: Int, fm: Boolean) { call { sendUserFreq(freq, fm) } }
+    fun sendUserFreq(freq: Int, fm: Boolean) {
+        owner?.let { it.send(McuOwnerProtocol.userFreq(freq, fm)); return }
+        call { sendUserFreq(freq, fm) }
+    }
 
     fun radioSelectFm() = sendRadioKey(RADIO_KEY_BAND_FM)
     fun radioSelectAm() = sendRadioKey(RADIO_KEY_BAND_AM)
