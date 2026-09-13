@@ -19,10 +19,10 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 . "$HERE/lib.sh"
 
 readonly LAUNCHER_PKG=com.ripostelabs.carlauncher
-readonly LAUNCHER_DIR=system/priv-app
+readonly LAUNCHER_DIR=priv-app                 # under the system root, see system_root()
 readonly LAUNCHER_NAME=CarLauncher
 readonly SUITE_DIR=product/app
-readonly PRIVAPP_XML=system/etc/permissions/privapp-permissions-ripostelabs.xml
+readonly PRIVAPP_XML=etc/permissions/privapp-permissions-ripostelabs.xml
 readonly BOOTANIM=product/media/bootanimation.zip   # bootanimation looks in /product before /system
 readonly PASSTHROUGH="vendor boot dtbo vbmeta vbmeta_system"
 readonly EDITED="system product"
@@ -89,6 +89,8 @@ for part in $EDITED; do
   KIND[$part]=$(unpack_image "$WORK/$part.raw" "$WORK/tree/$part")
   log "unpacked $part (${KIND[$part]})"
 done
+SYS=$(system_root "$WORK/tree/system")
+log "system root: ${SYS#"$WORK"/tree/}"
 
 # ---- 2. remove ----------------------------------------------------------------
 if [ "$PROFILE" = gsi ]; then
@@ -115,7 +117,7 @@ fi
 
 # ---- 3. add apps ---------------------------------------------------------------
 [ "$(apk_package "$APPS/carlauncher.apk")" = "$LAUNCHER_PKG" ] || die "carlauncher.apk is not $LAUNCHER_PKG"
-install_apk "$WORK/tree" "$LAUNCHER_DIR" "$LAUNCHER_NAME" "$APPS/carlauncher.apk"
+install_apk "$SYS" "$LAUNCHER_DIR" "$LAUNCHER_NAME" "$APPS/carlauncher.apk"
 SUITE_N=0
 for apk in "$APPS"/suite/*.apk; do
   [ -f "$apk" ] || continue
@@ -135,7 +137,7 @@ fi
 # ro.control_privapp_permissions=enforce: a priv-app requesting a privileged
 # permission missing here stops the boot. Every requested permission goes in;
 # entries for non-privileged ones are ignored by the framework.
-mkdir -p "$WORK/tree/$(dirname "$PRIVAPP_XML")"
+mkdir -p "$SYS/$(dirname "$PRIVAPP_XML")"
 {
   echo '<?xml version="1.0" encoding="utf-8"?>'
   echo "<permissions>"
@@ -144,19 +146,24 @@ mkdir -p "$WORK/tree/$(dirname "$PRIVAPP_XML")"
     | sed -n "s/^uses-permission: name='\([^']*\)'.*/        <permission name=\"\1\"\/>/p"
   echo "    </privapp-permissions>"
   echo "</permissions>"
-} > "$WORK/tree/$PRIVAPP_XML"
-label_system_file "$WORK/tree/$PRIVAPP_XML"
+} > "$SYS/$PRIVAPP_XML"
+label_system_file "$SYS/$PRIVAPP_XML"
 
 # ---- 5. static overlay + props -------------------------------------------------
+# overlay/system/... lands under the system root, overlay/product/... under product.
 (cd "$HERE/overlay" && find . -type f -path './system/*' -o -type f -path './product/*' | sed 's|^\./||') | while read -r f; do
-  mkdir -p "$WORK/tree/$(dirname "$f")"
-  cp "$HERE/overlay/$f" "$WORK/tree/$f"
-  label_system_file "$WORK/tree/$f"
-  case "$f" in system/bin/*) chmod 0755 "$WORK/tree/$f" ;; esac
+  case "$f" in
+    system/*) dst="$SYS/${f#system/}" ;;
+    *) dst="$WORK/tree/$f" ;;
+  esac
+  mkdir -p "$(dirname "$dst")"
+  cp "$HERE/overlay/$f" "$dst"
+  label_system_file "$dst"
+  case "$f" in system/bin/*) chmod 0755 "$dst" ;; esac
 done
 MILESTONE=$([ "$PROFILE" = gsi ] && echo 0.2 || echo 0.1)   # 0.1 stock re-mastered, 0.2 GSI base
 VERSION=${VERSION:-$MILESTONE+$(date -u +%Y%m%d).vc$("$AAPT2" dump badging "$APPS/carlauncher.apk" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p")}
-RIPOSTE_OS_VERSION=$VERSION RIPOSTE_CAR_OWNER=$CAR_OWNER envsubst < "$HERE/overlay/props" >> "$WORK/tree/system/build.prop"
+RIPOSTE_OS_VERSION=$VERSION RIPOSTE_CAR_OWNER=$CAR_OWNER envsubst < "$HERE/overlay/props" >> "$SYS/build.prop"
 log "version $VERSION"
 
 # ---- 6. repack + passthrough ---------------------------------------------------
