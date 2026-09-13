@@ -38,6 +38,7 @@ import com.ripostelabs.carlauncher.service.CanCaptureService
 import com.ripostelabs.carlauncher.carlib.AndroidOwnerGate
 import com.ripostelabs.carlauncher.carlib.CarService
 import com.ripostelabs.carlauncher.carlib.McuOwner
+import com.ripostelabs.carlauncher.carlib.SlcanLinkSource
 import com.ripostelabs.carlauncher.carlib.GatewayHandshake // v3.0
 import com.ripostelabs.carlauncher.carlib.SysVar // v0.4.9 vendor hidden-apps list
 import com.ripostelabs.carlauncher.carlib.VendorBtService
@@ -130,6 +131,9 @@ class MainActivity : ComponentActivity() {
 
     /** Riposte OS 0.2 only: our MCU port owner. Null on a stock or 0.1 slot. */
     private var mcuOwner: McuOwner? = null
+
+    /** Riposte OS 0.2 on a rig with a raw-bus carrier (`riposte.canbus.link`); null otherwise. */
+    private var busSource: SlcanLinkSource? = null
 
     /** Riposte OS 0.2 only: whether CAMERA is granted, so the reverse screen can say why not. */
     private var cameraGranted by mutableStateOf(false)
@@ -234,9 +238,20 @@ class MainActivity : ComponentActivity() {
         carService = CarService(applicationContext)
         val ownerGate = AndroidOwnerGate(applicationContext)
         if (ownerGate.ownerEnabled() && !ownerGate.eventcenterPresent()) {
-            mcuOwner = McuOwner(ownerGate, carEvents.ownerListener(CanCaptureService.vehicle())).also {
+            // The carrier comes from `riposte.mcu.link`: the vendor UART on the car, a QEMU
+            // virtio port or a socket on the emulator farm, where carsim plays the vehicle.
+            mcuOwner = McuOwner(
+                ownerGate,
+                carEvents.ownerListener(CanCaptureService.vehicle()),
+                openLink = { ownerGate.mcuLink().open() },
+            ).also {
                 carService.attachOwner(it)
                 it.start()
+            }
+            // The raw body bus on a second carrier (`riposte.canbus.link`), when the rig has one.
+            // The car has none: its bus arrives over USB through CanCaptureService.
+            busSource = ownerGate.canbusLink()?.let { spec ->
+                SlcanLinkSource({ spec.open() }, CanCaptureService.vehicle()).also { it.start() }
             }
         }
         carService.bind()
@@ -1115,6 +1130,10 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         super.onDestroy()
         keyPump.cancel() // v2.8: drop any held key and its repeat timer
+        // Release the carriers: a virtio port admits one opener, so a recreated activity that
+        // found the old one still open would report "Device or resource busy" as a silent MCU.
+        busSource?.stop()
+        mcuOwner?.stop()
         gatewayHandshake.unregister() // v3.0
         carEvents.unregister()
         carService.unbind()
