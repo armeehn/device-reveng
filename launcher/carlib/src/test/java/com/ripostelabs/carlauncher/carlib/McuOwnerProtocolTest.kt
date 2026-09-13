@@ -126,4 +126,39 @@ class McuOwnerProtocolTest {
         assertEquals(McuOwnerProtocol.Key.POWER, McuOwnerProtocol.key(command(0x72, 0x01, 0x00)))
         assertNull(McuOwnerProtocol.key(command(0x71, 0x01)))
     }
+
+    /** LEN 03 + 0B + 00 = 0x0E, ~0x0E = 0xF1: what ACC off sends before the port closes. */
+    @Test
+    fun btStateZeroFrame() {
+        assertArrayEquals(bytes(0x0D, 0x0A, 0x03, 0x0B, 0x00, 0xF1, 0x00), McuOwnerProtocol.btState(McuOwnerProtocol.BT_DISCONNECTED))
+    }
+
+    /** reloadParam's modes and backlight, then POWERON, MCU_VERSION and the resumed mode again. */
+    @Test
+    fun reloadIsModesBacklightModesThenLastMode() {
+        val frames = McuOwnerProtocol.reload(McuOwnerProtocol.StartupConfig(), McuOwnerProtocol.Mode.MUSIC)
+
+        assertEquals(6, frames.size)
+        assertArrayEquals(McuOwnerProtocol.mode(McuOwnerProtocol.Mode.POWER_ON), frames[0])
+        assertArrayEquals(McuOwnerProtocol.mode(McuOwnerProtocol.Mode.MCU_VERSION), frames[1])
+        assertArrayEquals(McuOwnerProtocol.backlight(100, 60), frames[2])
+        assertArrayEquals(McuOwnerProtocol.mode(McuOwnerProtocol.Mode.POWER_ON), frames[3])
+        assertArrayEquals(McuOwnerProtocol.mode(McuOwnerProtocol.Mode.MCU_VERSION), frames[4])
+        assertArrayEquals(bytes(0x0D, 0x0A, 0x03, 0x01, 0x0B, 0xF0, 0x00), frames[5])
+    }
+
+    @Test
+    fun reloadWithoutAModeResumesNone() {
+        val frames = McuOwnerProtocol.reload(McuOwnerProtocol.StartupConfig(), null)
+
+        assertArrayEquals(McuOwnerProtocol.mode(McuOwnerProtocol.Mode.NONE), frames.last())
+    }
+
+    @Test
+    fun wakeIsSleepStateOne() {
+        assertTrue(McuOwnerProtocol.isWake(command(0x96, 0x01)))
+        assertFalse(McuOwnerProtocol.isWake(command(0x96, 0x00)))
+        assertFalse(McuOwnerProtocol.isWake(command(0x96)))
+        assertFalse(McuOwnerProtocol.isWake(command(0x70, 0x01)))
+    }
 }

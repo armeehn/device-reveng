@@ -62,12 +62,14 @@ class McuOwnerTest {
         val keys = CopyOnWriteArrayList<Int>()
         val signals = CopyOnWriteArrayList<CanSignal>()
         val other = CopyOnWriteArrayList<McuSerial.Command>()
+        val wakes = CopyOnWriteArrayList<Long>()
 
         override fun onSysEvent(event: McuOwnerProtocol.SysEvent) { sys.add(event) }
         override fun onMainVolume(volume: McuOwnerProtocol.MainVolume) { this.volume.add(volume) }
         override fun onKey(key: Int) { keys.add(key) }
         override fun onCanSignal(signal: CanSignal, atMs: Long) { signals.add(signal) }
         override fun onOther(command: McuSerial.Command) { other.add(command) }
+        override fun onWake() { wakes.add(System.currentTimeMillis()) }
     }
 
     private fun owner(link: FakeLink, gate: Gate = Gate(eventcenter = false, enabled = true), recorder: Recorder = Recorder()) =
@@ -175,5 +177,38 @@ class McuOwnerTest {
         val failed = waitFor("failed") { owner.status.value as? McuOwner.Status.Failed }
         assertNotNull(failed)
         assertEquals("link closed", failed.reason)
+    }
+
+    /** `96 01` reaches onWake; `96 00` is nothing the vendor acts on and lands in onOther. */
+    @Test
+    fun sleepStateOneDispatchesOnWake() {
+        val link = FakeLink(ackNull = true)
+        val recorder = Recorder()
+        val owner = owner(link, recorder = recorder)
+        owner.start()
+        waitFor("running") { owner.status.value as? McuOwner.Status.Running }
+
+        link.feed(McuSerial.encode(McuOpcode.SLEEP_STATE.code, bytes(0x01)))
+        link.feed(McuSerial.encode(McuOpcode.SLEEP_STATE.code, bytes(0x00)))
+
+        waitFor("both frames") { (owner.status.value as? McuOwner.Status.Running)?.takeIf { it.frames == 3L } }
+        owner.stop()
+
+        assertEquals(1, recorder.wakes.size)
+        assertEquals(McuOpcode.SLEEP_STATE.code, recorder.other[0].opcode)
+    }
+
+    /** setMode remembers its argument so a wake can resume it. */
+    @Test
+    fun setModeIsRemembered() {
+        val link = FakeLink(ackNull = true)
+        val owner = owner(link)
+        owner.start()
+        waitFor("running") { owner.status.value as? McuOwner.Status.Running }
+
+        owner.setMode(McuOwnerProtocol.Mode.RADIO)
+        owner.stop()
+
+        assertEquals(McuOwnerProtocol.Mode.RADIO, owner.lastMode)
     }
 }

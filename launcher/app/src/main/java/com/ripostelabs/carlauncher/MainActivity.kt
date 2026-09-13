@@ -35,9 +35,11 @@ import com.ripostelabs.carlauncher.data.AccessoryRuntime
 import com.ripostelabs.carlauncher.carlib.RootShell
 import com.ripostelabs.carlauncher.input.WheelGamepad
 import com.ripostelabs.carlauncher.service.CanCaptureService
+import com.ripostelabs.carlauncher.carlib.AndroidAccSource
 import com.ripostelabs.carlauncher.carlib.AndroidOwnerGate
 import com.ripostelabs.carlauncher.carlib.CarService
 import com.ripostelabs.carlauncher.carlib.McuOwner
+import com.ripostelabs.carlauncher.carlib.McuSleepWake
 import com.ripostelabs.carlauncher.carlib.VendorBroadcastReemitter
 import com.ripostelabs.carlauncher.carlib.GatewayHandshake // v3.0
 import com.ripostelabs.carlauncher.carlib.SysVar // v0.4.9 vendor hidden-apps list
@@ -131,6 +133,9 @@ class MainActivity : ComponentActivity() {
 
     /** Riposte OS 0.2 only: our MCU port owner. Null on a stock or 0.1 slot. */
     private var mcuOwner: McuOwner? = null
+
+    /** Riposte OS 0.2 only: ACC sleep and wake for [mcuOwner], polled like the vendor's AccObserver. */
+    private var mcuSleepWake: McuSleepWake? = null
 
     /** Riposte OS 0.2 only: whether CAMERA is granted, so the reverse screen can say why not. */
     private var cameraGranted by mutableStateOf(false)
@@ -243,6 +248,7 @@ class MainActivity : ComponentActivity() {
             mcuOwner = McuOwner(ownerGate, ownerListener).also {
                 carService.attachOwner(it)
                 it.start()
+                mcuSleepWake = McuSleepWake.forOwner(it, AndroidAccSource()).also { sw -> sw.start() }
             }
         }
         carService.bind()
@@ -1123,6 +1129,7 @@ class MainActivity : ComponentActivity() {
         keyPump.cancel() // v2.8: drop any held key and its repeat timer
         gatewayHandshake.unregister() // v3.0
         carEvents.unregister()
+        mcuSleepWake?.stop()
         carService.unbind()
         vendorBtService.unbind()
         nowPlaying.stop()
