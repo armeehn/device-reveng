@@ -126,4 +126,76 @@ class McuOwnerProtocolTest {
         assertEquals(McuOwnerProtocol.Key.POWER, McuOwnerProtocol.key(command(0x72, 0x01, 0x00)))
         assertNull(McuOwnerProtocol.key(command(0x71, 0x01)))
     }
+
+    // ---- 72 / 74 keys ------------------------------------------------------------------------
+
+    /** LEN 04 + 72 + 01 + 00 = 0x77, ~0x77 = 0x88: the panel POWER key as the reader frames it. */
+    @Test
+    fun panelKeyFromHandSummedFrame() {
+        val events = McuSerial.Reader().feed(bytes(0x0D, 0x0A, 0x04, 0x72, 0x01, 0x00, 0x88, 0x00))
+
+        val command = events.single() as McuSerial.Command
+        assertEquals(McuOwnerProtocol.PanelKey(McuOwnerProtocol.Key.POWER, 0), McuOwnerProtocol.panelKey(command))
+    }
+
+    /** A custom panel key carries its press state in byte 2 (onMcuToPanelCustomKey). */
+    @Test
+    fun panelKeyKeepsByteTwoAsStatus() {
+        assertEquals(McuOwnerProtocol.PanelKey(164, 1), McuOwnerProtocol.panelKey(command(0x72, 0xA4, 0x01)))
+        assertEquals(McuOwnerProtocol.PanelKey(McuOwnerProtocol.Key.NEXT, 0), McuOwnerProtocol.panelKey(command(0x72, 0x02)))
+        assertNull(McuOwnerProtocol.panelKey(command(0x72)))
+        assertNull(McuOwnerProtocol.panelKey(command(0x74, 0x02, 0x01)))
+    }
+
+    /** LEN 06 + 74 + 02 + 01 + 00 + 5A = 0xD7, ~0xD7 = 0x28: slot 2 pressed at 90 (0x5A). */
+    @Test
+    fun wheelKeyFromHandSummedFrame() {
+        val events = McuSerial.Reader().feed(bytes(0x0D, 0x0A, 0x06, 0x74, 0x02, 0x01, 0x00, 0x5A, 0x28, 0x00))
+
+        val command = events.single() as McuSerial.Command
+        assertEquals(McuOwnerProtocol.WheelKey(slot = 2, down = true, voltage = 0x5A), McuOwnerProtocol.wheelKey(command))
+    }
+
+    /** Byte 2 zero is the release (WPARAM 4); any other value is the press (WPARAM 3). */
+    @Test
+    fun wheelKeyStateAndBounds() {
+        assertEquals(McuOwnerProtocol.WheelKey(0, down = false, voltage = 0), McuOwnerProtocol.wheelKey(command(0x74, 0x00, 0x00)))
+        assertEquals(McuOwnerProtocol.WheelKey(9, down = true, voltage = 0xFF), McuOwnerProtocol.wheelKey(command(0x74, 0x09, 0x7F, 0x00, 0xFF)))
+        // Slot 10 and the sign-passing 0xFF the vendor lets through are both refused.
+        assertNull(McuOwnerProtocol.wheelKey(command(0x74, 0x0A, 0x01, 0x00, 0x10)))
+        assertNull(McuOwnerProtocol.wheelKey(command(0x74, 0xFF, 0x01, 0x00, 0x10)))
+        assertNull(McuOwnerProtocol.wheelKey(command(0x74, 0x01)))
+        assertNull(McuOwnerProtocol.wheelKey(command(0x72, 0x01, 0x01)))
+    }
+
+    /** `08 xx`: LEN 03 + 08 + 00 = 0x0B → F4; + 01 = 0x0C → F3; + 0C = 0x17 → E8. */
+    @Test
+    fun systemKeyFrames() {
+        assertArrayEquals(bytes(0x0D, 0x0A, 0x03, 0x08, 0x00, 0xF4, 0x00), McuOwnerProtocol.systemKey(McuOwnerProtocol.SystemKey.VOLUME_UP))
+        assertArrayEquals(bytes(0x0D, 0x0A, 0x03, 0x08, 0x01, 0xF3, 0x00), McuOwnerProtocol.systemKey(McuOwnerProtocol.SystemKey.VOLUME_DOWN))
+        assertArrayEquals(bytes(0x0D, 0x0A, 0x03, 0x08, 0x0C, 0xE8, 0x00), McuOwnerProtocol.systemKey(McuOwnerProtocol.SystemKey.MUTE))
+    }
+
+    /** onCmdKeyEvent cases 17/18/19 → sendSystemKey(12/0/1); nothing else is echoed. */
+    @Test
+    fun onlyVolumeAndMuteAreEchoed() {
+        assertEquals(McuOwnerProtocol.SystemKey.VOLUME_UP, McuOwnerProtocol.panelSystemKey(McuOwnerProtocol.Key.VOLUME_UP))
+        assertEquals(McuOwnerProtocol.SystemKey.VOLUME_DOWN, McuOwnerProtocol.panelSystemKey(McuOwnerProtocol.Key.VOLUME_DOWN))
+        assertEquals(McuOwnerProtocol.SystemKey.MUTE, McuOwnerProtocol.panelSystemKey(McuOwnerProtocol.Key.MUTE))
+        assertNull(McuOwnerProtocol.panelSystemKey(McuOwnerProtocol.Key.POWER))
+        assertNull(McuOwnerProtocol.panelSystemKey(McuOwnerProtocol.Key.NEXT))
+        assertNull(McuOwnerProtocol.panelSystemKey(0xEE))
+    }
+
+    /** The reverse-camera allow list (onCmdKeyEvent, :2406): audio and track keys pass, the rest wait. */
+    @Test
+    fun reverseKeepsAudioAndTrackKeysOnly() {
+        assertTrue(McuOwnerProtocol.panelKeyPassesReverse(McuOwnerProtocol.Key.VOLUME_UP))
+        assertTrue(McuOwnerProtocol.panelKeyPassesReverse(McuOwnerProtocol.Key.MUTE))
+        assertTrue(McuOwnerProtocol.panelKeyPassesReverse(McuOwnerProtocol.Key.NEXT))
+        assertTrue(McuOwnerProtocol.panelKeyPassesReverse(McuOwnerProtocol.Key.PREV))
+        assertFalse(McuOwnerProtocol.panelKeyPassesReverse(McuOwnerProtocol.Key.POWER))
+        assertFalse(McuOwnerProtocol.panelKeyPassesReverse(McuOwnerProtocol.Key.MENU))
+        assertFalse(McuOwnerProtocol.panelKeyPassesReverse(McuOwnerProtocol.Key.MODE))
+    }
 }

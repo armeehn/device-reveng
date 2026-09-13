@@ -33,6 +33,7 @@ object McuOwnerProtocol {
     private const val OP_MODE = 0x01          // sendMode, EventService.java:3933
     private const val OP_RADIO_KEY = 0x02     // sendRadioKey, :3958
     private const val OP_SETUP = 0x05         // sendSetup, :6389; index 05 = main volume, :4384
+    private const val OP_SYSTEM_KEY = 0x08    // sendSystemKey, :4263-4268: the VOL/MUTE key echo
     private const val OP_MUTE = 0x0A          // sendMuteState, :4319
     private const val OP_USER_FREQ = 0x0C     // sendUserFreq, :4300
     private const val OP_RTC = 0x13           // sendRTCTimer, :9469
@@ -204,22 +205,118 @@ object McuOwnerProtocol {
     }
 
     /** `72` KEY_EVENT: the panel key code (onCmdKeyEvent, EventService.java:2401; codes in EventUtils.java:1470-1651). */
-    fun key(command: McuSerial.Command): Int? {
+    fun key(command: McuSerial.Command): Int? = panelKey(command)?.code
+
+    // ── Keys ─────────────────────────────────────────────────────────────────────────────────────
+    //
+    //     72 code status        panel / encoder key, one frame per press (onCmdKeyEvent, :2401)
+    //     74 slot state ? volt  resistive wheel, learned slot with press state (onCmdWheelEvent, :2847)
+    //
+    // What eventcenter did with a `72` besides the MCU_KEY_INFOR broadcast is transcribed in
+    // [panelSystemKey] and [panelKeyPassesReverse]; the RAV4's CAN wheel is not here, it arrives
+    // under 0xA5 as a frame-0x11 relay and goes to [WheelGestures].
+
+    /**
+     * Panel key codes (`EventUtils.MCU_KEY_*`, EventUtils.java:1470-1651). The launcher maps the
+     * ones with a `CAR_KEY_*` twin through [SwcFallback.mcuKey]; the rest are surfaced as-is.
+     */
+    object Key {
+        const val POWER = 0x01        // MCU_KEY_POWER, :1580
+        const val NEXT = 0x02         // MCU_KEY_NEXT, :1539
+        const val PREV = 0x03         // MCU_KEY_PREV, :1582
+        const val PLAY = 0x04         // MCU_KEY_PLAY, :1578
+        const val STOP = 0x05         // MCU_KEY_STOP, :1615
+        const val PLAY_PAUSE = 0x06   // MCU_KEY_PLAYPAUSE, :1579
+        const val MENU = 0x09         // MCU_KEY_MENU, :1531: the vendor's HOME
+        const val MODE = 0x10         // MCU_KEY_MODE, :1533
+        const val MUTE = 0x11         // MCU_KEY_MUTE, :1537
+        const val VOLUME_UP = 0x12    // MCU_KEY_VOL_ADD, :1634
+        const val VOLUME_DOWN = 0x13  // MCU_KEY_VOL_SUB, :1636
+        const val SETUP = 0x14        // MCU_KEY_SETUP, :1608
+        const val HANGUP = 0x16       // MCU_KEY_HANGUP, :1518
+        const val TALK = 0x17         // MCU_KEY_TALK, :1622
+        const val EQ = 0x33           // MCU_KEY_EQ, :1508
+        const val RADIO = 0x36        // MCU_KEY_RADIO, :1588
+        const val RETURN = 0x55       // MCU_KEY_RETURN, :1598: the vendor's BACK
+        const val TASK_LIST = 0x71    // MCU_KEY_TASK_LIST, :1623
+        const val VOICE = 0x74        // MCU_KEY_SHENGKONG, :1609
+    }
+
+    /**
+     * One `72` frame. [status] is byte 2: the press state of a custom panel/wheel key
+     * (codes 141-155 and 164-178, `onMcuToPanelCustomKey`), unused for the fixed codes. Those
+     * carry no edge at all: one frame is one complete press.
+     */
+    data class PanelKey(val code: Int, val status: Int)
+
+    /**
+     * One `74` frame: the resistive wheel's learned [slot] (0..9), [down] from byte 2 (non-zero
+     * = pressed, the vendor's WPARAM 3/4) and the [voltage] the MCU measured (byte 4). The
+     * broadcast form is LPARAM = slot + 1 (onCmdWheelEvent, EventService.java:2847-2859).
+     */
+    data class WheelKey(val slot: Int, val down: Boolean, val voltage: Int)
+
+    /** What `sendSystemKey` (EventService.java:4224-4268) writes as `08 xx` when no amp routing is configured. */
+    enum class SystemKey(val code: Int) {
+        VOLUME_UP(0),
+        VOLUME_DOWN(1),
+        MUTE(12),
+    }
+
+    /** The vendor takes `bArr[1] <= 9`, signed; this refuses the bytes that pass only by sign. */
+    private const val WHEEL_SLOT_MAX = 9
+    private const val WHEEL_MIN_PAYLOAD = 2
+    private const val WHEEL_VOLTAGE_INDEX = 3
+
+    /**
+     * Keys eventcenter still acts on while the reverse camera is up; every other `72` is dropped
+     * for the duration (onCmdKeyEvent, EventService.java:2406). 25/26, 80, 58 and 160-163 are
+     * encoder and socket relays this launcher does not act on but must not swallow either.
+     */
+    private val REVERSE_SAFE_KEYS = setOf(
+        Key.VOLUME_DOWN, Key.VOLUME_UP, Key.MUTE, Key.PREV, Key.NEXT,
+        25, 26, 80, 58, 160, 161, 162, 163,
+    )
+
+    fun panelKey(command: McuSerial.Command): PanelKey? {
         if (command.opcode != McuOpcode.KEY_EVENT.code || command.payload.isEmpty()) {
             return null
         }
 
-        return command.payload[0].toInt() and BYTE
+        val status = command.payload.getOrNull(1)?.toInt() ?: 0
+        return PanelKey(code = command.payload[0].toInt() and BYTE, status = status and BYTE)
     }
 
-    /** Panel key codes this launcher acts on (EventUtils.java:1470-1651). */
-    object Key {
-        const val POWER = 0x01
-        const val MODE = 0x10
-        const val MUTE = 0x11
-        const val VOLUME_UP = 0x12
-        const val VOLUME_DOWN = 0x13
+    fun wheelKey(command: McuSerial.Command): WheelKey? {
+        if (command.opcode != McuOpcode.WHEEL_EVENT.code || command.payload.size < WHEEL_MIN_PAYLOAD) {
+            return null
+        }
+
+        val slot = command.payload[0].toInt() and BYTE
+        if (slot > WHEEL_SLOT_MAX) {
+            return null
+        }
+
+        // The vendor reads bArr[4] unconditionally; a short frame is taken as "no reading".
+        val voltage = command.payload.getOrNull(WHEEL_VOLTAGE_INDEX)?.toInt() ?: 0
+        return WheelKey(
+            slot = slot,
+            down = command.payload[1].toInt() != 0,
+            voltage = voltage and BYTE,
+        )
     }
+
+    fun systemKey(key: SystemKey): ByteArray = McuSerial.encode(OP_SYSTEM_KEY, bytes(key.code))
+
+    /** The `08` echo eventcenter sends for a volume or mute panel key (onCmdKeyEvent cases 17-19, :2547-2555). */
+    fun panelSystemKey(code: Int): SystemKey? = when (code) {
+        Key.VOLUME_UP -> SystemKey.VOLUME_UP
+        Key.VOLUME_DOWN -> SystemKey.VOLUME_DOWN
+        Key.MUTE -> SystemKey.MUTE
+        else -> null
+    }
+
+    fun panelKeyPassesReverse(code: Int): Boolean = code in REVERSE_SAFE_KEYS
 
     private fun bytes(vararg v: Int) = ByteArray(v.size) { (v[it] and BYTE).toByte() }
 }
