@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.asStateFlow
  *
  * ── Where this sits ─────────────────────────────────────────────────────────────────────────────
  *
- *     MCU ◀──/dev/ttyHS1──▶ McuLink ──▶ McuSerial.Reader ──▶ Command ──┬─▶ Listener (sys/volume/key)
+ *     MCU ◀──/dev/ttyHS1──▶ McuLink ──▶ McuSerial.Reader ──▶ Command ──┬─▶ Listener (sys/volume/key/radio)
  *                                                                    └─▶ 0xA5: HiworldCanDecoder ──▶ CanSignal
  *
  * This is the portability layer of Riposte OS: the launcher and the suite consume [Listener] and
@@ -57,6 +57,9 @@ class McuOwner(
         fun onMute(mute: McuOwnerProtocol.Mute) {}
 
         fun onKey(key: Int) {}
+
+        /** One `73` RADIO_EVENT; [RadioStateHolder] folds them into what the tuner screen reads. */
+        fun onRadio(event: McuOwnerProtocol.RadioEvent) {}
 
         fun onCanSignal(signal: CanSignal, atMs: Long) {}
 
@@ -225,6 +228,7 @@ class McuOwner(
         McuOwnerProtocol.mainVolume(command)?.let { listener.onMainVolume(it); return }
         McuOwnerProtocol.mute(command)?.let { listener.onMute(it); return }
         McuOwnerProtocol.key(command)?.let { listener.onKey(it); return }
+        McuOwnerProtocol.radioEvent(command)?.let { listener.onRadio(it); return }
 
         // 0xA5 relays the CAN box's own frame; the decoder keys on the box's cmd, not the relay opcode.
         when (val inner = command.innerFrame()) {

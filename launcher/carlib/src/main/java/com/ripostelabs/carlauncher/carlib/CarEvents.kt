@@ -1059,9 +1059,10 @@ class CarEvents(private val appContext: Context) {
     /**
      * Riposte OS 0.2: the same state, fed by our own port owner instead of eventcenter's
      * broadcasts. Reverse, ACC and headlamps come from the `71` SYS_EVENT bits, volume and mute
-     * from `79`/`78`; the CAN relay goes to [vehicle]. Nothing else in the launcher changes.
+     * from `79`/`78`; the CAN relay goes to [vehicle] and the `73` tuner events to [radio].
+     * Nothing else in the launcher changes.
      */
-    fun ownerListener(vehicle: VehicleState?): McuOwner.Listener = object : McuOwner.Listener {
+    fun ownerListener(vehicle: VehicleState?, radio: RadioStateHolder? = null): McuOwner.Listener = object : McuOwner.Listener {
         override fun onSysEvent(event: McuOwnerProtocol.SysEvent) {
             updateReverse(event.reverse)
             if (_accOn.value != event.accLine) {
@@ -1087,6 +1088,10 @@ class CarEvents(private val appContext: Context) {
                 showWindow = !mute.silent,
                 atMs = System.currentTimeMillis(),
             )
+        }
+
+        override fun onRadio(event: McuOwnerProtocol.RadioEvent) {
+            radio?.onRadio(event)
         }
 
         override fun onCanSignal(signal: CanSignal, atMs: Long) {

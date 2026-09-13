@@ -234,7 +234,7 @@ class MainActivity : ComponentActivity() {
         carService = CarService(applicationContext)
         val ownerGate = AndroidOwnerGate(applicationContext)
         if (ownerGate.ownerEnabled() && !ownerGate.eventcenterPresent()) {
-            mcuOwner = McuOwner(ownerGate, carEvents.ownerListener(CanCaptureService.vehicle())).also {
+            mcuOwner = McuOwner(ownerGate, carEvents.ownerListener(CanCaptureService.vehicle(), carService.radioState)).also {
                 carService.attachOwner(it)
                 it.start()
             }
