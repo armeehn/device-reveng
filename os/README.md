@@ -84,6 +84,11 @@ startup handshake, SYS_EVENT/volume/key decode, power-off) → listener + `CanSi
 `ro.riposte.os.car_owner` is not `1`, because two readers on one tty split the stream. There is
 no keepalive to send: the MCU never times out, and ACC comes from `sys.gotoSleep.state`.
 
+## The session at the car
+
+`ACCEPTANCE.md`: the ordered step list for RAV4-82/83/84 with expected outcomes and the undo
+at each step.
+
 ## What the desk cannot prove
 
 The fixture proves the pipeline, not the phone. Boot, reverse camera, wheel keys,
