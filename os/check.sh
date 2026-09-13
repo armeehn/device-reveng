@@ -144,7 +144,7 @@ else
 fi
 
 echo "passthrough"
-for part in vendor boot dtbo vbmeta vbmeta_system; do
+for part in vendor system_ext boot dtbo vbmeta vbmeta_system; do
   [ -f "$BASE/$part.img" ] || continue
   check "cmp -s $BASE/$part.img $OUT/$part.img" "$part.img copied verbatim"
 done
