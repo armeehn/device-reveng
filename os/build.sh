@@ -4,8 +4,11 @@
 #   base/{system,product}.img ──unpack──► trees ──overlay──► trees ──repack──► out/{system,product}.img
 #   base/{vendor,boot,dtbo,vbmeta*}.img ─────────────────── copied verbatim ──► out/
 #
-# Usage: build.sh --base DIR --apps DIR --out DIR [--profile tier1|tier2] [--version V] [--car-owner]
+# Usage: build.sh --base DIR --apps DIR --out DIR [--profile tier1|tier2|gsi] [--system IMG]
+#                 [--version V] [--car-owner]
 #   --apps holds carlauncher.apk (release-signed) and suite/*.apk.
+#   --system replaces base/system.img (an AOSP GSI, .img or .img.xz); profile gsi removes the
+#   whole OEM stack from product and implies --car-owner.
 #   --car-owner sets ro.riposte.os.car_owner=1: McuOwner may take /dev/ttyHS1. ONLY for a
 #   build without eventcenter (0.2); on a stock-derived image two readers split the stream.
 # Runs as root on x (loop mounts). See README.md for why each step exists.
@@ -24,7 +27,7 @@ readonly BOOTANIM=product/media/bootanimation.zip   # bootanimation looks in /pr
 readonly PASSTHROUGH="vendor boot dtbo vbmeta vbmeta_system"
 readonly EDITED="system product"
 
-BASE="" APPS="" OUT="" PROFILE=tier1 VERSION="" CAR_OWNER=0
+BASE="" APPS="" OUT="" PROFILE=tier1 VERSION="" CAR_OWNER=0 SYSTEM=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --base) BASE=$2; shift 2 ;;
@@ -33,12 +36,14 @@ while [ $# -gt 0 ]; do
     --profile) PROFILE=$2; shift 2 ;;
     --version) VERSION=$2; shift 2 ;;
     --car-owner) CAR_OWNER=1; shift ;;
+    --system) SYSTEM=$2; shift 2 ;;
     *) die "unknown arg $1" ;;
   esac
 done
 [ -n "$BASE" ] && [ -n "$APPS" ] && [ -n "$OUT" ] || die "need --base --apps --out"
 [ "$(id -u)" = 0 ] || die "run as root (loop mounts)"
 [ -f "$APPS/carlauncher.apk" ] || die "$APPS/carlauncher.apk missing"
+case "$PROFILE" in tier1|tier2) ;; gsi) CAR_OWNER=1 ;; *) die "profile $PROFILE" ;; esac
 AAPT2=${AAPT2:-$(find_aapt2)}
 [ -x "${AAPT2:-/nonexistent}" ] || die "aapt2 not found; set AAPT2"
 
@@ -48,6 +53,18 @@ mkdir -p "$OUT"
 
 apk_package() { "$AAPT2" dump packagename "$1" 2>/dev/null || true; }
 
+# Exact name, or a `prefix.*` line covering it.
+pkg_listed() { # pkg list
+  local line
+  while read -r line; do
+    case "$line" in
+      *'*') [[ "$1" == "${line%\*}"* ]] && return 0 ;;
+      *) [ "$1" = "$line" ] && return 0 ;;
+    esac
+  done <<<"$2"
+  return 1
+}
+
 # Resolve a package list file to "<part>/<dir>" paths present in the trees.
 resolve_pkgs() { # listfile -> stdout: pkg<TAB>partition-relative dir (only those found)
   local pkgs apk pkg
@@ -55,7 +72,8 @@ resolve_pkgs() { # listfile -> stdout: pkg<TAB>partition-relative dir (only thos
   [ -n "$pkgs" ] || return 0
   while read -r apk; do
     pkg=$(apk_package "$apk")
-    if grep -qx "$pkg" <<<"$pkgs"; then
+    [ -n "$pkg" ] || continue
+    if pkg_listed "$pkg" "$pkgs"; then
       printf '%s\t%s\n' "$pkg" "$(dirname "${apk#"$WORK"/tree/}")"
     fi
   done < <(find "$WORK/tree" -name '*.apk' -path '*app/*')
@@ -64,16 +82,23 @@ resolve_pkgs() { # listfile -> stdout: pkg<TAB>partition-relative dir (only thos
 # ---- 1. unpack ----------------------------------------------------------------
 declare -A KIND
 for part in $EDITED; do
-  [ -f "$BASE/$part.img" ] || die "$BASE/$part.img missing"
-  unsparse "$BASE/$part.img" "$WORK/$part.raw"
+  src="$BASE/$part.img"
+  [ "$part" = system ] && [ -n "$SYSTEM" ] && src=$SYSTEM
+  [ -f "$src" ] || die "$src missing"
+  unsparse "$src" "$WORK/$part.raw"
   KIND[$part]=$(unpack_image "$WORK/$part.raw" "$WORK/tree/$part")
   log "unpacked $part (${KIND[$part]})"
 done
 
 # ---- 2. remove ----------------------------------------------------------------
-KEEP=$(resolve_pkgs "$HERE/overlay/keep")
-REMOVE=$(resolve_pkgs "$HERE/overlay/remove.tier1")
-[ "$PROFILE" = tier2 ] && REMOVE+=$'\n'$(resolve_pkgs "$HERE/overlay/remove.tier2")
+if [ "$PROFILE" = gsi ]; then
+  KEEP=$(resolve_pkgs "$HERE/overlay/keep.gsi")
+  REMOVE=$(resolve_pkgs "$HERE/overlay/remove.gsi")
+else
+  KEEP=$(resolve_pkgs "$HERE/overlay/keep")
+  REMOVE=$(resolve_pkgs "$HERE/overlay/remove.tier1")
+  [ "$PROFILE" = tier2 ] && REMOVE+=$'\n'$(resolve_pkgs "$HERE/overlay/remove.tier2")
+fi
 while IFS=$'\t' read -r pkg dir; do
   [ -n "$pkg" ] || continue
   grep -q "^$pkg	" <<<"$KEEP" && die "refusing to remove kept package $pkg"
@@ -83,6 +108,9 @@ done <<<"$REMOVE"
 
 if [ "$CAR_OWNER" = 1 ] && grep -q "^com.szchoiceway.eventcenter	" <<<"$KEEP"; then
   die "--car-owner with eventcenter in the image: two readers on one tty split the stream"
+fi
+if [ "$CAR_OWNER" = 1 ] && [ "$PROFILE" != gsi ]; then
+  log "WARNING: --car-owner on a stock-derived system; eventcenter must not be in the image"
 fi
 
 # ---- 3. add apps ---------------------------------------------------------------
@@ -126,7 +154,8 @@ label_system_file "$WORK/tree/$PRIVAPP_XML"
   label_system_file "$WORK/tree/$f"
   case "$f" in system/bin/*) chmod 0755 "$WORK/tree/$f" ;; esac
 done
-VERSION=${VERSION:-0.1+$(date -u +%Y%m%d).vc$("$AAPT2" dump badging "$APPS/carlauncher.apk" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p")}
+MILESTONE=$([ "$PROFILE" = gsi ] && echo 0.2 || echo 0.1)   # 0.1 stock re-mastered, 0.2 GSI base
+VERSION=${VERSION:-$MILESTONE+$(date -u +%Y%m%d).vc$("$AAPT2" dump badging "$APPS/carlauncher.apk" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p")}
 RIPOSTE_OS_VERSION=$VERSION RIPOSTE_CAR_OWNER=$CAR_OWNER envsubst < "$HERE/overlay/props" >> "$WORK/tree/system/build.prop"
 log "version $VERSION"
 
@@ -141,7 +170,8 @@ done
 {
   echo "version=$VERSION"; echo "profile=$PROFILE"; echo "car_owner=$CAR_OWNER"; echo "built=$(date -u +%FT%TZ)"
   echo "launcher=$(apk_package "$APPS/carlauncher.apk") vc$("$AAPT2" dump badging "$APPS/carlauncher.apk" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p")"
-  echo "suite=$SUITE_N"; echo "removed=$(awk -F'\t' 'NF{print $1}' <<<"$REMOVE" | paste -sd,)"
+  echo "suite=$SUITE_N"; echo "system=${SYSTEM:-$BASE/system.img}"
+  echo "removed=$(awk -F'\t' 'NF{print $1}' <<<"$REMOVE" | paste -sd,)"
 } > "$OUT/MANIFEST"
 (cd "$OUT" && sha256sum ./*.img > SHA256SUMS)
 log "done: $OUT"
