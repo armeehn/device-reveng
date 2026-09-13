@@ -13,7 +13,9 @@
 set -euo pipefail
 readonly CHUNK_MIB=64
 readonly CHUNK=$((CHUNK_MIB * 1048576))
-readonly DEFAULT_PARTS="system product boot dtbo vbmeta vbmeta_system"
+# product first: 0.2 needs only product + boot + vbmeta (the GSI brings system), and the car
+# is online for minutes at a time.
+readonly DEFAULT_PARTS="product boot dtbo vbmeta vbmeta_system system"
 readonly ADB_T=30          # seconds for a control call
 readonly CHUNK_T=900       # seconds for one chunk: 64 MiB at ~100 KiB/s
 
