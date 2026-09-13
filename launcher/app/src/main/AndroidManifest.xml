@@ -67,6 +67,14 @@
     -->
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
+    <!--
+      Riposte OS 0.2 reverse camera: with the vendor's AUXCamera gone, the launcher opens
+      camera id 1 (the AIS HAL) itself when the MCU reports reverse. Runtime permission,
+      requested only on a slot where the MCU owner is ours; on the bench:
+        pm grant com.ripostelabs.carlauncher android.permission.CAMERA
+    -->
+    <uses-permission android:name="android.permission.CAMERA" />
+
     <!-- Narrow visibility fallback if QUERY_ALL_PACKAGES is ever stripped. -->
     <queries>
         <intent>
