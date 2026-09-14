@@ -340,3 +340,110 @@ res/…                          icons + strings, theme wired through <queries> 
 - Which BT path is live (module serial vs Android RFCOMM) and the AT dialogue with the module.
 - Exact AOA/USB request immediates and the wireless-AA TCP port (assumed 5277).
 - The iAP2 gadget driver (`/dev/zjinnova_iap2`) and the MFi IC identity on `/dev/i2c-0`.
+
+Answered where the DEX could: §8.
+
+---
+
+## 8. Answered from the unpacked DEX (2026-09-14)
+
+_Inputs: the two DEX images lifted from the running `com.zjinnova.zlink` process (`dex\n035`, 7.6 MiB with
+7237 class_defs / 43,435 strings, 1.7 MiB with 2348 class_defs / 10,717 strings), decompiled with jadx 1.5.6.
+**Every `code_item` in both images has its instructions zeroed** (52,967 + 9,035 methods, 0 with live
+bytecode): SecShell keeps method bodies out of the DEX region and restores them per-call. What survives is
+the skeleton: class/field/method names and types, JNI signatures, protobuf field tables, Kotlin metadata,
+and the full string pool. Evidence is therefore `File.java:line` into `decompiled/com.zjinnova.zlink-unpacked/
+dex0/sources/` (declarations) or `str#N` = string index in the 7.6 MiB DEX. 230 `com.zjinnova.*` classes
+recovered; the rest is netty, okhttp, protobuf-lite, Bugly/Baidu stats, Kotlin. Nothing here changes §0-§5;
+it fills the `[unknown]` slots._
+
+**Hotspot** `[confirmed]` ZLink generates nothing. The APK reads the unit's own soft-AP settings with the hidden
+`WifiManager.getWifiApConfiguration()` (`str#32445`), casts to `WifiConfiguration` (`str#36234`) and uses
+`wifiCfg.SSID`, `preSharedKey`, `allowedKeyManagement`, `apBand` (`str#42919, 37374, 25851, 26254`), caches
+them in prefs `apSsid_/apPasswd_/apBand_` (`str#26259, 26258, 26255`) and answers the daemon's
+`BtApInfoReqMsg` with `BtApInfoMsg{message_id=1, ap_ssid=2, ap_passwd=3, ap_band=4, ap_interface_name=5}`
+(`proto/BtApInfoProto$BtApInfoMsg.java:14-17`). The interface name comes from the
+`android.net.wifi.WIFI_AP_STATE_CHANGED` extra `WIFI_AP_INTERFACE_NAME` (`str#25975, 25977`). Start is
+`HotspotManager.kt` (`str#7287`) on a `hotspot-worker` thread via reflective `startTethering/stopTethering`
+(`str#41334, 41387`, `START_TETHERING_FAILED`), guarded by `ssid & pwd both SHOULD-NOT-NULL, step1
+STOP-AP-FIRST!` (`str#41253`) and `persist.zlink.ap.start_delay_ms` (`str#37185`); the daemon triggers it
+with `WirelessCmdMsg{wireless_type=2, is_enable=3}` (`wirelessCmd startHotspot/stopHotspot`, `str#42960`).
+The broadcast `com.zjinnova.zlink.action.ENABLE_AP` (`str#27951`) is the vendor branch gated by
+`allowEnableApAction` (`str#41290`); the gateway's handler is just `ConnectivityManager.startTethering(0,…)`
+(`eventcenter/AccEvent/Utils.java:356-368`), so on this unit too the SSID/passphrase are whatever Settings
+→ Hotspot holds. Band: the phone is told `ap_band` as read; no 5 GHz forcing exists in Java `[confirmed]`.
+A replacement can use `SoftApConfiguration` directly; no ZLink secret is involved.
+
+**Fox RPC** `[confirmed]` On the APK side the **APK is the server**. Four Netty NIO servers,
+`CtrlTransServers`, `AudioTransServers`, `VideoTransServers`, `BtTransServers` (`str#5040, 3645, 23880,
+3997`; `Ooooo/W{30}.java:9` `ChannelInitializer<SocketChannel>`, `Ooooo/W{31}.java:25` `NioEventLoopGroup`; `W{n}` = a class named by n `w`s), and the
+daemon connects (`CtrlTransServers onClientConnected`, `CTRL_SOCKET_CONNECT_STATUS`, `str#5039, 4348`).
+Framing is a custom `ByteToMessageDecoder` (`MessageCodec.kt`, `Ooooo/W{34}.java:20`) carrying
+protobuf-lite messages whose first field is always `message_id`/`id` (every `proto/*.java`), with
+`ReqHandshakeMsg`/`RespHandshakeInfo{id, data}`, `HeartBeatMsg`, `SessionStateMsg{state, link_type}`.
+Port numbers and header layout were immediates in the zeroed bodies `[unknown]`; `ss -ltnp` on the unit
+while `zlink5` is up is the one-line answer. Port 1555 (`ZLinkSocket`) does not appear in the APK
+`[confirmed absent]`. Message vocabulary the daemon expects: `MESSAGE_BT_INIT_INFO`, `RESP_MFI_INFO`,
+`RESP_MIC_START/STOP`, `MESSAGE_PHONE_CALL_MODE`, `CMD_START_AP`, `CMD_MIC_START/STOP` (`str#5349, 5350,
+4201-4203`). `InitInfoMsg` (31 fields, `proto/InitInfoProto$InitInfoMsg.java:17-42`) is the APK→daemon
+bootstrap `[inferred: it carries the yaml values only the APK has]`: screen geometry, `activate_link_type=7`, `http_url=8`, `mfi_bus_num_1/2=14/15`,
+`otg_switch_host/device=17/18`, `is_wireless_carplay_ipv4=19`, `is_force_usb_host=20`, `log_file_path=21`;
+the values are the vendor yaml (`PlatformCnf.java`, `cnf_vendor_zhuoxw.yaml`, channel `zhuoxw`, `str#43293`).
+
+**Licensing** `[confirmed]` Two gates, both in `ActivationManager.kt` (`str#3295`): (1) a local licence file
+under `getPlatformLicenceDir()` (`ZlinkCore.java:50`, JNI ← `persist.sys.lic.dir`), prefs
+`LicenceFilePath/LicenceKey/LicenceKeyVersion` (`str#14139-14141`), `check local license file` /
+`local license file not found` (`str#27275, 34963`); (2) online `checkActivationInRemote` →
+`activateLoopCheck` (`str#27281, 25505`) against `https://apis.zjinnova.com/` `zlink/v5/reqHwId`
+(`str#33002, 43309`; also `act.zjinnova.com:9190`, `que.zjinnova.com` for QR activation,
+`zupdate.zjinnova.com` `checkUpdate/zlink2`), request `HwIdReqInfo{hwModelId}` from `getHwId()`
+(`ZlinkCore.java:40` ← `rw.zlink.hw.modelId`), reply `DeviceActivationInfo{activatedType,
+activatedFeatures}`. The result goes back to native via `setActivationKey/setActivationResult`
+(`ZlinkCore.java:68-70` → `rw.zlink.act.key/.ret`) and is broadcast as
+`zjinnova.android.intent.action.ACTIVATION_STATE_CHANGE` (`str#43301`). MFi tie-in: the daemon answers
+`ReqMfiInfoMsg` with `RespMfiInfoMsg{id, is_fake=2, mfi_uuid=3}` (`proto/RespMfiInfoProto…java:16-17`);
+the APK stores it (`AppPrefs.setMfiId:436`, `isMfiGot:277`, `getCurrentMfiId:163`), runs
+`setprop persist.zj.mfi.id ` (`str#40905`) and decides `exist mfi and activate type is MirroringFree so
+remove activate info` / `has mfi to activate` / `device mfi got false or device activated false`
+(`str#29668, 32621, 28875`). So a genuine MFi chip *is* the CarPlay licence: chip present → the paid
+activation is dropped; chip absent (`hu_mfi_fake`, `str#33023`) → online activation required `[inferred]`.
+`sys.zlink.regcode|barcode|chip` and `rw.zlink.mfi.id` live only in `libzlink_core.so`
+(`getChipActivationInfo`, `setMfiId` JNI); the in-memory `ZlinkCore` declares neither native
+(`ZlinkCore.java:1-77`), so that path is dead in 5.4.62 `[confirmed]`. Offline product codes exist
+(`getOfflineProductCode`, `ZlinkCore.java:44`, prefs `isOfflineProductCode*`).
+
+**BT path** `[confirmed]` Both exist in Java. Android-BT: `BluetoothService.java:126` holds a
+`BluetoothServerSocket`, `ZBTService.java:66` a `rfcommChannelMap`; strings show the head unit is RFCOMM
+**client** to an iPhone (`IPhone to connect Rfcomm socket`, `createInsecureRfcommSocketToServiceRecord`,
+`uuid-carplay matched:` after `fetchUuidsWithSdp` on `ACL_CONNECTED`; `str#7753, 28401, 42459, 29861`) and
+**server** for Android Auto (`listenUsingInsecureRfcommWithServiceRecord`, `Rfcomm server created or
+accepting`, `uuid-auto matched:`; `str#34924, 20743, 42458`), UUIDs `00000000-deca-fade-deca-deafdecacafe`
+and `4de17a00-52cb-11e6-bdf4-0800200c9a66` (`str#2420, 2498`). RFCOMM bytes are relayed to the daemon as
+`BtDataMsg` over `BtTransServers` (`send2RfComm data-len:`, `str#38870`), pairing state as
+`BtPhoneInfoMsg{local_mac, phone_uuid, is_paired, pair_mode, pair_code}` (`proto/BtPhoneInfoProto…java:16-21`).
+Selection: `getBtType()` (`ZlinkCore.java:26` ← `rw.zj.bt.type`) and the per-channel
+`androidBtSupportWirelessLinkType` (`VendorChildDynamicPropsCnf.java:302`,
+`ANDROID_BT_SUPPORT_WIRELESS_LINK_TYPES`). `/dev/zj_bt_serial` and `/dev/rf_serial` are in the APK pool
+(`str#2371-2372`) but no AT command is; with `rw.zj.bt.type=extra` here, the Java RFCOMM code is bypassed
+and the module/serial path of §3.1 is live `[inferred]`. HiCar goes through `libzbt_core` (`Zbt.java:200-246`).
+
+**Status broadcast the launcher consumes** `[confirmed]` Action `com.zjinnova.zlink` with string extras
+`status`, `command`, `phoneMode`, `phoneType` (`str#41366, 27966, 37226, 37230`). `status` ∈ `CONNECTED`,
+`DISCONNECT`, `MAIN_AUDIO_START/STOP`, `PHONE_CALL_ON/OFF` (`str#4243, 5297, 18379-18380, 19754-19755`);
+`phoneMode` ∈ `carplay_wired|carplay_wireless|auto_wired|auto_wireless|hicar_*|airplay_*|android_mirror_*|
+dlna_*` (`str#27178-27179, 26558-26559`); `phoneType` values are not literal in the pool `[unknown]`. Inbound `command` `REQ_SPEC_FUNC_CMD`
++ int `specFuncCode` (`str#20410, 41186`). The APK never asks eventcenter for the source mode:
+`GET_DATA_REQ/RES` are absent from its pool; it only emits, and listens for `ENABLE_AP`-class replies and
+`OUT_DARK_*`, `POWER_*`, `BACKCAR_*`, `USB_IDLE/OCCUPIED`, `AA_PHONECALL_ON/OFF`,
+`action.bluetooth.PHONE_STATUS` (`str#27945-27958`). Own actions: `zjinnova.android.intent.action.ZLINK_MAIN`,
+`…ACTIVATION`, `…secondary_screen.enter_background|enter_foreground|prohibit_minimize` (`str#27890-27892`).
+Extra sysprops it reads: `sys.gen.zlink.wifiap`, `persist.sys.zlink.{mode.registed,disable.features,bgconn.disa}`,
+`rw.zlink.audiostream.{media,others,phonecall,phonering,speech,tts}`, `persist.zj.cp_aa_fusion`
+(`str#41587, 37176-37178, 38650-38655, 37181`).
+
+**Still unknown after the dump** — the APK never touches these; they are daemon-side immediates:
+- Fox port numbers and frame header; the wireless-AA TCP port (5277 assumed); AOA request immediates.
+- `/dev/zjinnova_iap2` driver and the MFi IC identity. The daemon only reports `mfi_uuid`+`is_fake`.
+- The AT dialogue with the BT module (`AT#SH/DR/SG/ZA`, §3.1) — daemon strings only.
+Next step that answers the first two: `ss -ltnp`, `ls -l /dev/i2c-* /dev/zjinnova_iap2` and
+`i2cdetect -y 0` on the live unit; the kernel tree for the gadget function.
