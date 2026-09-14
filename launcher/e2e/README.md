@@ -41,7 +41,10 @@ Not part of CI: the suite needs a booted head unit and model credit.
 
 `test_carsim.py` needs no model: it starts `carsim/carsim.py` (the simulated
 vehicle on the emulator's virtio ports) and asserts over adb on what the
-launcher logged and drew. It runs where adb and the QEMU sockets are local:
+launcher logged and drew. `test_carsim_commute.py` drives the `commute`
+scenario end to end (Home climate card, Vehicle page, parked-only gate,
+reverse) and replays a door-cycle capture on the raw bus. Both run where adb
+and the QEMU sockets are local:
 
 ```
 CARSIM_SERIAL=emulator-5554 CARSIM_MCU=127.0.0.1:5700 CARSIM_CAN=127.0.0.1:5701 \
