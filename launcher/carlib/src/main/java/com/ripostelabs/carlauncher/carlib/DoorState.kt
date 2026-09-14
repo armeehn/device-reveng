@@ -39,5 +39,20 @@ data class DoorState(
             bonnet = raw and BIT_BONNET != 0,
             atMs = atMs,
         )
+
+        /**
+         * The same state off the box's own 0x11 frame (Riposte OS 0.2, no canbus2 to repack it).
+         * Copied by NAME, never by byte: the 0x11 door byte and the `CAR_DOOR_DATA` byte swap
+         * the front pair (driver is 0x40 there, 0x80 here), see [CanSignal.BasicStatus].
+         */
+        fun from(status: CanSignal.BasicStatus, atMs: Long): DoorState = DoorState(
+            frontLeft = status.doorFrontLeftOpen,
+            frontRight = status.doorFrontRightOpen,
+            rearRight = status.doorRearRightOpen,
+            rearLeft = status.doorRearLeftOpen,
+            tailgate = status.tailgateOpen,
+            bonnet = status.hoodOpen,
+            atMs = atMs,
+        )
     }
 }

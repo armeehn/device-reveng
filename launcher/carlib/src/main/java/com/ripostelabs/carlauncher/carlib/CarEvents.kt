@@ -458,7 +458,10 @@ class CarEvents(private val appContext: Context) {
     val accSleep: StateFlow<AccSleep?> = _accSleep.asStateFlow()
 
     private val _doors = MutableStateFlow<DoorState?>(null)
-    /** Latest `ACCORD_DOOR_INFO` decode, or null until canbus2 reports a door. */
+    /**
+     * Latest `ACCORD_DOOR_INFO` decode, or null until canbus2 reports a door. On 0.2 the box's
+     * 0x11 frame feeds it instead ([ownerListener]).
+     */
     val doors: StateFlow<DoorState?> = _doors.asStateFlow()
 
     private val _volume = MutableStateFlow<VolumeReading?>(null)
@@ -499,7 +502,8 @@ class CarEvents(private val appContext: Context) {
     /**
      * Latest HVAC snapshot from the `carairstruct` broadcast, or null until the CAN app sends
      * one. Unparcelled through the mirrored [CarAirState]; there is no other read path
-     * (`getAirData()` is a stub, see [ClimateState]).
+     * (`getAirData()` is a stub, see [ClimateState]). On 0.2 the box's 0x31 frame feeds it
+     * instead ([ownerListener]).
      */
     val climate: StateFlow<ClimateState?> = _climate.asStateFlow()
 
@@ -1098,8 +1102,16 @@ class CarEvents(private val appContext: Context) {
             radio?.onRadio(event)
         }
 
+        // The relay feeds the snapshot whole; the two signals the Home surface reads through
+        // their own flows (the climate card, the door state) are mapped here as well, so the
+        // card shows what canbus2's `carairstruct` / `ACCORD_DOOR_INFO` broadcasts showed.
         override fun onCanSignal(signal: CanSignal, atMs: Long) {
             vehicle?.onSignal(signal, atMs)
+            when (signal) {
+                is CanSignal.Climate -> _climate.value = ClimateState.from(signal)
+                is CanSignal.BasicStatus -> _doors.value = DoorState.from(signal, atMs)
+                else -> {}
+            }
         }
 
         // `72` panel keys take the MCU_KEY_INFOR route; the owner already did the vendor's own
