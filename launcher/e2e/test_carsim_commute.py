@@ -47,13 +47,18 @@ REPLAY_FIRST_CLOSE_S = 47.7
 REPLAY_END_S = 90.0
 
 HOME_SETTLE_S = 8.0          # launcher restart + handshake before the first dump is worth taking
+FORCE_STOP_SETTLE_S = 1.0
 FIRST_CLIMATE_WINDOW_S = CLIMATE_SECOND_S - CLIMATE_FIRST_S
-SETTINGS_SWIPES_MAX = 6      # the hub is a long list; Vehicle sits ~17 rows down
+SETTINGS_SWIPES_MAX = 8      # flings, then whole-row backtracks; each costs a ~2 s dump
 SETTINGS_FLINGS = 2          # two flings land near it; a dump costs ~2 s, so fling first
 FLING_MS = 300
 TILE_ROW_PX = 93             # SettingRow pitch on the Vehicle page (uiautomator bounds)
+LIST_TOP_Y = 250             # a swipe anchor safely inside a settings list, below its header
 SCROLL_MS = 800              # slow enough that Compose scrolls instead of flinging
 TAP_SAFE_BOTTOM_Y = 650      # a row centred below this is clipped by the 720 px panel edge
+HUB_ROWS_BELOW_VEHICLE = ("Games", "Guided car tests", "Radio info capture", "Vehicle data capture",
+                          "All settings (advanced)", "SysVar export")
+HUB_BACKTRACK_ROWS = 3
 VEHICLE_PAGE_SUBTITLE = "What the car is reporting, live"
 
 # What the launcher draws, verbatim (ClimateCard.kt, VehicleTiles.kt, StatusBar.kt, NavCard.kt).
@@ -80,6 +85,19 @@ def tap(xy: tuple[int, int]) -> None:
 
 def has_text(dump: str, text: str) -> bool:
     return NODE_TEXT.format(text) in dump
+
+
+def texts(dump: str) -> str:
+    """Every text node, one line, for a failure message that says what WAS on screen."""
+    return " | ".join(re.findall(r'text="([^"]+)"', dump))
+
+
+def seen(dump: str, *want: str) -> str | None:
+    """The dump when every `want` is a text node on it, else None (and the dump is printed)."""
+    if all(has_text(dump, w) for w in want):
+        return dump
+    print(f"[{time.strftime('%H:%M:%S')}] on screen: {texts(dump)}")
+    return None
 
 
 def dismiss_onboarding() -> str:
@@ -115,9 +133,15 @@ def open_vehicle_page() -> None:
     for _ in range(SETTINGS_FLINGS):
         fling_up()
     for _ in range(SETTINGS_SWIPES_MAX):
-        row = node_bounds(ui_dump(), "text", "Vehicle")
+        dump = ui_dump()
+        row = node_bounds(dump, "text", "Vehicle")
         if not row:
-            fling_up()
+            # A fling lands where it lands: read which side of Vehicle the hub shows and
+            # walk back in whole rows when it overshot, rather than only ever flinging on.
+            if any(has_text(dump, below) for below in HUB_ROWS_BELOW_VEHICLE):
+                scroll_tiles(-HUB_BACKTRACK_ROWS)
+            else:
+                fling_up()
             continue
         if row[1] > TAP_SAFE_BOTTOM_Y:
             # A row clipped by the bottom edge takes the tap on its visible sliver or not at
@@ -132,9 +156,11 @@ def open_vehicle_page() -> None:
 
 
 def scroll_tiles(rows: int) -> None:
-    """Scroll the Vehicle page by whole rows without a fling, so the offset is known."""
+    """Scroll a settings list by whole rows (negative = back up) without a fling."""
+    # Both ends stay inside the list (it starts below the page header), whichever way it goes.
     px = rows * TILE_ROW_PX
-    adb("shell", "input", "swipe", "960", str(400 + px), "960", "400", str(SCROLL_MS))
+    y0, y1 = (LIST_TOP_Y + px, LIST_TOP_Y) if px > 0 else (LIST_TOP_Y, LIST_TOP_Y - px)
+    adb("shell", "input", "swipe", "960", str(y0), "960", str(y1), str(SCROLL_MS))
     time.sleep(0.8)
 
 
@@ -149,6 +175,9 @@ def start_scenario(scenario: str, log: Path, *extra: str) -> subprocess.Popen:
     )
     adb("shell", "logcat", "-c")
     adb("shell", "am", "force-stop", PACKAGE)
+    # The virtio ports admit one opener: give the old process's descriptors a moment to close
+    # before the relaunch opens them, or McuOwner starts Failed(EBUSY) and stays so.
+    time.sleep(FORCE_STOP_SETTLE_S)
     adb("shell", "input", "keyevent", "KEYCODE_HOME")
     return proc
 
@@ -179,15 +208,13 @@ def test_home_climate_card_follows_the_relay(commute):
     dismiss_onboarding()
 
     def first_setpoint():
-        dump = ui_dump()
-        return (has_text(dump, "18.0℃") and has_text(dump, f"2/{FAN_MAX}")) or None
+        return seen(ui_dump(), "18.0℃", f"2/{FAN_MAX}")
     wait_for("the climate card at 18.0℃ fan 2", FIRST_CLIMATE_WINDOW_S, first_setpoint)
 
     since(commute, CLIMATE_SECOND_S)
 
     def second_setpoint():
-        dump = ui_dump()
-        return (has_text(dump, "22.5℃") and has_text(dump, f"4/{FAN_MAX}")) or None
+        return seen(ui_dump(), "22.5℃", f"4/{FAN_MAX}")
     wait_for("the climate card at 22.5℃ fan 4", GEAR_D_S + 6.0 - CLIMATE_SECOND_S, second_setpoint)
 
 
@@ -199,14 +226,7 @@ def test_vehicle_page_shows_the_drive(commute):
     since(commute, RAMP_UP_DONE_S)
 
     def cruising():
-        dump = ui_dump()
-        ok = (
-            has_text(dump, "Gear") and has_text(dump, "D")
-            and has_text(dump, "60 km/h")
-            and has_text(dump, "2100 rpm")
-            and "22.5°C, fan 4" in dump
-        )
-        return ok or None
+        return seen(ui_dump(), "Gear", "D", "60 km/h", "2100 rpm", "22.5°C, fan 4 (unverified)")
     wait_for("the Vehicle page in D at 60 km/h, 2100 rpm, climate 22.5°C fan 4", CRUISE_END_S - RAMP_UP_DONE_S - 4.0, cruising)
     assert "bus link closed" not in logcat("SlcanLinkSource"), "the raw-bus link died mid-drive"
     back_home()
@@ -216,8 +236,8 @@ def test_parked_gate_locks_while_moving(commute):
     # Still cruising: the Home speed tile reads 60 and the parked-only shelves are locked. The
     # gate reads the raw bus only (CarEvents.CAN_SPEED_TRUSTED is false), so this is 0x361.
     def locked():
-        dump = ui_dump()
-        return (has_text(dump, "60 km/h") and PARKED_ONLY_LOCKED in dump) or None
+        dump = seen(ui_dump(), "60 km/h")
+        return dump if dump and PARKED_ONLY_LOCKED in dump else None
     wait_for("60 km/h on Home with the parked-only shelves locked", CRUISE_END_S - (time.monotonic() - commute["start"]), locked)
 
 
@@ -235,8 +255,8 @@ def test_parked_gate_releases_at_rest(commute):
     since(commute, PARKED_S + 1.0)
 
     def released():
-        dump = ui_dump()
-        return (has_text(dump, "0 km/h") and PARKED_ONLY_LOCKED not in dump) or None
+        dump = seen(ui_dump(), "0 km/h")
+        return dump if dump and PARKED_ONLY_LOCKED not in dump else None
     wait_for("0 km/h on Home with the shelves unlocked", ACC_OFF_S - PARKED_S - 1.0, released)
 
     since(commute, ACC_OFF_S + 1.0)
@@ -265,18 +285,25 @@ def test_replay_reaches_the_raw_decoder(door_replay):
     # one door, none of them from the MCU relay: the ticker is paused while the capture plays.
     since(door_replay, HOME_SETTLE_S)
     open_vehicle_page()
-    # The Open tile sits past the fold behind Speed, Wheels, Gear, Engine, Intake air and
-    # Coolant; two rows up keeps Gear in view as the anchor whether or not Open is drawn.
-    scroll_tiles(2)
+
+    def past_the_fold() -> str:
+        # The Open tile sits behind Speed, Wheels, Gear, Engine, Intake air and Coolant, one row
+        # past the fold. The page only scrolls once those tiles exist, so scroll on the probe
+        # that sees the top of the page, not once after opening it; two rows keeps Gear in
+        # view as the anchor whether or not Open is drawn.
+        dump = ui_dump()
+        if has_text(dump, "Speed") and has_text(dump, "Coolant") and not has_text(dump, "Open"):
+            scroll_tiles(2)
+            dump = ui_dump()
+        return dump
 
     def driver_open():
-        dump = ui_dump()
-        return (has_text(dump, "Open") and has_text(dump, "driver") and has_text(dump, "P")) or None
+        return seen(past_the_fold(), "Open", "driver", "P")
     wait_for("driver door open + gear P from the capture", REPLAY_FIRST_CLOSE_S - HOME_SETTLE_S, driver_open)
 
     def driver_closed():
-        dump = ui_dump()
-        return (has_text(dump, "Gear") and not has_text(dump, "driver")) or None
+        dump = seen(past_the_fold(), "Gear")
+        return dump if dump and not has_text(dump, "driver") else None
     wait_for("the driver door closed", REPLAY_END_S - (time.monotonic() - door_replay["start"]), driver_closed)
     wait_for("the driver door open again", REPLAY_END_S - (time.monotonic() - door_replay["start"]), driver_open)
 
