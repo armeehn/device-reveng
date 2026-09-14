@@ -120,7 +120,7 @@ CMD_SPEED = 0x17           # p[0:1] BE × 0.1 km/h
 CMD_RPM_GEAR = 0x1A        # gear code p[5], rpm mirror p[9:10]
 CMD_HYBRID = 0x1F
 CMD_CLIMATE = 0x31         # OnHandleCanAirCmdVertical layout
-CMD_VEHICLE_INFO = 0x32    # rpm p[2:3], coolant p[9] (−40)
+CMD_VEHICLE_INFO = 0x32    # rpm p[2:3], speed p[4:5] (canbus2's iCarSpeed, untrusted), coolant p[9] (−40)
 CMD_RADAR = 0x41           # rear p[0..3], front p[4..7], steps of 30 cm
 CMD_TPMS = 0x48            # FL/FR/RL/RR/spare = p[i] + p[i+5], i = 2..6
 CMD_SYS_EVENT = 0x71       # the box's own reverse flag, p[0] & 0x02
@@ -144,7 +144,7 @@ ID_DOOR_STATUS = 0x4A5     # byte 3 = door bits
 RAW_DLC = 8                # RawCanDecoder.DLC_MIN: shorter frames are ignored
 GEAR_P_BIT, GEAR_R_BIT, GEAR_D_BIT = 0x20, 0x10, 0x80
 BUS_TICK_S = 0.1           # CarEvents.BUS_SPEED_STALE_MS is 2 s; 10 Hz keeps the gate fed
-RELAY_TICK_S = 1.0         # HiWorld speed/gear relay cadence (the real box is slower)
+RELAY_TICK_S = 1.0         # HiWorld status relay cadence (the real box is slower)
 
 CANDUMP_LINE = re.compile(r"^\s*\((?P<ts>[\d.]+)\)\s+\S+\s+(?P<id>[0-9A-Fa-f]+)\s+\[(?P<dlc>\d+)\]\s*(?P<data>(?:[0-9A-Fa-f]{2}\s*)*)$")
 
@@ -317,6 +317,9 @@ class Vehicle:
     def vehicle_info(self, coolant_c: int = 78) -> bytes:
         p = bytearray(14)
         p[2:4] = u16(self.rpm)
+        # Mirrors the bus speed so the digest never contradicts 0x361; the launcher shows it
+        # on the capture screen only (CarEvents.CAN_SPEED_TRUSTED is false).
+        p[4:6] = u16(int(round(self.speed_kmh)))
         p[9] = coolant_c + COOLANT_OFFSET_C
         return self.relay(CMD_VEHICLE_INFO, bytes(p))
 
@@ -532,12 +535,12 @@ The tuner needs no lines: `01 01` (SRC_RADIO) from the launcher starts the `73` 
   volume <0-40>              MAIN_VOLUME (79)              mute on|off        MUTE (78)
   key <NAME>                 panel key (72): VOL_UP, VOL_DOWN, MUTE, NEXT, PREV, MENU, RETURN, POWER ...
   wheel <NAME>               CAN wheel button press+release (0x11 relay): NEXT, PREV, VOL_UP, CALL ...
-  speed <kmh>                held; 0x361 on the bus at 10 Hz, 0x17 relay at 1 Hz
+  speed <kmh>                held; 0x361 on the bus at 10 Hz, 0x17 + 0x32 relays at 1 Hz
   ramp <from> <to> <secs>    speed ramp, linear
   gear P|R|N|D               0x3BC on the bus, 0x1A relay
   doors <FL|FR|RL|RR|TAIL|HOOD> open|closed     0x4A5 on the bus, 0x11 relay
-  climate temp=21 fan=3 ac=on auto=off recirc=on   0x31 relay
-  rpm <n>                    0x32 relay (and the 0x1A mirror)
+  climate temp=21 fan=3 ac=on auto=off recirc=on   0x31 relay (re-sent at 1 Hz)
+  rpm <n>                    0x32 relay (re-sent at 1 Hz, and the 0x1A mirror)
   radar rear=<a,b,c,d> front=<a,b,c,d>   steps 1-5 (30 cm each), 0 = clear; 0x41 relay
   tpms <fl,fr,rl,rr,spare>   kPa, 0 = no reading; 0x48 relay
   can-replay <file> [speedup] candump lines on the bus; without a bus, known ids become relays
@@ -570,29 +573,34 @@ SCENARIOS: dict[str, list[str]] = {
         "31.0 lamp off",
         "32.0 say smoke: done",
     ],
-    # ACC on, drive with a speed ramp, reverse in and out, lamps on.
+    # A drive, start to finish: key on, engine start, door shut, climate set twice, D, a ramp to
+    # 60 on both carriers with a cruise long enough to read the Vehicle page, dusk, back to 0,
+    # reverse into the spot, P, key off. test_carsim_commute.py asserts against these marks.
     "commute": [
         "0.0 say commute: key on",
         "3.0 acc on",
         "4.0 rpm 900",
         "5.0 doors FL open",
-        "8.0 doors FL closed",
-        "9.0 gear R",
-        "9.2 reverse on",
-        "10.0 ramp 0 6 3",
-        "14.0 ramp 6 0 2",
-        "16.5 reverse off",
-        "16.6 gear D",
-        "17.0 ramp 0 50 10",
-        "20.0 rpm 2100",
+        "7.0 doors FL closed",
+        "8.0 climate temp=18 fan=2 ac=on auto=off",
+        "14.0 climate temp=22.5 fan=4 auto=on",
+        "15.0 gear D",
+        "16.0 ramp 0 60 10",
+        "18.0 rpm 2100",
+        "26.0 say commute: cruising",
         "28.0 lamp on",
         "30.0 wheel VOL_UP",
-        "32.0 wheel NEXT",
-        "40.0 ramp 50 0 8",
-        "49.0 gear P",
-        "50.0 lamp off",
-        "51.0 acc off",
-        "52.0 say commute: done",
+        "50.0 ramp 60 0 8",
+        "58.5 rpm 900",
+        "59.0 gear R",
+        "59.2 reverse on",
+        "60.0 ramp 0 5 2",
+        "63.0 ramp 5 0 2",
+        "66.0 reverse off",
+        "66.2 gear P",
+        "72.0 lamp off",
+        "73.0 acc off",
+        "74.0 say commute: done",
     ],
     # Key on, parked; the tuner answers `01 01` with 96.3 MHz "CBC R1" and follows every key.
     # No timeline events beyond the handshake: the launcher drives it (test_carsim_radio.py).
@@ -643,6 +651,7 @@ class Simulator:
         self.v = vehicle
         self.speedup = speedup
         self.ramp: tuple[float, float, float, float] | None = None   # t_start, t_end, from, to
+        self.replaying = False   # the capture IS the bus: the ticker's own bus frames pause
         self._stop = threading.Event()
 
     # ── background: the bus is never silent while the car is on ──
@@ -657,14 +666,18 @@ class Simulator:
                 if frac >= 1.0:
                     log(f"ramp done at {self.v.speed_kmh:.0f} km/h")
                     self.ramp = None
-            if self.v.acc:
+            if self.v.acc and not self.replaying:
                 self.can.send(self.v.raw_speed())
                 self.can.send(self.v.raw_gear())
                 self.can.send(self.v.raw_doors())
-                if now - last_relay >= RELAY_TICK_S:
-                    last_relay = now
-                    self.mcu.link.send(self.v.speed_relay())
-                    self.mcu.link.send(self.v.gear_relay())
+            # The box repeats its status frames; without that the launcher's snapshot expires
+            # them (VehicleSnapshot.STALE_AFTER_MS) and the Vehicle page empties mid-drive.
+            if self.v.acc and now - last_relay >= RELAY_TICK_S:
+                last_relay = now
+                self.mcu.link.send(self.v.speed_relay())
+                self.mcu.link.send(self.v.gear_relay())
+                self.mcu.link.send(self.v.vehicle_info())
+                self.mcu.link.send(self.v.climate_relay())
             time.sleep(BUS_TICK_S)
 
     def run(self, events: list[Event]) -> None:
@@ -756,6 +769,7 @@ class Simulator:
         sent = converted = 0
         first_ts: float | None = None
         start = time.monotonic()
+        self.replaying = True
         with path.open() as f:
             for line in f:
                 m = CANDUMP_LINE.match(line)
@@ -775,6 +789,7 @@ class Simulator:
                     sent += 1
                 elif self.convert(can_id, data):
                     converted += 1
+        self.replaying = False
         log(f"replay {path.name}: {sent} frames on the bus, {converted} converted to relays")
 
     def convert(self, can_id: int, data: bytes) -> bool:

@@ -394,6 +394,8 @@ object HiworldCanDecoder {
             fanStep = u(p, 5) and 0x0F,
             leftTempC = tempC(u(p, 6)),
             rightTempC = tempC(u(p, 7)),
+            leftTempLimit = tempLimit(u(p, 6)),
+            rightTempLimit = tempLimit(u(p, 7)),
             rearFanStep = u(p, 9) and 0x0F,
         )
     }
@@ -401,6 +403,13 @@ object HiworldCanDecoder {
     /** Climate setpoint byte to degrees C; null for the LO/HI sentinels, which are not values. */
     private fun tempC(raw: Int): Double? =
         if (raw == TEMP_LO || raw == TEMP_HI) null else raw * TEMP_SCALE_C
+
+    /** The end stop a setpoint byte names, or null when it is a temperature. */
+    private fun tempLimit(raw: Int): CanSignal.Climate.TempLimit? = when (raw) {
+        TEMP_LO -> CanSignal.Climate.TempLimit.LO
+        TEMP_HI -> CanSignal.Climate.TempLimit.HI
+        else -> null
+    }
 
     /**
      * 0x48 TPMS — five tyre pressures.
@@ -730,7 +739,13 @@ sealed interface CanSignal {
         val leftTempC: Double?,
         val rightTempC: Double?,
         val tempUnitCelsius: Boolean,
-    ) : CanSignal
+        /** Which end stop a null temperature is, so a card can say "LO"/"HI" as the vendor does. */
+        val leftTempLimit: TempLimit? = null,
+        val rightTempLimit: TempLimit? = null,
+    ) : CanSignal {
+        /** The two setpoint sentinels (0xFE, 0xFF): end stops of the dial, not temperatures. */
+        enum class TempLimit { LO, HI }
+    }
 
     /** 0x48 — tyre pressures in kPa; null = no reading (0xFE sentinel). */
     data class Tpms(
