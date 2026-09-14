@@ -45,6 +45,7 @@ import com.ripostelabs.carlauncher.data.CrashRecord // v0.4.3.7
 import com.ripostelabs.carlauncher.data.DoctorCheck
 import com.ripostelabs.carlauncher.data.LauncherSettings
 import com.ripostelabs.carlauncher.data.OemApps
+import com.ripostelabs.carlauncher.data.RiposteSuite
 import com.ripostelabs.carlauncher.data.SettingKeys
 import com.ripostelabs.carlauncher.data.SettingsStore
 import com.ripostelabs.carlauncher.data.SetupDoctor
@@ -176,7 +177,7 @@ fun SetupDoctorScreen(
             }
         }
 
-        VendorAppsSection(report = vendorApps)
+        VendorAppsSection(report = vendorApps, ownerActive = mcuStatus != null)
         CarLinkSection(carService = carService, mcuStatus = mcuStatus)
         GatewayStateSection(controller = controller, carService = carService)
 
@@ -247,11 +248,21 @@ fun SetupDoctorScreen(
  * zlink means the unit lost part of its own plumbing.
  */
 @Composable
-private fun VendorAppsSection(report: OemApps.Report?) {
+private fun VendorAppsSection(report: OemApps.Report?, ownerActive: Boolean) {
     SettingsSection(title = "Vendor apps") {
         if (report == null) {
             MutedText("Checking…")
             return@SettingsSection
+        }
+
+        // Riposte OS 0.2: the suite's Radio and Bluetooth bind the gateway this slot has not got.
+        if (ownerActive) {
+            val bound = RiposteSuite.APPS.filter { it.packageName in RiposteSuite.VENDOR_BOUND }
+            MutedText(
+                "Suite apps hidden on this slot: " + bound.joinToString { it.label } +
+                    ". They bind the vendor gateway, which the car owner replaces; " +
+                    "the launcher's tuner is the radio here.",
+            )
         }
 
         report.missingKeep.forEach { app ->
