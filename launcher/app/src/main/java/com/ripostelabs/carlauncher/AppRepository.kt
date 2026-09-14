@@ -31,7 +31,11 @@ data class AppInfo(
  * On API 30+ enumeration depends on package visibility — see QUERY_ALL_PACKAGES / <queries>
  * in AndroidManifest.xml.
  */
-class AppRepository(private val context: Context) {
+class AppRepository(
+    private val context: Context,
+    /** Riposte OS 0.2: the launcher owns the MCU port, so the vendor-bound suite apps hide. */
+    private val ownerActive: Boolean = false,
+) {
 
     private val pm: PackageManager = context.packageManager
 
@@ -105,7 +109,8 @@ class AppRepository(private val context: Context) {
         val present = resolved.mapNotNullTo(mutableSetOf()) { it.activityInfo?.packageName }
         // Same idea for the Choiceway originals: hidden only once ours is present (or, for the
         // REMOVE class, always). A missing replacement leaves the OEM app in the drawer.
-        val shadowed = RiposteSuite.retiredTwins(present).toSet() + OemApps.shadowed(present, shadow)
+        val shadowed = RiposteSuite.retiredTwins(present).toSet() + OemApps.shadowed(present, shadow) +
+            RiposteSuite.hiddenOnOwner(ownerActive)
 
         return resolved.asSequence()
             .mapNotNull { ri ->
