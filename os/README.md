@@ -38,6 +38,7 @@ serial link behind a public API, and the framework check closed the last unknown
 | `build.sh` | x, as root | Unpacks (ext4 loop mount / `fsck.erofs --extract`), removes packages, adds apps, writes the privapp allowlist, first-boot hook and props, repacks in the base's format. |
 | `check.sh` | x, as root | Static proof of an output against its base. Framework byte-identical, kept packages present, removed ones gone, allowlist == the APK's permissions, labels preserved. |
 | `test-fixture.sh` | x, as root | Builds a synthetic base (ext4 system with labels, erofs product with OEM package names) and runs build + check + a negative control. `FIXTURE PASS` is the gate for changes here. |
+| `magisk-patch.sh` | build host | Magisk-patches a boot image on the desk with the Magisk APK's own `magiskboot` + `boot_patch.sh` (same kernel, root in the ramdisk); `build.sh --boot` takes the result. |
 | `flash.sh` | laptop at the car | fastbootd to the **inactive** slot, `set_active`, reboot. Dry-run unless `--yes`. Rollback is one `fastboot set_active`. |
 
 ```
