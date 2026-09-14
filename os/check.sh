@@ -16,7 +16,7 @@ readonly LAUNCHER_APK=priv-app/CarLauncher/CarLauncher.apk
 readonly PRIVAPP_XML=etc/permissions/privapp-permissions-ripostelabs.xml
 readonly FRAMEWORK=framework/framework.jar
 
-BASE="" OUT="" PROFILE=tier1 SUITE="" SYSTEM=""
+BASE="" OUT="" PROFILE=tier1 SUITE="" SYSTEM="" BOOT=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --base) BASE=$2; shift 2 ;;
@@ -24,6 +24,7 @@ while [ $# -gt 0 ]; do
     --profile) PROFILE=$2; shift 2 ;;
     --suite) SUITE=$2; shift 2 ;;
     --system) SYSTEM=$2; shift 2 ;;
+    --boot) BOOT=$2; shift 2 ;;
     *) die "unknown arg $1" ;;
   esac
 done
@@ -145,8 +146,10 @@ fi
 
 echo "passthrough"
 for part in vendor system_ext boot dtbo vbmeta vbmeta_system; do
-  [ -f "$BASE/$part.img" ] || continue
-  check "cmp -s $BASE/$part.img $OUT/$part.img" "$part.img copied verbatim"
+  src="$BASE/$part.img"
+  [ "$part" = boot ] && [ -n "$BOOT" ] && src=$BOOT
+  [ -f "$src" ] || continue
+  check "cmp -s $src $OUT/$part.img" "$part.img copied verbatim from $(basename "$src")"
 done
 check "(cd $OUT && sha256sum -c --quiet SHA256SUMS)" "SHA256SUMS verify"
 

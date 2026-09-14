@@ -7,6 +7,7 @@
 # Usage: build.sh --base DIR --apps DIR --out DIR [--profile tier1|tier2|gsi] [--system IMG]
 #                 [--version V] [--car-owner]
 #   --apps holds carlauncher.apk (release-signed) and suite/*.apk.
+#   --boot replaces base/boot.img (e.g. a magisk-patch.sh output for a rootable slot).
 #   --system replaces base/system.img (an AOSP GSI, .img or .img.xz); profile gsi removes the
 #   whole OEM stack from product and implies --car-owner.
 #   --car-owner sets ro.riposte.os.car_owner=1: McuOwner may take /dev/ttyHS1. ONLY for a
@@ -27,7 +28,7 @@ readonly BOOTANIM=product/media/bootanimation.zip   # bootanimation looks in /pr
 readonly PASSTHROUGH="vendor system_ext boot dtbo vbmeta vbmeta_system"   # one matched set, never mixed across builds
 readonly EDITED="system product"
 
-BASE="" APPS="" OUT="" PROFILE=tier1 VERSION="" CAR_OWNER=0 SYSTEM=""
+BASE="" APPS="" OUT="" PROFILE=tier1 VERSION="" CAR_OWNER=0 SYSTEM="" BOOT=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --base) BASE=$2; shift 2 ;;
@@ -37,6 +38,7 @@ while [ $# -gt 0 ]; do
     --version) VERSION=$2; shift 2 ;;
     --car-owner) CAR_OWNER=1; shift ;;
     --system) SYSTEM=$2; shift 2 ;;
+    --boot) BOOT=$2; shift 2 ;;
     *) die "unknown arg $1" ;;
   esac
 done
@@ -172,12 +174,14 @@ for part in $EDITED; do
   log "repacked $part.img ($(du -h "$OUT/$part.img" | cut -f1))"
 done
 for part in $PASSTHROUGH; do
-  [ -f "$BASE/$part.img" ] && cp --reflink=auto "$BASE/$part.img" "$OUT/$part.img"
+  src="$BASE/$part.img"
+  [ "$part" = boot ] && [ -n "$BOOT" ] && src=$BOOT
+  [ -f "$src" ] && cp --reflink=auto "$src" "$OUT/$part.img"
 done
 {
   echo "version=$VERSION"; echo "profile=$PROFILE"; echo "car_owner=$CAR_OWNER"; echo "built=$(date -u +%FT%TZ)"
   echo "launcher=$(apk_package "$APPS/carlauncher.apk") vc$("$AAPT2" dump badging "$APPS/carlauncher.apk" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p")"
-  echo "suite=$SUITE_N"; echo "system=${SYSTEM:-$BASE/system.img}"
+  echo "suite=$SUITE_N"; echo "system=${SYSTEM:-$BASE/system.img}"; echo "boot=${BOOT:-$BASE/boot.img}"
   echo "removed=$(awk -F'\t' 'NF{print $1}' <<<"$REMOVE" | paste -sd,)"
 } > "$OUT/MANIFEST"
 (cd "$OUT" && sha256sum ./*.img > SHA256SUMS)
