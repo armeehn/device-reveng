@@ -97,7 +97,7 @@ class CarService(private val appContext: Context) {
          */
         const val MAX_VOLUME = 40
 
-        /** Radio band ordinal → true when it's an AM band (getRadioBand()). GUESSED split. */
+        /** Radio band ordinal → true when it's an AM band: `mRadioBndNum > 2 ? "AM" : "FM"` (RadioUIControllerRotate.java:923). */
         fun isAmBand(band: Int): Boolean = band >= 3
     }
 
@@ -156,6 +156,26 @@ class CarService(private val appContext: Context) {
         _connected.value = true
     }
 
+    /**
+     * The tuner cache the owner's listener feeds (wire it with [CarEvents.ownerListener]). While
+     * [owner] is set the radio getters answer from here and [radioEvents] ticks on each fold, as
+     * the gateway's callback did; the binder path below is untouched.
+     */
+    val radioState = RadioStateHolder(onUpdate = { _radioEvents.update { it + 1 } })
+
+    /** Owner attached: [read] the cache, null until the MCU has reported; otherwise the binder. */
+    private inline fun <T> tuner(read: (RadioState) -> T, binder: IEventService.() -> T?): T? {
+        if (owner == null) {
+            return call(binder)
+        }
+
+        val cached = radioState.state.value
+        if (cached.updatedAt == 0L) {
+            return null
+        }
+        return read(cached)
+    }
+
     /** Bind the service. Idempotent-ish; returns false if the bind request was rejected. */
     fun bind(): Boolean {
         if (owner != null) {
@@ -191,8 +211,8 @@ class CarService(private val appContext: Context) {
 
     fun getValidMode(): Int? = call { getValidMode() }
     fun isBackCarConnected(): Boolean = call { IsBackCarConneted() } ?: false
-    fun getRadioFreq(): Int? = call { getRadioFreq() }
-    fun getRadioBand(): Int? = call { getRadioBand() }
+    fun getRadioFreq(): Int? = tuner({ it.freq }) { getRadioFreq() }
+    fun getRadioBand(): Int? = tuner({ it.band }) { getRadioBand() }
     fun getMainVolume(): Int? = call { getMainVolval().toInt() }
     fun isMuteOn(): Boolean = call { IsMuteOn() } ?: false
     fun getMcuVer(): String? = call { getMCUVer() }
@@ -308,6 +328,7 @@ class CarService(private val appContext: Context) {
      * Bumps on every tuner event the gateway pushes (band, tune slot, frequency, PS name, the
      * status bits) and on mode changes, so a screen can re-poll when something happened instead
      * of on a timer. The events' ids: 0 status bits, 1 band, 2 slot, 3 freq, 5 PTY, 6 PS name.
+     * With an owner attached, [radioState] bumps it for the same `73` sub-commands.
      */
     private val _radioEvents = MutableStateFlow(0L)
     val radioEvents: StateFlow<Long> = _radioEvents.asStateFlow()
@@ -351,8 +372,8 @@ class CarService(private val appContext: Context) {
     }
 
     // v1.7 — RDS/TA status getters (AIDL ordinals 16 / 21). Read-only: no AIDL setter exists.
-    fun getRadioRds(): Boolean? = call { getRadioRDSState() }
-    fun getRadioTa(): Boolean? = call { getRadioTAState() }
+    fun getRadioRds(): Boolean? = tuner({ it.rds }) { getRadioRDSState() }
+    fun getRadioTa(): Boolean? = tuner({ it.ta }) { getRadioTAState() }
 
     // ---- v2.6: the rest of the tuner status surface -------------------------
     // All getters. The AIDL has no radio setters beyond sendRadioKey/sendUserFreq, so RadioScreen
@@ -366,17 +387,17 @@ class CarService(private val appContext: Context) {
     // payload is unknown. RadioScreen therefore shows the real indicator set and not a scroller
     // it cannot fill.
     /** Alternative Frequencies on/off (getRadioAFState, ordinal 20). */
-    fun getRadioAf(): Boolean? = call { getRadioAFState() }
+    fun getRadioAf(): Boolean? = tuner({ it.af }) { getRadioAFState() }
     /** Traffic Programme icon state (getRadioTPIconState, ordinal 27). */
-    fun getRadioTp(): Boolean? = call { getRadioTPIconState() }
+    fun getRadioTp(): Boolean? = tuner({ it.tp }) { getRadioTPIconState() }
     /** Stereo icon state (getRadioSteroIconState, ordinal 26 — vendor's spelling). */
-    fun getRadioStereo(): Boolean? = call { getRadioSteroIconState() }
+    fun getRadioStereo(): Boolean? = tuner({ it.stereo }) { getRadioSteroIconState() }
     /**
      * The RDS PS station name (getRadioPTYName, ordinal 19 — misnamed by the vendor: the gateway
      * stores the MCU's PS frame in `mRadioPSName` and returns it here). The genre is
      * `getRadioPTYNum()`, an index into the vendor's 32-entry PTY table. No radio text (RT) exists.
      */
-    fun getRadioStationName(): String? = call { getRadioPTYName() }
+    fun getRadioStationName(): String? = tuner({ it.stationName }) { getRadioPTYName() }
 
     // ---- v1.5: Audio / EQ (CAR_API §3.2; ordinals confirmed in AIDL_ORDINALS.md) --------
     /** Current EQ preset index (getEQMode, ordinal 55). */

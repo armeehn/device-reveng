@@ -198,4 +198,139 @@ class McuOwnerProtocolTest {
         assertFalse(McuOwnerProtocol.panelKeyPassesReverse(McuOwnerProtocol.Key.MENU))
         assertFalse(McuOwnerProtocol.panelKeyPassesReverse(McuOwnerProtocol.Key.MODE))
     }
+
+    /** LEN 03 + 0B + 00 = 0x0E, ~0x0E = 0xF1: what ACC off sends before the port closes. */
+    @Test
+    fun btStateZeroFrame() {
+        assertArrayEquals(bytes(0x0D, 0x0A, 0x03, 0x0B, 0x00, 0xF1, 0x00), McuOwnerProtocol.btState(McuOwnerProtocol.BT_DISCONNECTED))
+    }
+
+    /** reloadParam's modes and backlight, then POWERON, MCU_VERSION and the resumed mode again. */
+    @Test
+    fun reloadIsModesBacklightModesThenLastMode() {
+        val frames = McuOwnerProtocol.reload(McuOwnerProtocol.StartupConfig(), McuOwnerProtocol.Mode.MUSIC)
+
+        assertEquals(6, frames.size)
+        assertArrayEquals(McuOwnerProtocol.mode(McuOwnerProtocol.Mode.POWER_ON), frames[0])
+        assertArrayEquals(McuOwnerProtocol.mode(McuOwnerProtocol.Mode.MCU_VERSION), frames[1])
+        assertArrayEquals(McuOwnerProtocol.backlight(100, 60), frames[2])
+        assertArrayEquals(McuOwnerProtocol.mode(McuOwnerProtocol.Mode.POWER_ON), frames[3])
+        assertArrayEquals(McuOwnerProtocol.mode(McuOwnerProtocol.Mode.MCU_VERSION), frames[4])
+        assertArrayEquals(bytes(0x0D, 0x0A, 0x03, 0x01, 0x0B, 0xF0, 0x00), frames[5])
+    }
+
+    @Test
+    fun reloadWithoutAModeResumesNone() {
+        val frames = McuOwnerProtocol.reload(McuOwnerProtocol.StartupConfig(), null)
+
+        assertArrayEquals(McuOwnerProtocol.mode(McuOwnerProtocol.Mode.NONE), frames.last())
+    }
+
+    @Test
+    fun wakeIsSleepStateOne() {
+        assertTrue(McuOwnerProtocol.isWake(command(0x96, 0x01)))
+        assertFalse(McuOwnerProtocol.isWake(command(0x96, 0x00)))
+        assertFalse(McuOwnerProtocol.isWake(command(0x96)))
+        assertFalse(McuOwnerProtocol.isWake(command(0x70, 0x01)))
+    }
+
+    // ---- 73 RADIO_EVENT: wire bytes summed by hand, read through the real reader ----------------
+
+    /** Frame the bytes as the MCU would send them; a wrong CK surfaces as a missing Command. */
+    private fun wire(vararg frame: Int): McuOwnerProtocol.RadioEvent? {
+        val events = McuSerial.Reader().feed(bytes(*frame))
+        val command = events.filterIsInstance<McuSerial.Command>().singleOrNull()
+            ?: throw AssertionError("hand-summed frame did not parse: $events")
+        return McuOwnerProtocol.radioEvent(command)
+    }
+
+    /** 96.30 MHz is 9630 = 0x259E in FM's 10 kHz units. 05+73+03+25+9E = 0x13E → ~3E = C1. */
+    @Test
+    fun fmFrequencyIsBigEndianTenKilohertz() {
+        assertEquals(McuOwnerProtocol.RadioEvent.Frequency(9630), wire(0x0D, 0x0A, 0x05, 0x73, 0x03, 0x25, 0x9E, 0xC1, 0x00))
+    }
+
+    /** 1010 kHz is 1010 = 0x03F2 in AM's kHz units, same layout. 05+73+03+03+F2 = 0x170 → ~70 = 8F. */
+    @Test
+    fun amFrequencyIsBigEndianKilohertz() {
+        assertEquals(McuOwnerProtocol.RadioEvent.Frequency(1010), wire(0x0D, 0x0A, 0x05, 0x73, 0x03, 0x03, 0xF2, 0x8F, 0x00))
+    }
+
+    /** Sub 1: band 3 (AM1), preset slot 2. 05+73+01+03+02 = 0x7E → ~7E = 81. */
+    @Test
+    fun bandCarriesBandAndPreset() {
+        assertEquals(McuOwnerProtocol.RadioEvent.Band(band = 3, preset = 2), wire(0x0D, 0x0A, 0x05, 0x73, 0x01, 0x03, 0x02, 0x81, 0x00))
+    }
+
+    /** Sub 7 is the same handler; band 9 is out of the 0..6 range and dropped, the slot kept. 05+73+07+09+05 = 0x8D → ~8D = 72. */
+    @Test
+    fun bandAltDropsOutOfRangeBandKeepsPreset() {
+        assertEquals(McuOwnerProtocol.RadioEvent.Band(band = null, preset = 5), wire(0x0D, 0x0A, 0x05, 0x73, 0x07, 0x09, 0x05, 0x72, 0x00))
+        assertNull(McuOwnerProtocol.radioEvent(command(0x73, 0x01, 0x09, 0x06)))
+    }
+
+    /** Sub 2: slot 4. 04+73+02+04 = 0x7D → ~7D = 82. Slot 6 is past the six presets. */
+    @Test
+    fun presetIsOneSlotByte() {
+        assertEquals(McuOwnerProtocol.RadioEvent.Preset(4), wire(0x0D, 0x0A, 0x04, 0x73, 0x02, 0x04, 0x82, 0x00))
+        assertNull(McuOwnerProtocol.radioEvent(command(0x73, 0x02, 0x06)))
+    }
+
+    /** Sub 0: icons 0x03 = stereo + TP; flags 0x19 = RDS + TA + ST/mono. 05+73+00+03+19 = 0x94 → ~94 = 6B. */
+    @Test
+    fun stateSplitsIconsAndFlags() {
+        val state = wire(0x0D, 0x0A, 0x05, 0x73, 0x00, 0x03, 0x19, 0x6B, 0x00) as McuOwnerProtocol.RadioEvent.State
+
+        assertTrue(state.stereoIcon)
+        assertTrue(state.tpIcon)
+        assertFalse(state.traffic)
+        assertFalse(state.noPty)
+        assertTrue(state.rds)
+        assertTrue(state.ta)
+        assertTrue(state.stMono)
+        assertFalse(state.pty)
+        assertFalse(state.af)
+        assertFalse(state.loc)
+        assertFalse(state.ams)
+        assertFalse(state.aps)
+    }
+
+    /** Sub 5: PTY 10. 04+73+05+0A = 0x86 → ~86 = 79. */
+    @Test
+    fun ptyIsOneByte() {
+        assertEquals(McuOwnerProtocol.RadioEvent.Pty(10), wire(0x0D, 0x0A, 0x04, 0x73, 0x05, 0x0A, 0x79, 0x00))
+    }
+
+    /**
+     * Sub 6: "CBC R1  " padded to RDS's eight. LEN 0B: 0B+73+06+43+42+43+20+52+31+20+20 = 0x22F → ~2F = D0.
+     * The vendor's `new String(bArr, 2, length - 3)` keeps the padding; we trim it, NULs too.
+     */
+    @Test
+    fun stationNameTrimsTrailingPadding() {
+        assertEquals(
+            McuOwnerProtocol.RadioEvent.StationName("CBC R1"),
+            wire(0x0D, 0x0A, 0x0B, 0x73, 0x06, 0x43, 0x42, 0x43, 0x20, 0x52, 0x31, 0x20, 0x20, 0xD0, 0x00),
+        )
+        assertEquals(
+            McuOwnerProtocol.RadioEvent.StationName("KEXP"),
+            McuOwnerProtocol.radioEvent(command(0x73, 0x06, 0x4B, 0x45, 0x58, 0x50, 0x00, 0x00, 0x00, 0x00)),
+        )
+        assertNull(McuOwnerProtocol.radioEvent(command(0x73, 0x06)))
+    }
+
+    /** Sub 4 and 8: slot 2 holds 96.30. 06+73+04+02+25+9E = 0x142 → ~42 = BD. Slot 42 is past the list. */
+    @Test
+    fun freqListIsSlotThenBigEndian() {
+        assertEquals(McuOwnerProtocol.RadioEvent.FreqList(2, 9630), wire(0x0D, 0x0A, 0x06, 0x73, 0x04, 0x02, 0x25, 0x9E, 0xBD, 0x00))
+        assertEquals(McuOwnerProtocol.RadioEvent.FreqList(2, 9630), McuOwnerProtocol.radioEvent(command(0x73, 0x08, 0x02, 0x25, 0x9E)))
+        assertNull(McuOwnerProtocol.radioEvent(command(0x73, 0x04, 0x2A, 0x25, 0x9E)))
+    }
+
+    @Test
+    fun radioEventRejectsShortOtherAndUnknown() {
+        assertNull(McuOwnerProtocol.radioEvent(command(0x73, 0x03, 0x25)))
+        assertNull(McuOwnerProtocol.radioEvent(command(0x73)))
+        assertNull(McuOwnerProtocol.radioEvent(command(0x72, 0x03, 0x25, 0x9E)))
+        assertNull(McuOwnerProtocol.radioEvent(command(0x73, 0x09, 0x01)))
+    }
 }

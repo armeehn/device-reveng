@@ -56,6 +56,8 @@ class CarEvents(private val appContext: Context) {
         /** Unprotected raw MCU-level reverse events — the normal-app fallback. */
         const val MCU_MSG_BACKCAR_START = "com.choiceway.eventcenter.EventUtils.MCU_MSG_BACKCAR_START"
         const val MCU_MSG_BACKCAR_END = "com.choiceway.eventcenter.EventUtils.MCU_MSG_BACKCAR_END"
+        /** Handbrake line changed (EventService.java:547); no extras, the state is a SysVar. */
+        const val MCU_MSG_BRAKE_EVT = "com.choiceway.eventcenter.EventUtils.MCU_MSG_BRAKE_EVT"
 
         // ---- ACC power (CAR_API §1.3) — unprotected (EventUtils.java:42,44) -----
         const val ACTION_ACC_OPEN_CLOSE_EVT =
@@ -822,8 +824,10 @@ class CarEvents(private val appContext: Context) {
                 }
 
                 // Headlamps changed; the state itself is in the SysVar the gateway wrote first.
+                // On 0.2 the launcher re-emits LAMP_STATUS itself and no SysVar exists: the
+                // owner listener already applied the bit, so a missing row must not read as DAY.
                 LAMP_STATUS -> {
-                    val on = sysVar.getString(SYSVAR_LAMP_STATUS) == LAMP_ON
+                    val on = (sysVar.getString(SYSVAR_LAMP_STATUS) ?: return) == LAMP_ON
                     updateDayNight(if (on) DayNight.NIGHT else DayNight.DAY)
                 }
 
@@ -1058,10 +1062,11 @@ class CarEvents(private val appContext: Context) {
     /**
      * Riposte OS 0.2: the same state, fed by our own port owner instead of eventcenter's
      * broadcasts. Reverse, ACC and headlamps come from the `71` SYS_EVENT bits, volume and mute
-     * from `79`/`78`, panel and wheel keys from `72`/`74`; the CAN relay goes to [vehicle].
+     * from `79`/`78`, panel and wheel keys from `72`/`74`; the CAN relay goes to [vehicle] and
+     * the `73` tuner events to [radio].
      * Nothing else in the launcher changes.
      */
-    fun ownerListener(vehicle: VehicleState?): McuOwner.Listener = object : McuOwner.Listener {
+    fun ownerListener(vehicle: VehicleState?, radio: RadioStateHolder? = null): McuOwner.Listener = object : McuOwner.Listener {
         override fun onSysEvent(event: McuOwnerProtocol.SysEvent) {
             updateReverse(event.reverse)
             if (_accOn.value != event.accLine) {
@@ -1087,6 +1092,10 @@ class CarEvents(private val appContext: Context) {
                 showWindow = !mute.silent,
                 atMs = System.currentTimeMillis(),
             )
+        }
+
+        override fun onRadio(event: McuOwnerProtocol.RadioEvent) {
+            radio?.onRadio(event)
         }
 
         override fun onCanSignal(signal: CanSignal, atMs: Long) {

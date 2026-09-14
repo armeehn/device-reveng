@@ -14,6 +14,7 @@ data class IntentSpec(
     val packageName: String? = null,
     val ints: Map<String, Int> = emptyMap(),
     val strings: Map<String, String> = emptyMap(),
+    val booleans: Map<String, Boolean> = emptyMap(),
     /** Explicit target class inside [packageName] (activity launches); ignored without one. */
     val className: String? = null,
 ) {
@@ -27,6 +28,7 @@ data class IntentSpec(
         }
         ints.forEach { (key, value) -> intent.putExtra(key, value) }
         strings.forEach { (key, value) -> intent.putExtra(key, value) }
+        booleans.forEach { (key, value) -> intent.putExtra(key, value) }
         return intent
     }
 

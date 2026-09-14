@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.asStateFlow
  *
  * ── Where this sits ─────────────────────────────────────────────────────────────────────────────
  *
- *     MCU ◀──/dev/ttyHS1──▶ McuLink ──▶ McuSerial.Reader ──▶ Command ──┬─▶ Listener (sys/volume/key)
+ *     MCU ◀──/dev/ttyHS1──▶ McuLink ──▶ McuSerial.Reader ──▶ Command ──┬─▶ Listener (sys/volume/key/radio)
  *                                                                    └─▶ 0xA5: HiworldCanDecoder ──▶ CanSignal
  *
  * This is the portability layer of Riposte OS: the launcher and the suite consume [Listener] and
@@ -63,11 +63,31 @@ class McuOwner(
 
         /** A `74` resistive-wheel edge; the vendor's STEER_WHEEL_INFOR, unbroadcast. */
         fun onWheelKey(key: McuOwnerProtocol.WheelKey) {}
+        /** One `73` RADIO_EVENT; [RadioStateHolder] folds them into what the tuner screen reads. */
+        fun onRadio(event: McuOwnerProtocol.RadioEvent) {}
 
         fun onCanSignal(signal: CanSignal, atMs: Long) {}
 
         /** A framed body no handler claims; logged by the caller, never dropped silently. */
         fun onOther(command: McuSerial.Command) {}
+
+        /** RX `96 01`: the MCU reports it woke (onCmdMcuSleepState, EventService.java:2270-2280). */
+        fun onWake() {}
+    }
+
+    /** One port, several consumers: every callback goes to each of [targets], in order. */
+    class FanOut(private vararg val targets: Listener) : Listener {
+        override fun onSysEvent(event: McuOwnerProtocol.SysEvent) = targets.forEach { it.onSysEvent(event) }
+
+        override fun onMainVolume(volume: McuOwnerProtocol.MainVolume) = targets.forEach { it.onMainVolume(volume) }
+
+        override fun onMute(mute: McuOwnerProtocol.Mute) = targets.forEach { it.onMute(mute) }
+
+        override fun onKey(key: Int) = targets.forEach { it.onKey(key) }
+
+        override fun onCanSignal(signal: CanSignal, atMs: Long) = targets.forEach { it.onCanSignal(signal, atMs) }
+
+        override fun onOther(command: McuSerial.Command) = targets.forEach { it.onOther(command) }
     }
 
     sealed class Status {
@@ -101,6 +121,10 @@ class McuOwner(
     /** Mirrors `mBackcarConnected`: while set, most panel keys are dropped as the vendor drops them. */
     @Volatile
     private var reversing = false
+    /** The last [setMode] argument, so a wake can resume it ([McuOwnerProtocol.reload]). */
+    @Volatile
+    var lastMode: McuOwnerProtocol.Mode? = null
+        private set
 
     fun start() {
         if (running) {
@@ -152,6 +176,7 @@ class McuOwner(
 
     fun setMode(mode: McuOwnerProtocol.Mode): Boolean {
         val l = link ?: return false
+        lastMode = mode
         return sendWithAck(l, mode)
     }
 
@@ -236,6 +261,11 @@ class McuOwner(
         McuOwnerProtocol.mute(command)?.let { listener.onMute(it); return }
         McuOwnerProtocol.panelKey(command)?.let { onPanelKey(it); return }
         McuOwnerProtocol.wheelKey(command)?.let { listener.onWheelKey(it); return }
+        McuOwnerProtocol.radioEvent(command)?.let { listener.onRadio(it); return }
+        if (McuOwnerProtocol.isWake(command)) {
+            listener.onWake()
+            return
+        }
 
         // 0xA5 relays the CAN box's own frame; the decoder keys on the box's cmd, not the relay opcode.
         when (val inner = command.innerFrame()) {

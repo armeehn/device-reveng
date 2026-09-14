@@ -62,16 +62,20 @@ class McuOwnerTest {
         val keys = CopyOnWriteArrayList<Int>()
         val panel = CopyOnWriteArrayList<McuOwnerProtocol.PanelKey>()
         val wheel = CopyOnWriteArrayList<McuOwnerProtocol.WheelKey>()
+        val radio = CopyOnWriteArrayList<McuOwnerProtocol.RadioEvent>()
         val signals = CopyOnWriteArrayList<CanSignal>()
         val other = CopyOnWriteArrayList<McuSerial.Command>()
+        val wakes = CopyOnWriteArrayList<Long>()
 
         override fun onSysEvent(event: McuOwnerProtocol.SysEvent) { sys.add(event) }
         override fun onMainVolume(volume: McuOwnerProtocol.MainVolume) { this.volume.add(volume) }
         override fun onKey(key: Int) { keys.add(key) }
         override fun onPanelKey(key: McuOwnerProtocol.PanelKey) { panel.add(key) }
         override fun onWheelKey(key: McuOwnerProtocol.WheelKey) { wheel.add(key) }
+        override fun onRadio(event: McuOwnerProtocol.RadioEvent) { radio.add(event) }
         override fun onCanSignal(signal: CanSignal, atMs: Long) { signals.add(signal) }
         override fun onOther(command: McuSerial.Command) { other.add(command) }
+        override fun onWake() { wakes.add(System.currentTimeMillis()) }
     }
 
     private fun owner(link: FakeLink, gate: Gate = Gate(eventcenter = false, enabled = true), recorder: Recorder = Recorder()) =
@@ -251,6 +255,28 @@ class McuOwnerTest {
         assertTrue(recorder.other.isEmpty())
     }
 
+    /** `73 03 25 9E` is 96.30 MHz; a sub-command the vendor has no case for (9) is an "other". */
+    @Test
+    fun dispatchesRadioEventsAndLogsUnknownSubCommand() {
+        val link = FakeLink(ackNull = true)
+        val recorder = Recorder()
+        val owner = owner(link, recorder = recorder)
+        owner.start()
+        waitFor("running") { owner.status.value as? McuOwner.Status.Running }
+
+        link.feed(McuSerial.encode(McuOpcode.RADIO_EVENT.code, bytes(0x03, 0x25, 0x9E)))
+        link.feed(McuSerial.encode(McuOpcode.RADIO_EVENT.code, bytes(0x09, 0x01)))
+
+        waitFor("three frames counted") {
+            (owner.status.value as? McuOwner.Status.Running)?.takeIf { it.frames == 3L }
+        }
+        owner.stop()
+
+        assertEquals(McuOwnerProtocol.RadioEvent.Frequency(9630), recorder.radio[0])
+        assertEquals(1, recorder.radio.size)
+        assertEquals(McuOpcode.RADIO_EVENT.code, recorder.other[0].opcode)
+    }
+
     @Test
     fun linkClosingUnderneathReportsFailed() {
         val link = FakeLink(ackNull = true)
@@ -263,5 +289,38 @@ class McuOwnerTest {
         val failed = waitFor("failed") { owner.status.value as? McuOwner.Status.Failed }
         assertNotNull(failed)
         assertEquals("link closed", failed.reason)
+    }
+
+    /** `96 01` reaches onWake; `96 00` is nothing the vendor acts on and lands in onOther. */
+    @Test
+    fun sleepStateOneDispatchesOnWake() {
+        val link = FakeLink(ackNull = true)
+        val recorder = Recorder()
+        val owner = owner(link, recorder = recorder)
+        owner.start()
+        waitFor("running") { owner.status.value as? McuOwner.Status.Running }
+
+        link.feed(McuSerial.encode(McuOpcode.SLEEP_STATE.code, bytes(0x01)))
+        link.feed(McuSerial.encode(McuOpcode.SLEEP_STATE.code, bytes(0x00)))
+
+        waitFor("both frames") { (owner.status.value as? McuOwner.Status.Running)?.takeIf { it.frames == 3L } }
+        owner.stop()
+
+        assertEquals(1, recorder.wakes.size)
+        assertEquals(McuOpcode.SLEEP_STATE.code, recorder.other[0].opcode)
+    }
+
+    /** setMode remembers its argument so a wake can resume it. */
+    @Test
+    fun setModeIsRemembered() {
+        val link = FakeLink(ackNull = true)
+        val owner = owner(link)
+        owner.start()
+        waitFor("running") { owner.status.value as? McuOwner.Status.Running }
+
+        owner.setMode(McuOwnerProtocol.Mode.RADIO)
+        owner.stop()
+
+        assertEquals(McuOwnerProtocol.Mode.RADIO, owner.lastMode)
     }
 }

@@ -35,10 +35,13 @@ import com.ripostelabs.carlauncher.data.AccessoryRuntime
 import com.ripostelabs.carlauncher.carlib.RootShell
 import com.ripostelabs.carlauncher.input.WheelGamepad
 import com.ripostelabs.carlauncher.service.CanCaptureService
+import com.ripostelabs.carlauncher.carlib.AndroidAccSource
 import com.ripostelabs.carlauncher.carlib.AndroidOwnerGate
 import com.ripostelabs.carlauncher.carlib.CarService
 import com.ripostelabs.carlauncher.carlib.McuOwner
 import com.ripostelabs.carlauncher.carlib.SlcanLinkSource
+import com.ripostelabs.carlauncher.carlib.VendorBroadcastReemitter
+import com.ripostelabs.carlauncher.carlib.McuSleepWake
 import com.ripostelabs.carlauncher.carlib.GatewayHandshake // v3.0
 import com.ripostelabs.carlauncher.carlib.SysVar // v0.4.9 vendor hidden-apps list
 import com.ripostelabs.carlauncher.carlib.VendorBtService
@@ -134,6 +137,8 @@ class MainActivity : ComponentActivity() {
 
     /** Riposte OS 0.2 on a rig with a raw-bus carrier (`riposte.canbus.link`); null otherwise. */
     private var busSource: SlcanLinkSource? = null
+    /** Riposte OS 0.2 only: ACC sleep and wake for [mcuOwner], polled like the vendor's AccObserver. */
+    private var mcuSleepWake: McuSleepWake? = null
 
     /** Riposte OS 0.2 only: whether CAMERA is granted, so the reverse screen can say why not. */
     private var cameraGranted by mutableStateOf(false)
@@ -238,15 +243,21 @@ class MainActivity : ComponentActivity() {
         carService = CarService(applicationContext)
         val ownerGate = AndroidOwnerGate(applicationContext)
         if (ownerGate.ownerEnabled() && !ownerGate.eventcenterPresent()) {
+            // The suite still listens for eventcenter's actions; the re-emitter replays them.
             // The carrier comes from `riposte.mcu.link`: the vendor UART on the car, a QEMU
             // virtio port or a socket on the emulator farm, where carsim plays the vehicle.
+            val ownerListener = McuOwner.FanOut(
+                carEvents.ownerListener(CanCaptureService.vehicle(), carService.radioState),
+                VendorBroadcastReemitter(applicationContext),
+            )
             mcuOwner = McuOwner(
                 ownerGate,
-                carEvents.ownerListener(CanCaptureService.vehicle()),
+                ownerListener,
                 openLink = { ownerGate.mcuLink().open() },
             ).also {
                 carService.attachOwner(it)
                 it.start()
+                mcuSleepWake = McuSleepWake.forOwner(it, AndroidAccSource()).also { sw -> sw.start() }
             }
             // The raw body bus on a second carrier (`riposte.canbus.link`), when the rig has one.
             // The car has none: its bus arrives over USB through CanCaptureService.
@@ -1136,6 +1147,7 @@ class MainActivity : ComponentActivity() {
         mcuOwner?.stop()
         gatewayHandshake.unregister() // v3.0
         carEvents.unregister()
+        mcuSleepWake?.stop()
         carService.unbind()
         vendorBtService.unbind()
         nowPlaying.stop()
