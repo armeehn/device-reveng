@@ -232,6 +232,8 @@ class McuOwnerProtocolTest {
         assertFalse(McuOwnerProtocol.isWake(command(0x96, 0x00)))
         assertFalse(McuOwnerProtocol.isWake(command(0x96)))
         assertFalse(McuOwnerProtocol.isWake(command(0x70, 0x01)))
+    }
+
     // ---- 73 RADIO_EVENT: wire bytes summed by hand, read through the real reader ----------------
 
     /** Frame the bytes as the MCU would send them; a wrong CK surfaces as a missing Command. */
