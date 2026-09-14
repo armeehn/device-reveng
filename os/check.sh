@@ -15,6 +15,13 @@ readonly LAUNCHER_PKG=com.ripostelabs.carlauncher
 readonly LAUNCHER_APK=priv-app/CarLauncher/CarLauncher.apk
 readonly PRIVAPP_XML=etc/permissions/privapp-permissions-ripostelabs.xml
 readonly FRAMEWORK=framework/framework.jar
+# Car-kit Bluetooth roles (overlay/props): on, off, and the class of device on a gsi output.
+readonly BT_CARKIT_ON="bluetooth.profile.a2dp.sink.enabled bluetooth.profile.hfp.hf.enabled
+  bluetooth.profile.avrcp.controller.enabled bluetooth.profile.pbap.client.enabled
+  bluetooth.profile.map.client.enabled"
+readonly BT_CARKIT_OFF="bluetooth.profile.a2dp.source.enabled bluetooth.profile.hfp.ag.enabled
+  bluetooth.profile.avrcp.target.enabled"
+readonly BT_CARKIT_COD=38,4,8
 
 BASE="" OUT="" PROFILE=tier1 SUITE="" SYSTEM="" BOOT=""
 while [ $# -gt 0 ]; do
@@ -98,6 +105,26 @@ if grep -q '^ro.riposte.os.car_owner=1' "$S/build.prop"; then
   check "! has_pkg $T com.szchoiceway.eventcenter" "car_owner=1 only without eventcenter"
 else
   check "grep -q '^ro.riposte.os.car_owner=0' $S/build.prop" "ro.riposte.os.car_owner=0 on a stock-derived build"
+fi
+
+echo "bluetooth"
+# The car-kit roles land only on profile gsi (overlay/props `@carkit` lines); a stock-derived
+# build keeps the vendor's bluetooth.* lines byte for byte. init keeps the LAST value of a
+# duplicated key, so the GSI's own phone-side lines above ours do not count.
+last_prop() { sed -n "s/^$1=//p" "$2" | tail -1; }
+if [ "$PROFILE" = gsi ]; then
+  check "grep -q '^ro.riposte.os.bt_carkit=1$' $S/build.prop" "ro.riposte.os.bt_carkit=1"
+  for p in $BT_CARKIT_ON; do
+    check "[ \"\$(last_prop $p $S/build.prop)\" = true ]" "$p=true"
+  done
+  for p in $BT_CARKIT_OFF; do
+    check "[ \"\$(last_prop $p $S/build.prop)\" = false ]" "$p=false"
+  done
+  check "[ \"\$(last_prop bluetooth.device.class_of_device $S/build.prop)\" = $BT_CARKIT_COD ]" "class of device $BT_CARKIT_COD (car audio)"
+else
+  check "grep -q '^ro.riposte.os.bt_carkit=0$' $S/build.prop" "ro.riposte.os.bt_carkit=0"
+  check "! grep -q '^@carkit ' $S/build.prop" "no @carkit tag leaked into build.prop"
+  check "cmp -s <(grep '^bluetooth\.' $SB/build.prop) <(grep '^bluetooth\.' $S/build.prop)" "bluetooth.* props identical to the base"
 fi
 
 echo "boot animation"

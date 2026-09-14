@@ -62,12 +62,40 @@ A GSI is system-as-root (`/system` content under `system/`, absolute symlinks at
 `system_root()` in `lib.sh` finds the right directory for either layout. The vanilla image went
 through build + check on 2026-09-13 (2.4 GB rebuilt in 10 s, PASS) with a stand-in product.
 
+## Bluetooth on 0.2: car-kit roles
+
+A GSI is a phone build: its Bluetooth stack runs the phone-side profiles (A2DP source, HFP
+AG, AVRCP target) and leaves the car-kit roles off, so a phone can neither stream music to
+the unit nor hand it a call. Android 13+ picks profiles by system property at stack start
+(`packages/modules/Bluetooth` `Config.java`, each service's `isEnabled()`; names from
+`system/libsysprop` `BluetoothProperties.sysprop`). Profile `gsi` sets `RIPOSTE_BT_CARKIT=1`
+and `build.sh` keeps the `@carkit` lines of `overlay/props`:
+
+    bluetooth.profile.a2dp.sink.enabled=true        unit plays the phone's music
+    bluetooth.profile.hfp.hf.enabled=true           unit is the hands-free
+    bluetooth.profile.avrcp.controller.enabled=true unit drives the phone's player, gets metadata
+    bluetooth.profile.pbap.client.enabled=true      contacts / call log from the phone
+    bluetooth.profile.map.client.enabled=true       messages from the phone
+    bluetooth.profile.a2dp.source.enabled=false     ┐ the phone-side roles the GSI ships;
+    bluetooth.profile.hfp.ag.enabled=false          │ off as in AOSP automotive
+    bluetooth.profile.avrcp.target.enabled=false    ┘ (car_product/properties/bluetooth.prop)
+    bluetooth.device.class_of_device=38,4,8         Audio/Video · Car Audio
+
+`ro.riposte.os.bt_carkit` says which set the image carries (1 / 0). Tier 1/2 keep the
+vendor's `bluetooth.*` lines byte for byte (`check.sh` compares them to the base); on gsi
+`check.sh` asserts the last value of each key, since init keeps the last of a duplicated
+non-`ro.` key. Audio needs no bridge: `A2dpSinkStreamHandler` takes audio focus and the
+native sink feeds an `AudioTrack`; `AvrcpControllerService` publishes a `MediaSession` the
+launcher's now-playing card already reads. The launcher's `BtCarKit` (carlib) drives the
+profiles on 0.2; whether the vendor audio HAL routes the sink track to the amp is a car test.
+
 ## Overlay
 
 - `overlay/remove.tier1` — phone-home and adware packages, deleted from the image.
 - `overlay/remove.tier2` — OEM apps the suite replaces. `CustomerUI` is never removed:
   eventcenter inflates its windows by name.
 - `overlay/keep` — the build refuses to remove these and `check.sh` asserts them.
+- `overlay/props` — appended to `build.prop` through `envsubst`; `@carkit` lines only on gsi.
 - `overlay/system/etc/init/riposte.rc` + `bin/riposte-firstboot.sh` — once per `/data`,
   hands the HOME role to CarLauncher.
 - `bootanim/make.py` renders `bootanimation.zip` (wordmark + marigold bar, RL-BRAND-001 night
@@ -94,7 +122,7 @@ at each step.
 ## What the desk cannot prove
 
 The fixture proves the pipeline, not the phone. Boot, reverse camera, wheel keys,
-radio and climate readout need the car (Plane RAV4-82). The emulator farm is x86_64
+radio, climate readout and a phone on the car-kit profiles need the car (Plane RAV4-82/84). The emulator farm is x86_64
 and cannot run these images.
 
 ## Roadmap (Plane RAV4-78)
