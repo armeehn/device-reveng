@@ -27,6 +27,7 @@ import com.ripostelabs.carlauncher.ui.theme.carShape
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import com.ripostelabs.carlauncher.carlib.CarService
+import com.ripostelabs.carlauncher.carlib.BtCarKit
 import com.ripostelabs.carlauncher.carlib.McuOwner
 import com.ripostelabs.carlauncher.data.AppDirectoryStore
 import com.ripostelabs.carlauncher.data.CarSettingsController
@@ -65,6 +66,8 @@ fun SettingsHost(
     initialRoute: SettingsRoute? = null,
     // Riposte OS 0.2: the McuOwner status when this slot owns the port; null = vendor binder.
     mcuStatus: StateFlow<McuOwner.Status>? = null,
+    // Riposte OS 0.2: the car-kit Bluetooth reader for the Doctor; null = btsuite's slot.
+    carKit: BtCarKit? = null,
 ) {
     val backStack = remember {
         mutableStateListOf<SettingsRoute>(SettingsRoute.Hub).also { stack ->
@@ -135,6 +138,7 @@ fun SettingsHost(
                 settingsStore = settingsStore,
                 carService = carService,
                 mcuStatus = mcuStatus,
+                carKit = carKit,
             )
 
             // v0.4.2: back up / restore the whole launcher state (DataStore file snapshot).

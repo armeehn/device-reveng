@@ -36,6 +36,9 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import com.ripostelabs.carlauncher.ui.AutoSizeText
 import com.ripostelabs.carlauncher.ui.theme.JetBrainsMono
+import com.ripostelabs.carlauncher.carlib.BtCarKit
+import com.ripostelabs.carlauncher.carlib.BtCarKitMap
+import com.ripostelabs.carlauncher.carlib.BtCarKitSnapshot
 import com.ripostelabs.carlauncher.carlib.CarService
 import com.ripostelabs.carlauncher.carlib.McuOwner
 import com.ripostelabs.carlauncher.data.CarLink
@@ -83,6 +86,7 @@ fun SetupDoctorScreen(
     settingsStore: SettingsStore? = null, // OEM-shadow policy (null keeps previews working)
     carService: CarService? = null, // live source mode; null = "gateway not bound"
     mcuStatus: StateFlow<McuOwner.Status>? = null, // owner status; null = vendor binder owns the link
+    carKit: BtCarKit? = null, // Riposte OS 0.2 car-kit Bluetooth; null = btsuite's slot
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -179,6 +183,7 @@ fun SetupDoctorScreen(
 
         VendorAppsSection(report = vendorApps, ownerActive = mcuStatus != null)
         CarLinkSection(carService = carService, mcuStatus = mcuStatus)
+        BtCarKitSection(carKit = carKit)
         GatewayStateSection(controller = controller, carService = carService)
 
         SettingsSection(title = "Crashes") {
@@ -312,6 +317,22 @@ private fun CarLinkSection(carService: CarService?, mcuStatus: StateFlow<McuOwne
     val reading = remember(status, connected) { CarLink.read(status, connected) }
 
     SettingsSection(title = "Car link") {
+        StatusRow(ok = reading.ok, title = reading.title, detail = reading.detail)
+    }
+}
+
+/**
+ * Riposte OS 0.2: are the car-kit profiles (HFP client, A2DP sink, AVRCP controller) up in the
+ * stock stack, and is a phone on them. The words come from [BtCarKitMap] so the unit test and
+ * this row agree; on the vendor slot the row says btsuite carries the phone.
+ */
+@Composable
+private fun BtCarKitSection(carKit: BtCarKit?) {
+    val snapshot by (carKit?.snapshot?.collectAsStateSafe(initial = BtCarKitSnapshot())
+        ?: remember { mutableStateOf<BtCarKitSnapshot?>(null) })
+    val reading = remember(snapshot) { BtCarKitMap.reading(snapshot) }
+
+    SettingsSection(title = "Bluetooth car-kit") {
         StatusRow(ok = reading.ok, title = reading.title, detail = reading.detail)
     }
 }

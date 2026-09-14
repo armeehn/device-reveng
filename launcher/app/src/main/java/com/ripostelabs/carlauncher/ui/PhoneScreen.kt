@@ -1,5 +1,7 @@
 package com.ripostelabs.carlauncher.ui
 
+import android.content.Intent
+import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -40,6 +42,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.ripostelabs.carlauncher.carlib.BtCarKit
 import com.ripostelabs.carlauncher.carlib.CarEvents
 import com.ripostelabs.carlauncher.carlib.HfpState
 import com.ripostelabs.carlauncher.carlib.IntentSpec
@@ -58,6 +61,10 @@ import kotlinx.coroutines.withContext
  * talks to the module: it reads btsuite's `HBCP_EVT_*` broadcasts ([CarEvents.vendorBt]) and
  * sends btsuite's own control broadcasts ([VendorBt]). Whatever btsuite does not expose (phone
  * book, pairing) is one tap away on its own pages ([VendorBt.openPage]).
+ *
+ * Riposte OS 0.2 has no btsuite: [carKit] ([BtCarKit]) feeds the same [CarEvents.vendorBt] from
+ * the stock stack's HF client and takes the three call actions; the vendor pages collapse to
+ * the system Bluetooth settings. The layout does not change between the slots.
  *
  * ```
  *  ┌ Back  Phone ───────────────────────────────────────────────────────────────┐
@@ -82,6 +89,8 @@ import kotlinx.coroutines.withContext
 fun PhoneScreen(
     carEvents: CarEvents,
     onBack: () -> Unit,
+    // Riposte OS 0.2: the stock stack's HF client answers the buttons; null = btsuite's slot.
+    carKit: BtCarKit? = null,
 ) {
     val context = LocalContext.current.applicationContext
     val vendor by carEvents.vendorBt.collectAsStateSafe(initial = VendorBtState())
@@ -94,12 +103,27 @@ fun PhoneScreen(
 
     fun open(page: VendorBt.Page) {
         feedback?.tap()
+        if (carKit != null) {
+            // No btsuite pages on 0.2: every escape hatch is the system Bluetooth settings.
+            context.startActivity(
+                Intent(Settings.ACTION_BLUETOOTH_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+            return
+        }
         VendorBt.openPage(page).start(context)
     }
 
+    // The three call actions, on whichever stack carries the phone this slot.
+    fun answer() = if (carKit != null) { feedback?.tap(); carKit.answer() } else send(VendorBt.answer())
+    fun hangUp() = if (carKit != null) { feedback?.tap(); carKit.hangUp() } else send(VendorBt.hangUp())
+    fun dial(number: String) =
+        if (carKit != null) { feedback?.tap(); carKit.dial(number) } else send(VendorBt.dial(number))
+
     // Seed the device name: btsuite only re-sends it on request (control key 8).
     LaunchedEffect(Unit) {
-        VendorBt.requestDeviceName().broadcast(context)
+        if (carKit == null) {
+            VendorBt.requestDeviceName().broadcast(context)
+        }
     }
 
     // The provider is a blocking ContentResolver query; re-read when a call ends, since that is
@@ -127,8 +151,8 @@ fun PhoneScreen(
                 CallStatus(vendor = vendor)
                 CallButtons(
                     state = vendor.hfp,
-                    onAnswer = { send(VendorBt.answer()) },
-                    onHangUp = { send(VendorBt.hangUp()) },
+                    onAnswer = ::answer,
+                    onHangUp = ::hangUp,
                 )
                 ParkedOnly(
                     feature = "The dial pad",
@@ -136,7 +160,7 @@ fun PhoneScreen(
                 ) {
                     DialPad(
                         state = vendor.hfp,
-                        onCall = { send(VendorBt.dial(it)) },
+                        onCall = ::dial,
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -155,7 +179,7 @@ fun PhoneScreen(
                     CallList(
                         entries = callLog,
                         canDial = vendor.hfp == HfpState.CONNECTED,
-                        onDial = { send(VendorBt.dial(it)) },
+                        onDial = ::dial,
                         onOpenVendorLog = { open(VendorBt.Page.CALL_RECORD) },
                         modifier = Modifier.weight(1f),
                     )
