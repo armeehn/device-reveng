@@ -34,7 +34,9 @@ mint_apk() { # pkg out
 mkdir -p "$W/sys/framework" "$W/sys/priv-app/SysVarProvider" "$W/sys/etc/permissions" "$W/sys/bin"
 head -c 1048576 /dev/urandom > "$W/sys/framework/framework.jar"
 mint_apk com.szchoiceway.providers.settings "$W/sys/priv-app/SysVarProvider/SysVarProvider.apk"
-printf 'ro.build.version.release=13\nro.build.type=userdebug\n' > "$W/sys/build.prop"
+# Phone-side Bluetooth roles as a stock or GSI build.prop carries them: tier2 must keep them
+# byte for byte, gsi must override them (init keeps the last value of a duplicated key).
+printf 'ro.build.version.release=13\nro.build.type=userdebug\nbluetooth.profile.a2dp.source.enabled=true\nbluetooth.profile.hfp.ag.enabled=true\n' > "$W/sys/build.prop"
 find "$W/sys" -exec setfattr -n security.selinux -v "$SELINUX_SYSTEM_FILE" {} +
 repack_image ext4 "$W/sys" "$W/base/system.img" system
 
@@ -79,6 +81,7 @@ repack_image ext4 "$W/sar" "$W/sar.img" system
 xz -c "$W/sar.img" > "$W/gsi.img.xz"
 "$HERE/build.sh" --base "$W/base" --system "$W/gsi.img.xz" --apps "$W/apps" --out "$W/out-gsi" --profile gsi
 grep -q '^car_owner=1$' "$W/out-gsi/MANIFEST" || die "gsi profile did not imply --car-owner"
+grep -q '^bt_carkit=1$' "$W/out-gsi/MANIFEST" || die "gsi profile did not turn the car-kit roles on"
 "$HERE/check.sh" --base "$W/base" --system "$W/gsi.img.xz" --out "$W/out-gsi" --profile gsi --suite "$N"
 
 echo "== negative control: --car-owner with eventcenter in the base must refuse"

@@ -84,6 +84,10 @@ in Setup Doctor / logcat with `acked=true`.
 | Headlamps | Night theme | |
 | Radio seek | Audio changes | The MCU may need the config blocks `startup()` omits |
 | Wi-Fi, BT pairing, audio out | Work (vendor HALs) | |
+| Setup Doctor → Bluetooth car-kit | `HFP client on, A2DP sink on, AVRCP controller on` | `OFF`: `getprop bluetooth.profile.hfp.hf.enabled` must print `true`; else the props did not land |
+| Pair a phone | Doctor row names it; Phone screen `Connected`; phone shows the unit as a car kit | Phone offers no call audio: class of device / HF record missing, `dumpsys bluetooth_manager` |
+| Play music on the phone | Sound from the amp; now-playing card shows the track | Card but no sound: the vendor audio HAL does not route the sink track (needs a routing fix) |
+| Call the phone | Phone screen `Incoming call`, Answer / Hang up act, audio on the car | Buttons inert: `logcat -s BtCarKit` for the HF call control failure |
 
 Undo: `set_active` back to stock. Everything here is expected to be partial; the point is the
 list of what the MCU does without the vendor's config frames.

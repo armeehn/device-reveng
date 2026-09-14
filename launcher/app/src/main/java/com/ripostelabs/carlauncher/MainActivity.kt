@@ -30,6 +30,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import com.ripostelabs.carlauncher.carlib.BtCarKit
 import com.ripostelabs.carlauncher.carlib.CarEvents
 import com.ripostelabs.carlauncher.data.AccessoryRuntime
 import com.ripostelabs.carlauncher.carlib.RootShell
@@ -134,6 +135,9 @@ class MainActivity : ComponentActivity() {
 
     /** Riposte OS 0.2 only: our MCU port owner. Null on a stock or 0.1 slot. */
     private var mcuOwner: McuOwner? = null
+
+    /** Riposte OS 0.2 only: the phone through the stock stack's car-kit profiles. */
+    private var btCarKit: BtCarKit? = null
 
     /** Riposte OS 0.2 on a rig with a raw-bus carrier (`riposte.canbus.link`); null otherwise. */
     private var busSource: SlcanLinkSource? = null
@@ -263,6 +267,12 @@ class MainActivity : ComponentActivity() {
             // The car has none: its bus arrives over USB through CanCaptureService.
             busSource = ownerGate.canbusLink()?.let { spec ->
                 SlcanLinkSource({ spec.open() }, CanCaptureService.vehicle()).also { it.start() }
+            }
+            // No btsuite on this slot: the HF client / A2DP sink / AVRCP controller proxies
+            // feed the same vendorBt flow the Phone screen and the chips already read.
+            btCarKit = BtCarKit(applicationContext).also { kit ->
+                kit.start()
+                lifecycleScope.launch { kit.vendorView.collect(carEvents::feedVendorBt) }
             }
         }
         carService.bind()
@@ -751,6 +761,7 @@ class MainActivity : ComponentActivity() {
                             Screen.Phone -> PhoneScreen(
                                 carEvents = carEvents,
                                 onBack = { screen = Screen.Home },
+                                carKit = btCarKit,
                             )
 
                             // v3.0: the cockpit dashboard.
@@ -810,6 +821,7 @@ class MainActivity : ComponentActivity() {
                                 appDirectoryStore = appDirectoryStore,
                                 initialRoute = s.initialRoute,
                                 mcuStatus = mcuOwner?.status,
+                                carKit = btCarKit,
                             )
 
                             Screen.Themes -> ThemesScreen(
@@ -1145,6 +1157,7 @@ class MainActivity : ComponentActivity() {
         // found the old one still open would report "Device or resource busy" as a silent MCU.
         busSource?.stop()
         mcuOwner?.stop()
+        btCarKit?.stop()
         gatewayHandshake.unregister() // v3.0
         carEvents.unregister()
         mcuSleepWake?.stop()

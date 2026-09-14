@@ -3,3 +3,23 @@ ro.riposte.os.version=${RIPOSTE_OS_VERSION}
 ro.riposte.os.base=gt6-eau
 # 1 only on a build without eventcenter (build.sh --car-owner); McuOwner refuses otherwise.
 ro.riposte.os.car_owner=${RIPOSTE_CAR_OWNER}
+# 1 when the Bluetooth stack runs the car-kit roles below (profile gsi); 0 keeps the base's.
+ro.riposte.os.bt_carkit=${RIPOSTE_BT_CARKIT}
+# Car-kit Bluetooth roles: the phone is the A2DP source / HFP AG / AVRCP target, the unit the
+# sink / HF / controller. A phone GSI ships the opposite set and none of these; stock keeps
+# the vendor's. `@carkit ` lines land only with RIPOSTE_BT_CARKIT=1 (build.sh strips the tag).
+# Names: system/libsysprop srcs/android/sysprop/BluetoothProperties.sysprop; each profile's
+# isEnabled() reads its prop at stack start (packages/modules/Bluetooth Config.java,
+# android-14.0.0_r1). The set and the class of device mirror AOSP automotive
+# (packages/services/Car car_product/properties/bluetooth.prop). init keeps the LAST value
+# of a duplicated non-ro key (init/property_service.cpp LoadProperties), so this overrides
+# the GSI's phone-side lines above.
+@carkit bluetooth.profile.a2dp.sink.enabled=true
+@carkit bluetooth.profile.hfp.hf.enabled=true
+@carkit bluetooth.profile.avrcp.controller.enabled=true
+@carkit bluetooth.profile.pbap.client.enabled=true
+@carkit bluetooth.profile.map.client.enabled=true
+@carkit bluetooth.profile.a2dp.source.enabled=false
+@carkit bluetooth.profile.hfp.ag.enabled=false
+@carkit bluetooth.profile.avrcp.target.enabled=false
+@carkit bluetooth.device.class_of_device=38,4,8

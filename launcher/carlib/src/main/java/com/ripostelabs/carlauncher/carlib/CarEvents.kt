@@ -491,6 +491,11 @@ class CarEvents(private val appContext: Context) {
      */
     val vendorBt: StateFlow<VendorBtState> = _vendorBt.asStateFlow()
 
+    /** Riposte OS 0.2: [BtCarKit] is the phone; no btsuite broadcast competes on that slot. */
+    fun feedVendorBt(state: VendorBtState) {
+        _vendorBt.value = state
+    }
+
     private val _carPlay = MutableStateFlow(CarPlayState())
     /**
      * RAV4-52 — the Zlink phone-projection session (contract in [CarPlayState]). Starts

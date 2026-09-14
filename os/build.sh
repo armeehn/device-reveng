@@ -28,7 +28,7 @@ readonly BOOTANIM=product/media/bootanimation.zip   # bootanimation looks in /pr
 readonly PASSTHROUGH="vendor system_ext boot dtbo vbmeta vbmeta_system"   # one matched set, never mixed across builds
 readonly EDITED="system product"
 
-BASE="" APPS="" OUT="" PROFILE=tier1 VERSION="" CAR_OWNER=0 SYSTEM="" BOOT=""
+BASE="" APPS="" OUT="" PROFILE=tier1 VERSION="" CAR_OWNER=0 BT_CARKIT=0 SYSTEM="" BOOT=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --base) BASE=$2; shift 2 ;;
@@ -45,7 +45,8 @@ done
 [ -n "$BASE" ] && [ -n "$APPS" ] && [ -n "$OUT" ] || die "need --base --apps --out"
 [ "$(id -u)" = 0 ] || die "run as root (loop mounts)"
 [ -f "$APPS/carlauncher.apk" ] || die "$APPS/carlauncher.apk missing"
-case "$PROFILE" in tier1|tier2) ;; gsi) CAR_OWNER=1 ;; *) die "profile $PROFILE" ;; esac
+# gsi: we own the MCU port and the Bluetooth stack runs the car-kit roles (overlay/props).
+case "$PROFILE" in tier1|tier2) ;; gsi) CAR_OWNER=1; BT_CARKIT=1 ;; *) die "profile $PROFILE" ;; esac
 AAPT2=${AAPT2:-$(find_aapt2)}
 [ -x "${AAPT2:-/nonexistent}" ] || die "aapt2 not found; set AAPT2"
 
@@ -165,7 +166,10 @@ label_system_file "$SYS/$PRIVAPP_XML"
 done
 MILESTONE=$([ "$PROFILE" = gsi ] && echo 0.2 || echo 0.1)   # 0.1 stock re-mastered, 0.2 GSI base
 VERSION=${VERSION:-$MILESTONE+$(date -u +%Y%m%d).vc$("$AAPT2" dump badging "$APPS/carlauncher.apk" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p")}
-RIPOSTE_OS_VERSION=$VERSION RIPOSTE_CAR_OWNER=$CAR_OWNER envsubst < "$HERE/overlay/props" >> "$SYS/build.prop"
+# `@carkit ` lines are kept (tag stripped) only when the stack runs the car-kit roles.
+CARKIT_SED=$([ "$BT_CARKIT" = 1 ] && echo 's/^@carkit //' || echo '/^@carkit /d')
+RIPOSTE_OS_VERSION=$VERSION RIPOSTE_CAR_OWNER=$CAR_OWNER RIPOSTE_BT_CARKIT=$BT_CARKIT \
+  envsubst < "$HERE/overlay/props" | sed "$CARKIT_SED" >> "$SYS/build.prop"
 log "version $VERSION"
 
 # ---- 6. repack + passthrough ---------------------------------------------------
@@ -179,7 +183,7 @@ for part in $PASSTHROUGH; do
   [ -f "$src" ] && cp --reflink=auto "$src" "$OUT/$part.img"
 done
 {
-  echo "version=$VERSION"; echo "profile=$PROFILE"; echo "car_owner=$CAR_OWNER"; echo "built=$(date -u +%FT%TZ)"
+  echo "version=$VERSION"; echo "profile=$PROFILE"; echo "car_owner=$CAR_OWNER"; echo "bt_carkit=$BT_CARKIT"; echo "built=$(date -u +%FT%TZ)"
   echo "launcher=$(apk_package "$APPS/carlauncher.apk") vc$("$AAPT2" dump badging "$APPS/carlauncher.apk" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p")"
   echo "suite=$SUITE_N"; echo "system=${SYSTEM:-$BASE/system.img}"; echo "boot=${BOOT:-$BASE/boot.img}"
   echo "removed=$(awk -F'\t' 'NF{print $1}' <<<"$REMOVE" | paste -sd,)"
