@@ -13,13 +13,14 @@
 #   already fetch by name), the default set first so a short visit still banks the useful part.
 
 set -euo pipefail
-readonly CHUNK_MIB=64
+readonly CHUNK_MIB=16
 readonly CHUNK=$((CHUNK_MIB * 1048576))
-# product first: 0.2 needs only product + boot + vbmeta (the GSI brings system), and the car
-# is online for minutes at a time.
-readonly DEFAULT_PARTS="product boot dtbo vbmeta vbmeta_system system"
+# Smallest first: the car is online for minutes at a time on a cellular uplink (~35 KiB/s
+# measured 2026-09-14), so vbmeta and dtbo land in seconds, the Magisk boot in half an hour,
+# and the big logical partitions bank across visits.
+readonly DEFAULT_PARTS="vbmeta_system vbmeta dtbo boot product system"
 readonly ADB_T=30          # seconds for a control call
-readonly CHUNK_T=900       # seconds for one chunk: 64 MiB at ~100 KiB/s
+readonly CHUNK_T=900       # seconds for one chunk: 16 MiB at the ~35 KiB/s an LTE uplink gives
 
 SERIAL=${RAV4_SERIAL:-100.127.132.101:5555}
 OUT=${RAV4_BASE_OUT:-/z1-pool/share/carlauncher/os/base}
