@@ -11,14 +11,18 @@
 # cable; see STATUS.md). Needs adb + fastboot. /data is kept: the build is the
 # stock system with additions, same fingerprint, same keys.
 #
-# Usage: flash.sh --images DIR [--serial S] [--yes]
+# Usage: flash.sh --images DIR [--adb S] [--fastboot S] [--yes]
+#   --adb is the Wi-Fi adb serial (ip:port) used to read the slot and reboot; --fastboot the
+#   USB serial fastbootd presents on the 4PIN port. Either may be omitted when only one device
+#   is attached.
 
 set -euo pipefail
-IMAGES="" SERIAL="" YES=0
+IMAGES="" ADB_SERIAL="" FB_SERIAL="" YES=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --images) IMAGES=$2; shift 2 ;;
-    --serial) SERIAL=$2; shift 2 ;;
+    --adb) ADB_SERIAL=$2; shift 2 ;;
+    --fastboot) FB_SERIAL=$2; shift 2 ;;
     --yes) YES=1; shift ;;
     *) echo "unknown arg $1" >&2; exit 2 ;;
   esac
@@ -28,7 +32,9 @@ for f in system product boot vbmeta; do [ -f "$IMAGES/$f.img" ] || { echo "$IMAG
 (cd "$IMAGES" && sha256sum -c --quiet SHA256SUMS) || { echo "SHA256SUMS do not verify" >&2; exit 2; }
 
 ADB=(adb); FB=(fastboot)
-[ -n "$SERIAL" ] && { ADB+=(-s "$SERIAL"); FB+=(-s "$SERIAL"); }
+[ -n "$ADB_SERIAL" ] && ADB+=(-s "$ADB_SERIAL")
+[ -n "$FB_SERIAL" ] && FB+=(-s "$FB_SERIAL")
+command -v fastboot >/dev/null || { echo "fastboot not installed" >&2; exit 2; }
 run() { printf '+ %s\n' "$*"; [ $YES = 1 ] && "$@"; return 0; }
 
 ACTIVE=$(timeout 30 "${ADB[@]}" shell getprop ro.boot.slot_suffix | tr -d '\r_')
@@ -37,7 +43,9 @@ echo "active slot: $ACTIVE   target (inactive): $TARGET   version: $(grep ^versi
 [ $YES = 1 ] || echo "(dry run; add --yes to execute)"
 
 run "${ADB[@]}" reboot fastboot                       # fastbootd, needed for logical partitions
-run "${FB[@]}" getvar is-userspace
+# The unit comes back on the 4PIN port as a fastboot USB device; wait for it rather than race it.
+[ $YES = 1 ] && { echo "waiting for fastbootd on USB"; "${FB[@]}" wait-for-device getvar is-userspace 2>&1 | tail -1; }
+[ $YES = 1 ] || echo "+ fastboot wait-for-device getvar is-userspace"
 # Logical partitions first (fastbootd resizes them); every image the set carries goes, so the
 # slot never mixes a system from one build with a vendor from another.
 for part in system system_ext product vendor; do
