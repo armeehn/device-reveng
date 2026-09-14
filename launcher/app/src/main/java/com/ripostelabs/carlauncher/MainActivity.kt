@@ -266,7 +266,7 @@ class MainActivity : ComponentActivity() {
             }
         }
         carService.bind()
-        appRepository = AppRepository(this)
+        appRepository = AppRepository(this, ownerActive = mcuOwner != null)
         nowPlaying = NowPlayingRepository(applicationContext).also { it.start(lifecycleScope) }
         themeStore = ThemeStore(applicationContext)
         settingsStore = SettingsStore(applicationContext) // v0.6

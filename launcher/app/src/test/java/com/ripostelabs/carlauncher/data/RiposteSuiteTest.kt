@@ -26,6 +26,17 @@ class RiposteSuiteTest {
      * classify the launcher — and its `.debug` sibling — as one of its own apps. That would put
      * the launcher in its own suite folder and count it in the Setup Doctor's tally.
      */
+    /** Riposte OS 0.2: Radio and Bluetooth bind a gateway that is not there; nothing else hides. */
+    @Test
+    fun `owner active hides only the vendor-bound members`() {
+        assertEquals(
+            setOf("com.ripostelabs.radio", "com.ripostelabs.bluetooth"),
+            RiposteSuite.hiddenOnOwner(ownerActive = true),
+        )
+        assertTrue(RiposteSuite.hiddenOnOwner(ownerActive = false).isEmpty())
+        RiposteSuite.VENDOR_BOUND.forEach { assertTrue(it, RiposteSuite.isSuiteApp(it)) }
+    }
+
     @Test
     fun `the launcher is not a suite app`() {
         assertFalse(RiposteSuite.isSuiteApp("com.ripostelabs.carlauncher"))

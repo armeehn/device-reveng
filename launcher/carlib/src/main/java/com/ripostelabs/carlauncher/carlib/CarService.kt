@@ -307,8 +307,19 @@ class CarService(private val appContext: Context) {
      * kill3rdAPK() on this path is gated by SysVar Sys_SoundManager_Type, which DEFAULTS to
      * "1" = Android-standard audio = no kill (`EventService.java:6581,6750,8294`). Only a unit
      * where it was set to 0 force-stops third-party tasks here.
+     *
+     * Riposte OS 0.2: with an owner attached there is no gateway to ask, so [radioSource] does
+     * the same in our own hand: `01 01` with the MODE_ACK wait. Without it the tuner cache fills
+     * and the amplifier stays on the last source.
      */
     fun claimRadio() {
+        owner?.let {
+            if (!radioSource.claim()) {
+                Log.w(TAG, "radio: SRC_RADIO not acknowledged")
+            }
+            takeRadioFocus()
+            return
+        }
         call { setCurModeCallback(SRC_RADIO, radioCallback) }
         call { setRadioCallback(radioCallback) }
         call { sendMode(SRC_RADIO, WAIT_FOR_MCU_ACK) }
@@ -318,9 +329,22 @@ class CarService(private val appContext: Context) {
     /**
      * Hand the tuner source back (exitCurMode; a no-op in the gateway unless we hold it). The
      * vendor radio does this when another source wins or its audio focus is lost for good.
+     * On the owner path [radioSource] sends what exitCurMode would: SRC_NULL, only if held.
      */
     fun releaseRadio() {
+        owner?.let {
+            radioSource.release()
+            dropRadioFocus()
+            return
+        }
         call { exitCurMode(SRC_RADIO) }
+        dropRadioFocus()
+    }
+
+    /** The tuner source on the owner path; idle while the binder owns the link. */
+    private val radioSource = RadioSource { mode -> owner?.setMode(mode) ?: false }
+
+    private fun dropRadioFocus() {
         radioFocus?.let { appContext.getSystemService(AudioManager::class.java)?.abandonAudioFocusRequest(it) }
     }
 

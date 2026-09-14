@@ -47,15 +47,27 @@ TX_OPCODES = {
     0x0A: "MUTE", 0x0C: "USER_FREQ", 0x13: "RTC", 0x2E: "BACKLIGHT",
 }
 OP_MODE = 0x01
+OP_RADIO_KEY = 0x02
 OP_SYSTEM_KEY = 0x08
+OP_USER_FREQ = 0x0C
 SYSTEM_KEY_VOLUME_UP = 0     # McuOwnerProtocol.SystemKey
 SYSTEM_KEY_VOLUME_DOWN = 1
 SYSTEM_KEY_MUTE = 12
+SRC_RADIO = 1                # McuOwnerProtocol.Mode.RADIO; `01 01` selects the tuner
+SRC_NULL = 99                # Mode.NULL, what exitCurMode sends when the tuner is left
+
+# `02 <key>` tuner keys (CarService.RADIO_KEY_*, EventService.sendRadioKey).
+RADIO_KEY_SCAN = 13
+RADIO_KEY_STEP_DOWN, RADIO_KEY_STEP_UP = 14, 15
+RADIO_KEY_SEEK_DOWN, RADIO_KEY_SEEK_UP = 16, 17
+RADIO_KEY_BAND_CYCLE = 24
+RADIO_KEY_BAND_FM, RADIO_KEY_BAND_AM = 30, 31
 
 # Opcodes the MCU sends (McuOpcode.kt).
 RX_MODE_ACK = 0x70
 RX_SYS_EVENT = 0x71
 RX_KEY_EVENT = 0x72
+RX_RADIO_EVENT = 0x73
 RX_MUTE = 0x78
 RX_MAIN_VOLUME = 0x79
 RX_CAN = 0xA5
@@ -68,6 +80,21 @@ SYS2_MCAN, SYS2_START_STOP, SYS2_HDMI, SYS2_LEFT_TURN = 0x80, 0x40, 0x08, 0x01
 # `79`/`78`: bit 7 = silent (no volume window), low bits = level / muted.
 SILENT_BIT = 0x80
 VOLUME_MAX = 40
+
+# `73` RADIO_EVENT sub-commands, first payload byte (McuOwnerProtocol.radioEvent).
+RADIO_STATE = 0       # [0, icons, flags]  icons: bit0 stereo, bit1 TP; flags: bit0 RDS, bit3 TA
+RADIO_BAND = 1        # [1, band, preset]  band 0-2 FM, 3+ AM (CarService.isAmBand)
+RADIO_PRESET = 2      # [2, preset]
+RADIO_FREQ = 3        # [3, hi, lo]        FM in 10 kHz, AM in kHz (RadioStateHolder)
+RADIO_PTY = 5         # [5, pty]
+RADIO_PS_NAME = 6     # [6, text...]       trailing spaces/NULs trimmed by the launcher
+RADIO_ICON_STEREO, RADIO_ICON_TP = 0x01, 0x02
+RADIO_FLAG_RDS = 0x01
+RADIO_PS_LEN = 8      # the RDS PS field is eight characters, space padded
+BAND_FM1, BAND_AM = 0, 3
+# North American dial (RadioTuning.kt): FM 87.5-108.0 MHz by 0.2, AM 530-1710 kHz by 10.
+FM_MIN, FM_MAX, FM_STEP = 8750, 10790, 20
+AM_MIN, AM_MAX, AM_STEP = 530, 1710, 10
 
 # Panel key codes (McuOwnerProtocol.Key).
 PANEL_KEYS = {
@@ -193,6 +220,47 @@ class Climate:
 
 
 @dataclass
+class Tuner:
+    """The MCU's tuner as the `73` events describe it: one field per sub-command."""
+    band: int = BAND_FM1
+    freq: int = 9630          # 96.3 MHz
+    preset: int = 0
+    ps_name: str = "CBC R1"
+    pty: int = 0
+    stereo: bool = True
+    rds: bool = True
+    selected: bool = False    # `01 01` seen; events flow only while the source is ours
+
+    @property
+    def fm(self) -> bool:
+        return self.band < BAND_AM
+
+    def step(self, direction: int) -> None:
+        lo, hi, step = (FM_MIN, FM_MAX, FM_STEP) if self.fm else (AM_MIN, AM_MAX, AM_STEP)
+        nxt = self.freq + direction * step
+        self.freq = lo if nxt > hi else hi if nxt < lo else nxt
+
+    def set_band(self, band: int) -> None:
+        if (band < BAND_AM) == self.fm:
+            self.band = band
+            return
+        self.band = band
+        self.freq = FM_MIN if self.fm else AM_MIN
+
+    def frames(self) -> list[tuple[bytes, str]]:
+        icons = (RADIO_ICON_STEREO if self.stereo else 0) | RADIO_ICON_TP
+        flags = RADIO_FLAG_RDS if self.rds else 0
+        ps = self.ps_name.encode("ascii", "replace").ljust(RADIO_PS_LEN)[:RADIO_PS_LEN]
+        return [
+            (outer_encode(RX_RADIO_EVENT, bytes([RADIO_STATE, icons, flags])), f"RADIO state icons={icons:02x} flags={flags:02x}"),
+            (outer_encode(RX_RADIO_EVENT, bytes([RADIO_BAND, self.band, self.preset])), f"RADIO band={self.band} preset={self.preset}"),
+            (outer_encode(RX_RADIO_EVENT, bytes([RADIO_FREQ]) + u16(self.freq)), f"RADIO freq={self.freq}"),
+            (outer_encode(RX_RADIO_EVENT, bytes([RADIO_PTY, self.pty])), f"RADIO pty={self.pty}"),
+            (outer_encode(RX_RADIO_EVENT, bytes([RADIO_PS_NAME]) + ps), f"RADIO ps={ps.decode().rstrip()!r}"),
+        ]
+
+
+@dataclass
 class Vehicle:
     acc: bool = True
     reverse: bool = False
@@ -207,6 +275,7 @@ class Vehicle:
     doors: int = 0
     rpm: int = 0
     climate: Climate = field(default_factory=Climate)
+    tuner: Tuner = field(default_factory=Tuner)
 
     # ── MCU-native frames (McuOwnerProtocol) ──
     def sys_event(self) -> bytes:
@@ -369,9 +438,59 @@ class McuSide:
             # sendDataWaitAck expects `70 <mode>` within 500 ms (McuOwnerProtocol.isModeAck).
             self.acks += 1
             self.send(outer_encode(RX_MODE_ACK, payload[:1]), f"MODE_ACK {payload[0]:02x}")
+            self._mode(payload[0])
             return
         if opcode == OP_SYSTEM_KEY and payload:
             self._system_key(payload[0])
+        elif opcode == OP_RADIO_KEY and payload:
+            self._radio_key(payload[0])
+        elif opcode == OP_USER_FREQ and len(payload) >= 3:
+            self._user_freq((payload[0] << 8) | payload[1], payload[2] == 0)
+
+    # ── the tuner ──
+    def _mode(self, mode: int) -> None:
+        # SRC_RADIO makes the tuner report itself, the way the vendor radio fills its fields
+        # right after sendRadioMode; any other source silences it (RadioStateHolder keeps the
+        # last values, as the gateway's mRadio* fields do).
+        t = self.vehicle.tuner
+        if mode == SRC_RADIO:
+            t.selected = True
+            self._tuner_report()
+        elif t.selected:
+            t.selected = False
+            log(f"tuner released by mode {mode}")
+
+    def _tuner_report(self) -> None:
+        for frame, what in self.vehicle.tuner.frames():
+            self.send(frame, what)
+
+    def _radio_key(self, key: int) -> None:
+        t = self.vehicle.tuner
+        if not t.selected:
+            log(f"radio key {key} ignored: tuner not selected")
+            return
+        if key in (RADIO_KEY_SEEK_UP, RADIO_KEY_STEP_UP):
+            t.step(+1)
+        elif key in (RADIO_KEY_SEEK_DOWN, RADIO_KEY_STEP_DOWN):
+            t.step(-1)
+        elif key == RADIO_KEY_BAND_FM:
+            t.set_band(BAND_FM1)
+        elif key == RADIO_KEY_BAND_AM:
+            t.set_band(BAND_AM)
+        elif key == RADIO_KEY_BAND_CYCLE:
+            t.set_band(BAND_AM if t.fm else BAND_FM1)
+        elif key == RADIO_KEY_SCAN:
+            t.step(+1)
+        else:
+            log(f"radio key {key}: no tuner action")
+            return
+        self._tuner_report()
+
+    def _user_freq(self, freq: int, fm: bool) -> None:
+        t = self.vehicle.tuner
+        t.set_band(BAND_FM1 if fm else BAND_AM)
+        t.freq = freq
+        self._tuner_report()
 
     def _system_key(self, code: int) -> None:
         # The launcher echoes VOL+/VOL-/MUTE as `08 xx`; the real MCU moves the amplifier and
@@ -409,6 +528,8 @@ class CanSide:
 # ── Scenario grammar ─────────────────────────────────────────────────────────────────────────
 GRAMMAR = """\
 Timeline lines: `<t> <verb> [args]`; t is seconds from start, or `+d` after the previous line.
+The tuner needs no lines: `01 01` (SRC_RADIO) from the launcher starts the `73` reports, and
+`02 <key>` / `0C <freq>` move it (seek, step, band, direct tune).
   acc on|off                 SYS_EVENT accLine (71)        lamp on|off        illumination bit
   reverse on|off             SYS_EVENT reverse bit         brake on|off       turn left|right|off
   volume <0-40>              MAIN_VOLUME (79)              mute on|off        MUTE (78)
@@ -480,6 +601,15 @@ SCENARIOS: dict[str, list[str]] = {
         "72.0 lamp off",
         "73.0 acc off",
         "74.0 say commute: done",
+    ],
+    # Key on, parked; the tuner answers `01 01` with 96.3 MHz "CBC R1" and follows every key.
+    # No timeline events beyond the handshake: the launcher drives it (test_carsim_radio.py).
+    "radio": [
+        "0.0 say radio: handshake window",
+        "3.0 acc on",
+        "4.0 volume 18",
+        "5.0 gear P",
+        "6.0 say radio: tuner armed, waiting for SRC_RADIO",
     ],
     # The 2026-09-07 door-cycle capture, as the CANable heard it.
     "replay-door-cycle": [
@@ -685,7 +815,7 @@ class Simulator:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0], epilog=GRAMMAR,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("scenario", help="smoke | commute | replay-door-cycle | a timeline file")
+    ap.add_argument("scenario", help="smoke | commute | radio | replay-door-cycle | a timeline file")
     ap.add_argument("--mcu", default="127.0.0.1:5590", help="host:port of the MCU carrier (default %(default)s)")
     ap.add_argument("--can", default="", help="host:port of the raw-bus carrier; omit to convert replays into relays")
     ap.add_argument("--capture", default="", help="candump file for {capture} in a scenario")

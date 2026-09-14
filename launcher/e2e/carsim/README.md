@@ -39,7 +39,9 @@ A `virtserialport` has no line discipline at all: raw bytes, one opener
 
 `smoke` (handshake + one of everything), `commute` (a whole drive: engine
 start, door, two climate setpoints, D, 0→60→0 on both carriers, dusk, reverse
-into the spot, P, key off), `replay-door-cycle` (a candump capture on the bus;
+into the spot, P, key off), `radio` (parked, tuner armed: the launcher's `01 01`
+starts the `73` reports at 96.3 MHz "CBC R1", `02 <key>` seeks/steps/switches
+band, `0C` tunes directly), `replay-door-cycle` (a candump capture on the bus;
 the ticker's own bus frames pause while it plays, the capture is the bus).
 `carsim.py --help` prints the timeline grammar; a text file with the same
 lines is a scenario too.

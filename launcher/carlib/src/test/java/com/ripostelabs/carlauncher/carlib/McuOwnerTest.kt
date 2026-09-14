@@ -310,6 +310,26 @@ class McuOwnerTest {
         assertEquals(McuOpcode.SLEEP_STATE.code, recorder.other[0].opcode)
     }
 
+    /** FanOut forwards every callback, the tuner's `73` events and the key edges included. */
+    @Test
+    fun fanOutForwardsRadioAndKeys() {
+        val a = Recorder()
+        val b = Recorder()
+        val fanOut = McuOwner.FanOut(a, b)
+        val freq = McuOwnerProtocol.RadioEvent.Frequency(9630)
+        val panel = McuOwnerProtocol.PanelKey(McuOwnerProtocol.Key.RADIO, 0)
+
+        fanOut.onRadio(freq)
+        fanOut.onPanelKey(panel)
+        fanOut.onWake()
+
+        for (recorder in listOf(a, b)) {
+            assertEquals(listOf<McuOwnerProtocol.RadioEvent>(freq), recorder.radio)
+            assertEquals(listOf(panel), recorder.panel)
+            assertEquals(1, recorder.wakes.size)
+        }
+    }
+
     /** setMode remembers its argument so a wake can resume it. */
     @Test
     fun setModeIsRemembered() {

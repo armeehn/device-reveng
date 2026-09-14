@@ -85,9 +85,19 @@ class McuOwner(
 
         override fun onKey(key: Int) = targets.forEach { it.onKey(key) }
 
+        override fun onPanelKey(key: McuOwnerProtocol.PanelKey) = targets.forEach { it.onPanelKey(key) }
+
+        override fun onWheelKey(key: McuOwnerProtocol.WheelKey) = targets.forEach { it.onWheelKey(key) }
+
+        // Missing until the tuner screen stayed "unavailable" on the farm: the `73` events reached
+        // the fan-out and stopped at the interface's no-op default. Every callback goes through.
+        override fun onRadio(event: McuOwnerProtocol.RadioEvent) = targets.forEach { it.onRadio(event) }
+
         override fun onCanSignal(signal: CanSignal, atMs: Long) = targets.forEach { it.onCanSignal(signal, atMs) }
 
         override fun onOther(command: McuSerial.Command) = targets.forEach { it.onOther(command) }
+
+        override fun onWake() = targets.forEach { it.onWake() }
     }
 
     sealed class Status {
