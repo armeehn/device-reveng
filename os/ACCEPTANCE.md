@@ -18,7 +18,7 @@ produces the base directory below. Exit EDL with `edl reset` or a power cycle.
       `.sha256` sidecars and `BASE-INFO` (`dump-base.sh assemble` reports every partition, or
       `from-edl.sh` ran).
 - [ ] `os/build.sh --base … --profile tier2` and `os/check.sh` PASS → `share/carlauncher/os/0.1/`.
-- [ ] `os/flash.sh --images share/carlauncher/os/0.1` dry run prints the plan; note the target slot.
+- [ ] `os/flash.sh --images <0.1 dir> --adb <ip:5555>` dry run prints the plan; note the target slot.
 - [ ] Laptop has `adb` + `fastboot` ≥ 34 and can `adb connect` the unit.
 
 ## Base from the vendor OTA (no car needed)
@@ -33,7 +33,7 @@ unit's own `boot_<slot>` from an adb dump.
 ## Step 1: flash to the inactive slot (RAV4-82)
 
 ```
-os/flash.sh --images <0.1 dir> --yes
+os/flash.sh --images <0.1 dir> --adb <ip:5555> --yes
 ```
 Proves: fastbootd accepts the images (logical partition resize), the slot switches.
 Expect: reboot within ~2 min, the Riposte boot animation, CarLauncher as HOME with no chooser.
