@@ -49,3 +49,7 @@ python3 -m pytest -m carsim -v
 ```
 
 Unset `CARSIM_SERIAL` skips the cases. See `carsim/README.md`.
+
+`test_carsim_radio.py` drives the tuner screen against the `radio` scenario:
+open, seek, AM, and the suite Radio absent from the drawer (that last case
+needs `com.ripostelabs.radio` installed on the instance, else it skips).
