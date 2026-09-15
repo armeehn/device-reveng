@@ -74,9 +74,24 @@ object OemApps {
         val removable: List<OemApp>,
         /** KEEP apps absent or disabled: the unit is missing part of its own plumbing. */
         val missingKeep: List<OemApp>,
+        /** One row per REMOVE / REPLACED app, on the unit or not, in matrix order. */
+        val rows: List<Row>,
     ) {
         val uninstallLines: List<String> = removable.map { uninstallLine(it.packageName) }
     }
+
+    /** Is our stand-in there? NONE = the matrix names no successor yet. */
+    enum class Replaced { INSTALLED, MISSING, NONE }
+
+    /** A Setup Doctor line: the OEM app on the unit, hidden from the drawer, and ours installed. */
+    data class Row(
+        val app: OemApp,
+        val present: Boolean,
+        val hidden: Boolean,
+        val replaced: Replaced,
+        /** Which stand-in is there, or what the app still waits for. */
+        val detail: String,
+    )
 
     const val UNINSTALL_PREFIX = "pm uninstall -k --user 0 "
 
@@ -87,24 +102,33 @@ object OemApps {
     private const val MUSIC_PKG = "com.ripostelabs.music"
     private const val VIDEO_PKG = "com.ripostelabs.video"
     private const val GPS_PKG = "com.ripostelabs.gps"
+    private const val PHOTOS_PKG = "com.ripostelabs.photos"
+    private const val INSTALLER_PKG = "com.ripostelabs.installer"
+    private const val WEATHER_PKG = "com.ripostelabs.weather"
+    private const val BROWSER_PKG = "com.ripostelabs.browser"
 
     val APPS: List<OemApp> = listOf(
         // ---- REMOVE: nothing of ours depends on them, and two are liabilities --------------
+        // replacedBy here is for the Doctor row only: REMOVE hides whether ours is there or not.
         OemApp(
             "com.szchoiceway.photoreader", "XDemonstrate", OemClass.REMOVE,
             "A 16-image demo slideshow. Photos is a real viewer.",
+            replacedBy = listOf(Replacement.Package(PHOTOS_PKG)),
         ),
         OemApp(
             "com.szchoiceway.apkinstall", "Apk Installer", OemClass.REMOVE,
             "Silent pm install -r from any USB stick. Installer replaces it.",
+            replacedBy = listOf(Replacement.Package(INSTALLER_PKG)),
         ),
         OemApp(
             "com.choiceway.weather", "Weather", OemClass.REMOVE,
             "Seniverse (China) API client. Weather has its own source.",
+            replacedBy = listOf(Replacement.Package(WEATHER_PKG)),
         ),
         OemApp(
             "com.mmbox.xbrowser", "XBrowser", OemClass.REMOVE,
             "Chinese browser. Browser replaces it.",
+            replacedBy = listOf(Replacement.Package(BROWSER_PKG)),
         ),
         OemApp(
             "com.android.atslcarconsole", "Console", OemClass.REMOVE,
@@ -189,6 +213,10 @@ object OemApps {
     /** The exact line a human runs over `adb shell` (or a root shell). Never run from here. */
     fun uninstallLine(packageName: String): String = UNINSTALL_PREFIX + packageName
 
+    /** The com.ripostelabs.* package standing in for [app]; null when only a screen or nothing does. */
+    fun suitePackage(app: OemApp): String? =
+        app.replacedBy.filterIsInstance<Replacement.Package>().firstOrNull()?.packageName
+
     /**
      * OEM packages the drawer hides, given what is [installed] and what the driver allowed.
      * REMOVE hides unconditionally; REPLACED hides only with every replacement present and the
@@ -236,7 +264,36 @@ object OemApps {
             pending = onUnit.filter { it.oemClass == OemClass.REPLACED && it.packageName !in hidden },
             removable = onUnit.filter { it.oemClass == OemClass.REMOVE },
             missingKeep = APPS.filter { it.oemClass == OemClass.KEEP && it.packageName !in enabled },
+            rows = APPS.filter { it.oemClass != OemClass.KEEP }.map { row(it, installed, hidden) },
         )
+    }
+
+    private fun row(app: OemApp, installed: Set<String>, hidden: Set<String>): Row {
+        val suite = suitePackage(app)
+        val replaced = when {
+            suite == null -> Replaced.NONE
+            suite in installed -> Replaced.INSTALLED
+            else -> Replaced.MISSING
+        }
+        val detail = when {
+            replaced == Replaced.INSTALLED -> RiposteSuite.label(suite!!) + " installed"
+            app.oemClass == OemClass.REPLACED -> pendingReason(app, installed)
+            replaced == Replaced.MISSING -> "needs $suite"
+            else -> "no replacement yet"
+        }
+        return Row(app, present = app.packageName in installed, hidden = app.packageName in hidden, replaced = replaced, detail = detail)
+    }
+
+    /**
+     * The row as the Setup Doctor prints it: `present · hidden · Music installed`. An app already
+     * uninstalled still says whether ours is there, which is the RAV4-51 debloat check.
+     */
+    fun describe(row: Row): String {
+        if (!row.present) {
+            return if (row.replaced == Replaced.INSTALLED) "not on this unit · ${row.detail}" else "not on this unit"
+        }
+        val state = if (row.hidden) "hidden" else "visible"
+        return "present · $state · ${row.detail}"
     }
 
     /** Why a REPLACED app is still visible: the missing replacement, or the opt-in it waits on. */

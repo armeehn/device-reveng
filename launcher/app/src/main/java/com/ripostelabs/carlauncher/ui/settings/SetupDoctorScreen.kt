@@ -282,9 +282,10 @@ private fun VendorAppsSection(report: OemApps.Report?, ownerActive: Boolean) {
             if (hidden.isEmpty()) "Nothing hidden from the drawer." else "Hidden from the drawer: $hidden.",
         )
 
-        // Pending = REPLACED but still visible; say what each one waits for.
-        report.pending.forEach { app ->
-            InfoRow(label = app.label, value = OemApps.pendingReason(app, report.installed))
+        // One row per shadowed OEM app: on the unit, hidden, and whether ours is installed.
+        // A REPLACED app still visible says what it waits for.
+        report.rows.forEach { row ->
+            InfoRow(label = row.app.label, value = OemApps.describe(row))
         }
 
         if (report.removable.isNotEmpty()) {
