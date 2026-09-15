@@ -162,6 +162,17 @@ echo "suite"
 N=$(find "$T/product/app" -name '*.apk' -exec "$AAPT2" dump packagename {} \; 2>/dev/null | grep -c '^com.ripostelabs\.' || true)
 if [ -n "$SUITE" ]; then check "[ $N -eq $SUITE ]" "$N suite apps (expected $SUITE)"; else ok "$N suite apps"; fi
 
+echo "filesystem features the unit's kernel accepts"
+# The vendor's images carry exactly this set; anything beyond it (metadata_csum, 64bit …) is a
+# 900E crash at first-stage mount on the 4.14 kernel (2026-09-15). Repacked ext4 only.
+readonly VENDOR_EXT4="dir_index dir_nlink ext_attr extent extra_isize filetype huge_file large_file sparse_super uninit_bg"
+for part in system product; do
+  [ -f "$WORK/out-$part.raw" ] || continue
+  [ "$(image_kind "$WORK/out-$part.raw")" = ext4 ] || continue
+  feats=$(dumpe2fs -h "$WORK/out-$part.raw" 2>/dev/null | sed -n 's/^Filesystem features: *//p' | tr ' ' '\n' | grep -v shared_blocks | sort | tr '\n' ' ' | sed 's/ $//')
+  check "[ \"$feats\" = \"$VENDOR_EXT4\" ]" "$part ext4 features == vendor set ($feats)"
+done
+
 echo "xattrs survive the round trip"
 sample=$(find "$SB/framework" -type f -name '*.jar' | head -1)
 if [ -n "$sample" ] && getfattr -n security.selinux "$sample" >/dev/null 2>&1; then
