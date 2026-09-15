@@ -106,7 +106,13 @@ repack_image() { # kind tree out mountpoint(label, e.g. system)
   rm -f "$out"
   case "$kind" in
     ext4)
-      mke2fs -q -t ext4 -b $BLOCK -I 256 -m 0 -O ^has_journal -L "$name" -M "/$name" \
+      # Feature set copied from the vendor's own images (dumpe2fs on the OTA system.img): the
+      # unit's 4.14 kernel mounts /system in first-stage init, where the host mke2fs defaults
+      # (metadata_csum needs crc32c, 64bit, flex_bg, metadata_csum_seed) are not guaranteed.
+      # A repack with those defaults crashed the unit into 900E on 2026-09-15.
+      mke2fs -q -t ext4 -b $BLOCK -I 256 -m 0 \
+        -O "^has_journal,^64bit,^flex_bg,^metadata_csum,^metadata_csum_seed,^resize_inode,uninit_bg" \
+        -E lazy_itable_init=0,lazy_journal_init=0 -L "$name" -M "/$name" \
         -d "$tree" "$out" $(( $(ext4_size_for "$tree") / BLOCK ))
       e2fsck -fy "$out" >/dev/null 2>&1 || [ $? -le 1 ]
       ;;

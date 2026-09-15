@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Flash a Riposte OS build to the INACTIVE slot and switch to it. Dry-run by
-# default: prints every command, runs nothing until --yes.
+# Flash a Riposte OS build IN PLACE on the running slot (Virtual A/B: the other slot has no
+# logical partitions, learned 2026-09-15). Back the slot up first. Dry-run by default.
 #
 #   active slot _b (stock, daily driver)     inactive slot _a  ◄── the whole matched set:
 #                                                system, system_ext, product, vendor, boot,
@@ -38,23 +38,31 @@ command -v fastboot >/dev/null || { echo "fastboot not installed" >&2; exit 2; }
 run() { printf '+ %s\n' "$*"; [ $YES = 1 ] && "$@"; return 0; }
 
 ACTIVE=$(timeout 30 "${ADB[@]}" shell getprop ro.boot.slot_suffix | tr -d '\r_')
-case "$ACTIVE" in a) TARGET=b ;; b) TARGET=a ;; *) echo "cannot read active slot ($ACTIVE)" >&2; exit 1 ;; esac
-echo "active slot: $ACTIVE   target (inactive): $TARGET   version: $(grep ^version= "$IMAGES/MANIFEST")"
+case "$ACTIVE" in a|b) TARGET=$ACTIVE ;; *) echo "cannot read active slot ($ACTIVE)" >&2; exit 1 ;; esac
+echo "active slot: $ACTIVE   target (IN PLACE): $TARGET   version: $(grep ^version= "$IMAGES/MANIFEST")"
 [ $YES = 1 ] || echo "(dry run; add --yes to execute)"
 
 run "${ADB[@]}" reboot fastboot                       # fastbootd, needed for logical partitions
 # The unit comes back on the 4PIN port as a fastboot USB device; wait for it rather than race it.
-[ $YES = 1 ] && { echo "waiting for fastbootd on USB"; "${FB[@]}" wait-for-device getvar is-userspace 2>&1 | tail -1; }
-[ $YES = 1 ] || echo "+ fastboot wait-for-device getvar is-userspace"
+[ $YES = 1 ] && { echo "waiting for fastbootd on USB (replug the cable if it never appears)"; "${FB[@]}" getvar is-userspace 2>&1 | tail -1 || true; }
 # Logical partitions first (fastbootd resizes them); every image the set carries goes, so the
 # slot never mixes a system from one build with a vendor from another.
+# Stale Virtual A/B snapshots fill super; the vendor's images are a little smaller than ours and
+# fastbootd resizes on flash. -S 64M: this cable stalls on larger sparse chunks.
+run "${FB[@]}" snapshot-update cancel
+run "${FB[@]}" delete-logical-partition "product_$TARGET-cow"
 for part in system system_ext product vendor; do
-  [ -f "$IMAGES/$part.img" ] && run "${FB[@]}" flash "${part}_$TARGET" "$IMAGES/$part.img"
+  [ -f "$IMAGES/$part.img" ] && run "${FB[@]}" -S 64M flash "${part}_$TARGET" "$IMAGES/$part.img"
 done
 run "${FB[@]}" flash "boot_$TARGET" "$IMAGES/boot.img"         # Magisk-patched if the base came off the unit; stock if from an OTA
 [ -f "$IMAGES/dtbo.img" ] && run "${FB[@]}" flash "dtbo_$TARGET" "$IMAGES/dtbo.img"
-run "${FB[@]}" --disable-verity --disable-verification flash "vbmeta_$TARGET" "$IMAGES/vbmeta.img"
-[ -f "$IMAGES/vbmeta_system.img" ] && run "${FB[@]}" --disable-verity --disable-verification flash "vbmeta_system_$TARGET" "$IMAGES/vbmeta_system.img"
-run "${FB[@]}" set_active "$TARGET"
+# fastboot's own --disable-verification refused this vbmeta ("AVB_MAGIC at offset 0"); patch the
+# flags ourselves and flash plain.
+TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
+for v in vbmeta vbmeta_system; do
+  [ -f "$IMAGES/$v.img" ] || continue
+  python3 "$(dirname "$0")/vbmeta-disable.py" "$IMAGES/$v.img" "$TMP/$v.img" >/dev/null
+  run "${FB[@]}" flash "${v}_$TARGET" "$TMP/$v.img"
+done
 run "${FB[@]}" reboot
-echo "rollback if it does not come up: fastboot set_active $ACTIVE"
+echo "rollback: the same script with --images <backup dir>"

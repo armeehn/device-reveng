@@ -30,10 +30,23 @@ partition image. `payload-dumper-go -o base-ota update13.zip` yields the base di
 absent there until the boot image is patched (Magisk app → patch a file) or replaced by the
 unit's own `boot_<slot>` from an adb dump.
 
-## Step 1: flash to the inactive slot (RAV4-82)
+## Facts from the 2026-09-15 sitting that change the steps below
+
+- **There is no inactive-slot system.** Virtual A/B: `super` holds `_b` logical partitions only.
+  Every flash is IN PLACE on the running slot; rollback = flashing the backup back.
+- **Back up the running slot first** (`backup-slot.sh` on the laptop over the car's LAN, ~15 min,
+  resumable) — it is the only exact rollback.
+- **Run `os/kernel-mount-probe.sh --adb <ip:5555>` before flashing.** Images the host mounts
+  crashed the unit into 900E; only the unit's kernel can prove a feature set.
+- **`fastboot -S 64M`** on this cable; replug to revive fastbootd after a stall; vbmeta via
+  `vbmeta-disable.py` + plain flash.
+- The unit resets only from the RST pinhole. `05c6:900e` = crash dump; after RST `05c6:9008` =
+  EDL, and the public QCM6125 generic-key loader authenticates (`os/edl/` on the share).
+
+## Step 1: flash in place (RAV4-82)
 
 ```
-os/flash.sh --images <0.1 dir> --adb <ip:5555> --yes
+os/flash.sh --images <0.1 dir> --adb <ip:5555> --yes        # in place on the running slot
 ```
 Proves: fastbootd accepts the images (logical partition resize), the slot switches.
 Expect: reboot within ~2 min, the Riposte boot animation, CarLauncher as HOME with no chooser.
