@@ -16,6 +16,12 @@ import org.junit.Test
  */
 class McuOwnerTest {
 
+    private companion object {
+        /** start() hands the port to its own thread; anything slower is the main thread waiting on it. */
+        const val BOUNDED_START_MS = 200L
+        const val TEST_TIMEOUT_MS = 5_000L
+    }
+
     private fun bytes(vararg v: Int) = ByteArray(v.size) { v[it].toByte() }
 
     /** A pipe whose reads block on a queue and whose writes are recorded; [ackNull] answers SRC_NULL. */
@@ -342,5 +348,73 @@ class McuOwnerTest {
         owner.stop()
 
         assertEquals(McuOwnerProtocol.Mode.RADIO, owner.lastMode)
+    }
+
+    /** A pipe whose first write never returns: the port with nobody reading on the far side. */
+    private class StuckLink : McuLink {
+        val opens = java.util.concurrent.atomic.AtomicInteger()
+        private val never = java.util.concurrent.CountDownLatch(1)
+
+        @Volatile
+        var closed = false
+
+        override fun read(buffer: ByteArray): Int {
+            while (!closed) {
+                Thread.sleep(10)
+            }
+            return -1
+        }
+
+        override fun write(bytes: ByteArray) {
+            never.await()
+        }
+
+        override fun close() {
+            closed = true
+        }
+    }
+
+    /**
+     * RAV4-96: with the port wired but no reader behind it, `CharDevLink.write` blocked the main
+     * thread from `MainActivity.onCreate` and the launcher ANR'd on every start. start() must
+     * hand the port to its own thread and return at once, and the stuck write must surface as
+     * a dead link instead of a hang.
+     */
+    @Test(timeout = TEST_TIMEOUT_MS)
+    fun startReturnsAtOnceWhenTheWriteBlocks() {
+        val link = StuckLink()
+        val owner = McuOwner(Gate(eventcenter = false, enabled = true), Recorder(), openLink = { link.opens.incrementAndGet(); link }, ackTimeoutMs = 20, writeTimeoutMs = 50)
+
+        val startedAt = System.currentTimeMillis()
+        owner.start()
+        val took = System.currentTimeMillis() - startedAt
+
+        assertTrue("start() blocked for $took ms", took < BOUNDED_START_MS)
+        val failed = waitFor("link dead") { owner.status.value as? McuOwner.Status.Failed }
+        assertTrue(failed.reason, failed.reason.startsWith(McuOwner.LINK_DEAD))
+        owner.stop()
+    }
+
+    /** After a dead link the owner reopens in the background; a live port then runs the session. */
+    @Test(timeout = TEST_TIMEOUT_MS)
+    fun deadLinkIsReopenedInTheBackground() {
+        val stuck = StuckLink()
+        val live = FakeLink(ackNull = true)
+        val opens = java.util.concurrent.atomic.AtomicInteger()
+        val owner = McuOwner(
+            Gate(eventcenter = false, enabled = true),
+            Recorder(),
+            openLink = { if (opens.getAndIncrement() == 0) stuck else live },
+            ackTimeoutMs = 20,
+            writeTimeoutMs = 50,
+            retryDelayMs = 50,
+        )
+
+        owner.start()
+        val running = waitFor("running on the second link") { owner.status.value as? McuOwner.Status.Running }
+        owner.stop()
+
+        assertTrue(running.acked)
+        assertEquals(2, opens.get())
     }
 }
