@@ -1,9 +1,12 @@
 package com.ripostelabs.carlauncher.data
 
 import com.ripostelabs.carlauncher.data.OemApps.OemClass
+import com.ripostelabs.carlauncher.data.OemApps.Replaced
+import com.ripostelabs.carlauncher.data.OemApps.Replacement
 import com.ripostelabs.carlauncher.data.OemApps.ShadowPolicy
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -146,5 +149,99 @@ class OemAppsTest {
         assertEquals("needs com.ripostelabs.radio", OemApps.pendingReason(radio, allOem))
         val reason = OemApps.pendingReason(radio, allOem + "com.ripostelabs.radio")
         assertTrue(reason.contains("Hide replaced OEM apps"))
+    }
+
+    @Test
+    fun `every OEM app we shadow names its suite successor`() {
+        // The rav4-apps removal plan, as the launcher carries it. Console has none yet.
+        val expected = mapOf(
+            "com.szchoiceway.photoreader" to "com.ripostelabs.photos",
+            "com.szchoiceway.apkinstall" to "com.ripostelabs.installer",
+            "com.choiceway.weather" to "com.ripostelabs.weather",
+            "com.mmbox.xbrowser" to "com.ripostelabs.browser",
+            "com.android.atslcarconsole" to null,
+            "com.szchoiceway.radio" to "com.ripostelabs.radio",
+            "com.szchoiceway.musicplayer" to "com.ripostelabs.music",
+            "com.szchoiceway.videoplayer" to "com.ripostelabs.video",
+            "com.szchoiceway.gps" to "com.ripostelabs.gps",
+            "com.szchoiceway.settings" to null,
+            "com.szchoiceway.navigation" to null,
+        )
+        val shadowable = OemApps.APPS.filter { it.oemClass != OemClass.KEEP }
+        assertEquals(expected.keys, shadowable.map { it.packageName }.toSet())
+        shadowable.forEach { app ->
+            assertEquals(app.packageName, expected[app.packageName], OemApps.suitePackage(app))
+        }
+    }
+
+    @Test
+    fun `every suite replacement is a package the suite builds`() {
+        val suite = RiposteSuite.APPS.map { it.packageName }.toSet()
+        OemApps.APPS.flatMap { it.replacedBy }.filterIsInstance<Replacement.Package>().forEach {
+            assertTrue(it.packageName, it.packageName in suite)
+        }
+    }
+
+    @Test
+    fun `naming a successor does not change what REMOVE hides`() {
+        val off = ShadowPolicy(hideReplaced = false, hideOemSettings = false)
+        assertEquals(remove.toSet(), OemApps.shadowed(allOem, off))
+        assertNull(OemApps.suitePackage(OemApps.byPackage("com.szchoiceway.settings")!!))
+    }
+
+    @Test
+    fun `the doctor has one row per shadowable app, present or not`() {
+        val installed = allOem - "com.szchoiceway.photoreader" + "com.ripostelabs.music" + "com.ripostelabs.photos"
+        val rows = OemApps.report(installed, installed, ShadowPolicy.DEFAULT).rows
+        val byPkg = rows.associateBy { it.app.packageName }
+
+        assertEquals(OemApps.APPS.count { it.oemClass != OemClass.KEEP }, rows.size)
+        assertTrue(rows.none { it.app.oemClass == OemClass.KEEP })
+
+        // REMOVE: on the unit, hidden, successor installed.
+        val browser = byPkg.getValue("com.mmbox.xbrowser")
+        assertTrue(browser.present)
+        assertTrue(browser.hidden)
+        assertEquals(Replaced.MISSING, browser.replaced)
+
+        // REMOVE already gone from the unit: not present, so not hidden either.
+        val photos = byPkg.getValue("com.szchoiceway.photoreader")
+        assertFalse(photos.present)
+        assertFalse(photos.hidden)
+        assertEquals(Replaced.INSTALLED, photos.replaced)
+
+        // REPLACED with its successor: hidden. Without: visible, successor missing.
+        val music = byPkg.getValue("com.szchoiceway.musicplayer")
+        assertTrue(music.present && music.hidden)
+        assertEquals(Replaced.INSTALLED, music.replaced)
+        val video = byPkg.getValue("com.szchoiceway.videoplayer")
+        assertTrue(video.present && !video.hidden)
+        assertEquals(Replaced.MISSING, video.replaced)
+
+        // Nothing of ours yet.
+        assertEquals(Replaced.NONE, byPkg.getValue("com.szchoiceway.navigation").replaced)
+        assertEquals(Replaced.NONE, byPkg.getValue("com.android.atslcarconsole").replaced)
+    }
+
+    @Test
+    fun `row text reads present, hidden, replaced-by`() {
+        val installed = allOem + "com.ripostelabs.music"
+        val rows = OemApps.report(installed, installed, ShadowPolicy.DEFAULT).rows.associateBy { it.app.packageName }
+
+        assertEquals("present · hidden · Music installed", OemApps.describe(rows.getValue("com.szchoiceway.musicplayer")))
+        assertEquals("present · visible · needs com.ripostelabs.video", OemApps.describe(rows.getValue("com.szchoiceway.videoplayer")))
+        assertEquals("present · hidden · no replacement yet", OemApps.describe(rows.getValue("com.android.atslcarconsole")))
+        assertEquals(
+            "present · visible · hidden only if you turn on \"Hide OEM System settings\"",
+            OemApps.describe(rows.getValue("com.szchoiceway.settings")),
+        )
+
+        val gone = OemApps.report(
+            installed - "com.mmbox.xbrowser" - "com.szchoiceway.photoreader" + "com.ripostelabs.photos",
+            installed,
+            ShadowPolicy.DEFAULT,
+        ).rows.associateBy { it.app.packageName }
+        assertEquals("not on this unit", OemApps.describe(gone.getValue("com.mmbox.xbrowser")))
+        assertEquals("not on this unit · Photos installed", OemApps.describe(gone.getValue("com.szchoiceway.photoreader")))
     }
 }

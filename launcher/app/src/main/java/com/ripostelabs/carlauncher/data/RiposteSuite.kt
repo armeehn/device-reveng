@@ -73,6 +73,9 @@ object RiposteSuite {
     /** True only for a registered member — the launcher's own package is not one. */
     fun isSuiteApp(packageName: String): Boolean = packageName in byPackage
 
+    /** The member's drawer label; a non-member reads as its package name. */
+    fun label(packageName: String): String = byPackage[packageName]?.label ?: packageName
+
     /** The suite members present in [installedPackages], in registry order. */
     fun installed(installedPackages: Set<String>): List<SuiteApp> =
         APPS.filter { it.packageName in installedPackages }
