@@ -20,6 +20,7 @@ class McuOwnerTest {
         /** start() hands the port to its own thread; anything slower is the main thread waiting on it. */
         const val BOUNDED_START_MS = 200L
         const val TEST_TIMEOUT_MS = 5_000L
+        const val WATCHDOG_OFF_MS = 60_000L
     }
 
     private fun bytes(vararg v: Int) = ByteArray(v.size) { v[it].toByte() }
@@ -84,8 +85,10 @@ class McuOwnerTest {
         override fun onWake() { wakes.add(System.currentTimeMillis()) }
     }
 
+    // The write watchdog is off the clock here (a CI stall once declared a fake link dead
+    // mid-test); the two RAV4-96 cases below shorten it against a write that never returns.
     private fun owner(link: FakeLink, gate: Gate = Gate(eventcenter = false, enabled = true), recorder: Recorder = Recorder()) =
-        McuOwner(gate, recorder, openLink = { link }, ackTimeoutMs = 20)
+        McuOwner(gate, recorder, openLink = { link }, ackTimeoutMs = 20, writeTimeoutMs = WATCHDOG_OFF_MS)
 
     private fun <T> waitFor(what: String, timeoutMs: Long = 2_000, probe: () -> T?): T {
         val deadline = System.currentTimeMillis() + timeoutMs
