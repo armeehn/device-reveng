@@ -40,7 +40,7 @@ data class VehicleSnapshot(
         DOOR_BITS, REVERSE, SIDE_CAMERA_LEFT, SIDE_CAMERA_RIGHT,
         CLIMATE_ON, FAN_STEP, TEMP_LEFT_C, TEMP_RIGHT_C,
         RADAR_REAR_MIN_CM, RADAR_FRONT_MIN_CM,
-        TRIP_ELAPSED_MIN, TRIP_AVG_KMH,
+        TRIP_ELAPSED_MIN, TRIP_AVG_KMH, TRIP_FUEL, TRIP_BEST_FUEL, TRIP_FUEL_UNIT,
     }
 
     /** One reading and when it landed. */
@@ -100,6 +100,16 @@ data class VehicleSnapshot(
                 Field.RANGE_KM to sig.rangeToEmptyKm,
                 Field.TRIP_ELAPSED_MIN to sig.elapsedMin,
                 Field.TRIP_AVG_KMH to sig.avgSpeedKmh)
+                .let { s -> sig.tripFuel?.let { s.put(atMs, Field.TRIP_FUEL to it) } ?: s }
+                .let { s -> sig.bestFuel?.let { s.put(atMs, Field.TRIP_BEST_FUEL to it) } ?: s }
+                // The unit only matters alongside a figure; on its own it would count as a source.
+                .let { s ->
+                    if (sig.tripFuel == null && sig.bestFuel == null) {
+                        s
+                    } else {
+                        s.put(atMs, Field.TRIP_FUEL_UNIT to sig.fuelUnit.ordinal.toDouble())
+                    }
+                }
 
             // Speed is NOT folded in. A real drive proved 0x32 is not road speed, and 0x17/0x13
             // remain unconfirmed candidates. Putting either here would let a screen show it as
@@ -242,6 +252,7 @@ data class VehicleSnapshot(
     val hybridBattery: Int? get() = int(Field.HYBRID_BATTERY)
     val steeringDeg: Double? get() = raw(Field.STEERING_DEG)
     val rangeKm: Int? get() = int(Field.RANGE_KM)
+    val fuelUnit: CanSignal.FuelUnit? get() = int(Field.TRIP_FUEL_UNIT)?.let { CanSignal.FuelUnit.entries[it] }
     val reverse: Boolean? get() = bool(Field.REVERSE)
     val climateOn: Boolean? get() = bool(Field.CLIMATE_ON)
     val fanStep: Int? get() = int(Field.FAN_STEP)

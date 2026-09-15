@@ -67,4 +67,35 @@ class HiworldTripInfoTest {
         assertEquals(0, t.elapsedMin)
         assertEquals(0, t.avgSpeedKmh)
     }
+
+    /** OEM: trip fuel = computeValue(bArr[3], bArr[2]) => p[0:1], x0.1 in the p[10] unit. */
+    @Test
+    fun `trip fuel is big-endian across p0 and p1 in tenths`() {
+        assertEquals(25.7, trip(0 to 0x01, 1 to 0x01).tripFuel!!, 1e-9)
+        assertEquals(5.4, trip(1 to 54).tripFuel!!, 1e-9)
+    }
+
+    /** OEM: "optimal" fuel = computeValue(bArr[7], bArr[6]) => p[4:5], x0.1 in the p[10] unit. */
+    @Test
+    fun `best fuel is big-endian across p4 and p5 in tenths`() {
+        assertEquals(25.7, trip(4 to 0x01, 5 to 0x01).bestFuel!!, 1e-9)
+        assertEquals(4.8, trip(5 to 48).bestFuel!!, 1e-9)
+    }
+
+    /** OEM: bArr[12] = p[10]: 1 km/L, 2 L/100km, 3 MPG(UK), anything else MPG(US). */
+    @Test
+    fun `fuel unit follows the vendor code table`() {
+        assertEquals(CanSignal.FuelUnit.KM_PER_L, trip(10 to 1).fuelUnit)
+        assertEquals(CanSignal.FuelUnit.L_PER_100KM, trip(10 to 2).fuelUnit)
+        assertEquals(CanSignal.FuelUnit.MPG_UK, trip(10 to 3).fuelUnit)
+        assertEquals(CanSignal.FuelUnit.MPG_US, trip(10 to 0).fuelUnit)
+        assertEquals(CanSignal.FuelUnit.MPG_US, trip(10 to 7).fuelUnit)
+    }
+
+    @Test
+    fun `fuel sentinels mean no data`() {
+        val t = trip(0 to 0xFF, 1 to 0xFF, 4 to 0xFF, 5 to 0xFF)
+        assertNull(t.tripFuel)
+        assertNull(t.bestFuel)
+    }
 }

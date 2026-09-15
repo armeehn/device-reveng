@@ -588,6 +588,8 @@ private fun decodedRows(sig: CanSignal): Map<String, String> = when (sig) {
         put("Range to empty", sig.rangeToEmptyKm?.let { "$it km" } ?: "—")
         put("Trip elapsed", sig.elapsedMin?.let { "$it min" } ?: "—")
         put("Trip average speed", sig.avgSpeedKmh?.let { "$it km/h" } ?: "—")
+        put("Trip fuel", sig.tripFuel?.let { "%.1f %s".format(it, sig.fuelUnit.label) } ?: "—")
+        put("Best fuel", sig.bestFuel?.let { "%.1f %s".format(it, sig.fuelUnit.label) } ?: "—")
         put("Speed (0x13 live candidate, raw)", sig.speedCandidateRaw.toString())
     }
     is CanSignal.RpmGearMirror -> mapOf(

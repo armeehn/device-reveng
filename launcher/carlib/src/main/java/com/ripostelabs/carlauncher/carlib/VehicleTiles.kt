@@ -63,6 +63,8 @@ object VehicleTiles {
         s.int(Field.RANGE_KM, now)?.let { out += Tile("Range", "$it km") }
         s.int(Field.TRIP_ELAPSED_MIN, now)?.let { out += Tile("Trip time", tripTime(it) + UNVERIFIED) }
         s.int(Field.TRIP_AVG_KMH, now)?.let { out += Tile("Average speed", "$it km/h" + UNVERIFIED) }
+        fuel(s, Field.TRIP_FUEL, now)?.let { out += Tile("Trip fuel", it) }
+        fuel(s, Field.TRIP_BEST_FUEL, now)?.let { out += Tile("Best fuel", it) }
 
         openingsAjar(s, now)?.let { out += Tile("Open", it, Emphasis.ALERT) }
 
@@ -96,6 +98,13 @@ object VehicleTiles {
         val h = minutes / MINUTES_PER_HOUR
         val m = minutes % MINUTES_PER_HOUR
         return if (h == 0) "$m min" else "$h h $m min"
+    }
+
+    /** A fuel figure in the unit the car reports, one decimal like the cluster; null without a unit. */
+    private fun fuel(s: VehicleSnapshot, field: Field, now: Long): String? {
+        val value = s.raw(field, now) ?: return null
+        val unit = s.fuelUnit?.takeIf { s.raw(Field.TRIP_FUEL_UNIT, now) != null } ?: return null
+        return "%.1f %s".format(value, unit.label) + UNVERIFIED
     }
 
     /** Names of every opening the car reports ajar, or null when none are — never "0 open". */
