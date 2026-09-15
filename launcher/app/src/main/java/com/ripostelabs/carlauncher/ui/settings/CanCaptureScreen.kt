@@ -428,7 +428,7 @@ private fun CanableRows(status: CanableStatus, onGrant: () -> Unit) {
             // Everything else the ECU has answered. These need no decoding argument: the values
             // are defined by the standard, so they are shown plainly rather than as candidates.
             status.obdReadings.forEach { (pid, value) ->
-                InfoRow(label = "OBD 0x%02X".format(pid.code), value = "%.1f".format(value))
+                InfoRow(label = "${obdName(pid)} (OBD 0x%02X)".format(pid.code), value = obdValue(pid, value))
             }
             // Where road speed actually comes from. Shown beside the ECU reference so a
             // divergence is visible here first.
@@ -502,6 +502,21 @@ private fun dumpToLog(frame: CanFrame?, capture: RadarCapture) {
  * signals are shown plainly; speed and gear are labelled RAW because the 0x32 speed field and
  * the 0x1A gear codes are not yet calibrated (see the caveat rendered under the section).
  */
+/** J1979 names for the ECU rows. The PID stays in the label so a capture line can be matched to it. */
+private fun obdName(pid: ObdPid): String = when (pid) {
+    ObdPid.ENGINE_LOAD -> "Engine load"
+    ObdPid.COOLANT_C -> "Coolant"
+    ObdPid.SPEED_KMH -> "Speed"
+    ObdPid.THROTTLE_PCT -> "Throttle"
+}
+
+/** The value in its J1979 unit; percentages and degrees are whole numbers on the wire. */
+private fun obdValue(pid: ObdPid, value: Double): String = when (pid) {
+    ObdPid.ENGINE_LOAD, ObdPid.THROTTLE_PCT -> "%.0f %%".format(value)
+    ObdPid.COOLANT_C -> "%.0f °C".format(value)
+    ObdPid.SPEED_KMH -> "%.0f km/h".format(value)
+}
+
 private fun decodedRows(sig: CanSignal): Map<String, String> = when (sig) {
     is CanSignal.VehicleInfo -> buildMap {
         put("RPM", sig.rpm.toString())
