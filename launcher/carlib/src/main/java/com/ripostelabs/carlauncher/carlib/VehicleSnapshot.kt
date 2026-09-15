@@ -40,6 +40,7 @@ data class VehicleSnapshot(
         DOOR_BITS, REVERSE, SIDE_CAMERA_LEFT, SIDE_CAMERA_RIGHT,
         CLIMATE_ON, FAN_STEP, TEMP_LEFT_C, TEMP_RIGHT_C,
         RADAR_REAR_MIN_CM, RADAR_FRONT_MIN_CM,
+        TRIP_ELAPSED_MIN, TRIP_AVG_KMH,
     }
 
     /** One reading and when it landed. */
@@ -95,7 +96,10 @@ data class VehicleSnapshot(
                 Field.RADAR_REAR_MIN_CM to sig.rearCm.filterNotNull().minOrNull(),
                 Field.RADAR_FRONT_MIN_CM to sig.frontCm.filterNotNull().minOrNull())
 
-            is CanSignal.TripInfo -> putNullable(atMs, Field.RANGE_KM to sig.rangeToEmptyKm)
+            is CanSignal.TripInfo -> putNullable(atMs,
+                Field.RANGE_KM to sig.rangeToEmptyKm,
+                Field.TRIP_ELAPSED_MIN to sig.elapsedMin,
+                Field.TRIP_AVG_KMH to sig.avgSpeedKmh)
 
             // Speed is NOT folded in. A real drive proved 0x32 is not road speed, and 0x17/0x13
             // remain unconfirmed candidates. Putting either here would let a screen show it as

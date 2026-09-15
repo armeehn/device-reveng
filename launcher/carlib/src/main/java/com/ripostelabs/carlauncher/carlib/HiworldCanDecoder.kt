@@ -30,6 +30,8 @@ object HiworldCanDecoder {
     // ---- Opcodes we decode (== the byte after LEN). See variance.txt for observed counts. ----
     private const val OP_BASIC_STATUS = 0x11   // key/SWC + doors + steering
     private const val OP_TRIP_INFO = 0x13      // vehicle information page (range/trip) + speed candidate p[0:1]
+    private const val KM_PER_MILE = 1.609344
+    private const val UNIT_MILE = 1               // 0x13 p[11]: 1 = mile, anything else km
     private const val OP_SPEED = 0x17          // dedicated low-rate speed field (2026-08-29 drive); p[0:1] BE ×0.1 km/h
     private const val OP_RPM_GEAR_MIRROR = 0x1A // unparsed by OEM; RPM + gear raw found in capture
     private const val OP_HYBRID = 0x1F         // hybrid battery + energy flow
@@ -471,13 +473,27 @@ object HiworldCanDecoder {
      * `(bArr[4]<<8)|bArr[5]` ⇒ **(p[2]<<8)|p[3] big-endian**. Variance confirms it: p[2]=0x01
      * (static), p[3] ∈ {0x2C,0x2D,0x2E} ⇒ 0x012C…0x012E = 300..302 km, the observed ~300. We
      * therefore follow the parser (authoritative) and expose the range from p[2]/p[3]. 0xFFFF ⇒
-     * no data ⇒ null. Other page fields (trip fuel, optimal economy, elapsed time, avg speed)
-     * are present in the OEM parser but left out here as not-yet-needed.
+     * no data ⇒ null.
+     *
+     * The same parser reads the rest of the page (all `computeValue(bArr[i+1], bArr[i])`, so BE):
+     * elapsed time `bArr[8:9]` = p[6:7] in minutes (`formatTimeHm`), average speed `bArr[10:11]`
+     * = p[8:9] in km/h, and the distance unit `bArr[13]` = p[11] (1 = mile). Range is converted
+     * to km when the unit says miles so the field name stays true. Trip fuel figures (p[0:1],
+     * p[4:5], ×0.1 in the p[10] unit) are left out: p[4:5] was static 0 in every capture and
+     * p[0:1] is already exposed raw below. None of the trip fields has been read against the
+     * car's own display yet; the tiles say so.
      */
     private fun decodeTripInfo(p: ByteArray): CanSignal.TripInfo {
         val raw = u16be(p, 2, 3)
+        val inMiles = u(p, 11) == UNIT_MILE
         return CanSignal.TripInfo(
-            rangeToEmptyKm = if (raw == U16_SENTINEL) null else raw,
+            rangeToEmptyKm = when {
+                raw == U16_SENTINEL -> null
+                inMiles -> Math.round(raw * KM_PER_MILE).toInt()
+                else -> raw
+            },
+            elapsedMin = u16be(p, 6, 7).takeIf { it != U16_SENTINEL },
+            avgSpeedKmh = u16be(p, 8, 9).takeIf { it != U16_SENTINEL },
             // 2026-08-29: p[0:1] is a ~10 Hz value that tracks the speed profile up and down
             // (R²≈0.66, capped by 1 Hz GPS lag). Best *live* speed candidate; scale UNCONFIRMED.
             speedCandidateRaw = u16be(p, 0, 1),
@@ -768,6 +784,10 @@ sealed interface CanSignal {
     /** 0x13 — driving range to empty (km; null = no data) + the ~10 Hz raw speed candidate p[0:1]. */
     data class TripInfo(
         val rangeToEmptyKm: Int?,
+        /** p[6:7] BE — trip elapsed time in minutes; null = no data (0xFFFF). Unverified on the car. */
+        val elapsedMin: Int? = null,
+        /** p[8:9] BE — trip average speed in km/h; null = no data (0xFFFF). Unverified on the car. */
+        val avgSpeedKmh: Int? = null,
         /** p[0:1] BE — live speed candidate (2026-08-29); tracks the profile, scale UNCONFIRMED. */
         val speedCandidateRaw: Int = 0,
     ) : CanSignal

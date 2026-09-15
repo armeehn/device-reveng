@@ -23,6 +23,11 @@ object VehicleTiles {
 
     data class Tile(val label: String, val value: String, val emphasis: Emphasis = Emphasis.NORMAL)
 
+    private const val MINUTES_PER_HOUR = 60
+
+    /** Suffix for readings taken from the vendor parser and never checked against the car. */
+    private const val UNVERIFIED = " (unverified)"
+
     /** Door bits, as decoded from cmd 0x11. Kept beside the labels so the two cannot drift. */
     private val OPENINGS = listOf(
         0x40 to "driver",
@@ -56,6 +61,8 @@ object VehicleTiles {
         s.raw(Field.OBD_THROTTLE_PCT, now)?.let { out += Tile("Throttle", "%.0f%%".format(it)) }
         s.int(Field.HYBRID_BATTERY, now)?.let { out += Tile("Hybrid battery", "$it/15") }
         s.int(Field.RANGE_KM, now)?.let { out += Tile("Range", "$it km") }
+        s.int(Field.TRIP_ELAPSED_MIN, now)?.let { out += Tile("Trip time", tripTime(it) + UNVERIFIED) }
+        s.int(Field.TRIP_AVG_KMH, now)?.let { out += Tile("Average speed", "$it km/h" + UNVERIFIED) }
 
         openingsAjar(s, now)?.let { out += Tile("Open", it, Emphasis.ALERT) }
 
@@ -82,6 +89,13 @@ object VehicleTiles {
         s.int(Field.AMBIENT_LIGHT, now)?.let { out += Tile("Ambient light", "$it") }
 
         return out
+    }
+
+    /** Minutes as the cluster shows them: "35 min", "1 h 35 min". Never "0 h". */
+    private fun tripTime(minutes: Int): String {
+        val h = minutes / MINUTES_PER_HOUR
+        val m = minutes % MINUTES_PER_HOUR
+        return if (h == 0) "$m min" else "$h h $m min"
     }
 
     /** Names of every opening the car reports ajar, or null when none are — never "0 open". */
