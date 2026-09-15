@@ -115,7 +115,7 @@ SWC_PRESS_MS = 120
 # ── Inner framing: McuFrame.kt, cmd set: HiworldCanDecoder.kt ────────────────────────────────
 INNER_HEADER = b"\x5a\xa5"
 CMD_BASIC_STATUS = 0x11    # SWC key p[2:3], doors p[4], steering p[6:7]
-CMD_TRIP_INFO = 0x13       # range p[2:3], speed candidate p[0:1]
+CMD_TRIP_INFO = 0x13       # range p[2:3], elapsed min p[6:7], avg km/h p[8:9], unit p[11] (1 = mile)
 CMD_SPEED = 0x17           # p[0:1] BE × 0.1 km/h
 CMD_RPM_GEAR = 0x1A        # gear code p[5], rpm mirror p[9:10]
 CMD_HYBRID = 0x1F
@@ -131,6 +131,7 @@ COOLANT_OFFSET_C = 40
 TEMP_SCALE_HALF_C = 2      # climate setpoint byte = °C × 2 (TEMP_SCALE_C = 0.5)
 RADAR_STEP_CM = 30
 TPMS_NONE = 0xFE
+TRIP_NONE = 0xFFFF         # 0x13 word sentinel: the page has no such reading
 
 # Door bits, shared by inner 0x11 p[4] and raw 0x4A5 byte 3 (RawCanDecoder DOOR_*).
 DOOR_BITS = {"FL": 0x80, "FR": 0x40, "RR": 0x20, "RL": 0x10, "TAIL": 0x08, "HOOD": 0x04}
@@ -274,6 +275,7 @@ class Vehicle:
     gear: str = "P"
     doors: int = 0
     rpm: int = 0
+    trip: dict[str, int] | None = None   # range/elapsed/avg once a `trip` event set them
     climate: Climate = field(default_factory=Climate)
     tuner: Tuner = field(default_factory=Tuner)
 
@@ -322,6 +324,14 @@ class Vehicle:
         p[4:6] = u16(int(round(self.speed_kmh)))
         p[9] = coolant_c + COOLANT_OFFSET_C
         return self.relay(CMD_VEHICLE_INFO, bytes(p))
+
+    def trip_relay(self) -> bytes:
+        t = self.trip or {}
+        p = bytearray(12)
+        p[2:4] = u16(t.get("range", TRIP_NONE))
+        p[6:8] = u16(t.get("elapsed", TRIP_NONE))
+        p[8:10] = u16(t.get("avg", TRIP_NONE))
+        return self.relay(CMD_TRIP_INFO, bytes(p))
 
     def climate_relay(self) -> bytes:
         c = self.climate
@@ -543,6 +553,7 @@ The tuner needs no lines: `01 01` (SRC_RADIO) from the launcher starts the `73` 
   rpm <n>                    0x32 relay (re-sent at 1 Hz, and the 0x1A mirror)
   radar rear=<a,b,c,d> front=<a,b,c,d>   steps 1-5 (30 cm each), 0 = clear; 0x41 relay
   tpms <fl,fr,rl,rr,spare>   kPa, 0 = no reading; 0x48 relay
+  trip range=300 elapsed=95 avg=42   km / min / km/h, a missing key = no reading; 0x13 relay (re-sent at 1 Hz)
   can-replay <file> [speedup] candump lines on the bus; without a bus, known ids become relays
   say <text>                 log a marker
 """
@@ -566,6 +577,7 @@ SCENARIOS: dict[str, list[str]] = {
         "22.0 rpm 1450",
         "23.0 radar rear=0,2,2,0 front=0,0,0,0",
         "24.0 tpms 230,232,228,229,0",
+        "24.5 trip range=300 elapsed=95 avg=42",
         "25.0 mute on",
         "26.0 mute off",
         "27.0 ramp 43 0 3",
@@ -678,6 +690,8 @@ class Simulator:
                 self.mcu.link.send(self.v.gear_relay())
                 self.mcu.link.send(self.v.vehicle_info())
                 self.mcu.link.send(self.v.climate_relay())
+                if self.v.trip:
+                    self.mcu.link.send(self.v.trip_relay())
             time.sleep(BUS_TICK_S)
 
     def run(self, events: list[Event]) -> None:
@@ -759,6 +773,9 @@ class Simulator:
             self.mcu.send(v.radar_relay(fields.get("rear", [0] * 4), fields.get("front", [0] * 4)), "relay 0x41 radar")
         elif ev.verb == "tpms":
             self.mcu.send(v.tpms_relay([int(x) for x in a[0].split(",")]), "relay 0x48 tpms")
+        elif ev.verb == "trip":
+            v.trip = {k: int(val) for k, _, val in (kv.partition("=") for kv in a)}
+            self.mcu.send(v.trip_relay(), f"relay 0x13 trip {v.trip}")
         elif ev.verb == "can-replay":
             self.replay(Path(a[0]), float(a[1]) if len(a) > 1 else 1.0)
         else:

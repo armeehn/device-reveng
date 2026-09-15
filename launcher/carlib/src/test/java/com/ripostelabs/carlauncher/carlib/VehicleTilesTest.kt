@@ -134,6 +134,29 @@ class VehicleTilesTest {
         assertTrue("Reverse" !in labels(r.copy(reverseRaw = false)))
     }
 
+    /** Trip fields come from the vendor parser only, so they carry the caveat like climate. */
+    @Test
+    fun `trip tiles are labelled unverified and formatted as the cluster shows them`() {
+        val m = tiles(CanSignal.TripInfo(rangeToEmptyKm = 300, elapsedMin = 95, avgSpeedKmh = 42))
+            .associate { it.label to it.value }
+        assertEquals("300 km", m["Range"])
+        assertEquals("1 h 35 min (unverified)", m["Trip time"])
+        assertEquals("42 km/h (unverified)", m["Average speed"])
+    }
+
+    @Test
+    fun `trip time under an hour omits the hours`() {
+        val m = tiles(CanSignal.TripInfo(rangeToEmptyKm = null, elapsedMin = 7)).associate { it.label to it.value }
+        assertEquals("7 min (unverified)", m["Trip time"])
+    }
+
+    /** A page with the trip words at 0xFFFF contributes no trip tiles, not zeroes. */
+    @Test
+    fun `absent trip fields produce no trip tiles`() {
+        val l = labels(CanSignal.TripInfo(rangeToEmptyKm = 300))
+        assertEquals(listOf("Range"), l)
+    }
+
     /** Stale data must disappear from the screen, not linger. */
     @Test
     fun `everything vanishes once stale`() {
