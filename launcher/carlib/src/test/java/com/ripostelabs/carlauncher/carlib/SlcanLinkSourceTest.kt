@@ -15,6 +15,9 @@ class SlcanLinkSourceTest {
         @Volatile
         var closed = false
 
+        /** Every line the launcher transmitted, as slcan text. */
+        val written = java.util.concurrent.CopyOnWriteArrayList<String>()
+
         fun feed(text: String) = inbound.put(text.toByteArray(Charsets.US_ASCII))
 
         override fun read(buffer: ByteArray): Int {
@@ -26,7 +29,9 @@ class SlcanLinkSourceTest {
             return -1
         }
 
-        override fun write(bytes: ByteArray) = Unit
+        override fun write(bytes: ByteArray) {
+            written += bytes.toString(Charsets.US_ASCII)
+        }
 
         override fun close() {
             closed = true
@@ -82,5 +87,41 @@ class SlcanLinkSourceTest {
         source.start()
         link.close()
         await { source.status.value == SlcanLinkSource.Status.Failed("link closed") }
+    }
+
+    @Test
+    fun obdCoolantReplyLandsInTheSnapshot() {
+        val link = FakeLink()
+        val vehicle = VehicleState()
+        val source = SlcanLinkSource({ link }, vehicle, clock = { 1_000L })
+
+        source.start()
+        // 7E8 # 03 41 05 72: service 01 PID 05, A = 0x72 = 114, so 114 - 40 = 74 C.
+        link.feed("t7E880341057200000000\r")
+        await { vehicle.snapshot.value.raw(VehicleSnapshot.Field.OBD_COOLANT_C, 1_000L) == 74.0 }
+        source.stop()
+    }
+
+    @Test
+    fun aRequestGoesOutWhileTheBusIsAlive() {
+        val link = FakeLink()
+        val source = SlcanLinkSource({ link }, VehicleState(), clock = { 1_000L })
+
+        source.start()
+        link.feed("t36180027560056002B7B\r")
+        // Functional request to 0x7DF, service 01, one PID, padded to 8 bytes.
+        await { link.written.any { it.startsWith("t7DF80201") } }
+        source.stop()
+    }
+
+    @Test
+    fun aSilentBusIsNotPolled() {
+        val link = FakeLink()
+        val source = SlcanLinkSource({ link }, VehicleState(), clock = { 1_000L })
+
+        source.start()
+        Thread.sleep(100)
+        assertTrue(link.written.isEmpty())
+        source.stop()
     }
 }

@@ -148,6 +148,21 @@ ID_GEAR = 0x3BC            # byte 1: 0x20 P, 0x10 R; byte 5: 0x80 D; else N
 ID_DOOR_STATUS = 0x4A5     # byte 3 = door bits
 RAW_DLC = 8                # RawCanDecoder.DLC_MIN: shorter frames are ignored
 GEAR_P_BIT, GEAR_R_BIT, GEAR_D_BIT = 0x20, 0x10, 0x80
+# Standard OBD, SAE J1979 service 01: the launcher asks on 0x7DF, the engine ECU answers on 0x7E8.
+OBD_REQUEST_ID = 0x7DF     # Obd.REQUEST_ID, functional: every emissions ECU listens
+OBD_ECU_ID = 0x7E8         # the engine ECU's reply id
+OBD_SERVICE_CURRENT = 0x01
+OBD_POSITIVE_OFFSET = 0x40 # 0x41 = "service 01 answered"
+OBD_PCI_SINGLE = 0x03      # ISO-TP single frame: service + PID + one data byte
+OBD_AT_SERVICE = 1
+OBD_AT_PID = 2
+OBD_AT_VALUE = 3
+OBD_PIDS = {"load": 0x04, "coolant": 0x05, "throttle": 0x11}   # ObdPid; the key is the `obd` verb's
+OBD_PID_SPEED = 0x0D       # answered from speed_kmh, the launcher's own cross-check
+OBD_BYTE_FULL = 255        # J1979: a full byte is 100 %
+OBD_PERCENT_FULL = 100
+SLCAN_FRAME = re.compile(rb"t(?P<id>[0-9A-Fa-f]{3})(?P<dlc>[0-9A-Fa-f])(?P<data>(?:[0-9A-Fa-f]{2})*)")
+
 BUS_TICK_S = 0.1           # CarEvents.BUS_SPEED_STALE_MS is 2 s; 10 Hz keeps the gate fed
 RELAY_TICK_S = 1.0         # HiWorld status relay cadence (the real box is slower)
 
@@ -200,6 +215,15 @@ def slcan_frame(can_id: int, data: bytes) -> bytes:
 
 def u16(value: int) -> bytes:
     return bytes([(value >> 8) & 0xFF, value & 0xFF])
+
+
+def obd_value(key: str, text: str) -> int:
+    """One `obd k=v` pair as the ECU's data byte A carries it: J1979's formulas, inverted."""
+    if key not in OBD_PIDS:
+        raise KeyError(f"unknown obd key {key}")
+    if key == "coolant":
+        return int(text) + COOLANT_OFFSET_C
+    return round(float(text) * OBD_BYTE_FULL / OBD_PERCENT_FULL)
 
 
 def trip_value(key: str, text: str) -> int:
@@ -289,6 +313,7 @@ class Vehicle:
     doors: int = 0
     rpm: int = 0
     trip: dict[str, int] | None = None   # range/elapsed/avg/fuel/best/unit once a `trip` event set them
+    obd: dict[str, int] | None = None    # load/coolant/throttle data bytes once an `obd` event set them
     climate: Climate = field(default_factory=Climate)
     tuner: Tuner = field(default_factory=Tuner)
 
@@ -382,6 +407,25 @@ class Vehicle:
         d = bytearray(RAW_DLC)
         d[3] = self.doors
         return slcan_frame(ID_DOOR_STATUS, bytes(d))
+
+    # ── The engine ECU (what answers the launcher's 0x7DF) ──
+    def obd_reply(self, pid: int) -> bytes | None:
+        """The single-frame answer to a service 01 request; None = this car has no such PID."""
+        if self.obd is None:
+            return None
+        if pid == OBD_PID_SPEED:
+            a = int(round(self.speed_kmh))
+        else:
+            key = next((k for k, code in OBD_PIDS.items() if code == pid), None)
+            if key is None or key not in self.obd:
+                return None
+            a = self.obd[key]
+        d = bytearray(RAW_DLC)
+        d[0] = OBD_PCI_SINGLE
+        d[OBD_AT_SERVICE] = OBD_SERVICE_CURRENT + OBD_POSITIVE_OFFSET
+        d[OBD_AT_PID] = pid
+        d[OBD_AT_VALUE] = a & 0xFF
+        return slcan_frame(OBD_ECU_ID, bytes(d))
 
 
 # ── Transport ────────────────────────────────────────────────────────────────────────────────
@@ -534,21 +578,61 @@ class McuSide:
 
 
 class CanSide:
-    """The raw body bus in slcan text. Optional: without it, replays degrade to relay frames."""
+    """The raw body bus in slcan text, and the engine ECU on it. Optional: without it, replays
+    degrade to relay frames and nothing answers OBD."""
 
-    def __init__(self, link: Link | None) -> None:
+    def __init__(self, link: Link | None, vehicle: Vehicle) -> None:
         self.link = link
+        self.vehicle = vehicle
         self.frames = 0
+        self.requests = 0
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._pump, name="can-rx", daemon=True)
 
     @property
     def present(self) -> bool:
         return self.link is not None
+
+    def start(self) -> None:
+        if self.link is not None:
+            self._thread.start()
+
+    def stop(self) -> None:
+        self._stop.set()
 
     def send(self, line: bytes) -> None:
         if self.link is None:
             return
         self.frames += 1
         self.link.send(line)
+
+    def _pump(self) -> None:
+        buf = bytearray()
+        while not self._stop.is_set():
+            chunk = self.link.recv()
+            if not chunk:
+                continue
+            buf += chunk
+            while (end := buf.find(b"\r")) >= 0:
+                line, buf = bytes(buf[:end]), buf[end + 1:]
+                self._handle(line)
+
+    def _handle(self, line: bytes) -> None:
+        """A 0x7DF service 01 request gets the ECU's answer; a PID this car lacks gets silence,
+        as on the real bus. Anything else on the wire is the launcher's business, not ours."""
+        m = SLCAN_FRAME.fullmatch(line)
+        if not m or int(m["id"], 16) != OBD_REQUEST_ID:
+            return
+        data = bytes.fromhex(m["data"].decode("ascii"))
+        if len(data) <= OBD_AT_PID or data[OBD_AT_SERVICE] != OBD_SERVICE_CURRENT:
+            return
+        self.requests += 1
+        pid = data[OBD_AT_PID]
+        reply = self.vehicle.obd_reply(pid)
+        if reply is None:
+            return
+        log(f"ecu 0x{pid:02X} -> {reply.decode('ascii').strip()}")
+        self.send(reply)
 
 
 # ── Scenario grammar ─────────────────────────────────────────────────────────────────────────
@@ -572,6 +656,9 @@ The tuner needs no lines: `01 01` (SRC_RADIO) from the launcher starts the `73` 
   trip range=300 elapsed=95 avg=42 fuel=5.4 best=4.8 unit=L/100km
                              km / min / km/h / fuel figures in unit (km/L, L/100km, MPG(UK), MPG(US));
                              a missing key = no reading; 0x13 relay (re-sent at 1 Hz)
+  obd coolant=74 load=23 throttle=15   what the engine ECU answers to the launcher's 0x7DF
+                             service 01 requests (°C, %, %); a missing key = unsupported PID,
+                             silence; 0x0D follows `speed`; needs --can
   can-replay <file> [speedup] candump lines on the bus; without a bus, known ids become relays
   say <text>                 log a marker
 """
@@ -596,6 +683,7 @@ SCENARIOS: dict[str, list[str]] = {
         "23.0 radar rear=0,2,2,0 front=0,0,0,0",
         "24.0 tpms 230,232,228,229,0",
         "24.5 trip range=300 elapsed=95 avg=42 fuel=5.4 best=4.8 unit=L/100km",
+        "24.7 obd coolant=74 load=23 throttle=15",
         "25.0 mute on",
         "26.0 mute off",
         "27.0 ramp 43 0 3",
@@ -794,6 +882,9 @@ class Simulator:
         elif ev.verb == "trip":
             v.trip = {k: trip_value(k, val) for k, _, val in (kv.partition("=") for kv in a)}
             self.mcu.send(v.trip_relay(), f"relay 0x13 trip {v.trip}")
+        elif ev.verb == "obd":
+            v.obd = {k: obd_value(k, val) for k, _, val in (kv.partition("=") for kv in a)}
+            log(f"ecu answers {v.obd}" if self.can.present else "obd: no --can, nothing will ask")
         elif ev.verb == "can-replay":
             self.replay(Path(a[0]), float(a[1]) if len(a) > 1 else 1.0)
         else:
@@ -878,13 +969,14 @@ def main() -> int:
         can_link.connect()
 
     mcu = McuSide(mcu_link, vehicle)
-    can = CanSide(can_link)
+    can = CanSide(can_link, vehicle)
     sim = Simulator(mcu, can, vehicle, args.speedup)
     mcu.start()
+    can.start()
     log(f"scenario {args.scenario}: {len(events)} events, bus={'yes' if can.present else 'converted relays'}")
     try:
         sim.run(events)
-        log(f"timeline done: mcu rx={mcu.rx_frames} acks={mcu.acks} bus frames={can.frames}")
+        log(f"timeline done: mcu rx={mcu.rx_frames} acks={mcu.acks} bus frames={can.frames} obd requests={can.requests}")
         if args.hold < 0:
             while True:
                 time.sleep(1)
@@ -894,6 +986,7 @@ def main() -> int:
     finally:
         sim.stop()
         mcu.stop()
+        can.stop()
         mcu_link.close()
         if can_link:
             can_link.close()

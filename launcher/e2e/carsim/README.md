@@ -52,6 +52,10 @@ channel at 10 Hz. Without `--can`, replays convert the ids `RawCanDecoder`
 knows (0x361 speed, 0x3BC gear, 0x4A5 doors) into HiWorld relay frames, which
 the launcher shows but does not gate on.
 
+With `--can`, `CanSide` also plays the engine ECU: an `obd` event sets what it
+answers to the launcher's `0x7DF` service 01 requests (coolant, load,
+throttle), which `SlcanLinkSource` sends at 2 Hz while frames are arriving.
+
 ## What it cannot fake
 
 - The CANable path itself (USB CDC-ACM): no USB on the emulator, hence the second carrier.
