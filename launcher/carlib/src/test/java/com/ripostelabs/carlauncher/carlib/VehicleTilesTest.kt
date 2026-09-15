@@ -150,6 +150,25 @@ class VehicleTilesTest {
         assertEquals("7 min (unverified)", m["Trip time"])
     }
 
+    /** Fuel figures are drawn in the unit the car reports, one decimal, with the caveat. */
+    @Test
+    fun `trip fuel tiles carry the car's unit and the caveat`() {
+        val m = tiles(CanSignal.TripInfo(rangeToEmptyKm = null, tripFuel = 5.4, bestFuel = 4.8,
+                fuelUnit = CanSignal.FuelUnit.L_PER_100KM))
+            .associate { it.label to it.value }
+        assertEquals("5.4 L/100km (unverified)", m["Trip fuel"])
+        assertEquals("4.8 L/100km (unverified)", m["Best fuel"])
+    }
+
+    @Test
+    fun `trip fuel in miles per gallon says which gallon`() {
+        val m = tiles(CanSignal.TripInfo(rangeToEmptyKm = null, tripFuel = 41.0,
+                fuelUnit = CanSignal.FuelUnit.MPG_UK))
+            .associate { it.label to it.value }
+        assertEquals("41.0 MPG (UK) (unverified)", m["Trip fuel"])
+        assertTrue("Best fuel" !in m)
+    }
+
     /** A page with the trip words at 0xFFFF contributes no trip tiles, not zeroes. */
     @Test
     fun `absent trip fields produce no trip tiles`() {

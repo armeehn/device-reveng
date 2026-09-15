@@ -32,6 +32,10 @@ object HiworldCanDecoder {
     private const val OP_TRIP_INFO = 0x13      // vehicle information page (range/trip) + speed candidate p[0:1]
     private const val KM_PER_MILE = 1.609344
     private const val UNIT_MILE = 1               // 0x13 p[11]: 1 = mile, anything else km
+    private const val FUEL_TENTHS = 0.1           // 0x13 fuel words are x0.1 in the p[10] unit
+    private const val FUEL_UNIT_KM_PER_L = 1      // 0x13 p[10] code table, vendor page handler
+    private const val FUEL_UNIT_L_PER_100KM = 2
+    private const val FUEL_UNIT_MPG_UK = 3        // any other code => MPG (US)
     private const val OP_SPEED = 0x17          // dedicated low-rate speed field (2026-08-29 drive); p[0:1] BE ×0.1 km/h
     private const val OP_RPM_GEAR_MIRROR = 0x1A // unparsed by OEM; RPM + gear raw found in capture
     private const val OP_HYBRID = 0x1F         // hybrid battery + energy flow
@@ -478,10 +482,16 @@ object HiworldCanDecoder {
      * The same parser reads the rest of the page (all `computeValue(bArr[i+1], bArr[i])`, so BE):
      * elapsed time `bArr[8:9]` = p[6:7] in minutes (`formatTimeHm`), average speed `bArr[10:11]`
      * = p[8:9] in km/h, and the distance unit `bArr[13]` = p[11] (1 = mile). Range is converted
-     * to km when the unit says miles so the field name stays true. Trip fuel figures (p[0:1],
-     * p[4:5], ×0.1 in the p[10] unit) are left out: p[4:5] was static 0 in every capture and
-     * p[0:1] is already exposed raw below. None of the trip fields has been read against the
-     * car's own display yet; the tiles say so.
+     * to km when the unit says miles so the field name stays true.
+     *
+     * The two fuel words follow the same handler: trip fuel `bArr[2:3]` = p[0:1] and the
+     * "optimal" (best) figure `bArr[6:7]` = p[4:5], both ×0.1 in the unit coded by `bArr[12]`
+     * = p[10] (1 km/L, 2 L/100km, 3 MPG UK, else MPG US). The vendor reading of p[0:1] as
+     * fuel economy is consistent with the 2026-08-29 finding that it tracks the speed profile
+     * (economy follows speed); the raw word stays exposed as the candidate until a drive
+     * settles it. p[4:5] was static 0 in every capture, which is a fresh best-of record, not a
+     * sentinel. None of the trip fields has been read against the car's own display yet; the
+     * tiles say so.
      */
     private fun decodeTripInfo(p: ByteArray): CanSignal.TripInfo {
         val raw = u16be(p, 2, 3)
@@ -494,6 +504,9 @@ object HiworldCanDecoder {
             },
             elapsedMin = u16be(p, 6, 7).takeIf { it != U16_SENTINEL },
             avgSpeedKmh = u16be(p, 8, 9).takeIf { it != U16_SENTINEL },
+            tripFuel = fuelWord(p, 0, 1),
+            bestFuel = fuelWord(p, 4, 5),
+            fuelUnit = fuelUnit(u(p, 10)),
             // 2026-08-29: p[0:1] is a ~10 Hz value that tracks the speed profile up and down
             // (R²≈0.66, capped by 1 Hz GPS lag). Best *live* speed candidate; scale UNCONFIRMED.
             speedCandidateRaw = u16be(p, 0, 1),
@@ -504,6 +517,17 @@ object HiworldCanDecoder {
      * 0x17 — dedicated speed field (2026-08-29 drive). p[0:1] BE × [SPEED_017_SCALE_KMH]. Accurate
      * (raw 540 = 54.0 km/h) but low-rate (~once per 25–40 s) and the scale rests on 2 points.
      */
+    /** A 0x13 fuel word: BE ×0.1, 0xFFFF = no reading. */
+    private fun fuelWord(p: ByteArray, hi: Int, lo: Int): Double? =
+        u16be(p, hi, lo).takeIf { it != U16_SENTINEL }?.let { it * FUEL_TENTHS }
+
+    private fun fuelUnit(code: Int): CanSignal.FuelUnit = when (code) {
+        FUEL_UNIT_KM_PER_L -> CanSignal.FuelUnit.KM_PER_L
+        FUEL_UNIT_L_PER_100KM -> CanSignal.FuelUnit.L_PER_100KM
+        FUEL_UNIT_MPG_UK -> CanSignal.FuelUnit.MPG_UK
+        else -> CanSignal.FuelUnit.MPG_US
+    }
+
     private fun decodeSpeed(p: ByteArray): CanSignal.SpeedCandidate {
         val raw = u16be(p, 0, 1)
         return CanSignal.SpeedCandidate(
@@ -781,6 +805,11 @@ sealed interface CanSignal {
         val frontCm: List<Int?>,
     ) : CanSignal
 
+    /** 0x13 p[10] fuel-economy unit, labelled as the cluster would print it. */
+    enum class FuelUnit(val label: String) {
+        KM_PER_L("km/L"), L_PER_100KM("L/100km"), MPG_UK("MPG (UK)"), MPG_US("MPG (US)"),
+    }
+
     /** 0x13 — driving range to empty (km; null = no data) + the ~10 Hz raw speed candidate p[0:1]. */
     data class TripInfo(
         val rangeToEmptyKm: Int?,
@@ -788,6 +817,12 @@ sealed interface CanSignal {
         val elapsedMin: Int? = null,
         /** p[8:9] BE — trip average speed in km/h; null = no data (0xFFFF). Unverified on the car. */
         val avgSpeedKmh: Int? = null,
+        /** p[0:1] BE ×0.1 — trip fuel economy in [fuelUnit]; null = no data (0xFFFF). Unverified. */
+        val tripFuel: Double? = null,
+        /** p[4:5] BE ×0.1 — best fuel economy in [fuelUnit]; null = no data (0xFFFF). Unverified. */
+        val bestFuel: Double? = null,
+        /** p[10] — the unit the car reports its fuel figures in. */
+        val fuelUnit: FuelUnit = FuelUnit.L_PER_100KM,
         /** p[0:1] BE — live speed candidate (2026-08-29); tracks the profile, scale UNCONFIRMED. */
         val speedCandidateRaw: Int = 0,
     ) : CanSignal
