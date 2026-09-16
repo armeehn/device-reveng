@@ -9,6 +9,9 @@ import kotlinx.coroutines.flow.asStateFlow
  * [freq] is in the band's own units, FM 10 kHz / AM kHz (see [McuOwnerProtocol.RadioEvent]); 0 until
  * the MCU has said, which every screen already treats as "no tuner". [updatedAt] is 0 for the same
  * reason: [CarService] answers null from an owner that has heard nothing yet.
+ *
+ * [stationList] is the vendor's `mRadioFreqList` (sub 4/8), 42 slots, 0 = empty; the suite radio's
+ * preset list reads it through the tuner binder (RAV4-97).
  */
 data class RadioState(
     val band: Int = 0,
@@ -21,6 +24,9 @@ data class RadioState(
     val af: Boolean = false,
     val stereo: Boolean = false,
     val tp: Boolean = false,
+    val stMono: Boolean = false,
+    val dxLoc: Boolean = false,
+    val stationList: List<Int> = List(McuOwnerProtocol.RADIO_FREQ_LIST_SIZE) { 0 },
     val updatedAt: Long = 0L,
 )
 
@@ -35,7 +41,7 @@ data class RadioState(
  * The vendor gateway does the same fold: each `73` sub-command overwrites one field and fires
  * `notifyRadioEvt` (EventService.java:2763-2845), and `getRadioFreq` and friends (:7482-7545)
  * read the field back. The tuner screen already re-polls the getters on every tick, so it needs
- * no other hook. Station-list slots (sub 4/8) are not kept: nothing in the launcher reads them.
+ * no other hook.
  */
 class RadioStateHolder(
     private val clock: () -> Long = System::currentTimeMillis,
@@ -64,6 +70,8 @@ class RadioStateHolder(
             af = event.af,
             stereo = event.stereoIcon,
             tp = event.tpIcon,
+            stMono = event.stMono,
+            dxLoc = event.loc,
             updatedAt = now,
         )
 
@@ -77,6 +85,15 @@ class RadioStateHolder(
         is McuOwnerProtocol.RadioEvent.Frequency -> copy(freq = event.freq, updatedAt = now)
         is McuOwnerProtocol.RadioEvent.Pty -> copy(ptyNumber = event.pty, updatedAt = now)
         is McuOwnerProtocol.RadioEvent.StationName -> copy(stationName = event.name, updatedAt = now)
-        is McuOwnerProtocol.RadioEvent.FreqList -> this
+        is McuOwnerProtocol.RadioEvent.FreqList -> slot(event.index, event.freq, now)
+    }
+
+    /** A slot outside the vendor's 42 is dropped, as `onRadioFreqList` drops it. */
+    private fun RadioState.slot(index: Int, freq: Int, now: Long): RadioState {
+        if (index !in stationList.indices) {
+            return this
+        }
+
+        return copy(stationList = stationList.toMutableList().also { it[index] = freq }, updatedAt = now)
     }
 }

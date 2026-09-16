@@ -202,6 +202,19 @@
             android:authorities="${applicationId}.theme"
             android:exported="true"
             android:grantUriPermissions="false" />
+
+        <!--
+          RAV4-97: the tuner for the suite radio (com.ripostelabs.radio), bound by action. Exported
+          without a permission because the suite is signed by its own key; TunerService checks the
+          caller on every transaction (SuiteCaller) instead.
+        -->
+        <service
+            android:name=".tuner.TunerService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.ripostelabs.carlauncher.tuner.ITuner" />
+            </intent-filter>
+        </service>
     
         <service
             android:name=".service.CanCaptureService"

@@ -344,6 +344,16 @@ class CarService(private val appContext: Context) {
     /** The tuner source on the owner path; idle while the binder owns the link. */
     private val radioSource = RadioSource { mode -> owner?.setMode(mode) ?: false }
 
+    /** `mValidMode == SRC_RADIO`: ours on the owner path, the gateway's answer otherwise. */
+    fun isRadioClaimed(): Boolean {
+        owner?.let { return radioSource.held }
+        return getValidMode() == SRC_RADIO
+    }
+
+    /** Ticks when the gateway moves the source off the tuner (RAV4-97 onSourceLost). */
+    private val _sourceLost = MutableStateFlow(0L)
+    val sourceLost: StateFlow<Long> = _sourceLost.asStateFlow()
+
     private fun dropRadioFocus() {
         radioFocus?.let { appContext.getSystemService(AudioManager::class.java)?.abandonAudioFocusRequest(it) }
     }
@@ -362,6 +372,7 @@ class CarService(private val appContext: Context) {
         override fun notifyEvt(what: Int, arg1: Int, arg2: Int, data: ByteArray?, str: String?) {
             if (what == EVT_MODE_CHANGE && arg2 != SRC_RADIO && arg2 != SRC_CARPLAY) {
                 Log.i(TAG, "radio: mode moved to $arg2")
+                _sourceLost.update { it + 1 }
             }
             _radioEvents.update { it + 1 }
         }
