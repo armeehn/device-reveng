@@ -56,3 +56,8 @@ Unset `CARSIM_SERIAL` skips the cases. See `carsim/README.md`.
 `test_carsim_radio.py` drives the tuner screen against the `radio` scenario:
 open, seek, AM, and the suite Radio absent from the drawer (that last case
 needs `com.ripostelabs.radio` installed on the instance, else it skips).
+
+`test_carsim_gestures.py` drives the `gestures` scenario: `wheelhold MODE`
+(0x11 relayed every 100 ms for 900 ms) must log a LongPress and open the
+Media screen, `wheeldouble PLAY_PAUSE` a DoublePress. Chords are not
+simulated; one key id per frame is a car question.

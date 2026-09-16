@@ -556,6 +556,7 @@ class CarEvents(private val appContext: Context) {
     private val keySwallow = WheelKeySwallow()
 
     private val gestures = WheelGestures { gesture ->
+        Log.i(TAG, "wheel gesture: $gesture")
         if (gesture is WheelGesture.LongPress) {
             keySwallow.arm(gesture.key, SystemClock.elapsedRealtime())
         }
@@ -1114,7 +1115,16 @@ class CarEvents(private val appContext: Context) {
             vehicle?.onSignal(signal, atMs)
             when (signal) {
                 is CanSignal.Climate -> _climate.value = ClimateState.from(signal)
-                is CanSignal.BasicStatus -> _doors.value = DoorState.from(signal, atMs)
+                is CanSignal.BasicStatus -> {
+                    _doors.value = DoorState.from(signal, atMs)
+                    // RAV4-53: the same frame carries the wheel key byte pair; on 0.2 this is the
+                    // only source, no MCU_MSG_CAN_ALL_INFO broadcast exists. Hopped onto the main
+                    // looper: the engine is unsynchronised and its tick already runs there.
+                    handler.post {
+                        gestures.onSignal(signal, SystemClock.elapsedRealtime())
+                        scheduleGestureTick()
+                    }
+                }
                 else -> {}
             }
         }

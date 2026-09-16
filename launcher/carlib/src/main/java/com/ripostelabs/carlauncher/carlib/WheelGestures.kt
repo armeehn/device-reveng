@@ -122,6 +122,14 @@ class WheelGestures(private val emit: (WheelGesture) -> Unit) {
         fireLongIfDue(nowMs)
     }
 
+    /**
+     * One frame-0x11 decode, as the owner path delivers it: McuOwner relays the box's frame under
+     * 0xA5 and [HiworldCanDecoder] reads the same two bytes into [CanSignal.BasicStatus].
+     */
+    fun onSignal(signal: CanSignal.BasicStatus, nowMs: Long) {
+        onSample(signal.swcButtonId, signal.swcPressed, nowMs)
+    }
+
     /** Time passed with no frame. Call at [nextDeadlineMs]; harmless any other time. */
     fun onTick(nowMs: Long) {
         if (held == null) {

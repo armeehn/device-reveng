@@ -111,6 +111,11 @@ SWC_BUTTONS = {
     "NEXT": 8, "PREV": 9, "MODE": 12, "PLAY_PAUSE": 15, "BACK": 16,
 }
 SWC_PRESS_MS = 120
+# Hold gestures (WheelGestures.kt): the box repeats 0x11 every FRAME_PERIOD_MS while a key is
+# held; LONG_PRESS_MS = 600 fires the long press, DOUBLE_PRESS_MS = 400 pairs two presses.
+SWC_FRAME_MS = 100
+SWC_HOLD_MS = 900
+SWC_DOUBLE_GAP_MS = 200
 
 # ── Inner framing: McuFrame.kt, cmd set: HiworldCanDecoder.kt ────────────────────────────────
 INNER_HEADER = b"\x5a\xa5"
@@ -645,6 +650,8 @@ The tuner needs no lines: `01 01` (SRC_RADIO) from the launcher starts the `73` 
   volume <0-40>              MAIN_VOLUME (79)              mute on|off        MUTE (78)
   key <NAME>                 panel key (72): VOL_UP, VOL_DOWN, MUTE, NEXT, PREV, MENU, RETURN, POWER ...
   wheel <NAME>               CAN wheel button press+release (0x11 relay): NEXT, PREV, VOL_UP, CALL ...
+  wheelhold <NAME> [ms]      the same key held (0x11 re-sent every 100 ms), default 900 ms: a long press
+  wheeldouble <NAME>         two presses 200 ms apart: a double press
   speed <kmh>                held; 0x361 on the bus at 10 Hz, 0x17 + 0x32 relays at 1 Hz
   ramp <from> <to> <secs>    speed ramp, linear
   gear P|R|N|D               0x3BC on the bus, 0x1A relay
@@ -719,6 +726,16 @@ SCENARIOS: dict[str, list[str]] = {
         "72.0 lamp off",
         "73.0 acc off",
         "74.0 say commute: done",
+    ],
+    # Key on, parked; a long press and a double press on the CAN wheel (RAV4-53). MODE held opens
+    # the Media screen by default (WheelGestureBindings.DEFAULT_LONG); test_carsim_gestures.py.
+    "gestures": [
+        "0.0 say gestures: handshake window",
+        "3.0 acc on",
+        "4.0 gear P",
+        "6.0 wheelhold MODE",
+        "9.0 wheeldouble PLAY_PAUSE",
+        "11.0 say gestures: done",
     ],
     # Key on, parked; the tuner answers `01 01` with 96.3 MHz "CBC R1" and follows every key.
     # No timeline events beyond the handshake: the launcher drives it (test_carsim_radio.py).
@@ -819,6 +836,18 @@ class Simulator:
         self._stop.set()
 
     # ── one event ──
+    def wheel_press(self, name: str, hold_ms: int) -> None:
+        """One CAN wheel key held for hold_ms: a held 0x11 every SWC_FRAME_MS, then the release frame."""
+        button = SWC_BUTTONS[name]
+        down = self.v.basic_status(button, True)
+        end = time.monotonic() + hold_ms / 1000
+        self.mcu.send(down, f"relay 0x11 wheel {name} down ({hold_ms} ms)")
+        while (left := end - time.monotonic()) > 0:
+            time.sleep(min(left, SWC_FRAME_MS / 1000))
+            if left > SWC_FRAME_MS / 1000:
+                self.mcu.link.send(down)
+        self.mcu.send(self.v.basic_status(button, False), f"relay 0x11 wheel {name} up")
+
     def apply(self, ev: Event) -> None:
         v, a = self.v, ev.args
         log(f"event {ev.verb} {' '.join(a)}")
@@ -842,9 +871,13 @@ class Simulator:
         elif ev.verb == "key":
             self.mcu.send(v.panel_key(PANEL_KEYS[a[0]]), f"KEY_EVENT {a[0]}")
         elif ev.verb == "wheel":
-            self.mcu.send(v.basic_status(SWC_BUTTONS[a[0]], True), f"relay 0x11 wheel {a[0]} down")
-            time.sleep(SWC_PRESS_MS / 1000)
-            self.mcu.send(v.basic_status(SWC_BUTTONS[a[0]], False), f"relay 0x11 wheel {a[0]} up")
+            self.wheel_press(a[0], SWC_PRESS_MS)
+        elif ev.verb == "wheelhold":
+            self.wheel_press(a[0], int(a[1]) if len(a) > 1 else SWC_HOLD_MS)
+        elif ev.verb == "wheeldouble":
+            self.wheel_press(a[0], SWC_PRESS_MS)
+            time.sleep(SWC_DOUBLE_GAP_MS / 1000)
+            self.wheel_press(a[0], SWC_PRESS_MS)
         elif ev.verb == "speed":
             self.ramp = None
             v.speed_kmh = float(a[0])

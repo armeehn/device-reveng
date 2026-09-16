@@ -765,7 +765,10 @@ it emits one MCU key on the release frame whatever the hold
 the same decode and turns the run of frames into one of **Press**, **LongPress** (held 600 ms,
 emitted while still held) or **DoublePress** (second press within 400 ms of a release). A gap of
 more than 300 ms with no frame is read as a release. VOL± are ignored: the CAN app owns their
-auto-repeat. Ids 8/13 and 9/14 both mean PREV/NEXT and are folded.
+auto-repeat. Ids 8/13 and 9/14 both mean PREV/NEXT and are folded. On Riposte OS 0.2 there is
+no broadcast: McuOwner relays the box's own `0x11` under `0xA5` and the same engine reads the
+`HiworldCanDecoder` decode (`CarEvents.ownerListener`), so the thresholds are shared. Each
+gesture is logged as `CarEvents: wheel gesture: LongPress(key=MODE)`.
 
 Settings ▸ Wheel gestures binds a hold and a double press per key (NEXT, PREV, MODE, PLAY/PAUSE,
 TALK, RETURN, MUTE, VOICE) to one of: seek ±30/10 s, next/prev track, play/pause, open
