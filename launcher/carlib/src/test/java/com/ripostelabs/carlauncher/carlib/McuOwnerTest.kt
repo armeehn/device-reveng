@@ -19,8 +19,9 @@ class McuOwnerTest {
     private companion object {
         /** start() hands the port to its own thread; anything slower is the main thread waiting on it. */
         const val BOUNDED_START_MS = 200L
-        const val TEST_TIMEOUT_MS = 5_000L
+        const val TEST_TIMEOUT_MS = 20_000L
         const val WATCHDOG_OFF_MS = 60_000L
+        const val WAIT_FOR_MS = 10_000L
     }
 
     private fun bytes(vararg v: Int) = ByteArray(v.size) { v[it].toByte() }
@@ -90,7 +91,9 @@ class McuOwnerTest {
     private fun owner(link: FakeLink, gate: Gate = Gate(eventcenter = false, enabled = true), recorder: Recorder = Recorder()) =
         McuOwner(gate, recorder, openLink = { link }, ackTimeoutMs = 20, writeTimeoutMs = WATCHDOG_OFF_MS)
 
-    private fun <T> waitFor(what: String, timeoutMs: Long = 2_000, probe: () -> T?): T {
+    // Generous: the CI runner is shared and has run McuOwnerTest at a load average past 250,
+    // where a 2 s bound expired on cases that assert by count, not by clock.
+    private fun <T> waitFor(what: String, timeoutMs: Long = WAIT_FOR_MS, probe: () -> T?): T {
         val deadline = System.currentTimeMillis() + timeoutMs
         while (System.currentTimeMillis() < deadline) {
             probe()?.let { return it }
@@ -402,12 +405,13 @@ class McuOwnerTest {
     @Test(timeout = TEST_TIMEOUT_MS)
     fun deadLinkIsReopenedInTheBackground() {
         val stuck = StuckLink()
-        val live = FakeLink(ackNull = true)
         val opens = java.util.concurrent.atomic.AtomicInteger()
+        // A fresh live link per reopen: a starved runner can outlast the 50 ms watchdog on the
+        // live link too, and a closed FakeLink never reads again.
         val owner = McuOwner(
             Gate(eventcenter = false, enabled = true),
             Recorder(),
-            openLink = { if (opens.getAndIncrement() == 0) stuck else live },
+            openLink = { if (opens.getAndIncrement() == 0) stuck else FakeLink(ackNull = true) },
             ackTimeoutMs = 20,
             writeTimeoutMs = 50,
             retryDelayMs = 50,
@@ -418,7 +422,6 @@ class McuOwnerTest {
         owner.stop()
 
         assertTrue(running.acked)
-        // At least: on a starved runner the live link's own write can outlast the 50 ms too.
         assertTrue("opens=${opens.get()}", opens.get() >= 2)
     }
 }
