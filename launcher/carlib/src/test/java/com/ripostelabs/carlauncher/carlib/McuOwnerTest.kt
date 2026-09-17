@@ -22,6 +22,11 @@ class McuOwnerTest {
         const val TEST_TIMEOUT_MS = 20_000L
         const val WATCHDOG_OFF_MS = 60_000L
         const val WAIT_FOR_MS = 10_000L
+        // The production window. 20 ms once kept the no-ack cases quick, but a loaded runner
+        // answered the fake link's ack after the window, the owner re-sent SRC_NULL, the fake
+        // acked twice, and every exact frame count and write index drifted: three different
+        // pairs of cases went red on CI in one day. The no-ack cases now cost ACK_ATTEMPTS×0.5 s.
+        const val ACK_MS = McuOwnerProtocol.ACK_TIMEOUT_MS
         const val SLOW_START_MS = 100L
     }
 
@@ -90,7 +95,7 @@ class McuOwnerTest {
     // The write watchdog is off the clock here (a CI stall once declared a fake link dead
     // mid-test); the two RAV4-96 cases below shorten it against a write that never returns.
     private fun owner(link: FakeLink, gate: Gate = Gate(eventcenter = false, enabled = true), recorder: Recorder = Recorder()) =
-        McuOwner(gate, recorder, openLink = { link }, ackTimeoutMs = 20, writeTimeoutMs = WATCHDOG_OFF_MS)
+        McuOwner(gate, recorder, openLink = { link }, ackTimeoutMs = ACK_MS, writeTimeoutMs = WATCHDOG_OFF_MS)
 
     // Generous: the CI runner is shared and has run McuOwnerTest at a load average past 250,
     // where a 2 s bound expired on cases that assert by count, not by clock.
@@ -283,6 +288,32 @@ class McuOwnerTest {
         assertArrayEquals(McuOwnerProtocol.systemKey(McuOwnerProtocol.SystemKey.VOLUME_DOWN), link.written[handshake])
     }
 
+    /**
+     * The vendor's read thread hands every LEN-delimited frame to the handler without checking
+     * CK (SerialReadThread.parseRxData, EventService.parseCmdEvt), and the car's first tally
+     * said the outbound formula DISAGREES with what the MCU sends (RAV4-61 item 10). A frame
+     * with a CK the launcher cannot reproduce is still the car talking: dispatched, and counted.
+     */
+    @Test
+    fun badChecksumFrameIsDispatchedAndCounted() {
+        val link = FakeLink(ackNull = true)
+        val recorder = Recorder()
+        val (owner, _) = runningOwner(link, recorder)
+
+        val frame = McuSerial.encode(McuOpcode.SYS_EVENT.code, bytes(0x02, 0x00))
+        frame[frame.size - 2] = (frame[frame.size - 2].toInt() xor 0x5A).toByte()   // CK is before the pad
+        link.feed(frame)
+
+        val counted = waitFor("the bad-CK frame counted") {
+            (owner.status.value as? McuOwner.Status.Running)?.takeIf { it.badChecksum == 1L }
+        }
+        waitFor("the reverse bit seen") { recorder.sys.firstOrNull() }
+        owner.stop()
+
+        assertTrue(recorder.sys[0].reverse)
+        assertEquals(1L, counted.badChecksum)
+    }
+
     /** `74` goes to onWheelKey and writes nothing back; an unknown `72` code is surfaced, not thrown. */
     @Test
     fun wheelEdgeAndUnknownPanelCodeAreSurfaced() {
@@ -423,7 +454,7 @@ class McuOwnerTest {
     @Test(timeout = TEST_TIMEOUT_MS)
     fun startReturnsAtOnceWhenTheWriteBlocks() {
         val link = StuckLink()
-        val owner = McuOwner(Gate(eventcenter = false, enabled = true), Recorder(), openLink = { link.opens.incrementAndGet(); link }, ackTimeoutMs = 20, writeTimeoutMs = 50)
+        val owner = McuOwner(Gate(eventcenter = false, enabled = true), Recorder(), openLink = { link.opens.incrementAndGet(); link }, ackTimeoutMs = ACK_MS, writeTimeoutMs = 50)
 
         val startedAt = System.currentTimeMillis()
         owner.start()
@@ -446,7 +477,7 @@ class McuOwnerTest {
             Gate(eventcenter = false, enabled = true),
             Recorder(),
             openLink = { if (opens.getAndIncrement() == 0) stuck else FakeLink(ackNull = true) },
-            ackTimeoutMs = 20,
+            ackTimeoutMs = ACK_MS,
             writeTimeoutMs = 50,
             retryDelayMs = 50,
         )

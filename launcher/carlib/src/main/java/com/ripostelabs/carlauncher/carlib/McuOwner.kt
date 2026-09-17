@@ -130,7 +130,10 @@ class McuOwner(
 
         data class Failed(val reason: String) : Status()
 
-        /** [acked] is whether SRC_NULL was acknowledged; the session runs either way. */
+        /**
+         * [acked] is whether SRC_NULL was acknowledged; the session runs either way. [frames] is
+         * every frame dispatched, [badChecksum] how many of those the CK formula did not fit.
+         */
         data class Running(val acked: Boolean, val frames: Long, val badChecksum: Long, val skipped: Long) : Status()
     }
 
@@ -370,7 +373,16 @@ class McuOwner(
                         dispatch(event)
                     }
 
-                    is McuSerial.BadChecksum -> bad++
+                    // The vendor never checks CK on this direction (SerialReadThread.parseRxData
+                    // hands every LEN-delimited frame on), and the car's first tally said the
+                    // outbound formula disagrees with what the MCU sends. Dropping here would
+                    // lose real frames on the owner path; count it, dispatch it, let the tally
+                    // say how often the formula holds.
+                    is McuSerial.BadChecksum -> {
+                        bad++
+                        frames++
+                        dispatch(event.command)
+                    }
                     is McuSerial.Skipped -> skipped += event.bytes
                 }
             }
