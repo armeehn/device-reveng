@@ -22,8 +22,9 @@ import android.content.Context
  * mute fire on every report (`notifyMainVolChange` / `notifyMuteStateChange`).
  *
  * ── What is deliberately absent ─────────────────────────────────────────────────────────────────
- * SysVar rows (`Sys_LAMP_STAUS_CHECK`, `Sys_CurBreakSate`): the provider is eventcenter's and is
- * gone with it; the suite's readers already treat "no provider" as "no gate". The protected
+ * SysVar rows: the provider is eventcenter's and is gone with it. `Sys_CurBreakSate` is served
+ * again by [SysVarMirror] on the launcher's own authority (RAV4-98); `Sys_LAMP_STAUS_CHECK` is
+ * still absent, and the suite's readers treat "no row" as "no gate". The protected
  * `ACTION_BACKCAR_*` pair: a signature permission we cannot hold. Keys, CAN digests, radio, BT:
  * nothing in the suite listens for them.
  *
