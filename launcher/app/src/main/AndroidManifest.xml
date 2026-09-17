@@ -202,6 +202,19 @@
             android:authorities="${applicationId}.theme"
             android:exported="true"
             android:grantUriPermissions="false" />
+
+        <!--
+          RAV4-98 SysVarMirrorProvider: on Riposte OS 0.2 eventcenter's SysVar store is gone, and
+          the suite's video gate read "no row" as "no gate". This serves the rows the owner path
+          recomputes (Sys_CurBreakSate) on the launcher's own authority; claiming the vendor's
+          would be an install conflict next to eventcenter on stock. Same export and variant
+          reasoning as the theme provider above.
+        -->
+        <provider
+            android:name=".data.SysVarMirrorProvider"
+            android:authorities="${applicationId}.sysvar"
+            android:exported="true"
+            android:grantUriPermissions="false" />
     
         <service
             android:name=".service.CanCaptureService"

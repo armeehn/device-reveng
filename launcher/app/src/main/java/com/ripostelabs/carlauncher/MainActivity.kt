@@ -41,6 +41,7 @@ import com.ripostelabs.carlauncher.carlib.AndroidOwnerGate
 import com.ripostelabs.carlauncher.carlib.CarService
 import com.ripostelabs.carlauncher.carlib.McuOwner
 import com.ripostelabs.carlauncher.carlib.SlcanLinkSource
+import com.ripostelabs.carlauncher.carlib.SysVarMirror
 import com.ripostelabs.carlauncher.carlib.VendorBroadcastReemitter
 import com.ripostelabs.carlauncher.carlib.McuSleepWake
 import com.ripostelabs.carlauncher.carlib.GatewayHandshake // v3.0
@@ -52,6 +53,7 @@ import com.ripostelabs.carlauncher.carlib.WheelKeyMap
 import com.ripostelabs.carlauncher.carlib.WheelKeySwallow
 import com.ripostelabs.carlauncher.carlib.Zlink // RAV4-52 CarPlay deep link
 import com.ripostelabs.carlauncher.data.CallPopupGuard
+import com.ripostelabs.carlauncher.data.SysVarMirrorProvider // RAV4-98
 import com.ripostelabs.carlauncher.data.CarSettingsController // v1.1 settings suite
 import com.ripostelabs.carlauncher.data.parseVendorHidden // v0.4.9
 import com.ripostelabs.carlauncher.data.CrashLog // v0.4.3.7
@@ -253,6 +255,8 @@ class MainActivity : ComponentActivity() {
             val ownerListener = McuOwner.FanOut(
                 carEvents.ownerListener(CanCaptureService.vehicle(), carService.radioState),
                 VendorBroadcastReemitter(applicationContext),
+                // The value behind the brake edge, served to the suite by SysVarMirrorProvider.
+                SysVarMirror { key, value -> SysVarMirrorProvider.publish(applicationContext, key, value) },
             )
             mcuOwner = McuOwner(
                 ownerGate,
