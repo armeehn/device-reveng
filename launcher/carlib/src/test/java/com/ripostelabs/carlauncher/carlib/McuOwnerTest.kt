@@ -27,6 +27,7 @@ class McuOwnerTest {
         // acked twice, and every exact frame count and write index drifted: three different
         // pairs of cases went red on CI in one day. The no-ack cases now cost ACK_ATTEMPTS×0.5 s.
         const val ACK_MS = McuOwnerProtocol.ACK_TIMEOUT_MS
+        const val SLOW_START_MS = 100L
     }
 
     private fun bytes(vararg v: Int) = ByteArray(v.size) { v[it].toByte() }
@@ -105,6 +106,39 @@ class McuOwnerTest {
             Thread.sleep(5)
         }
         throw AssertionError("timed out waiting for $what")
+    }
+
+    /**
+     * start() once assigned [worker] AFTER Thread.start() ran inside apply {}: the new thread's
+     * first isCurrent() could read the old field, and run() returned without opening the port.
+     * Status stayed Idle for good. On a loaded CI runner that was one "timed out waiting for
+     * running" in a few hundred starts; in the car it is an owner path that never comes up.
+     *
+     * The window is a few instructions wide, so no loop reaches it. A Thread whose start()
+     * returns late does: the owner thread runs its first isCurrent() while the caller is
+     * still inside apply {}, before the field is written. Correct code assigns first.
+     */
+    @Test(timeout = TEST_TIMEOUT_MS)
+    fun startAssignsTheWorkerBeforeTheThreadRuns() {
+        val link = FakeLink(ackNull = true)
+        val owner = McuOwner(
+            Gate(eventcenter = false, enabled = true),
+            Recorder(),
+            openLink = { link },
+            ackTimeoutMs = 20,
+            writeTimeoutMs = WATCHDOG_OFF_MS,
+            newThread = { body, name ->
+                object : Thread(body, name) {
+                    override fun start() {
+                        super.start()
+                        sleep(SLOW_START_MS)   // the caller has not stored the field yet
+                    }
+                }
+            },
+        )
+        owner.start()
+        waitFor("running after a slow Thread.start()") { owner.status.value as? McuOwner.Status.Running }
+        owner.stop()
     }
 
     @Test

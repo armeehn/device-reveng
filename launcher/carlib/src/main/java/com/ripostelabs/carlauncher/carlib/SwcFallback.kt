@@ -36,6 +36,8 @@ internal object SwcFallback {
     const val MCU_KEY_VOL_SUB = 19
     const val MCU_KEY_HANGUP = 22
     const val MCU_KEY_TALK = 23
+    /** The panel's RADIO key (0x36); its CAR_KEY twin opens the tuner screen. */
+    const val MCU_KEY_RADIO = 54
     /** The vendor's BACK key. */
     const val MCU_KEY_RETURN = 85
     const val MCU_KEY_TASK_LIST = 113
@@ -59,6 +61,7 @@ internal object SwcFallback {
         MCU_KEY_PREV -> CarEvents.CAR_KEY_PREV
         MCU_KEY_TALK -> CarEvents.CAR_KEY_PHONE
         MCU_KEY_MODE -> CarEvents.CAR_KEY_MEDIA
+        MCU_KEY_RADIO -> CarEvents.CAR_KEY_RADIO
         else -> null
     }
 
