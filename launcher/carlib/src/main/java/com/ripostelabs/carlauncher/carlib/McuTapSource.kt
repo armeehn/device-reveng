@@ -55,8 +55,9 @@ class McuTapSource private constructor(
         data class Failed(val reason: String) : Status()
 
         /**
-         * Reading. [frames] counts well-formed MCU messages, [badChecksum] ones that framed but
-         * failed their own checksum, and [skipped] bytes discarded while hunting for a header.
+         * Reading. [frames] counts every LEN-delimited MCU message taken in, [badChecksum] how
+         * many of those carried a CK the outbound formula does not reproduce (taken in all the
+         * same, as the vendor does), and [skipped] bytes discarded while hunting for a header.
          *
          * Three counters because the failures are different problems. Bytes arriving with nothing
          * framing is a wrong baud rate or the wrong wire. Frames arriving with bad checksums is
@@ -229,6 +230,15 @@ class McuTapSource private constructor(
         var skipped = 0L
         var published = 0L
 
+        // One frame off the tap: counted per opcode, written to the record, decoded for the vehicle.
+        val ingest = { event: McuSerial.Command ->
+            counts[event.opcode] = (counts[event.opcode] ?: 0) + 1
+
+            val now = System.currentTimeMillis()
+            record.write(now, event.opcode, event.payload)
+            vehicle.onSignal(HiworldCanDecoder.decodePayload(event.opcode, event.payload), now)
+        }
+
         while (running) {
             // poll() returns slcan events, which this link does not carry, so the bytes are taken
             // from the transfer itself. Everything below is the MCU framing, not slcan.
@@ -238,14 +248,16 @@ class McuTapSource private constructor(
                 when (event) {
                     is McuSerial.Command -> {
                         frames++
-                        counts[event.opcode] = (counts[event.opcode] ?: 0) + 1
-
-                        val now = System.currentTimeMillis()
-                        record.write(now, event.opcode, event.payload)
-                        vehicle.onSignal(HiworldCanDecoder.decodePayload(event.opcode, event.payload), now)
+                        ingest(event)
                     }
 
-                    is McuSerial.BadChecksum -> bad++
+                    // Same rule as McuOwner: the vendor does not check CK inbound, so a frame the
+                    // formula cannot reproduce is still recorded and decoded, and counted here.
+                    is McuSerial.BadChecksum -> {
+                        bad++
+                        frames++
+                        ingest(event.command)
+                    }
                     is McuSerial.Skipped -> skipped += event.bytes
                 }
             }
