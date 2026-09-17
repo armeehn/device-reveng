@@ -28,6 +28,7 @@ PX_PER_DP = 1.5
 MIN_TAP_DP = 48                 # Material minimum touch target; the car wants nothing smaller
 MIN_TAP_PX = int(MIN_TAP_DP * PX_PER_DP)
 DIAL_KEYS = "123456789*0#"
+FIELD_KEYS = ("+", "Backspace")   # the two keys in the number field, by text / content-desc
 PHONE_TITLE = "Phone"
 
 pytestmark = pytest.mark.carsim
@@ -84,3 +85,15 @@ def test_dial_keys_clear_min_tap_target(phone_dump):
         if size[0] < MIN_TAP_PX or size[1] < MIN_TAP_PX:
             small[key] = size
     assert not small, f"dial keys under {MIN_TAP_DP} dp ({MIN_TAP_PX} px): {small}"
+
+
+def test_field_keys_clear_min_tap_target(phone_dump):
+    """`+` and backspace sit in the number field; they are keys too and get the same minimum."""
+    small = {}
+    for key in FIELD_KEYS:
+        m = re.search(rf'<node[^>]*\b(?:text|content-desc)="{re.escape(key)}"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', phone_dump)
+        assert m, f"{key!r} not on the Phone screen; on screen: {texts(phone_dump)}"
+        x0, y0, x1, y1 = (int(v) for v in m.groups())
+        if x1 - x0 < MIN_TAP_PX or y1 - y0 < MIN_TAP_PX:
+            small[key] = (x1 - x0, y1 - y0)
+    assert not small, f"number field keys under {MIN_TAP_DP} dp ({MIN_TAP_PX} px): {small}"
