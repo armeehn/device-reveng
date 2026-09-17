@@ -55,4 +55,22 @@ class SysVarMirrorTest {
         mirror.onSysEvent(sys(brake = false))
         assertEquals("0", mirror.get(SysVarMirror.KEY_CUR_BRAKE_STATE))
     }
+
+    @Test
+    fun refreshReappliesDetectionToTheLastEvent() {
+        mirror.refresh()
+        assertEquals(emptyList<Pair<String, String>>(), changes)   // nothing seen yet: no row
+
+        mirror.onSysEvent(sys(brake = false))
+        assertEquals("1", mirror.get(SysVarMirror.KEY_CUR_BRAKE_STATE))
+
+        detect = false
+        mirror.refresh()
+        assertEquals("0", mirror.get(SysVarMirror.KEY_CUR_BRAKE_STATE))
+
+        detect = true
+        mirror.refresh()
+        assertEquals("1", mirror.get(SysVarMirror.KEY_CUR_BRAKE_STATE))
+        assertEquals(3, changes.size)
+    }
 }
