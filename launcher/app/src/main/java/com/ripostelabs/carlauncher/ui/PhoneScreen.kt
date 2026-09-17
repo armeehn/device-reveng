@@ -376,20 +376,22 @@ private fun NumberField(number: String, onChange: (String) -> Unit, modifier: Mo
             text = TRUNK_KEY.toString(),
             style = MaterialTheme.typography.headlineSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
             modifier = Modifier
+                .width(MIN_TAP_DP.dp)
                 .clip(carShape(10.dp))
                 .clickable(onClick = withTapFeedback { onChange(PhoneLogic.append(number, TRUNK_KEY)) })
-                .padding(horizontal = 14.dp, vertical = 4.dp),
+                .padding(vertical = 4.dp),
         )
         Icon(
             imageVector = Icons.AutoMirrored.Filled.Backspace,
             contentDescription = "Backspace",
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier
-                .size(44.dp)
+                .size(MIN_TAP_DP.dp)
                 .clip(carShape(10.dp))
                 .clickable(onClick = withTapFeedback { onChange(PhoneLogic.backspace(number)) })
-                .padding(8.dp),
+                .padding(10.dp),
         )
     }
 }
@@ -566,6 +568,7 @@ private val DIAL_ROWS = listOf(
 )
 
 private const val TRUNK_KEY = '+'
+private const val MIN_TAP_DP = 48   // `+` and backspace are keys like the pad's: 43 and 44 dp read as one key
 
 private val VENDOR_PAGES = listOf(
     "Call log" to VendorBt.Page.CALL_RECORD,
