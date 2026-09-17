@@ -136,6 +136,13 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+        // RAV4-97: ITuner for the suite radio, under src/main/aidl.
+        aidl = true
+    }
+
+    // TunerHub's tests drive the generated ITuner.Stub, whose base is android.os.Binder.
+    testOptions {
+        unitTests.isReturnDefaultValues = true
     }
 
     // v1.0: `assembleRelease` runs lint-vital by default, which drags in extra resolution we

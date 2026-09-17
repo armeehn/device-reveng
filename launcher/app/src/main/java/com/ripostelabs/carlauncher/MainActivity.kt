@@ -39,6 +39,8 @@ import com.ripostelabs.carlauncher.service.CanCaptureService
 import com.ripostelabs.carlauncher.carlib.AndroidAccSource
 import com.ripostelabs.carlauncher.carlib.AndroidOwnerGate
 import com.ripostelabs.carlauncher.carlib.CarService
+import com.ripostelabs.carlauncher.tuner.CarTunerPort
+import com.ripostelabs.carlauncher.tuner.TunerHub
 import com.ripostelabs.carlauncher.carlib.McuOwner
 import com.ripostelabs.carlauncher.carlib.SlcanLinkSource
 import com.ripostelabs.carlauncher.carlib.SysVarMirror
@@ -280,6 +282,8 @@ class MainActivity : ComponentActivity() {
             }
         }
         carService.bind()
+        // RAV4-97: the suite radio's ITuner answers from this link while HOME lives.
+        TunerHub.attach(CarTunerPort(carService), lifecycleScope)
         appRepository = AppRepository(this, ownerActive = mcuOwner != null)
         nowPlaying = NowPlayingRepository(applicationContext).also { it.start(lifecycleScope) }
         themeStore = ThemeStore(applicationContext)
@@ -1156,6 +1160,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        TunerHub.detach()
         keyPump.cancel() // v2.8: drop any held key and its repeat timer
         // Release the carriers: a virtio port admits one opener, so a recreated activity that
         // found the old one still open would report "Device or resource busy" as a silent MCU.
