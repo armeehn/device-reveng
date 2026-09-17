@@ -252,7 +252,11 @@ private fun CallStatus(vendor: VendorBtState) {
     }
 }
 
-/** Answer + Reject while ringing, Hang up during a call, nothing while idle. */
+/**
+ * Answer + Reject while ringing, Hang up during a call, nothing while idle. Idle really means
+ * nothing: two dimmed buttons here cost the dial pad 84 dp of a 480 dp panel and squashed its
+ * keys to 23 dp. The pad shrinks while a call is up, when it is only DTMF.
+ */
 @Composable
 private fun CallButtons(
     state: HfpState?,
@@ -260,6 +264,10 @@ private fun CallButtons(
     onHangUp: () -> Unit,
 ) {
     val buttons = PhoneLogic.buttons(state)
+    if (buttons == PhoneLogic.CallButtons.NONE) {
+        return
+    }
+
     val hangUpLabel = if (state == HfpState.INCOMING_CALL) "Reject" else "Hang up"
 
     Row(
@@ -285,7 +293,7 @@ private fun CallButtons(
     }
 }
 
-/** Number field, 3x4 keys, Call. The pad types even without a phone; only Call is gated. */
+/** Number field with Call beside it, then 3x4 keys. The pad types without a phone; only Call is gated. */
 @Composable
 private fun DialPad(
     state: HfpState?,
@@ -298,43 +306,29 @@ private fun DialPad(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        // One tap-height row for the number and Call, so the four key rows below keep the
+        // rest of the column (48 dp+ each on the 480 dp panel).
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(carShape(12.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant)
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
+                .height(NUMBER_ROW_HEIGHT_DP.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(
-                text = number.ifEmpty { "Enter number" },
-                style = MaterialTheme.typography.headlineSmall,
-                color = if (number.isEmpty()) {
-                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = DISABLED_ALPHA)
-                } else {
-                    MaterialTheme.colorScheme.onSurface
-                },
-                maxLines = 1,
-                modifier = Modifier.weight(1f),
-            )
-            Text(
-                text = TRUNK_KEY.toString(),
-                style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            NumberField(
+                number = number,
+                onChange = { number = it },
                 modifier = Modifier
-                    .clip(carShape(10.dp))
-                    .clickable(onClick = withTapFeedback { number = PhoneLogic.append(number, TRUNK_KEY) })
-                    .padding(horizontal = 14.dp, vertical = 4.dp),
+                    .weight(1f)
+                    .fillMaxHeight(),
             )
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.Backspace,
-                contentDescription = "Backspace",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            BigButton(
+                label = "Call",
+                enabled = PhoneLogic.canDial(state, number),
+                color = MaterialTheme.colorScheme.primary,
+                onClick = { onCall(number) },
                 modifier = Modifier
-                    .size(44.dp)
-                    .clip(carShape(10.dp))
-                    .clickable(onClick = withTapFeedback { number = PhoneLogic.backspace(number) })
-                    .padding(8.dp),
+                    .width(CALL_KEY_WIDTH_DP.dp)
+                    .fillMaxHeight(),
             )
         }
 
@@ -354,15 +348,48 @@ private fun DialPad(
                 }
             }
         }
+    }
+}
 
-        BigButton(
-            label = "Call",
-            enabled = PhoneLogic.canDial(state, number),
-            color = MaterialTheme.colorScheme.primary,
-            onClick = { onCall(number) },
+/** The typed number (or its placeholder), `+`, backspace. */
+@Composable
+private fun NumberField(number: String, onChange: (String) -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .clip(carShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = number.ifEmpty { "Enter number" },
+            style = MaterialTheme.typography.headlineSmall,
+            color = if (number.isEmpty()) {
+                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = DISABLED_ALPHA)
+            } else {
+                MaterialTheme.colorScheme.onSurface
+            },
+            maxLines = 1,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            text = TRUNK_KEY.toString(),
+            style = MaterialTheme.typography.headlineSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier
-                .fillMaxWidth()
-                .height(CALL_BUTTON_HEIGHT_DP.dp),
+                .clip(carShape(10.dp))
+                .clickable(onClick = withTapFeedback { onChange(PhoneLogic.append(number, TRUNK_KEY)) })
+                .padding(horizontal = 14.dp, vertical = 4.dp),
+        )
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.Backspace,
+            contentDescription = "Backspace",
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .size(44.dp)
+                .clip(carShape(10.dp))
+                .clickable(onClick = withTapFeedback { onChange(PhoneLogic.backspace(number)) })
+                .padding(8.dp),
         )
     }
 }
@@ -548,4 +575,6 @@ private val VENDOR_PAGES = listOf(
 
 /** Forgiving targets for a moving car: taller than the 48 dp minimum by a clear margin. */
 private const val CALL_BUTTON_HEIGHT_DP = 72
+private const val NUMBER_ROW_HEIGHT_DP = 56   // number field + Call: one tap-height row, not two
+private const val CALL_KEY_WIDTH_DP = 160
 private const val VENDOR_BUTTON_HEIGHT_DP = 56
