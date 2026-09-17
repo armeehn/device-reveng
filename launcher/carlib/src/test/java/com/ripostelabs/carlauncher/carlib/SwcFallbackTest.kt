@@ -24,6 +24,8 @@ class SwcFallbackTest {
         assertEquals(CarEvents.CAR_KEY_PREV, SwcFallback.mcuKey(SwcFallback.MCU_KEY_PREV))
         assertEquals(CarEvents.CAR_KEY_PHONE, SwcFallback.mcuKey(SwcFallback.MCU_KEY_TALK))
         assertEquals(CarEvents.CAR_KEY_MEDIA, SwcFallback.mcuKey(SwcFallback.MCU_KEY_MODE))
+        // The panel's RADIO key: unmapped until 2026-09-17, so `key RADIO` from carsim did nothing.
+        assertEquals(CarEvents.CAR_KEY_RADIO, SwcFallback.mcuKey(SwcFallback.MCU_KEY_RADIO))
     }
 
     @Test
@@ -31,6 +33,7 @@ class SwcFallbackTest {
         // The numbers themselves are the contract; a typo here is a wheel that does nothing.
         assertEquals(9, SwcFallback.MCU_KEY_MENU)
         assertEquals(85, SwcFallback.MCU_KEY_RETURN)
+        assertEquals(54, SwcFallback.MCU_KEY_RADIO)
         assertEquals(2, SwcFallback.MCU_KEY_NEXT)
         assertEquals(3, SwcFallback.MCU_KEY_PREV)
         assertEquals(23, SwcFallback.MCU_KEY_TALK)
