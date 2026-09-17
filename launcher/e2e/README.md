@@ -61,3 +61,19 @@ needs `com.ripostelabs.radio` installed on the instance, else it skips).
 (0x11 relayed every 100 ms for 900 ms) must log a LongPress and open the
 Media screen, `wheeldouble PLAY_PAUSE` a DoublePress. Chords are not
 simulated; one key id per frame is a car question.
+
+`test_carsim_brake.py` drives the `brake` scenario (RAV4-98): the launcher's
+SysVar mirror must serve `Sys_CurBreakSate` `0` with the brake on and `1`
+with it off, and the suite's video player must cover its picture on `1`.
+The player cases need `com.ripostelabs.video` on the instance and the
+launcher under its release id, which on the x86 farm is the `farm` build:
+
+```
+HEADUNIT_VARIANT=farm headunit -i N build <worktree>   # replaces a .debug install's HOME
+headunit -i N install <path to rav4-apps video app-debug.apk>
+headunit carsim e2e N test_carsim_brake.py
+```
+
+The suite apps query release ids (`ThemeContract`, `SysVarContract`, the tuner
+bind action), so any launcher-to-suite check on the farm needs the same
+`farm` build; a `.debug` launcher is invisible to them.
