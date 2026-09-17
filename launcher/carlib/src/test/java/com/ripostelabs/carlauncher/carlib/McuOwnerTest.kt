@@ -249,6 +249,32 @@ class McuOwnerTest {
         assertArrayEquals(McuOwnerProtocol.systemKey(McuOwnerProtocol.SystemKey.VOLUME_DOWN), link.written[handshake])
     }
 
+    /**
+     * The vendor's read thread hands every LEN-delimited frame to the handler without checking
+     * CK (SerialReadThread.parseRxData, EventService.parseCmdEvt), and the car's first tally
+     * said the outbound formula DISAGREES with what the MCU sends (RAV4-61 item 10). A frame
+     * with a CK the launcher cannot reproduce is still the car talking: dispatched, and counted.
+     */
+    @Test
+    fun badChecksumFrameIsDispatchedAndCounted() {
+        val link = FakeLink(ackNull = true)
+        val recorder = Recorder()
+        val (owner, _) = runningOwner(link, recorder)
+
+        val frame = McuSerial.encode(McuOpcode.SYS_EVENT.code, bytes(0x02, 0x00))
+        frame[frame.size - 2] = (frame[frame.size - 2].toInt() xor 0x5A).toByte()   // CK is before the pad
+        link.feed(frame)
+
+        val counted = waitFor("the bad-CK frame counted") {
+            (owner.status.value as? McuOwner.Status.Running)?.takeIf { it.badChecksum == 1L }
+        }
+        waitFor("the reverse bit seen") { recorder.sys.firstOrNull() }
+        owner.stop()
+
+        assertTrue(recorder.sys[0].reverse)
+        assertEquals(1L, counted.badChecksum)
+    }
+
     /** `74` goes to onWheelKey and writes nothing back; an unknown `72` code is surfaced, not thrown. */
     @Test
     fun wheelEdgeAndUnknownPanelCodeAreSurfaced() {
