@@ -1,0 +1,620 @@
+#!/usr/bin/env bash
+# =====================================================================================
+# headunit — drive the RAV4 CarLauncher on an emulated head unit.
+#
+# One entry point for prototyping and for worker agents. It hides the plumbing:
+#
+#   worker ──► [ssh <farm host>] pct exec 124 (srv-android) ──► adb ──► emulator-<port>
+#          └──► pct exec 111 (build host)  ──► gradle ──► APK ──────────────┘
+#
+# Site values (which Proxmox host runs the farm, its address, the web names, the capture
+# on the share) come from /etc/headunit.env (or $HEADUNIT_ENV), never from this file:
+# the repo is public. Without that file everything runs on this host.
+#
+# The emulator matches the GT6-EAU panel: 1920x720 landscape @240dpi, API 33, so a
+# screenshot here has the same shape as the car. It is NOT the car: see `headunit caveats`.
+#
+# Instances are independent AVDs, so N workers can test in parallel without colliding.
+# Select one with `-i N` or HEADUNIT_INSTANCE; instance 0 is the default.
+# =====================================================================================
+set -euo pipefail
+
+HEADUNIT_ENV="${HEADUNIT_ENV:-/etc/headunit.env}"
+if [ -r "$HEADUNIT_ENV" ]; then
+  # shellcheck source=/dev/null
+  . "$HEADUNIT_ENV"
+fi
+# What the env file may set (all optional):
+#   HEADUNIT_FARM_HOST       ssh host running the farm's CT; unset/"local" = this host
+#   HEADUNIT_LOCAL_HOST      this host's name, so HEADUNIT_EMU_HOST=<it> means local
+#   HEADUNIT_FARM_ADDR       the farm CT's address when local (else it is looked up)
+#   HEADUNIT_MAX_INSTANCES   emulators the farm's RAM takes (default 3 local, 6 remote)
+#   HEADUNIT_WEB_HOST        published name of the web console (reverse proxy)
+#   HEADUNIT_ARTEMIS_HOST    published name of the ARTEMIS console
+#   HEADUNIT_SECRET_CMD      command printing the Anthropic key (default: rl-secret anthropic)
+#   HEADUNIT_GEMINI_CMD      command printing a Gemini key, or nothing
+#   HEADUNIT_CARSIM_CAPTURE  a candump log for carsim's replay scenarios
+
+readonly EMU_CT=124                      # srv-android, the emulator farm
+# Which Proxmox host runs the farm: this one, or a clone of the same CT reached over ssh.
+# The build host stays LXC 111 here either way.
+readonly LOCAL_HOST="${HEADUNIT_LOCAL_HOST:-local}"
+readonly EMU_HOST="${HEADUNIT_EMU_HOST:-${HEADUNIT_FARM_HOST:-$LOCAL_HOST}}"
+readonly BUILD_CT=111                    # the only host with the Android toolchain
+readonly FIRST_CONSOLE_PORT=5554         # instance N listens on FIRST + 2N
+# The debug build carries an applicationIdSuffix, so the installed package is
+# com.reveng.carlauncher.debug while the activity class stays com.reveng.carlauncher.
+# Both are resolved from the device rather than hardcoded, so debug and release both work.
+readonly PKG_PREFIX=com.ripostelabs.carlauncher
+readonly BUILD_SCRIPT=/home/user/build-launcher.sh
+readonly SDK=/opt/android-sdk
+readonly BOOT_TIMEOUT_S=300
+# Each running emulator holds ~2.7 GB RSS and the container has 10 GB. A fourth does not
+# fail cleanly: the cgroup OOM killer takes a process and the symptom is an unexplained
+# hang or a dead adb, never "out of memory". Refuse instead, overridable deliberately.
+readonly MAX_INSTANCES="${HEADUNIT_MAX_INSTANCES:-$([ "$EMU_HOST" = "$LOCAL_HOST" ] && echo 3 || echo 6)}"
+
+# google/artemis: natural-language automation, installed in 124 next to adb. Its .env is
+# REGENERATED from $SECRET_CMD before every call, so it is a cache of the one site key,
+# never a second copy that keeps working after a rotation.
+readonly ARTEMIS_DIR=/home/emu/artemis
+readonly ARTEMIS_BIN=$ARTEMIS_DIR/.venv/bin/artemis
+readonly ARTEMIS_PORT=8000                 # web console + SDK API, behind the reverse proxy
+# The daemon's address as seen from the proxy: configured when the farm is local, a DHCP
+# lease on a remote clone (looked up on demand so a new lease does not strand the e2e
+# runner or the console URL).
+artemis_host() {
+  if [ "$EMU_HOST" = "$LOCAL_HOST" ] && [ -n "${HEADUNIT_FARM_ADDR:-}" ]; then echo "$HEADUNIT_FARM_ADDR"; return; fi
+  if [ "$EMU_HOST" = "$LOCAL_HOST" ]; then command pct exec "$EMU_CT" -- hostname -I | awk '{print $1}'; return; fi
+  ssh -o BatchMode=yes "$EMU_HOST" "pct exec $EMU_CT -- hostname -I" | awk '{print $1}'
+}
+readonly WEB_HOST="${HEADUNIT_WEB_HOST:-}"        # reverse proxy -> farm :8100, when published
+readonly ARTEMIS_HOST="${HEADUNIT_ARTEMIS_HOST:-}"
+readonly WEB_PORT=8100                     # headunit-web.service (ws-scrcpy); 8000 is artemis
+readonly ARTEMIS_BIND=0.0.0.0              # one daemon serves the proxy, the CLI (loopback) and the SDK
+readonly SECRET_CMD="${HEADUNIT_SECRET_CMD:-rl-secret anthropic}"   # prints the Anthropic key
+readonly GEMINI_CMD="${HEADUNIT_GEMINI_CMD:-}"                       # prints a Gemini key, if any
+readonly E2E_DIR="${HEADUNIT_E2E_DIR:-/home/user/device-reveng/launcher/e2e}"   # on the build host, LXC 111
+
+instance="${HEADUNIT_INSTANCE:-0}"
+
+die() { echo "headunit: $*" >&2; exit 1; }
+
+# Transport shim: every `pct` below that names the farm goes over ssh when the farm is on
+# another host. exec forwards stdin (heredocs and pipes still work); push/pull become cat
+# over the same channel because the file only exists here. Anything else, and every call
+# for BUILD_CT, is the real pct on this host.
+#
+#   pct exec 124 -- CMD   ──▶  ssh <farm> "pct exec 124 -- CMD"
+#   pct push 124 SRC DST  ──▶  cat SRC | ssh <farm> "pct exec 124 -- sh -c 'cat > DST'"
+#   pct pull 124 SRC DST  ──▶  ssh <farm> "pct exec 124 -- cat SRC" > DST
+pct() {
+  if [ "$EMU_HOST" = "$LOCAL_HOST" ] || [ "${2:-}" != "$EMU_CT" ]; then command pct "$@"; return; fi
+  local sub=$1 ct=$2; shift 2
+  case $sub in
+    exec)  shift; ssh -o BatchMode=yes "$EMU_HOST" "pct exec $ct -- $(printf '%q ' "$@")" ;;
+    push)  ssh -o BatchMode=yes "$EMU_HOST" "pct exec $ct -- sh -c 'cat > $(printf '%q' "$2")'" < "$1" ;;
+    pull)  ssh -o BatchMode=yes "$EMU_HOST" "pct exec $ct -- cat $(printf '%q' "$1")" > "$2" ;;
+    status) ssh -o BatchMode=yes "$EMU_HOST" "pct status $ct" ;;
+    *)     die "pct $sub is not routed to $EMU_HOST" ;;
+  esac
+}
+
+# Run a command inside the emulator container as the emu user, with the SDK on PATH.
+in_emu() {
+  local cmd; printf -v cmd '%q ' "$@"
+  pct exec "$EMU_CT" -- su emu -c "export ANDROID_HOME=$SDK ANDROID_SDK_ROOT=$SDK \
+    JAVA_HOME=/opt/jdk17 PATH=$SDK/platform-tools:$SDK/emulator:/opt/jdk17/bin:\$PATH; $cmd"
+}
+
+serial() { echo "emulator-$(( FIRST_CONSOLE_PORT + 2 * instance ))"; }
+
+# The installed launcher package (debug and release differ by suffix).
+launcher_pkg() {
+  adb_ shell pm list packages "$PKG_PREFIX" | tr -d '\r' | sed 's/^package://' | head -1
+}
+
+# Its HOME activity, as "<package>/<activity>" — what set-home-activity wants.
+launcher_home_activity() {
+  adb_ shell "pm query-activities --brief -a android.intent.action.MAIN -c android.intent.category.HOME" \
+    | tr -d '\r' | grep "^ *$PKG_PREFIX" | head -1 | tr -d ' '
+}
+
+adb_() { in_emu adb -s "$(serial)" "$@"; }
+
+# An instance is only usable once sys.boot_completed flips; adb reports `device` well before.
+wait_boot() {
+  local waited=0
+  while [ "$waited" -lt "$BOOT_TIMEOUT_S" ]; do
+    if [ "$(adb_ shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; then
+      return 0
+    fi
+    sleep 5; waited=$(( waited + 5 ))
+  done
+  die "instance $instance did not finish booting in ${BOOT_TIMEOUT_S}s"
+}
+
+usage() {
+  cat <<'USAGE'
+usage: headunit [-i N] <command> [args]
+
+  status              instances, boot state and asserted geometry
+  up [N]              create the AVD if needed and start instance N
+  down [N]            stop instance N
+  wait                block until the instance has finished booting
+
+  build [worktree]    build the debug APK on the build host, then install and launch it
+                      HEADUNIT_VARIANT=farm builds the release-id x86_64 variant instead:
+                      what the suite apps see as the real launcher (they query release ids)
+  install <apk>       install an APK (path on x) and launch it
+  launch              set the launcher as HOME and bring it to the front
+  reset               wipe the launcher's app data (fast alternative to a reboot)
+
+  screenshot [out]    PNG of the current screen, written on x (default: ./headunit.png)
+  ui [out]            uiautomator view hierarchy as XML
+  logcat [args]       logcat, defaults to the launcher's own tag stream
+  shell <cmd>         adb shell
+  tap <x> <y>         tap at panel coordinates (1920x720 space)
+  key <keycode>       e.g. KEYCODE_HOME, KEYCODE_BACK
+
+  web                 URL of the browser front end (ws-scrcpy on the farm, port 8100):
+                      live screen, touch, keys and a shell for every running instance
+  doctor              prove the whole chain end to end
+  caveats             what the emulator cannot tell you about the real head unit
+
+  artemis <sub>       drive the instance in natural language (google/artemis on 124):
+    run "<goal>" [-p flash|pro] [artemis flags]   one task, blocking, result on stdout
+    helper install|status|uninstall              the on-device accessibility helper
+    serve|stop|status                            web console (behind the reverse proxy)
+    mcp                                          stdio MCP bridge (used by ~/.claude.json)
+    e2e [pytest args]                            launcher e2e suite (device-reveng/launcher/e2e)
+    doctor | trace <args> | env                  environment check / trace inspector / resync .env
+
+  carsim <sub>        the simulated vehicle (launcher/e2e/carsim/carsim.py) on the instance:
+    <N> <scenario> [--speedup X]   boot N with the serial wiring, set the owner props, run a
+                                   scenario: smoke | commute | replay-door-cycle | <timeline file>
+    stop [N]                       kill the simulator and drop the wiring for the next boot
+    log [N]                        tail the simulator log
+    e2e [N] [pytest args]          run the carsim pytest cases (launcher/e2e) against N
+USAGE
+}
+
+cmd_status() {
+  echo "container : $(pct status "$EMU_CT" | awk '{print $2}') (srv-android, LXC $EMU_CT on $EMU_HOST)"
+  echo "instances :"
+  for svc in $(pct exec "$EMU_CT" -- systemctl list-units 'headunit-emu@*' --no-legend --plain 2>/dev/null | awk '{print $1}'); do
+    local idx state
+    idx="${svc##*@}"; idx="${idx%%.service}"
+    state=$(pct exec "$EMU_CT" -- systemctl is-active "$svc" 2>/dev/null || true)
+    printf '  %-14s %-8s serial=emulator-%s\n' "$svc" "$state" "$(( FIRST_CONSOLE_PORT + 2 * idx ))"
+  done
+  echo "adb       :"; in_emu adb devices | sed '1d;/^$/d;s/^/  /'
+  if [ "$(adb_ shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; then
+    echo "geometry  : $(adb_ shell wm size | tr -d '\r') / $(adb_ shell wm density | tr -d '\r')"
+    echo "installed : $(launcher_pkg | sed 's/^$/(not installed)/')"
+  fi
+}
+
+running_instances() {
+  pct exec "$EMU_CT" -- systemctl list-units 'headunit-emu@*' --state=active --no-legend --plain 2>/dev/null | grep -c . || true
+}
+
+cmd_up() {
+  local idx="${1:-$instance}"
+  local running; running=$(running_instances)
+  if [ "$running" -ge "$MAX_INSTANCES" ] && [ "${HEADUNIT_FORCE:-0}" != "1" ]; then
+    die "$running instances already running (max $MAX_INSTANCES; ~2.7 GB each). \
+Stop one with 'headunit down N', or set HEADUNIT_FORCE=1 if you know the container has room."
+  fi
+  # Each instance needs its own AVD; creating one is idempotent enough to just check.
+  if ! in_emu test -d "/home/emu/.android/avd/headunit-$idx.avd"; then
+    echo "creating AVD headunit-$idx ..."
+    in_emu /opt/emu-farm/bin/avd-create.sh "headunit-$idx"
+  fi
+  pct exec "$EMU_CT" -- systemctl start "headunit-emu@$idx"
+  instance="$idx"; wait_boot
+  echo "instance $idx ready: $(adb_ shell wm size | tr -d '\r')"
+}
+
+cmd_down() { pct exec "$EMU_CT" -- systemctl stop "headunit-emu@${1:-$instance}"; }
+
+# Move an APK from wherever it was built onto the emulator and start it.
+push_and_install() {
+  local apk="$1"
+  [ -f "$apk" ] || die "no APK at $apk"
+  # Keep the .apk suffix: `adb install` rejects a filename without it.
+  local tmp="/tmp/headunit-$$-$(basename "$apk")"
+  pct push "$EMU_CT" "$apk" "$tmp"
+  pct exec "$EMU_CT" -- chown emu "$tmp"
+  adb_ install -r -g "$tmp"
+  grant_runtime_perms "$(launcher_pkg)"
+  pct exec "$EMU_CT" -- rm -f "$tmp"
+  cmd_launch
+}
+
+cmd_install() { push_and_install "${1:?usage: headunit install <apk>}"; }
+
+cmd_build() {
+  local wt="${1:-/home/user/wt-emu-farm}"
+  # Build as whoever owns the worktree. Running Gradle as `user` inside a root-owned tree fails
+  # in a second with a "dubious ownership" refusal and no APK, which looked like a broken build
+  # host until 2026-09-08; running it as root inside a user-owned tree leaves root-owned files
+  # that break the owner's git afterwards. The owner is the only account that is right both ways.
+  local owner; owner=$(pct exec "$BUILD_CT" -- stat -c %U "$wt")
+  # `farm` (app/build.gradle.kts) is the debug build under the release applicationId, x86_64
+  # only, so the suite apps on the instance find the launcher's providers and services.
+  local variant="${HEADUNIT_VARIANT:-debug}"
+  local task; task="assemble$(printf '%s' "${variant:0:1}" | tr a-z A-Z)${variant:1}"
+  echo "building $wt/launcher ($variant) on LXC $BUILD_CT as $owner (serialised by flock) ..."
+  if [ "$owner" = "root" ]; then
+    pct exec "$BUILD_CT" -- sh "$BUILD_SCRIPT" "$wt/launcher" "$task"
+  else
+    pct exec "$BUILD_CT" -- su - "$owner" -c "sh $BUILD_SCRIPT $wt/launcher $task"
+  fi
+  local remote="$wt/launcher/app/build/outputs/apk/$variant/app-$variant.apk"
+  pct exec "$BUILD_CT" -- test -f "$remote" || die "build produced no APK at $remote"
+  # mktemp -u so the name keeps the .apk suffix adb insists on; the redirect creates it.
+  local staged; staged=$(mktemp -u /tmp/headunit-XXXXXX.apk)
+  pct exec "$BUILD_CT" -- cat "$remote" > "$staged"
+  push_and_install "$staged"
+  rm -f "$staged"
+}
+
+# The launcher is a HOME app: without set-home-activity it installs but never shows.
+cmd_launch() {
+  local home; home=$(launcher_home_activity)
+  [ -n "$home" ] || die "no HOME activity for $PKG_PREFIX — is the launcher installed?"
+  adb_ shell cmd package set-home-activity "$home" >/dev/null
+  adb_ shell input keyevent KEYCODE_HOME
+  echo "launched $home on $(serial)"
+}
+
+# `pm clear` also drops the runtime grants that `install -g` gave, which leaves the app
+# sitting on a permission dialog instead of at a clean first screen. Re-grant them so a
+# reset lands where a fresh install does. Non-runtime permissions just error; ignore those.
+grant_runtime_perms() {
+  local pkg="$1" perm
+  for perm in $(adb_ shell dumpsys package "$pkg" \
+      | grep -oE 'android\.permission\.[A-Z_]+' | sort -u); do
+    adb_ shell pm grant "$pkg" "$perm" >/dev/null 2>&1 || true
+  done
+}
+
+cmd_reset() {
+  local pkg; pkg=$(launcher_pkg)
+  [ -n "$pkg" ] || die "launcher not installed on $(serial)"
+  adb_ shell pm clear "$pkg"
+  grant_runtime_perms "$pkg"
+  cmd_launch
+}
+
+cmd_screenshot() {
+  local out="${1:-headunit.png}" remote="/data/local/tmp/shot-$$.png"
+  adb_ shell screencap -p "$remote"
+  local staged="/tmp/headunit-$$-$(basename "$remote")"
+  in_emu adb -s "$(serial)" pull "$remote" "$staged" >/dev/null
+  pct pull "$EMU_CT" "$staged" "$out"
+  adb_ shell rm -f "$remote"; pct exec "$EMU_CT" -- rm -f "$staged"
+  echo "$out"
+}
+
+cmd_ui() {
+  local out="${1:-headunit-ui.xml}" remote="/data/local/tmp/ui-$$.xml"
+  adb_ shell uiautomator dump "$remote" >/dev/null
+  local staged="/tmp/headunit-$$-$(basename "$remote")"
+  in_emu adb -s "$(serial)" pull "$remote" "$staged" >/dev/null
+  pct pull "$EMU_CT" "$staged" "$out"
+  adb_ shell rm -f "$remote"; pct exec "$EMU_CT" -- rm -f "$staged"
+  echo "$out"
+}
+
+cmd_doctor() {
+  echo "== container";  pct status "$EMU_CT"
+  echo "== kvm";        pct exec "$EMU_CT" -- test -c /dev/kvm && echo "  /dev/kvm present"
+  echo "== adb";        in_emu adb devices | sed '1d;/^$/d;s/^/  /'
+  echo "== boot";       wait_boot && echo "  boot_completed=1"
+  echo "== geometry";   echo "  $(adb_ shell wm size | tr -d '\r') / $(adb_ shell wm density | tr -d '\r')"
+  echo "  expected: Physical size: 1920x720 / Physical density: 240"
+  echo "== api";        echo "  sdk=$(adb_ shell getprop ro.build.version.sdk | tr -d '\r') abi=$(adb_ shell getprop ro.product.cpu.abi | tr -d '\r')"
+  echo "== launcher";   echo "  pkg=$(launcher_pkg) home=$(launcher_home_activity)"
+}
+
+# ws-scrcpy (headunit-web.service on the farm) streams every adb device it sees, so
+# there is nothing per instance to start: `up N` is enough, then open the link.
+cmd_web() {
+  # The reverse proxy publishes the farm's port 8100 as $WEB_HOST; the raw address is the fallback.
+  local base="https://$WEB_HOST" wsbase="wss://$WEB_HOST"
+  if [ -z "$WEB_HOST" ] || ! curl -sk -o /dev/null --max-time 5 "$base/"; then
+    local host; host=$(artemis_host)
+    base="http://$host:$WEB_PORT"; wsbase="ws://$host:$WEB_PORT"
+  fi
+  if ! curl -sk -o /dev/null --max-time 5 "$base/"; then
+    die "no front end at $base; on the farm: systemctl restart headunit-web"
+  fi
+
+  # The stream page needs the adb-proxy websocket spelled out, encoded twice as the
+  # device list does it: ws=<wss://host/?action=proxy-adb&remote=tcp:8886&udid=...>.
+  local ws; ws=$(printf '%s/?action=proxy-adb&remote=tcp%%3A8886&udid=%s' "$wsbase" "$(serial)" \
+    | sed 's,%,%25,g; s,:,%3A,g; s,/,%2F,g; s,?,%3F,g; s,=,%3D,g; s,&,%26,g')
+
+  echo "device list: $base/"
+  echo "instance $instance: $base/#!action=stream&udid=$(serial)&player=mse&ws=$ws&fitToScreen=true"
+}
+
+cmd_caveats() {
+  cat <<'CAVEATS'
+The emulator reproduces the PANEL, not the CAR. It is right for layout, navigation,
+Compose state and crashes; it is silent or wrong for everything vendor-backed:
+
+  volume      vendor EventService getMainVolume() does not exist here
+  brightness  root `settings put system screen_brightness` writes, but no backlight
+  HVAC        vendor service absent (writes are unproven on the real unit anyway)
+  radar       vendor service absent (byte layout is guessed even on the car)
+  reverse     permanently vendor-owned, never emulatable
+  wifi/BT     QuickControls are Intent shortcuts with no state read on either target
+  ABI         emulator is x86_64; the car is arm64-v8a. The launcher ships no native
+              code, so the APK is portable — but that stops being true the day it does.
+
+Anything in that list still needs the car. Everything else can be settled here.
+CAVEATS
+}
+
+# ---- artemis -------------------------------------------------------------------------
+
+# Run the artemis CLI inside 124 with the SDK on PATH and the instance's serial exported.
+in_artemis() {
+  local cmd; printf -v cmd '%q ' "$@"
+  pct exec "$EMU_CT" -- su emu -c "cd $ARTEMIS_DIR && export ANDROID_HOME=$SDK ANDROID_SDK_ROOT=$SDK \
+    JAVA_HOME=/opt/jdk17 PATH=$SDK/platform-tools:$SDK/emulator:/opt/jdk17/bin:/usr/local/bin:\$PATH \
+    ADB_DEVICE_SERIAL=$(serial) ARTEMIS_HEADUNIT_INSTANCE=$instance; $cmd"
+}
+
+# Rewrite .env on 124 from $SECRET_CMD. Called before every artemis command (cheap), so a
+# rotated key is picked up on the next call and a revoked one fails loudly, not silently.
+artemis_env() {
+  local key; key=$($SECRET_CMD) || die "'$SECRET_CMD' failed"
+  [ -n "$key" ] || die "'$SECRET_CMD' resolved empty"
+  # A Gemini key is optional: it unlocks the ER pixel-grounding node, nothing else needs it.
+  local gemini; gemini=$([ -n "$GEMINI_CMD" ] && $GEMINI_CMD 2>/dev/null || true)
+  { printf 'ANTHROPIC_API_KEY=%s\n' "$key"
+    [ -n "$gemini" ] && printf 'GEMINI_API_KEY=%s\n' "$gemini"
+    printf '%s\n' \
+      ADB_HOST=127.0.0.1 ADB_PORT=5037 ARTEMIS_KEEP_DEVICE_AWAKE=true \
+      ARTEMIS_HIERARCHY_BACKEND=auto ARTEMIS_HELPER_AUTO_INSTALL=true \
+      ARTEMIS_DEFAULT_PROFILE=flash ARTEMIS_DESKTOP_NOTIFY=false
+  } | pct exec "$EMU_CT" -- su emu -c "umask 077; cat > $ARTEMIS_DIR/.env"
+}
+
+# One natural-language task against this instance. Flash is the default profile; pass
+# `-p pro` for planning + checkpoint verification. Other flags go straight to artemis run.
+artemis_run() {
+  local goal="${1:?usage: headunit artemis run \"<goal>\" [-p flash|pro] [flags]}"; shift
+  wait_boot
+  in_artemis "$ARTEMIS_BIN" run "$goal" --device-serial "$(serial)" "$@"
+}
+
+# The console daemon is a systemd unit in 124 bound on every interface, so one process
+# serves the proxy, the CLI (which looks on loopback) and the SDK. It reads .env
+# at start, so `serve` restarts it after the resync to pick up a rotated key.
+readonly ARTEMIS_UNIT=artemis-console.service
+artemis_serve() {
+  pct exec "$EMU_CT" -- systemctl restart "$ARTEMIS_UNIT"
+  local waited=0
+  until pct exec "$EMU_CT" -- curl -sf -o /dev/null "http://127.0.0.1:$ARTEMIS_PORT/"; do
+    sleep 1; waited=$(( waited + 1 )); [ "$waited" -lt 30 ] || die "$ARTEMIS_UNIT did not come up"
+  done
+  echo "console up: http://$(artemis_host):$ARTEMIS_PORT${ARTEMIS_HOST:+ ($ARTEMIS_HOST)}"
+}
+
+# The e2e suite lives with the launcher source on the build host and talks to the console
+# daemon over HTTP via artemis-client, so it needs the daemon up and the instance booted.
+artemis_e2e() {
+  wait_boot
+  pct exec "$EMU_CT" -- curl -sf -o /dev/null "http://127.0.0.1:$ARTEMIS_PORT/" \
+    || { echo "console daemon down, starting it"; artemis_serve; }
+  local args; printf -v args '%q ' "$@"
+  pct exec "$BUILD_CT" -- su - user -c "cd $E2E_DIR && ARTEMIS_URL=http://$(artemis_host):$ARTEMIS_PORT \
+    ARTEMIS_DEVICE_SERIAL=$(serial) ARTEMIS_LAUNCHER_PACKAGE=$(launcher_pkg) ./run.sh $args"
+}
+
+cmd_artemis() {
+  local sub="${1:-}"; shift || true
+  artemis_env
+  case "$sub" in
+    run)     artemis_run "$@" ;;
+    helper)  in_artemis "$ARTEMIS_BIN" helper "${1:-status}" --serial "$(serial)" ;;
+    serve)   artemis_serve ;;
+    stop)    pct exec "$EMU_CT" -- systemctl stop "$ARTEMIS_UNIT" ;;
+    status)  pct exec "$EMU_CT" -- systemctl status "$ARTEMIS_UNIT" --no-pager -n 5 ;;
+    doctor)  in_artemis "$ARTEMIS_BIN" doctor ;;
+    trace)   in_artemis "$ARTEMIS_BIN" trace "$@" ;;
+    mcp)     in_artemis "$ARTEMIS_DIR/.venv/bin/python" -m mcp_server ;;
+    e2e)     artemis_e2e "$@" ;;
+    env)     echo ".env resynced on $EMU_CT from '$SECRET_CMD'" ;;
+    *)       usage; exit 1 ;;
+  esac
+}
+
+# ---- carsim ------------------------------------------------------------------------------
+#
+# The vendor's Android cannot be emulated, so the CAR is: carsim.py plays the MCU and the CAN
+# box on two QEMU virtio-serial ports that the guest sees as /dev/vportNpM. The ranchu kernel
+# boots with `8250.nr_uarts=1` and the emulator pins `-serial null` on COM1, so a second 8250
+# (/dev/ttyS1) cannot exist; virtserialport is the carrier that can (see the PR notes).
+#
+#     carsim.py ──TCP 127.0.0.1:<port>──▶ qemu -chardev socket ──▶ virtserialport ──▶ /dev/vportNpM ──▶ launcher
+#
+# The wiring is an env file run-instance.sh reads; a default boot has none and is unchanged.
+readonly CARSIM_ENV_DIR=/opt/emu-farm/env
+readonly CARSIM_DIR=/home/emu/carsim                 # script, logs and pid files in 124
+readonly CARSIM_PORT_BASE=5700                       # instance N: MCU on BASE+10N, bus on BASE+10N+1
+readonly CARSIM_PORT_STRIDE=10
+readonly CARSIM_PY=/home/emu/artemis/.venv/bin/python # has pytest; carsim.py itself is stdlib
+readonly CARSIM_CAPTURE="${HEADUNIT_CARSIM_CAPTURE:-}"   # a candump log for the replay scenarios
+readonly CARSIM_PORT_MCU=carsim.mcu                  # virtio port names, resolved in the guest
+readonly CARSIM_PORT_CAN=carsim.can
+readonly PROP_CAR_OWNER=ro.riposte.os.car_owner
+readonly PROP_MCU_LINK=riposte.mcu.link
+readonly PROP_CANBUS_LINK=riposte.canbus.link
+
+carsim_mcu_port() { echo $(( CARSIM_PORT_BASE + CARSIM_PORT_STRIDE * instance )); }
+carsim_can_port() { echo $(( CARSIM_PORT_BASE + CARSIM_PORT_STRIDE * instance + 1 )); }
+
+# The guest path of a named virtio port; the vportNpM numbering shifts with the port list.
+# The name files are root-only, so this runs after `adb root`; the trailing `true` keeps a
+# no-match loop from failing the pipeline under pipefail.
+carsim_guest_dev() {
+  local name="$1"
+  adb_ shell 'for p in /sys/class/virtio-ports/*; do [ "$(cat $p/name 2>/dev/null)" = "'"$name"'" ] && echo /dev/$(basename $p); done; true' 2>/dev/null | tr -d '\r'
+}
+
+# `adb root` restarts adbd; give it a moment and wait for the device to be back.
+carsim_adb_root() {
+  adb_ root >/dev/null 2>&1 || true
+  sleep 2
+  adb_ wait-for-device >/dev/null 2>&1 || true
+}
+
+carsim_write_env() {
+  local mcu can
+  mcu=$(carsim_mcu_port); can=$(carsim_can_port)
+  pct exec "$EMU_CT" -- su emu -c "mkdir -p $CARSIM_ENV_DIR && cat > $CARSIM_ENV_DIR/instance-$instance.env" <<EOF_ENV
+# written by 'headunit carsim'; delete (or 'headunit carsim stop') for a default boot
+EMU_EXTRA_ARGS="-qemu -chardev socket,id=carsim0,host=127.0.0.1,port=$mcu,server=on,wait=off -device virtserialport,chardev=carsim0,name=$CARSIM_PORT_MCU -chardev socket,id=carsim1,host=127.0.0.1,port=$can,server=on,wait=off -device virtserialport,chardev=carsim1,name=$CARSIM_PORT_CAN"
+EOF_ENV
+}
+
+# Boot (or reboot) the instance so both ports exist, then point the launcher at them.
+carsim_wire() {
+  carsim_write_env
+  local carried=""
+  if [ "$(pct exec "$EMU_CT" -- systemctl is-active "headunit-emu@$instance" 2>/dev/null)" = "active" ]; then
+    carsim_adb_root
+    carried=$(carsim_guest_dev "$CARSIM_PORT_MCU")
+  fi
+  if [ -n "$carried" ]; then
+    echo "instance $instance already carries the carsim ports"
+  else
+    pct exec "$EMU_CT" -- systemctl stop "headunit-emu@$instance" 2>/dev/null || true
+    cmd_up "$instance"
+    carsim_adb_root
+  fi
+
+  local mcu_dev can_dev
+  mcu_dev=$(carsim_guest_dev "$CARSIM_PORT_MCU"); can_dev=$(carsim_guest_dev "$CARSIM_PORT_CAN")
+  [ -n "$mcu_dev" ] && [ -n "$can_dev" ] || die "guest shows no carsim virtio ports (mcu='$mcu_dev' can='$can_dev')"
+
+  # ro. props take one write while unset; the link props are plain and follow the port names.
+  adb_ shell "setprop $PROP_CAR_OWNER 1; setprop $PROP_MCU_LINK dev:$mcu_dev; setprop $PROP_CANBUS_LINK dev:$can_dev" >/dev/null
+  echo "wired: $PROP_MCU_LINK=dev:$mcu_dev  $PROP_CANBUS_LINK=dev:$can_dev  $PROP_CAR_OWNER=$(adb_ shell getprop $PROP_CAR_OWNER | tr -d '\r')"
+}
+
+# carsim.py lives with the launcher source on the build host; copy it (and the capture) over.
+carsim_stage() {
+  pct exec "$EMU_CT" -- su emu -c "mkdir -p $CARSIM_DIR"
+  pct exec "$BUILD_CT" -- cat "$E2E_DIR/carsim/carsim.py" \
+    | pct exec "$EMU_CT" -- su emu -c "cat > $CARSIM_DIR/carsim.py"
+  [ -n "$CARSIM_CAPTURE" ] || { echo "HEADUNIT_CARSIM_CAPTURE unset; replay scenarios will fail" >&2; return 0; }
+  if pct exec "$EMU_CT" -- test -s "$CARSIM_DIR/$(basename "$CARSIM_CAPTURE")"; then
+    return 0
+  fi
+  [ -f "$CARSIM_CAPTURE" ] || { echo "no capture at $CARSIM_CAPTURE; replay scenarios will fail" >&2; return 0; }
+  pct push "$EMU_CT" "$CARSIM_CAPTURE" "$CARSIM_DIR/$(basename "$CARSIM_CAPTURE")"
+  pct exec "$EMU_CT" -- chown emu "$CARSIM_DIR/$(basename "$CARSIM_CAPTURE")"
+}
+
+carsim_unit() { echo "carsim-$instance"; }
+carsim_logfile() { echo "$CARSIM_DIR/instance-$instance.log"; }
+
+# The simulator is a transient systemd unit: it outlives the pct exec that started it, stops
+# in one call, and a nohup'd child that inherited the pct pty is what hung the CLI before.
+carsim_kill() {
+  pct exec "$EMU_CT" -- systemctl stop "$(carsim_unit)" 2>/dev/null || true
+  pct exec "$EMU_CT" -- systemctl reset-failed "$(carsim_unit)" 2>/dev/null || true
+}
+
+carsim_run() {
+  local scenario="${1:?usage: headunit carsim <N> <scenario> [--speedup X]}"; shift
+  [ -n "$(launcher_pkg)" ] || die "launcher not installed on $(serial); run 'headunit -i $instance build <worktree>' first"
+  carsim_stage
+  carsim_kill
+  local log; log=$(carsim_logfile)
+  pct exec "$EMU_CT" -- rm -f "$log"
+  pct exec "$EMU_CT" -- systemd-run --quiet --unit "$(carsim_unit)" --uid emu --gid emu \
+    --working-directory "$CARSIM_DIR" --property Restart=no \
+    python3 carsim.py "$scenario" --mcu "127.0.0.1:$(carsim_mcu_port)" --can "127.0.0.1:$(carsim_can_port)" \
+    --capture "${CARSIM_CAPTURE:+$CARSIM_DIR/$(basename "$CARSIM_CAPTURE")}" --log "$log" "$@"
+  # Restart the launcher so McuOwner opens the ports with the simulator already attached and
+  # the handshake lands in a fresh logcat.
+  adb_ shell logcat -c >/dev/null 2>&1 || true
+  adb_ shell am force-stop "$(launcher_pkg)" >/dev/null
+  cmd_launch
+  echo "carsim '$scenario' running on instance $instance as $(carsim_unit).service ($(pct exec "$EMU_CT" -- systemctl is-active "$(carsim_unit)" || true))"
+  echo "  log     : $log (LXC $EMU_CT)   → headunit carsim log $instance"
+  echo "  logcat  : headunit -i $instance logcat -s McuOwner:* SlcanLinkSource:* CharDevLink:*"
+}
+
+carsim_stop() {
+  carsim_kill
+  pct exec "$EMU_CT" -- rm -f "$CARSIM_ENV_DIR/instance-$instance.env"
+  echo "carsim stopped on instance $instance; the next 'headunit up $instance' boots without the ports"
+}
+
+# The pytest cases drive carsim.py themselves and assert over adb, so they run where both
+# live: inside the emulator container, against this instance.
+carsim_e2e() {
+  local dest="$CARSIM_DIR/e2e"
+  carsim_kill   # the QEMU chardev takes one client; the cases start their own carsim.py
+  pct exec "$BUILD_CT" -- tar -C "$E2E_DIR" -cf - --exclude=.venv --exclude=__pycache__ . \
+    | pct exec "$EMU_CT" -- su emu -c "rm -rf $dest && mkdir -p $dest && tar -C $dest -xf -"
+  local args; printf -v args '%q ' "$@"
+  pct exec "$EMU_CT" -- su emu -c "cd $dest && export ANDROID_HOME=$SDK PATH=$SDK/platform-tools:\$PATH \
+    CARSIM_SERIAL=$(serial) CARSIM_MCU=127.0.0.1:$(carsim_mcu_port) CARSIM_CAN=127.0.0.1:$(carsim_can_port) \
+    CARSIM_LAUNCHER_PACKAGE=$(launcher_pkg) && $CARSIM_PY -m pytest -m carsim -v -rs -p no:cacheprovider $args"
+}
+
+cmd_carsim() {
+  local sub="${1:-}"; shift || true
+  case "$sub" in
+    stop) [ -n "${1:-}" ] && instance="$1"; carsim_stop ;;
+    log)  [ -n "${1:-}" ] && instance="$1"; pct exec "$EMU_CT" -- tail -n "${2:-40}" "$(carsim_logfile)" ;;
+    e2e)  if [ -n "${1:-}" ] && [[ "$1" =~ ^[0-9]+$ ]]; then instance="$1"; shift; fi
+          carsim_wire; carsim_e2e "$@" ;;
+    ''|help) usage; exit 1 ;;
+    *)    [[ "$sub" =~ ^[0-9]+$ ]] || die "carsim: first argument is the instance number (got '$sub')"
+          instance="$sub"; carsim_wire; carsim_run "$@" ;;
+  esac
+}
+
+while getopts ':i:h' opt; do
+  case "$opt" in
+    i) instance="$OPTARG" ;;
+    h) usage; exit 0 ;;
+    *) die "unknown option -$OPTARG" ;;
+  esac
+done
+shift $(( OPTIND - 1 ))
+
+case "${1:-}" in
+  status)     shift; cmd_status "$@" ;;
+  up)         shift; cmd_up "$@" ;;
+  down)       shift; cmd_down "$@" ;;
+  wait)       shift; wait_boot; echo "instance $instance booted" ;;
+  build)      shift; cmd_build "$@" ;;
+  install)    shift; cmd_install "$@" ;;
+  launch)     shift; cmd_launch ;;
+  reset)      shift; cmd_reset ;;
+  screenshot) shift; cmd_screenshot "$@" ;;
+  ui)         shift; cmd_ui "$@" ;;
+  logcat)     shift; adb_ logcat "${@:--d}" ;;
+  shell)      shift; adb_ shell "$@" ;;
+  tap)        shift; adb_ shell input tap "$1" "$2" ;;
+  key)        shift; adb_ shell input keyevent "$1" ;;
+  doctor)     shift; cmd_doctor ;;
+  caveats)    shift; cmd_caveats ;;
+  web)        shift; cmd_web ;;
+  artemis)    shift; cmd_artemis "$@" ;;
+  carsim)     shift; cmd_carsim "$@" ;;
+  ''|help|-h) usage ;;
+  *)          die "unknown command '$1' (try: headunit help)" ;;
+esac
