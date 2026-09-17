@@ -244,6 +244,8 @@ class MainActivity : ComponentActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         carEvents = CarEvents(applicationContext).also { it.register() }
+        // Before the owner path: SysVarMirror reads the motion gate on every SYS_EVENT.
+        settingsStore = SettingsStore(applicationContext) // v0.6
         // v0.4.7.1: activity-scoped so opening the Dashboard doesn't restart the session timer.
         ignitionSession = IgnitionSession(lifecycleScope, carEvents.accOn)
         // Riposte OS 0.2: when the OS says we own the MCU port and eventcenter is gone, the car
@@ -254,11 +256,19 @@ class MainActivity : ComponentActivity() {
             // The suite still listens for eventcenter's actions; the re-emitter replays them.
             // The carrier comes from `riposte.mcu.link`: the vendor UART on the car, a QEMU
             // virtio port or a socket on the emulator farm, where carsim plays the vehicle.
+            // The value behind the brake edge, served to the suite by SysVarMirrorProvider.
+            // Detection follows the one opt-out safety switch: with parked-only gating off,
+            // the suite's video player stays uncovered too (the vendor's Set_BreakDetected).
+            val sysVarMirror = SysVarMirror(detect = { settingsStore.settings.value.motionGateEnabled }) { key, value ->
+                SysVarMirrorProvider.publish(applicationContext, key, value)
+            }
+            lifecycleScope.launch {
+                settingsStore.settings.map { it.motionGateEnabled }.distinctUntilChanged().collect { sysVarMirror.refresh() }
+            }
             val ownerListener = McuOwner.FanOut(
                 carEvents.ownerListener(CanCaptureService.vehicle(), carService.radioState),
                 VendorBroadcastReemitter(applicationContext),
-                // The value behind the brake edge, served to the suite by SysVarMirrorProvider.
-                SysVarMirror { key, value -> SysVarMirrorProvider.publish(applicationContext, key, value) },
+                sysVarMirror,
             )
             mcuOwner = McuOwner(
                 ownerGate,
@@ -287,7 +297,6 @@ class MainActivity : ComponentActivity() {
         appRepository = AppRepository(this, ownerActive = mcuOwner != null)
         nowPlaying = NowPlayingRepository(applicationContext).also { it.start(lifecycleScope) }
         themeStore = ThemeStore(applicationContext)
-        settingsStore = SettingsStore(applicationContext) // v0.6
 
         // v2.7: the notification shelf's mute filter. Constructed before the speech controller
         // below, which shares it.

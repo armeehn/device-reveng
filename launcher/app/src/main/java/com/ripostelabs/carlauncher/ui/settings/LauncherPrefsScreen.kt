@@ -305,7 +305,8 @@ fun LauncherPrefsScreen(
         SettingsSection(title = "Motion gating") {
             Text(
                 text = "Hide search, the theme editor, the SysVar browser and destructive " +
-                    "actions while the car is moving.",
+                    "actions while the car is moving. On Riposte OS, also cover the video " +
+                    "player's picture while the handbrake is off.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -324,7 +325,8 @@ fun LauncherPrefsScreen(
         ConfirmDialog(
             title = "Disable parked-only gating?",
             message = "Search, the theme editor, the SysVar browser and destructive actions " +
-                "will stay available while the car is moving.",
+                "will stay available while the car is moving, and the video player will " +
+                "not cover its picture when the handbrake is off.",
             confirmLabel = "Disable",
             destructive = true,
             onConfirm = { confirmGateOff = false; settingsStore.setMotionGateEnabled(false) },

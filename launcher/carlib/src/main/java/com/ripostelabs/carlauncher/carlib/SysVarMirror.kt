@@ -18,9 +18,10 @@ package com.ripostelabs.carlauncher.carlib
  *     "0" (open)               when the brake is connected, or detection is off
  *
  * `Set_BreakDetected` was a vendor setting defaulting to off; on the owner path the launcher is
- * the policy, and [detect] defaults to on because a player that never covers itself in a moving
- * car is the wrong failure. Rows are announced on change only, so a caller can notify observers
- * from [onChange] without a storm.
+ * the policy: [detect] is read on every SYS_EVENT (MainActivity hands it the parked-only motion
+ * gate, the one opt-out safety switch) and defaults to on because a player that never covers
+ * itself in a moving car is the wrong failure. Rows are announced on change only, so a caller
+ * can notify observers from [onChange] without a storm.
  */
 class SysVarMirror(
     private val detect: () -> Boolean = { true },
@@ -29,11 +30,23 @@ class SysVarMirror(
 
     private val rows = mutableMapOf<String, String>()
 
+    @Volatile
+    private var last: McuOwnerProtocol.SysEvent? = null
+
     /** The row's value, or null until the first SYS_EVENT has been seen. */
     fun get(key: String): String? = synchronized(rows) { rows[key] }
 
     override fun onSysEvent(event: McuOwnerProtocol.SysEvent) {
+        last = event
         put(KEY_CUR_BRAKE_STATE, brakeState(detect(), event.brake))
+    }
+
+    /**
+     * Recompute from the last SYS_EVENT: the MCU reports `71` on change, so a [detect] flip
+     * would otherwise wait for the next brake edge. Nothing until the first event.
+     */
+    fun refresh() {
+        last?.let(::onSysEvent)
     }
 
     private fun put(key: String, value: String) {
