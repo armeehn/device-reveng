@@ -9,9 +9,11 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.ripostelabs.carlauncher.MainActivity
+import com.ripostelabs.carlauncher.carlib.AndroidOwnerGate
 import com.ripostelabs.carlauncher.carlib.CarService
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.util.concurrent.CountDownLatch
@@ -23,6 +25,9 @@ import java.util.concurrent.TimeUnit
  * callback carry carsim's reply. Run with carsim's `radio` scenario on the instance
  * (`headunit carsim N radio`); the wire side is asserted from the simulator log outside.
  *
+ * Skipped where nothing owns the port: the CI AVD has no carsim, so a claim there is never
+ * acked and the case would read as a tuner bug instead of a missing simulator.
+ *
  * FM 96.3 → carsim answers seek up with 96.5 and a direct tune with the frequency asked.
  */
 @RunWith(AndroidJUnit4::class)
@@ -32,6 +37,8 @@ class TunerServiceTest {
 
     @Test
     fun seekAndTuneRoundTrip() {
+        assumeTrue("no carsim: ${AndroidOwnerGate.PROP_CAR_OWNER} unset", AndroidOwnerGate(context).ownerEnabled())
+
         // HOME attaches the car link to the hub; without it every answer is idle.
         ActivityScenario.launch(MainActivity::class.java)
 
