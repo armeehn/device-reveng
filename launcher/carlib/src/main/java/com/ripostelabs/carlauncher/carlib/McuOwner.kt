@@ -61,6 +61,8 @@ class McuOwner(
     private val clock: () -> LocalDateTime = { LocalDateTime.now() },
     private val writeTimeoutMs: Long = WRITE_TIMEOUT_MS,
     private val retryDelayMs: Long = RETRY_DELAY_MS,
+    /** Test seam: a Thread whose start() dawdles is how the start race below is reproduced. */
+    private val newThread: (Runnable, String) -> Thread = { body, name -> Thread(body, name) },
 ) {
 
     /** What must be true before the port is touched. The app answers from PackageManager and getprop. */
@@ -187,10 +189,11 @@ class McuOwner(
         }
 
         // Everything from here touches the port and may block: never on the caller's thread.
-        worker = Thread({ run() }, "mcu-owner").apply {
-            isDaemon = true
-            start()
-        }
+        // The field is written BEFORE the thread starts: run() gates on isCurrent(), and a
+        // thread that ran first read a null and returned without ever opening the port.
+        val w = newThread({ run() }, "mcu-owner").apply { isDaemon = true }
+        worker = w
+        w.start()
     }
 
     fun stop() {

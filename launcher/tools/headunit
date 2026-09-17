@@ -69,6 +69,7 @@ artemis_host() {
   ssh -o BatchMode=yes "$EMU_HOST" "pct exec $EMU_CT -- hostname -I" | awk '{print $1}'
 }
 readonly WEB_HOST="${HEADUNIT_WEB_HOST:-}"        # reverse proxy -> farm :8100, when published
+readonly MCP_SHIM=/usr/local/lib/headunit/mcp_shim.py   # lazy stdio front for `artemis mcp`; see its docstring
 readonly ARTEMIS_HOST="${HEADUNIT_ARTEMIS_HOST:-}"
 readonly WEB_PORT=8100                     # headunit-web.service (ws-scrcpy); 8000 is artemis
 readonly ARTEMIS_BIND=0.0.0.0              # one daemon serves the proxy, the CLI (loopback) and the SDK
@@ -419,7 +420,7 @@ artemis_e2e() {
 
 cmd_artemis() {
   local sub="${1:-}"; shift || true
-  artemis_env
+  [ "$sub" = mcp ] || artemis_env   # the shim resyncs .env itself via mcp-real
   case "$sub" in
     run)     artemis_run "$@" ;;
     helper)  in_artemis "$ARTEMIS_BIN" helper "${1:-status}" --serial "$(serial)" ;;
@@ -428,7 +429,8 @@ cmd_artemis() {
     status)  pct exec "$EMU_CT" -- systemctl status "$ARTEMIS_UNIT" --no-pager -n 5 ;;
     doctor)  in_artemis "$ARTEMIS_BIN" doctor ;;
     trace)   in_artemis "$ARTEMIS_BIN" trace "$@" ;;
-    mcp)     in_artemis "$ARTEMIS_DIR/.venv/bin/python" -m mcp_server ;;
+    mcp)     exec python3 "$MCP_SHIM" ;;   # lazy: nothing touches the farm until a tool is called
+    mcp-real) artemis_env; in_artemis "$ARTEMIS_DIR/.venv/bin/python" -m mcp_server ;;
     e2e)     artemis_e2e "$@" ;;
     env)     echo ".env resynced on $EMU_CT from '$SECRET_CMD'" ;;
     *)       usage; exit 1 ;;
