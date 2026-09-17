@@ -22,6 +22,11 @@ class McuOwnerTest {
         const val TEST_TIMEOUT_MS = 20_000L
         const val WATCHDOG_OFF_MS = 60_000L
         const val WAIT_FOR_MS = 10_000L
+        // The production window. 20 ms once kept the no-ack cases quick, but a loaded runner
+        // answered the fake link's ack after the window, the owner re-sent SRC_NULL, the fake
+        // acked twice, and every exact frame count and write index drifted: three different
+        // pairs of cases went red on CI in one day. The no-ack cases now cost ACK_ATTEMPTS×0.5 s.
+        const val ACK_MS = McuOwnerProtocol.ACK_TIMEOUT_MS
     }
 
     private fun bytes(vararg v: Int) = ByteArray(v.size) { v[it].toByte() }
@@ -89,7 +94,7 @@ class McuOwnerTest {
     // The write watchdog is off the clock here (a CI stall once declared a fake link dead
     // mid-test); the two RAV4-96 cases below shorten it against a write that never returns.
     private fun owner(link: FakeLink, gate: Gate = Gate(eventcenter = false, enabled = true), recorder: Recorder = Recorder()) =
-        McuOwner(gate, recorder, openLink = { link }, ackTimeoutMs = 20, writeTimeoutMs = WATCHDOG_OFF_MS)
+        McuOwner(gate, recorder, openLink = { link }, ackTimeoutMs = ACK_MS, writeTimeoutMs = WATCHDOG_OFF_MS)
 
     // Generous: the CI runner is shared and has run McuOwnerTest at a load average past 250,
     // where a 2 s bound expired on cases that assert by count, not by clock.
@@ -415,7 +420,7 @@ class McuOwnerTest {
     @Test(timeout = TEST_TIMEOUT_MS)
     fun startReturnsAtOnceWhenTheWriteBlocks() {
         val link = StuckLink()
-        val owner = McuOwner(Gate(eventcenter = false, enabled = true), Recorder(), openLink = { link.opens.incrementAndGet(); link }, ackTimeoutMs = 20, writeTimeoutMs = 50)
+        val owner = McuOwner(Gate(eventcenter = false, enabled = true), Recorder(), openLink = { link.opens.incrementAndGet(); link }, ackTimeoutMs = ACK_MS, writeTimeoutMs = 50)
 
         val startedAt = System.currentTimeMillis()
         owner.start()
@@ -438,7 +443,7 @@ class McuOwnerTest {
             Gate(eventcenter = false, enabled = true),
             Recorder(),
             openLink = { if (opens.getAndIncrement() == 0) stuck else FakeLink(ackNull = true) },
-            ackTimeoutMs = 20,
+            ackTimeoutMs = ACK_MS,
             writeTimeoutMs = 50,
             retryDelayMs = 50,
         )
