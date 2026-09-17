@@ -131,6 +131,18 @@ android {
                 signingConfigs.getByName("debug")
             }
         }
+        // The emulator farm's stand-in for the release install. The suite apps query the
+        // RELEASE ids (ThemeContract, SysVarContract, the tuner bind action), so a debug
+        // launcher on the farm is invisible to them and every launcher<->suite path was
+        // car-only. `farm` is the debug build under the release applicationId, x86_64 only:
+        // its native libs are stripped of arm64 below, so it cannot install on the head
+        // unit by construction (INSTALL_FAILED_NO_MATCHING_ABIS), which is what keeps a
+        // debug-signed APK with the release id off the car.
+        create("farm") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = null
+            matchingFallbacks += "debug"
+        }
     }
 
     buildFeatures {
@@ -168,6 +180,13 @@ android {
 
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
+    }
+}
+
+// `farm` ships x86_64 only: drop the arm64 libs defaultConfig asks for (see buildTypes).
+androidComponents {
+    onVariants(selector().withBuildType("farm")) { variant ->
+        variant.packaging.jniLibs.excludes.add("**/arm64-v8a/**")
     }
 }
 

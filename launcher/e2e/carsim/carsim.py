@@ -746,6 +746,18 @@ SCENARIOS: dict[str, list[str]] = {
         "5.0 gear P",
         "6.0 say radio: tuner armed, waiting for SRC_RADIO",
     ],
+    # The handbrake as the MCU reports it (71 bit 0x04), late enough that the launcher's
+    # McuOwner is on the port (~17 s after `headunit carsim` returns). RAV4-98: the suite's
+    # video gate must cover the picture while the brake is OFF.
+    "brake": [
+        "0.0 say brake: handshake window",
+        "3.0 acc on",
+        "4.0 gear P",
+        "25.0 brake on",
+        "55.0 brake off",
+        "85.0 brake on",
+        "90.0 say brake: done",
+    ],
     # The 2026-09-07 door-cycle capture, as the CANable heard it.
     "replay-door-cycle": [
         "0.0 say replay: door cycle capture",
@@ -974,7 +986,7 @@ class Simulator:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0], epilog=GRAMMAR,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("scenario", help="smoke | commute | radio | replay-door-cycle | a timeline file")
+    ap.add_argument("scenario", help="smoke | commute | radio | brake | replay-door-cycle | a timeline file")
     ap.add_argument("--mcu", default="127.0.0.1:5590", help="host:port of the MCU carrier (default %(default)s)")
     ap.add_argument("--can", default="", help="host:port of the raw-bus carrier; omit to convert replays into relays")
     ap.add_argument("--capture", default="", help="candump file for {capture} in a scenario")
