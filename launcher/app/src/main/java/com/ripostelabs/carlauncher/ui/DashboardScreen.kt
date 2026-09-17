@@ -406,7 +406,7 @@ private fun Tile(modifier: Modifier = Modifier, content: @Composable () -> Unit)
             .carCard()
             .clip(carShape(18.dp))
             .background(MaterialTheme.colorScheme.surface)
-            .padding(20.dp),
+            .padding(horizontal = TILE_PAD_DP.dp, vertical = TILE_PAD_V_DP.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
@@ -436,6 +436,10 @@ private fun formatElapsed(ms: Long): String {
 }
 
 private const val SPEED_SP = 96f
+private const val TILE_PAD_DP = 20
+// The middle column stacks three tiles in 480 dp; at 20 dp top and bottom a label + value +
+// note tile ran 15 px over and clipped its note to a strip. 12 dp leaves 9 px to spare.
+private const val TILE_PAD_V_DP = 12
 private const val STEERING_BAR_DP = 48
 private const val STEERING_TRACK_PX = 6f
 private const val STEERING_KNOB_PX = 14f
