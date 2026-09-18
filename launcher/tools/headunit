@@ -171,6 +171,12 @@ usage: headunit [-i N] <command> [args]
     e2e [pytest args]                            launcher e2e suite (device-reveng/launcher/e2e)
     doctor | trace <args> | env                  environment check / trace inspector / resync .env
 
+  sweep [N] [what]    layout checks on instance N, read back from the panel over adb:
+    launcher (default)   test_layout_sweep + test_phone_pad + test_dashboard_notes (pytest)
+    suite                install the served rav4-apps suite, then suite_sweep, suite_theme,
+                         suite_startup; needs the release-id launcher (HEADUNIT_VARIANT=farm build)
+    all                  both
+
   carsim <sub>        the simulated vehicle (launcher/e2e/carsim/carsim.py) on the instance:
     <N> <scenario> [--speedup X]   boot N with the serial wiring, set the owner props, run a
                                    scenario: smoke | commute | replay-door-cycle | <timeline file>
@@ -449,6 +455,7 @@ cmd_artemis() {
 # The wiring is an env file run-instance.sh reads; a default boot has none and is unchanged.
 readonly CARSIM_ENV_DIR=/opt/emu-farm/env
 readonly CARSIM_DIR=/home/emu/carsim                 # script, logs and pid files in 124
+readonly SUITE_URL="${HEADUNIT_SUITE_URL:-}"          # where the built suite APKs are served, e.g. https://launcher.hq.../suite/
 readonly CARSIM_PORT_BASE=5700                       # instance N: MCU on BASE+10N, bus on BASE+10N+1
 readonly CARSIM_PORT_STRIDE=10
 readonly CARSIM_PY=/home/emu/artemis/.venv/bin/python # has pytest; carsim.py itself is stdlib
@@ -575,6 +582,67 @@ carsim_e2e() {
     CARSIM_LAUNCHER_PACKAGE=$(launcher_pkg) && $CARSIM_PY -m pytest -m carsim -v -rs -p no:cacheprovider $args"
 }
 
+# ---- sweep: the layout checks, one command ------------------------------------------------
+# Every check reads the panel back over adb (uiautomator, screencap, am start -W), so nothing
+# here needs ARTEMIS or a model. Each instance gets its own staging dir: the carsim one is
+# re-staged by every `carsim e2e`, and a peer's run must not pull the files out from under us.
+sweep_dir() { echo "/home/emu/sweep-$instance"; }
+
+sweep_stage() {
+  local dest; dest="$(sweep_dir)/e2e"
+  pct exec "$BUILD_CT" -- tar -C "$E2E_DIR" -cf - --exclude=.venv --exclude=__pycache__ . \
+    | pct exec "$EMU_CT" -- su emu -c "rm -rf $dest && mkdir -p $dest && tar -C $dest -xf -"
+}
+
+sweep_env() {
+  echo "cd $(sweep_dir)/e2e && export ANDROID_HOME=$SDK PATH=$SDK/platform-tools:\$PATH CARSIM_SERIAL=$(serial)"
+}
+
+sweep_launcher() {
+  pct exec "$EMU_CT" -- su emu -c "$(sweep_env) CARSIM_LAUNCHER_PACKAGE=$(launcher_pkg) \
+    && $CARSIM_PY -m pytest -m carsim -v -rs -p no:cacheprovider \
+       test_layout_sweep.py test_phone_pad.py test_dashboard_notes.py"
+}
+
+# The suite apps query the launcher's release ids, so the .debug build is invisible to them.
+sweep_suite() {
+  [ -n "$SUITE_URL" ] || die "sweep suite: set HEADUNIT_SUITE_URL to where the suite APKs are served"
+  adb_ shell pm list packages | grep -qx "package:$PKG_PREFIX" \
+    || die "sweep suite: no release-id launcher on $(serial); run HEADUNIT_VARIANT=farm headunit -i $instance build <tree>"
+
+  local tmp; tmp=$(mktemp -d /tmp/headunit-suite-XXXXXX)
+  local n=0
+  for apk in $(curl -sk "$SUITE_URL" | grep -oE 'href="[^"]+\.apk"' | sed 's/href="//;s/"//' | sort -u); do
+    curl -sk -o "$tmp/$(basename "$apk")" "$SUITE_URL$(basename "$apk")" && n=$(( n + 1 ))
+  done
+  [ "$n" -gt 0 ] || die "sweep suite: no APKs at $SUITE_URL"
+  echo "installing $n suite APKs on $(serial)"
+  tar -C "$tmp" -cf - . | pct exec "$EMU_CT" -- su emu -c "d=$(sweep_dir)/suite && rm -rf \$d && mkdir -p \$d \
+    && tar -C \$d -xf - && export PATH=$SDK/platform-tools:\$PATH \
+    && for f in \$d/*.apk; do adb -s $(serial) install -r \$f >/dev/null 2>&1 || echo \"install failed: \$f\"; done"
+  rm -rf "$tmp"
+
+  local run="$(sweep_env)"
+  for tool in suite_sweep suite_theme suite_startup; do
+    echo "== $tool"
+    pct exec "$EMU_CT" -- su emu -c "$run && $CARSIM_PY $tool.py $(serial) > ../$tool.json"
+    echo "report: $(sweep_dir)/$tool.json on $EMU_CT"
+  done
+}
+
+cmd_sweep() {
+  if [ -n "${1:-}" ] && [[ "$1" =~ ^[0-9]+$ ]]; then instance="$1"; shift; fi
+  local what="${1:-launcher}"
+  wait_boot
+  sweep_stage
+  case "$what" in
+    launcher) sweep_launcher ;;
+    suite)    sweep_suite ;;
+    all)      sweep_launcher; sweep_suite ;;
+    *)        die "sweep: launcher, suite or all (got '$what')" ;;
+  esac
+}
+
 cmd_carsim() {
   local sub="${1:-}"; shift || true
   case "$sub" in
@@ -617,6 +685,7 @@ case "${1:-}" in
   web)        shift; cmd_web ;;
   artemis)    shift; cmd_artemis "$@" ;;
   carsim)     shift; cmd_carsim "$@" ;;
+  sweep)      shift; cmd_sweep "$@" ;;
   ''|help|-h) usage ;;
   *)          die "unknown command '$1' (try: headunit help)" ;;
 esac
