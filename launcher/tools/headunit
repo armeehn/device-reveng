@@ -174,7 +174,8 @@ usage: headunit [-i N] <command> [args]
   sweep [N] [what]    layout checks on instance N, read back from the panel over adb:
     launcher (default)   test_layout_sweep + test_phone_pad + test_dashboard_notes (pytest)
     suite                install the served rav4-apps suite, then suite_sweep, suite_theme,
-                         suite_startup; needs the release-id launcher (HEADUNIT_VARIANT=farm build)
+                         suite_startup, suite_monkey; needs the release-id launcher
+                         (HEADUNIT_VARIANT=farm build)
     all                  both
 
   carsim <sub>        the simulated vehicle (launcher/e2e/carsim/carsim.py) on the instance:
@@ -623,7 +624,7 @@ sweep_suite() {
   rm -rf "$tmp"
 
   local run="$(sweep_env)"
-  for tool in suite_sweep suite_theme suite_startup; do
+  for tool in suite_sweep suite_theme suite_startup suite_monkey; do
     echo "== $tool"
     pct exec "$EMU_CT" -- su emu -c "$run && $CARSIM_PY $tool.py $(serial) > ../$tool.json"
     echo "report: $(sweep_dir)/$tool.json on $EMU_CT"
