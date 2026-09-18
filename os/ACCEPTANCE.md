@@ -39,7 +39,9 @@ unit's own `boot_<slot>` from an adb dump.
 - **Run `os/kernel-mount-probe.sh --adb <ip:5555>` before flashing.** Images the host mounts
   crashed the unit into 900E; only the unit's kernel can prove a feature set.
 - **`fastboot -S 64M`** on this cable; replug to revive fastbootd after a stall; vbmeta via
-  `vbmeta-disable.py` + plain flash.
+  `vbmeta-disable.py` + plain flash: flags=1 (hashtree off) ONLY. flags=3 skips the ABL path that
+  reads the vendor screen config from privdata2 and the panel comes up 720x1280 portrait
+  (2026-09-18 bench; `panel_size=0x0` in /proc/cmdline is the tell).
 - The unit resets only from the RST pinhole. `05c6:900e` = crash dump; after RST `05c6:9008` =
   EDL, and the public QCM6125 generic-key loader authenticates (`os/edl/` on the share).
 

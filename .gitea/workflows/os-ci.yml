@@ -26,3 +26,5 @@ jobs:
         run: os/test-edl-extents.sh
       - name: edl-restore
         run: os/test-edl-restore.sh
+      - name: vbmeta-flags
+        run: os/test-vbmeta-flags.sh
