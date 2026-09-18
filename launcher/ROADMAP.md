@@ -198,7 +198,7 @@ port rotates on every reboot, so a crash on the road currently leaves no evidenc
 ## 0.5 — the suite lands
 
 The 0.4 window was corrections. 0.5 is the release that makes the *rest* of the unit ours: the
-twenty-six standalone rewrites in `armeehn/rav4-apps` (`com.ripostelabs.clock`, `…browser`,
+twenty-eight standalone rewrites in `armeehn/rav4-apps` (`com.ripostelabs.clock`, `…browser`,
 `…weather`, …) stop being a separate project that happens to be installed, and become apps the
 launcher knows about and styles.
 
@@ -211,10 +211,10 @@ Shipped in this milestone:
   so an app on screen re-paints on a theme switch or a night crossing. Read-only — a suite app
   that could write the palette could restyle the home screen of a moving car.
 - **`RiposteSuite`, the registry of what the suite is.** Nothing on the device marks the
-  twenty-six as one family, and a `com.ripostelabs.` prefix match would swallow the launcher itself
+  twenty-eight as one family, and a `com.ripostelabs.` prefix match would swallow the launcher itself
   and its `.debug` sibling. Membership is an explicit list, so an app that failed to install is
   reported missing instead of silently leaving the family.
-- **Setup Doctor counts the suite.** `Rewritten app suite (n/26)`, naming what is absent. It
+- **Setup Doctor counts the suite.** `Rewritten app suite (n/28)`, naming what is absent. It
   never blocks: the launcher is complete without any of them, so a partial suite is reported,
   not treated as a fault to repair.
 - **The provider authority is applicationId-scoped**, so a `.debug` launcher installs alongside

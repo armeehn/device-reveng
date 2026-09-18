@@ -10,7 +10,7 @@ package com.ripostelabs.carlauncher.data
  * camera and the steering-wheel controls.
  *
  * The consequence for the launcher is that a suite app looks like any other third-party app to
- * PackageManager. Nothing in the system marks the twenty-six of them as one family, so the
+ * PackageManager. Nothing in the system marks the twenty-eight of them as one family, so the
  * launcher carries the registry: membership is this explicit list, never a prefix match.
  * [PACKAGE_PREFIX] alone would swallow the launcher itself (`com.ripostelabs.carlauncher`) and its
  * debug sibling.
@@ -53,11 +53,13 @@ object RiposteSuite {
         SuiteApp("com.ripostelabs.files", "Files"),
         SuiteApp("com.ripostelabs.gps", "GPS"),
         SuiteApp("com.ripostelabs.installer", "Installer"),
+        SuiteApp("com.ripostelabs.lamp", "Lamp"),
         SuiteApp("com.ripostelabs.level", "Level"),
         SuiteApp("com.ripostelabs.music", "Music"),
         SuiteApp("com.ripostelabs.news", "News"),
         SuiteApp("com.ripostelabs.notes", "Notes"),
         SuiteApp("com.ripostelabs.photos", "Photos"),
+        SuiteApp("com.ripostelabs.projection", "Projection"),
         SuiteApp("com.ripostelabs.radio", "Radio"),
         SuiteApp("com.ripostelabs.recorder", "Recorder"),
         SuiteApp("com.ripostelabs.sketch", "Sketch"),

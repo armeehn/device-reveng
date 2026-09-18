@@ -87,4 +87,18 @@ class RiposteSuiteTest {
         assertEquals("com.reveng.other", RiposteSuite.liveTwin("com.reveng.other"))
         assertEquals("com.android.chrome", RiposteSuite.liveTwin("com.android.chrome"))
     }
+
+    /**
+     * The registry is the suite as built (rav4-apps `apps/com.ripostelabs.*`). Lamp and
+     * Projection joined the suite after this list was written and were missing from it for two
+     * weeks: the Setup doctor read "26/26" with 28 apps installed and could never report either
+     * absent. Pin the count and the two late members.
+     */
+    @Test
+    fun registryMatchesTheSuiteAsBuilt() {
+        assertEquals(28, RiposteSuite.APPS.size)
+        assertTrue(RiposteSuite.isSuiteApp("com.ripostelabs.lamp"))
+        assertTrue(RiposteSuite.isSuiteApp("com.ripostelabs.projection"))
+        assertEquals(RiposteSuite.APPS.map { it.label }.sorted(), RiposteSuite.APPS.map { it.label })
+    }
 }
