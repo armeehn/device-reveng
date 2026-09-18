@@ -311,19 +311,32 @@ class CarService(private val appContext: Context) {
      * Riposte OS 0.2: with an owner attached there is no gateway to ask, so [radioSource] does
      * the same in our own hand: `01 01` with the MODE_ACK wait. Without it the tuner cache fills
      * and the amplifier stays on the last source.
+     *
+     * [focus]: the launcher's own RadioScreen takes Android audio focus here; a bound ITuner
+     * client (the suite radio, RAV4-97) already holds it as the media citizen, and taking it
+     * again 16 ms later knocked that client into pause, which released the tuner it just
+     * claimed.
      */
-    fun claimRadio() {
+    fun claimRadio(focus: RadioFocus = RadioFocus.TAKE) {
         owner?.let {
             if (!radioSource.claim()) {
                 Log.w(TAG, "radio: SRC_RADIO not acknowledged")
             }
-            takeRadioFocus()
+            if (focus == RadioFocus.TAKE) takeRadioFocus()
             return
         }
         call { setCurModeCallback(SRC_RADIO, radioCallback) }
         call { setRadioCallback(radioCallback) }
         call { sendMode(SRC_RADIO, WAIT_FOR_MCU_ACK) }
-        takeRadioFocus()
+        if (focus == RadioFocus.TAKE) takeRadioFocus()
+    }
+
+    /** Who holds Android audio focus for the tuner after [claimRadio]. */
+    enum class RadioFocus {
+        /** The launcher: its own RadioScreen or a wheel gesture is the player. */
+        TAKE,
+        /** A bound ITuner client: it is the media citizen and keeps the focus it already has. */
+        CLIENT_HOLDS,
     }
 
     /**

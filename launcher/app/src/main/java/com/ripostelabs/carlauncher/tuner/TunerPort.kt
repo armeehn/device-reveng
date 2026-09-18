@@ -25,7 +25,7 @@ class CarTunerPort(private val car: CarService) : TunerPort {
     override val sourceLost: StateFlow<Long> get() = car.sourceLost
 
     override fun claim(): Boolean {
-        car.claimRadio()
+        car.claimRadio(CarService.RadioFocus.CLIENT_HOLDS)
         return car.isRadioClaimed()
     }
 
