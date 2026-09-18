@@ -36,12 +36,30 @@ def packages():
                   if p.startswith("package:com.ripostelabs.") and LAUNCHER_PKG not in p)
 
 
+SCROLLERS = ("ScrollView", "HorizontalScrollView", "RecyclerView", "ListView", "GridView")
+SCROLL_EDGE_PX = 4
+
+
+def inside(box, outer):
+    x, y, w, h = box
+    ox, oy, ow, oh = outer
+    return x >= ox and y >= oy and x + w <= ox + ow and y + h <= oy + oh
+
+
 def defects_for(dump, pkg):
     ns = [n for n in L.nodes(dump) if n.get("package", "") == pkg]
+    # A row cut by its own scroll viewport is not a small target, and a site's buttons
+    # inside a WebView (the news reader) are not the app's layout.
+    scroll_bottoms = [n["box"][1] + n["box"][3] for n in ns if n.get("class", "").split(".")[-1] in SCROLLERS]
+    webviews = [n["box"] for n in ns if n.get("class", "").endswith("WebView")]
     found = []
     for n in ns:
         x, y, w, h = n["box"]
         if L.at_bottom_edge(n["box"]):
+            continue
+        if any(abs((y + h) - sb) <= SCROLL_EDGE_PX for sb in scroll_bottoms):
+            continue
+        if any(inside(n["box"], wv) for wv in webviews):
             continue
         if n.get("clickable") == "true" and (w < L.MIN_TAP_PX or h < L.MIN_TAP_PX):
             found.append(f"tap target {L.label(n, ns)!r} is {w}x{h} px at ({x},{y})")
