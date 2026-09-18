@@ -1,0 +1,28 @@
+# Host-side checks for the Riposte OS tooling in os/: no device, no images, python3 + bash only.
+name: os-ci
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "os/**"
+      - ".gitea/workflows/os-ci.yml"
+  pull_request:
+    paths:
+      - "os/**"
+      - ".gitea/workflows/os-ci.yml"
+  workflow_dispatch:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax
+        run: |
+          for f in os/*.sh; do bash -n "$f"; done
+          python3 -m py_compile os/*.py
+      - name: edl-extents
+        run: os/test-edl-extents.sh
+      - name: edl-restore
+        run: os/test-edl-restore.sh

@@ -4,18 +4,25 @@
     lpdump super.img  ──parse──►  {system_b: [(sector, nsectors), …]}  ──►  `edl ws` commands
 
 Virtual A/B keeps logical partitions for the running slot only, so a restore over EDL writes
-each backup image into the extents `super`'s metadata already names, at 512-byte sectors,
-without rebuilding the metadata. An image larger than its extents is refused.
+each backup image into the extents `super`'s metadata already names, without rebuilding the
+metadata. An image larger than its extents is refused.
 
-Usage: edl-extents.py --lpdump DUMP.txt --super-sector S --images DIR --out PLAN.sh
-  S = first sector of the `super` GPT partition (edl printgpt), so `ws` offsets are absolute.
+Two sector sizes meet here and the plan converts between them:
+
+    lpdump extents      512-byte sectors, relative to the start of `super`   (liblp fixed)
+    edl ws <sector>     device sectors, 4096 on UFS (`--memory=ufs`), absolute
+
+Usage: edl-extents.py --lpdump DUMP.txt --super-offset BYTES --images DIR --out PLAN.sh
+  BYTES = `Offset` of `super` in `edl printgpt` (already in bytes). An extent that does not
+  start on a device sector is refused rather than rounded.
 """
 import argparse
 import os
 import re
 import sys
 
-SECTOR = 512
+LP_SECTOR = 512          # liblp always describes extents in 512-byte sectors
+UFS_SECTOR = 4096        # what `edl --memory=ufs` means by a sector
 IMAGES = ("system", "system_ext", "product", "vendor")
 
 
@@ -37,7 +44,8 @@ def parse(text):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--lpdump", required=True)
-    ap.add_argument("--super-sector", type=int, required=True)
+    ap.add_argument("--super-offset", type=int, required=True, help="byte offset of super (printgpt Offset)")
+    ap.add_argument("--sectorsize", type=int, default=UFS_SECTOR, help="device sector size edl ws uses")
     ap.add_argument("--images", required=True)
     ap.add_argument("--slot", default="b")
     ap.add_argument("--out", required=True)
@@ -54,17 +62,25 @@ def main():
             continue
         size = os.path.getsize(img)
         extents = parts[name]
-        capacity = sum(n for _, n in extents) * SECTOR
+        capacity = sum(n for _, n in extents) * LP_SECTOR
         if size > capacity:
             sys.exit(f"{name}: image {size} bytes > extents {capacity} bytes; refuse")
         offset = 0
         for i, (phys, nsect) in enumerate(extents):
-            chunk = min(nsect * SECTOR, size - offset)
+            chunk = min(nsect * LP_SECTOR, size - offset)
             if chunk <= 0:
                 break
+
+            # Absolute device sector of this extent: super's byte offset plus the 512-byte
+            # extent offset, divided by the device sector size. Must divide exactly.
+            start_bytes = a.super_offset + phys * LP_SECTOR
+            if start_bytes % a.sectorsize:
+                sys.exit(f"{name} extent {i}: byte {start_bytes} is not on a {a.sectorsize}-byte sector; refuse")
+            start = start_bytes // a.sectorsize
+
             piece = f"{p}.part{i}.img"
             lines.append(f"dd if={img} of={piece} bs=4M iflag=skip_bytes,count_bytes skip={offset} count={chunk} status=none")
-            lines.append(f"$EDL ws {a.super_sector + phys} {piece}   # {name} extent {i}: {chunk} bytes")
+            lines.append(f"$EDL ws {start} {piece}   # {name} extent {i}: {chunk} bytes")
             offset += chunk
         print(f"{name}: {size} bytes into {len(extents)} extent(s), capacity {capacity}", file=sys.stderr)
     open(a.out, "w").write("\n".join(lines) + "\n")
