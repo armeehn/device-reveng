@@ -9,6 +9,18 @@ has `edl` (bkerler) with the unit's loader. Everything below is from the laptop.
                                                │ r super → lpdump → edl-extents.py → ws …          (logical partitions, by extent)
                                                └ reset ──► boots the restored slot
 
+## One command
+
+```
+cd ~/rav4-headunit/edl
+bash edl-restore.sh --backup ~/rav4-headunit/backup-20260915-093543_b --yes
+```
+`edl-restore.sh` (this directory, copied from `os/`) does steps 0–3 below in order, verifies the
+backup's SHA256SUMS first, writes nothing until the GPT has been read, and logs to
+`restore-<timestamp>/restore.log`. `--no-reset` to stop before the reboot, `--full-super` to
+keep a full copy of the broken `super` first (6 GB, minutes). If it stops at "no GPT read", the
+loader upload was refused: press RST and run it again. The steps by hand:
+
 ## 0. Loader
 
 HWID `0x001750e1`, PK hash `d40eee56f3194665…` (Qualcomm's generic key): bkerler `Loaders/qualcomm/
@@ -18,7 +30,7 @@ enumeration: after any failed attempt press RST again before retrying.
 ```
 cd ~/rav4-headunit/edl/src
 E="../venv/bin/python edl.py --memory=ufs --loader=../prog_firehose_qcm6125.bin"
-$E printgpt | tee ../gpt.txt            # note the LUN and first sector of `super`, and of boot_b etc.
+$E printgpt | tee ../gpt.txt            # note the byte Offset of `super`, and that boot_b etc. exist
 ```
 
 ## 1. Physical partitions, straight from the backup
@@ -33,17 +45,20 @@ leave them.
 ## 2. Logical partitions, into super's existing extents
 
 ```
-$E r super ../super-current.img          # ~6 GB, minutes; keep it, it is a second backup of the broken state
-lpdump ../super-current.img > ../lpdump.txt
-python3 edl-extents.py --lpdump ../lpdump.txt --super-sector <first sector of super from gpt.txt> \
+$E rs <super sector> 4096 ../super-meta.img   # super Offset / 4096, then 16 MiB: what lpdump needs
+lpdump ../super-meta.img > ../lpdump.txt
+python3 edl-extents.py --lpdump ../lpdump.txt --super-offset <super Offset from gpt.txt, bytes> \
         --images $B --out ../restore-plan.sh
 cat ../restore-plan.sh                   # read it: one dd + one ws per extent, sizes checked
 bash ../restore-plan.sh
 ```
-The backup images are smaller than the resized partitions the failed flash left behind; the
-filesystem size inside the image is what mounts, the extra extent space is ignored. If
-`edl-extents.py` refuses (image larger than extents), rebuild super with `lpmake` instead using
-the geometry in `lpdump.txt` — not needed for a backup restore.
+Two sector sizes meet here: lpdump counts 512-byte sectors from the start of `super`, `edl ws`
+on UFS counts 4096-byte sectors from the start of the disk. `edl-extents.py` converts and refuses
+an extent that does not start on a device sector (`test-edl-extents.sh` pins this). The backup
+images are smaller than the resized partitions the failed flash left behind; the filesystem
+size inside the image is what mounts, the extra extent space is ignored. If `edl-extents.py`
+refuses (image larger than extents), rebuild super with `lpmake` instead using the geometry in
+`lpdump.txt` — not needed for a backup restore.
 
 ## 3. Reset and watch
 

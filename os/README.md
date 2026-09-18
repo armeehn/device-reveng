@@ -40,6 +40,9 @@ serial link behind a public API, and the framework check closed the last unknown
 | `test-fixture.sh` | x, as root | Builds a synthetic base (ext4 system with labels, erofs product with OEM package names) and runs build + check + a negative control. `FIXTURE PASS` is the gate for changes here. |
 | `magisk-patch.sh` | build host | Magisk-patches a boot image on the desk with the Magisk APK's own `magiskboot` + `boot_patch.sh` (same kernel, root in the ramdisk); `build.sh --boot` takes the result. |
 | `flash.sh` | laptop at the car | fastbootd to the **inactive** slot, `set_active`, reboot. Dry-run unless `--yes`. Rollback is one `fastboot set_active`. |
+| `edl-restore.sh` | laptop at the car | Restores a slot backup over EDL in one go: verifies SHA256SUMS, reads the GPT, writes boot/dtbo/vbmeta/vbmeta_system, reads super's metadata, writes each logical image into its existing extents, resets. `EDL_RESTORE.md` has the steps by hand. |
+| `edl-extents.py` | laptop at the car | Turns an `lpdump` listing into `edl ws` writes, converting liblp's 512-byte sectors to the device's 4096-byte sectors. |
+| `test-edl-extents.sh`, `test-edl-restore.sh` | anywhere | Host-only tests of the two above against a stubbed `edl` (CI: `os-ci.yml`). |
 
 ```
 os/build.sh --base share/carlauncher/os/base --apps APPS --out share/carlauncher/os/0.1 --profile tier2
