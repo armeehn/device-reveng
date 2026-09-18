@@ -57,12 +57,12 @@ done
 run "${FB[@]}" flash "boot_$TARGET" "$IMAGES/boot.img"         # Magisk-patched if the base came off the unit; stock if from an OTA
 [ -f "$IMAGES/dtbo.img" ] && run "${FB[@]}" flash "dtbo_$TARGET" "$IMAGES/dtbo.img"
 # fastboot's own --disable-verification refused this vbmeta ("AVB_MAGIC at offset 0"); patch the
-# flags ourselves and flash plain.
+# flag ourselves (HASHTREE_DISABLED only: see vbmeta-disable.py, the panel config rides on the
+# verification path) and flash plain. Only the top-level vbmeta may carry flags, so
+# vbmeta_system goes verbatim.
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
-for v in vbmeta vbmeta_system; do
-  [ -f "$IMAGES/$v.img" ] || continue
-  python3 "$(dirname "$0")/vbmeta-disable.py" "$IMAGES/$v.img" "$TMP/$v.img" >/dev/null
-  run "${FB[@]}" flash "${v}_$TARGET" "$TMP/$v.img"
-done
+python3 "$(dirname "$0")/vbmeta-disable.py" "$IMAGES/vbmeta.img" "$TMP/vbmeta.img" >/dev/null
+run "${FB[@]}" flash "vbmeta_$TARGET" "$TMP/vbmeta.img"
+[ -f "$IMAGES/vbmeta_system.img" ] && run "${FB[@]}" flash "vbmeta_system_$TARGET" "$IMAGES/vbmeta_system.img"
 run "${FB[@]}" reboot
 echo "rollback: the same script with --images <backup dir>"
