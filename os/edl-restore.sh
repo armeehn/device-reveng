@@ -47,8 +47,10 @@ WORK=${WORK:-$EDL_DIR/restore-$(date +%Y%m%d-%H%M%S)}
 mkdir -p "$WORK"
 LOG=$WORK/restore.log
 LOADER=$EDL_DIR/prog_firehose_qcm6125.bin
-# EDL_CMD lets the test stub the tool; the real one runs from src/ so relative paths resolve.
-EDL_CMD=${EDL_CMD:-"$EDL_DIR/venv/bin/python $EDL_DIR/src/edl.py --memory=ufs --loader=$LOADER"}
+# EDL_BIN/EDL_CMD let the test stub the tool. `reset` takes no --memory (edl.py's docopt refuses
+# the whole call and prints usage), so it goes through EDL_BIN with the loader only.
+EDL_BIN=${EDL_BIN:-"$EDL_DIR/venv/bin/python $EDL_DIR/src/edl.py"}
+EDL_CMD=${EDL_CMD:-"$EDL_BIN --memory=ufs --loader=$LOADER"}
 
 log() { echo "$(date +%T) $*" | tee -a "$LOG"; }
 edl() { log "edl $*"; $EDL_CMD "$@" 2>&1 | { grep -v RuntimeWarning || true; } | tee -a "$LOG"; }
@@ -93,8 +95,11 @@ python3 "$HERE/edl-extents.py" --lpdump "$WORK/lpdump.txt" --super-offset "$SUPE
 log "plan: $(grep -c ' ws ' "$WORK/plan.sh") extent writes"
 (cd "$WORK" && EDL="$EDL_CMD" bash plan.sh 2>&1 | { grep -v RuntimeWarning || true; } | tee -a "$LOG")
 
-# 4. Reboot into the restored slot.
+# 4. Reboot into the restored slot. A refused reset leaves the unit sitting in 9008 looking
+# done, so it is fatal here.
 if [ $RESET -eq 1 ]; then
-    edl reset
+    log "edl reset"
+    $EDL_BIN reset --loader="$LOADER" 2>&1 | { grep -v RuntimeWarning || true; } | tee -a "$LOG"
+    [ "${PIPESTATUS[0]}" = 0 ] || { log "reset REFUSED: unit still in EDL, run: $EDL_BIN reset --loader=$LOADER"; exit 1; }
 fi
 log "RESTORE DONE (log: $LOG)"
