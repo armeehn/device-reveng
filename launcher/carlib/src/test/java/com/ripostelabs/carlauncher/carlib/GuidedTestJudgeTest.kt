@@ -229,6 +229,19 @@ class GuidedTestJudgeTest {
         assertEquals(GuidedTest.CATALOGUE.size, GuidedTest.CATALOGUE.map { it.key }.toSet().size)
     }
 
+    /**
+     * The parking brake search pins the brake pedal out of the action: brake pressure is a known
+     * raw-bus signal (RawCanDecoder), and a pedal press during the hold would move it and be
+     * reported as the answer. The prompt is the only thing keeping that out of the window.
+     */
+    @Test
+    fun `parking brake search keeps the pedal out of the hold`() {
+        val test = GuidedTest.CATALOGUE.first { it.key == "parking-brake" }
+        assertTrue(test.expected == null)
+        assertTrue(test.actionPrompt.contains("pedal"))
+        assertTrue(test.baselinePrompt.contains("RELEASED"))
+    }
+
     /** The instrument-proving tests must come before the searches. See CATALOGUE. */
     @Test
     fun `a confirmed test runs before the first search`() {

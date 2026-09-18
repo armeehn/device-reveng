@@ -142,6 +142,15 @@ data class GuidedTest(
                 note = "SEARCH. Never looked for. A window position is a plausible body signal " +
                     "and nothing has ruled it out.",
             ),
+            GuidedTest(
+                key = "parking-brake",
+                title = "Parking brake",
+                baselinePrompt = "Car in READY, in Park, parking brake RELEASED. Feet off both pedals.",
+                actionPrompt = "Set the parking brake and leave it set. Do not touch the brake pedal.",
+                note = "SEARCH. The head unit gets the handbrake from the MCU (71 bit 0x04); the video " +
+                    "gate rides on it. Whether the body bus carries the same state directly was never " +
+                    "looked for. A raw-bus bit would give the gate a source without the MCU.",
+            ),
         )
 
         /**
