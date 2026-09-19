@@ -31,6 +31,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
+import android.content.Context
+import android.hardware.input.InputManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
@@ -42,6 +44,7 @@ import com.ripostelabs.carlauncher.carlib.BtCarKitSnapshot
 import com.ripostelabs.carlauncher.carlib.CarService
 import com.ripostelabs.carlauncher.carlib.McuOwner
 import com.ripostelabs.carlauncher.data.CarLink
+import com.ripostelabs.carlauncher.data.TouchProxy
 import com.ripostelabs.carlauncher.data.CarSettingsController
 import com.ripostelabs.carlauncher.data.CrashLog // v0.4.3.7
 import com.ripostelabs.carlauncher.data.CrashRecord // v0.4.3.7
@@ -183,6 +186,7 @@ fun SetupDoctorScreen(
 
         VendorAppsSection(report = vendorApps, ownerActive = mcuStatus != null)
         CarLinkSection(carService = carService, mcuStatus = mcuStatus)
+        TouchSection(ownerActive = mcuStatus != null)
         BtCarKitSection(carKit = carKit)
         GatewayStateSection(controller = controller, carService = carService)
 
@@ -318,6 +322,24 @@ private fun CarLinkSection(carService: CarService?, mcuStatus: StateFlow<McuOwne
     val reading = remember(status, connected) { CarLink.read(status, connected) }
 
     SettingsSection(title = "Car link") {
+        StatusRow(ok = reading.ok, title = reading.title, detail = reading.detail)
+    }
+}
+
+/**
+ * Riposte OS 0.2: is the touch proxy's device present. The names come from InputManager once per
+ * composition; the words from [TouchProxy] so the unit test and this row agree.
+ */
+@Composable
+private fun TouchSection(ownerActive: Boolean) {
+    val context = LocalContext.current
+    val names = remember(ownerActive) {
+        val im = context.getSystemService(Context.INPUT_SERVICE) as InputManager
+        im.inputDeviceIds.toList().mapNotNull { id -> im.getInputDevice(id)?.name }
+    }
+    val reading = remember(names, ownerActive) { TouchProxy.read(ownerActive, names) }
+
+    SettingsSection(title = "Touch") {
         StatusRow(ok = reading.ok, title = reading.title, detail = reading.detail)
     }
 }
