@@ -24,6 +24,17 @@ service riposte_usbadb /system/bin/sh /system/bin/riposte-usbadb.sh
 on property:service.bootanim.exit=0
     start riposte_usbadb
 
+# Car-owner builds: the MCU serial line behind a loopback socket for McuOwner (see props).
+service riposte_mcubridge /system/bin/sh /system/bin/riposte-mcubridge.sh
+    class core
+    user root
+    group root
+    seclabel u:r:su:s0
+    disabled
+
+on boot && property:ro.riposte.os.car_owner=1
+    start riposte_mcubridge
+
 # Car-owner builds: keep /dev/zxw_io open the way eventcenter's GetTouchEvt thread does on
 # stock (EventService.java startGetTouchEvtThread). The vendor's zxw_io driver may gate the
 # touch path on an open reader; 0.2 without it never sees a touch interrupt (RAV4-84).
