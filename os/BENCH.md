@@ -20,6 +20,7 @@ loop from the laptop, and a bad boot costs a 2-minute test-point cycle instead o
 
 | State | Door | How |
 |---|---|---|
+| Booted, adb reachable, x online | `bench-cycle.sh <vcNNN>` on x | Build + ship + flash in one command (see README) |
 | Booted, adb reachable | fastbootd | `adb reboot fastboot`, then `fastboot-flash-set.sh DIR [wipe]` |
 | Booted, no adb | none | 0.1 keeps the port in host mode after boot; 0.2 built with `--bench` keeps adb on it |
 | Anything else | EDL | test point, then `edl-write-set.sh DIR SUPER` (with `mksuper.sh` first) |

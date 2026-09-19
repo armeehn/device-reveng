@@ -45,6 +45,7 @@ serial link behind a public API, and the framework check closed the last unknown
 | `test-edl-extents.sh`, `test-edl-restore.sh` | anywhere | Host-only tests of the two above against a stubbed `edl` (CI: `os-ci.yml`). |
 | `mksuper.sh` | laptop at the bench | Builds a full `super` image for any image set with the unit's own geometry (6 GiB, virtual A/B), for `edl-write-set.sh` when images no longer fit the extents the last flash left. |
 | `edl-write-set.sh` | laptop at the bench | Writes super + boot/dtbo/vbmeta over EDL from 9008, `WIPE=1` erases userdata, then resets. |
+| `bench-cycle.sh` | x, as root | One 0.2 bench iteration: release launcher from launcher.hq (checksum verified), `build.sh --profile gsi --bench`, rsync to the laptop, `fastboot-flash-set.sh`. `bench-cycle.sh vc461`, `--wipe` when crossing 0.1 <-> 0.2. |
 | `fastboot-flash-set.sh` | laptop at the bench | Flashes an image set in place from fastbootd, shrinking the logical partitions first; `wipe` erases userdata. `BENCH.md` has the wiring, the doors and the rules. |
 
 ```
