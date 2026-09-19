@@ -52,13 +52,15 @@ chown -R sasha:smbshare "$OUT" 2>/dev/null || true
 # 3. ship to the bench laptop, then flash from fastbootd
 FLASH_ARGS="~/rav4-headunit/os/0.2-bench"
 [ "$WIPE" = --wipe ] && FLASH_ARGS="$FLASH_ARGS wipe"
+# The remote shell is bash: pipefail so a flash that fails behind the tail still fails here.
+# A failed write leaves the unit in fastbootd with a half-written slot; never reboot it, rerun.
 ssh -o BatchMode=yes "$BENCH_HOST" "
-  set -e
+  set -eo pipefail
   rsync -a --delete $SHARE_HOST:$OUT/ ~/rav4-headunit/os/0.2-bench/
   cd ~/rav4-headunit/os/0.2-bench && sha256sum -c --quiet SHA256SUMS && echo '[bench] on the laptop: SUMS-OK'
   adb -s $BENCH_SERIAL reboot fastboot
   for i in \$(seq 1 24); do sleep 5; lsusb | grep -q '$FASTBOOTD_USB_ID' && break; done
   lsusb | grep -q '$FASTBOOTD_USB_ID' || { echo '[bench] ERROR: fastbootd never enumerated'; exit 1; }
-  bash ~/rav4-headunit/os/fastboot-flash-set.sh $FLASH_ARGS 2>&1 | tail -3
-"
+  bash ~/rav4-headunit/os/fastboot-flash-set.sh $FLASH_ARGS 2>&1 | grep -v '^Sending\|^Writing' | tail -12
+" || die "flash failed: the unit is still in fastbootd, rerun fastboot-flash-set.sh there (BENCH.md)"
 log "flashed $VC; the unit is booting"
