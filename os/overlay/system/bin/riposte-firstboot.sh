@@ -13,6 +13,14 @@ settings put system screen_off_timeout 2147483647
 # ... and has no lock screen: AOSP booted 0.2 into a keyguard with "No SIM" over the launcher.
 locksettings set-disabled true
 settings put secure lockscreen.disabled 1
+# What Setup Doctor would otherwise ask the owner to grant over adb: the runtime permissions
+# and notification listeners a reinstall drops. Root here, so the first boot reads 7 of 7.
+pm grant "$LAUNCHER" android.permission.ACCESS_FINE_LOCATION
+pm grant "$LAUNCHER" android.permission.BLUETOOTH_CONNECT
+appops set "$LAUNCHER" WRITE_SETTINGS allow
+for listener in media.MediaListenerService nav.NavListenerService notif.ShelfListenerService; do
+  cmd notification allow_listener "$LAUNCHER/$LAUNCHER.$listener"
+done
 # Gesture navigation: swipe up is HOME, an edge swipe is BACK, only a pill on screen. The
 # fascia keys cannot leave a foreign app on the owner path, so this is the way out of Settings.
 cmd overlay enable-exclusive --category com.android.internal.systemui.navbar.gestural
