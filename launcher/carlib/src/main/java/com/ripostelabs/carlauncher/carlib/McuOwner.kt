@@ -96,6 +96,9 @@ class McuOwner(
 
         /** RX `96 01`: the MCU reports it woke (onCmdMcuSleepState, EventService.java:2270-2280). */
         fun onWake() {}
+
+        /** RX `83`: the MCU's battery-backed clock, decoded (onCmdSysRTCTimeEvt, :3041-3058). */
+        fun onRtc(time: LocalDateTime) {}
     }
 
     /** One port, several consumers: every callback goes to each of [targets], in order. */
@@ -121,6 +124,8 @@ class McuOwner(
         override fun onOther(command: McuSerial.Command) = targets.forEach { it.onOther(command) }
 
         override fun onWake() = targets.forEach { it.onWake() }
+
+        override fun onRtc(time: LocalDateTime) = targets.forEach { it.onRtc(time) }
     }
 
     sealed class Status {
@@ -410,6 +415,7 @@ class McuOwner(
         McuOwnerProtocol.panelKey(command)?.let { onPanelKey(it); return }
         McuOwnerProtocol.wheelKey(command)?.let { listener.onWheelKey(it); return }
         McuOwnerProtocol.radioEvent(command)?.let { listener.onRadio(it); return }
+        McuOwnerProtocol.rtcTime(command)?.let { listener.onRtc(it); return }
         if (McuOwnerProtocol.isWake(command)) {
             listener.onWake()
             return

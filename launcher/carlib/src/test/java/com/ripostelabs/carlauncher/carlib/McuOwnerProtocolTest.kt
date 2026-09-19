@@ -363,4 +363,19 @@ class McuOwnerProtocolTest {
         assertNull(McuOwnerProtocol.radioEvent(command(0x72, 0x03, 0x25, 0x9E)))
         assertNull(McuOwnerProtocol.radioEvent(command(0x73, 0x09, 0x01)))
     }
+    /** `83 yy MM dd HH mm ss`, year from 2000 (onCmdSysRTCTimeEvt, EventService.java:3041-3058). */
+    @Test
+    fun rtcTimeDecodesTheMcuClock() {
+        val cmd = McuSerial.Command(McuOpcode.SYS_RTC_TIME.code, bytes(26, 9, 19, 14, 5, 7))
+        assertEquals(LocalDateTime.of(2026, 9, 19, 14, 5, 7), McuOwnerProtocol.rtcTime(cmd))
+    }
+
+    /** The vendor ignores a year at or below 2018 (an unset RTC), a short body and other opcodes. */
+    @Test
+    fun rtcTimeRejectsWhatTheVendorIgnores() {
+        assertNull(McuOwnerProtocol.rtcTime(McuSerial.Command(McuOpcode.SYS_RTC_TIME.code, bytes(18, 1, 1, 0, 0, 0))))
+        assertNull(McuOwnerProtocol.rtcTime(McuSerial.Command(McuOpcode.SYS_RTC_TIME.code, bytes(26, 9, 19, 14, 5))))
+        assertNull(McuOwnerProtocol.rtcTime(McuSerial.Command(McuOpcode.SYS_RTC_TIME.code, bytes(26, 13, 1, 0, 0, 0))))
+        assertNull(McuOwnerProtocol.rtcTime(McuSerial.Command(McuOpcode.MUTE.code, bytes(26, 9, 19, 14, 5, 7))))
+    }
 }
