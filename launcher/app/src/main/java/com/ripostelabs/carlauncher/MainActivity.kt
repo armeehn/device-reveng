@@ -269,6 +269,7 @@ class MainActivity : ComponentActivity() {
                 carEvents.ownerListener(CanCaptureService.vehicle(), carService.radioState),
                 VendorBroadcastReemitter(applicationContext),
                 sysVarMirror,
+                carService.volumeState,
             )
             mcuOwner = McuOwner(
                 ownerGate,
