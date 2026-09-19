@@ -4,7 +4,7 @@ Since 2026-09-18 the GT6-EAU lives on a bench instead of the dash: every flash i
 loop from the laptop, and a bad boot costs a 2-minute test-point cycle instead of a drive.
 
 ```
- 12 V PSU (5 A) ─┬─ B+  (constant)      head unit ── 4PIN USB pigtail ── USB-A ── laptop (zero)
+ 12 V PSU (5 A) ─┬─ B+  (constant)      head unit ── 4PIN USB pigtail ── USB-A ── laptop
                  └─ ACC (tied to B+)                      │
  GND ────────────┬─ GND                                   └── Wi-Fi: adb <ip>:5555 (pinned)
                  └─ BRAKE (grounded = parked)
@@ -20,14 +20,14 @@ loop from the laptop, and a bad boot costs a 2-minute test-point cycle instead o
 
 | State | Door | How |
 |---|---|---|
-| Booted, on Wi-Fi | adb over TCP | `adb connect <unit-ip>:5555` from LXC 111 (`--bench` builds pin the port); launcher installs, logs, shell. No laptop needed. |
-| Booted, adb reachable, x online | `bench-cycle.sh <vcNNN>` on x | Build + ship + flash in one command (see README) |
+| Booted, on Wi-Fi | adb over TCP | `adb connect <unit-ip>:5555` from any host on the same network (`--bench` builds pin the port); launcher installs, logs, shell. No laptop needed. |
+| Booted, adb reachable, build host online | `bench-cycle.sh <vcNNN>` on the build host | Build + ship + flash in one command (see README) |
 | Booted, adb reachable | fastbootd | `adb reboot fastboot`, then `fastboot-flash-set.sh DIR [wipe]` |
 | Booted, no adb | none | 0.1 keeps the port in host mode after boot; 0.2 built with `--bench` keeps adb on it |
 | Anything else | EDL | test point, then `edl-write-set.sh DIR SUPER` (with `mksuper.sh` first) |
 
 Test point (vendor guide, step 4): unit unpowered, tweezers across the pads **1P8** and **B0**
-(beside RST, by the TO KB connector on the core board; photo in `share/carlauncher/os/edl/`),
+(beside RST, by the TO KB connector on the core board; photo in the workspace's `os/edl/`),
 power on with the short held, release after 5-10 s. Success: core-board LED off, backlight on,
 `05c6:9008` on the laptop within seconds. Every reset variant (RST pinhole, ACC cycle, Sahara
 reset) leaves a crashed unit in `05c6:900e`; none of them reaches 9008.

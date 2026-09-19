@@ -9,15 +9,15 @@ first step that fails; the rest is not worth the seat time.
 The unit's USB port only speaks EDL/fastboot. `adb reboot edl` (screen goes black but backlit),
 plug the USB-A-to-A cable into a USB-A port on the laptop, then `backup.sh` with
 `RAV4_UPLOAD=<rsync destination on the build host>`. Minutes, versus hours of car-on time for the
-over-the-air dump. Afterwards `os/from-edl.sh --edl <dump> --out share/carlauncher/os/base`
+over-the-air dump. Afterwards `os/from-edl.sh --edl <dump> --out <workspace>/os/base`
 produces the base directory below. Exit EDL with `edl reset` or a power cycle.
 
 ## Before leaving the desk
 
-- [ ] `share/carlauncher/os/base/` has `system.img product.img boot.img vbmeta.img` with
+- [ ] `<workspace>/os/base/` has `system.img product.img boot.img vbmeta.img` with
       `.sha256` sidecars and `BASE-INFO` (`dump-base.sh assemble` reports every partition, or
       `from-edl.sh` ran).
-- [ ] `os/build.sh --base … --profile tier2` and `os/check.sh` PASS → `share/carlauncher/os/0.1/`.
+- [ ] `os/build.sh --base … --profile tier2` and `os/check.sh` PASS → `<workspace>/os/0.1/`.
 - [ ] `os/flash.sh --images <0.1 dir> --adb <ip:5555>` dry run prints the plan; note the target slot.
 - [ ] Laptop has `adb` + `fastboot` ≥ 34 and can `adb connect` the unit.
 
@@ -45,7 +45,7 @@ unit's own `boot_<slot>` from an adb dump.
 - The unit resets only from the RST pinhole. `05c6:900e` = crash dump; after RST `05c6:9008` =
   EDL, and the public QCM6125 generic-key loader authenticates (`os/edl/` on the share).
 
-## Step 1: flash in place (RAV4-82)
+## Step 1: flash in place
 
 ```
 os/flash.sh --images <0.1 dir> --adb <ip:5555> --yes        # in place on the running slot
@@ -75,7 +75,7 @@ Proves: a re-mastered stock system loses nothing. Undo: as step 1.
 `fastboot set_active <old>` → boots stock → `set_active <new>` → boots 0.1.
 Proves: the daily driver is one command away either way. Do not skip this.
 
-## Step 4: first bytes on the port (RAV4-83, still on 0.1)
+## Step 4: first bytes on the port (still on 0.1)
 
 `McuOwner` must NOT run here (eventcenter owns the port; the gate refuses). Instead:
 ```
@@ -84,7 +84,7 @@ adb logcat -d | grep -c McuOwner                      # expect 0
 ```
 Proves: the gate holds on a stock-derived slot.
 
-## Step 5: 0.2 on the same inactive slot (RAV4-84)
+## Step 5: 0.2 on the same inactive slot
 
 Build with `--profile gsi --system …/gsi/system-td-arm64-ab-vanilla.img.xz`, flash as step 1.
 Expect: AOSP 14 boots (up to 5 min first time), CarLauncher HOME, `McuOwner` status Running
@@ -99,7 +99,7 @@ in Setup Doctor / logcat with `acked=true`.
 | Headlamps | Night theme | |
 | Radio seek | Audio changes | The MCU may need the config blocks `startup()` omits |
 | Wi-Fi, BT pairing, audio out | Work (vendor HALs) | |
-| Setup Doctor → Bluetooth car-kit | `HFP client on, A2DP sink on, AVRCP controller on` | `OFF`: `getprop bluetooth.profile.hfp.hf.enabled` must print `true`; else the props did not land |
+| Setup Doctor → Bluetooth car-kit | `HFP client on, A2DP sink on, AVRCP controller on` | `OFF`: `getprop bluetooth.profile.hfp.hf.enabled` must print `true`; else the props did not apply |
 | Pair a phone | Doctor row names it; Phone screen `Connected`; phone shows the unit as a car kit | Phone offers no call audio: class of device / HF record missing, `dumpsys bluetooth_manager` |
 | Play music on the phone | Sound from the amp; now-playing card shows the track | Card but no sound: the vendor audio HAL does not route the sink track (needs a routing fix) |
 | Call the phone | Phone screen `Incoming call`, Answer / Hang up act, audio on the car | Buttons inert: `logcat -s BtCarKit` for the HF call control failure |
@@ -110,4 +110,4 @@ list of what the MCU does without the vendor's config frames.
 ## After
 
 - Journal entry with the table filled in, frame counts, and every "if not" that fired.
-- `share/carlauncher/os/<version>/RESULT.md` next to the images that were flashed.
+- `<workspace>/os/<version>/RESULT.md` next to the images that were flashed.
