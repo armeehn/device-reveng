@@ -45,7 +45,18 @@ service riposte_zxwio /system/bin/sh /system/bin/riposte-zxwio.sh
     seclabel u:r:su:s0
     disabled
 
+# The touch chip boots on its own portrait config; the driver's landscape table has to be
+# sent to it once (riposte-gt9cfg.sh). Without it every touch lands in the left third.
+service riposte_gt9cfg /system/bin/sh /system/bin/riposte-gt9cfg.sh
+    class core
+    user root
+    group root
+    seclabel u:r:su:s0
+    disabled
+    oneshot
+
 on property:sys.boot_completed=1 && property:ro.riposte.os.car_owner=1
+    start riposte_gt9cfg
     start riposte_zxwio
 
 # ro.riposte.os.bench=1 only: take the port back after the vendor's boot_completed host write.

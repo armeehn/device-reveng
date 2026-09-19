@@ -28,3 +28,5 @@ jobs:
         run: os/test-edl-restore.sh
       - name: vbmeta-flags
         run: os/test-vbmeta-flags.sh
+      - name: gt9cfg
+        run: os/test-gt9cfg.sh
