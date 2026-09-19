@@ -1,6 +1,6 @@
 # Project status
 
-_Last updated: 2026-09-09. Unit: Choiceway/AiNavi **GT6-EAU**, Qualcomm **QCM6125**, Android 13, in a 2019 Toyota RAV4 (XA50)._
+_Last updated: 2026-09-19. Unit: Choiceway/AiNavi **GT6-EAU**, Qualcomm **QCM6125**, Android 13 stock, in a 2019 Toyota RAV4 (XA50); on a bench since 2026-09-18._
 
 ## Done
 
@@ -10,6 +10,15 @@ _Last updated: 2026-09-09. Unit: Choiceway/AiNavi **GT6-EAU**, Qualcomm **QCM612
 - **Rooted** with Magisk 30.7 (TWRP `fastboot boot` → install). Boots clean.
 - **Recovery proven**: the EDL loader authenticates; fastboot works over the 4PIN USB port.
 - **Reverse-camera lag fixed**: root cause was XS9922B signal auto-detection; pinning the rear signal format stops the reset loop ([FINDINGS.md](FINDINGS.md)).
+
+## Riposte OS (`os/`)
+
+- **0.1** (stock Android 13 re-mastered, our apps beside the OEM ones) boots on the unit.
+- **0.2** (AOSP 14 GSI, no OEM app, our own MCU owner) runs on the bench: boot, touch,
+  gesture navigation, Wi-Fi, radio tune and seek on the real MCU, volume from the MCU,
+  Bluetooth car-kit profiles, all 28 suite apps launching clean, Setup Doctor green.
+- Waiting for the car: reverse camera, wheel keys, headlamps, a paired phone.
+- Details, pipeline and the bench tools: [`os/README.md`](os/README.md).
 
 ## Key facts
 
