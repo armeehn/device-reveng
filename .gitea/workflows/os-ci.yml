@@ -1,4 +1,5 @@
-# Host-side checks for the Riposte OS tooling in os/: no device, no images, python3 + bash only.
+# Host-side checks for the Riposte OS tooling in os/: no device, no images, python3 + bash,
+# plus xxd for the touch-config test (toybox has it on the unit).
 name: os-ci
 
 on:
@@ -29,4 +30,6 @@ jobs:
       - name: vbmeta-flags
         run: os/test-vbmeta-flags.sh
       - name: gt9cfg
-        run: os/test-gt9cfg.sh
+        run: |
+          command -v xxd >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq xxd; }
+          os/test-gt9cfg.sh
