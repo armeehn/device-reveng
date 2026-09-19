@@ -21,7 +21,7 @@ loop from the laptop, and a bad boot costs a 2-minute test-point cycle instead o
 | State | Door | How |
 |---|---|---|
 | Booted, adb reachable | fastbootd | `adb reboot fastboot`, then `fastboot-flash-set.sh DIR [wipe]` |
-| Booted, no adb | none | 0.1 keeps the port in host mode after boot; 0.2 bench builds keep adb on it |
+| Booted, no adb | none | 0.1 keeps the port in host mode after boot; 0.2 built with `--bench` keeps adb on it |
 | Anything else | EDL | test point, then `edl-write-set.sh DIR SUPER` (with `mksuper.sh` first) |
 
 Test point (vendor guide, step 4): unit unpowered, tweezers across the pads **1P8** and **B0**
