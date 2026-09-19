@@ -187,7 +187,7 @@ its `/vendor` partition provides.
 | [`can-integration/`](can-integration/) | CANable / LIN tapping plans and decoders |
 | [`boot-speed/BOOT_SPEED.md`](boot-speed/BOOT_SPEED.md) | Cold-boot measurement and tuning |
 | [`FINDINGS.md`](FINDINGS.md), [`STATUS.md`](STATUS.md) | Raw findings, live status |
-| `backup.sh`, `root.sh`, `debloat.sh`, `camera-diag.sh` | Runbook scripts |
+| `recon.sh`, `backup.sh`, `root.sh`, `debloat.sh`, `camera-diag.sh`, `analyze-capture.sh` | Runbook scripts, in the order they were used: identify the unit, back it up, root it, debloat, diagnose the camera |
 
 The runbook scripts expect the vendor files (Firehose loader, TWRP image, Magisk) in a
 workspace directory, `~/rav4-headunit` by default:
