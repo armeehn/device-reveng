@@ -435,11 +435,49 @@ object BuiltInThemes {
         ),
     )
 
+    /**
+     * "Riposte Ink" — the two-ink briefing look of ripostelabs.xyz (site.css, 2026-09):
+     * Ink #1D1A17 and Bone #F6F1E7 and nothing else. No accent trio: `accent2`/`accent3`
+     * are left unset so every accent slot falls back to the primary, which *is* the ink.
+     * A selected chip is therefore ink with bone text by day, and the reverse by night,
+     * exactly as `.chip` / `.dark .chip` render on the site. Dim text is the ink at the
+     * site's `.dim`/`.tag` opacity (~0.7), pre-composited so the value stays opaque.
+     *
+     * Night keeps the dimmed-bone night-driving rule of [RIPOSTE]. `error` is the one
+     * colour kept: a car UI must show a fault as red even when the brand shows none.
+     */
+    val RIPOSTE_INK = CarTheme(
+        id = "builtin.riposte_ink",
+        name = "Riposte Ink",
+        isBuiltIn = true,
+        style = ThemeStyle(cornerScale = 0f, monoType = true, hardEdge = true, themedIcons = true),
+        day = ThemeColors(
+            background = 0xFFF6F1E7, // Bone
+            surface = 0xFFF6F1E7, // cards are bone too — the 2dp ink rule separates
+            surfaceVariant = 0xFFEAE4D6, // Bone Dim (recessed panels)
+            primary = 0xFF1D1A17, // Ink — the only accent
+            onBackground = 0xFF1D1A17,
+            onSurface = 0xFF1D1A17,
+            onSurfaceMuted = 0xFF5E5A55, // Ink at 0.7 over bone
+            error = 0xFFB3261E,
+        ),
+        night = ThemeColors(
+            background = 0xFF14110E, // ink field, dimmed below brand Ink for night
+            surface = 0xFF1D1A17, // Ink
+            surfaceVariant = 0xFF241F1B, // Ink Raised
+            primary = 0xFFCFC7B8, // dimmed bone — the only accent
+            onBackground = 0xFFCFC7B8,
+            onSurface = 0xFFCFC7B8,
+            onSurfaceMuted = 0xFF8A8172, // dimmed bone at 0.7 over ink
+            error = 0xFFCC4A44,
+        ),
+    )
+
     val DEFAULT: CarTheme = MIDNIGHT
 
     val ALL: List<CarTheme> = listOf(
         MIDNIGHT, DAYLIGHT, AMBER,
         CATPPUCCIN, GRUVBOX, NORD, TOKYO_NIGHT, DRACULA, ROSE_PINE, PHOSPHOR,
-        RIPOSTE,
+        RIPOSTE, RIPOSTE_INK,
     )
 }

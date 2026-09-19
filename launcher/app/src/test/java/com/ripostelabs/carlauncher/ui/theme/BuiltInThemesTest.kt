@@ -85,6 +85,22 @@ class BuiltInThemesTest {
     }
 
     @Test
+    fun riposteInkIsTwoInks() {
+        // ripostelabs.xyz (2026-09) is ink and bone with no colour. The car preset keeps
+        // that: no accent trio, and the primary is the text ink on both variants, so a
+        // selected chip is the inverse of the page rather than a third colour.
+        val theme = BuiltInThemes.RIPOSTE_INK
+
+        assertEquals(BuiltInThemes.RIPOSTE.style, theme.style)
+        listOf(theme.day, theme.night).forEach { c ->
+            assertEquals(0L, c.accent2)
+            assertEquals(0L, c.accent3)
+            assertEquals(c.onBackground, c.primary)
+            assertEquals(c.onBackground, c.onSurface)
+        }
+    }
+
+    @Test
     fun riposteCarriesBrandStyle() {
         // RL-BRAND-001: radius 0, JetBrains Mono, hard offset shadows. The brand theme is the
         // one preset whose style is load-bearing rather than taste.
