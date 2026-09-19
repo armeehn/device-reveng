@@ -35,11 +35,10 @@ code) or **[inferred]** (deduced, not directly provable from the files we have).
 | Be the **HOME launcher** | Normal `<category HOME/DEFAULT>` activity | normal app OK; system app for privileged widgets |
 
 **Big caveat for launchers:** the stock launcher `com.szchoiceway.customerui` and the gateway both
-run as `android.uid.system`. A **normal** third-party launcher can receive every broadcast below and
-read the provider, but **cannot** hold `android.uid.system`, so a few things (writing SysVar,
-binding some privileged flows, `WRITE_SECURE_SETTINGS`) will need the launcher to be installed as a
-**privileged/system app** (push to `/system/priv-app` + platform signature) — feasible because the
-device is rooted. See §6.
+run as `android.uid.system`. A **normal** third-party launcher can receive every broadcast below and read the provider, but
+**cannot** hold `android.uid.system`. A few things (writing SysVar, binding some privileged
+flows, `WRITE_SECURE_SETTINGS`) need the launcher installed as a **privileged/system app**
+(`/system/priv-app` plus a platform signature), which the rooted device allows. See §6.
 
 ---
 
@@ -318,10 +317,10 @@ bindService(i, conn, BIND_AUTO_CREATE);
 | **Power / system** | `sendSoftWareReboot()`, `sendSystemReset()`, `setSystemBrightness()`, `openTVout(int,boolean)`, camera/upgrade APIs |
 | **Listener** | `addMessageListener(ICommunication)` |
 
-**`sendRadioKey(int)` values** (from the vendor radio app's key handlers; the gateway sends
-the int untouched as MCU frame `{0x02, key}`): 1–6 recall preset N, 7–12 store preset N,
-13 preset scan, 14/15 step down/up, 16/17 seek down/up, 18 auto-store (AMS), 19 stereo/mono,
-20 DX/LOC, 30 band FM, 31 band AM. `sendUserFreq(int freq, boolean fm)` → `{0x0C, hi, lo,
+**`sendRadioKey(int)` values**, from the vendor radio app's key handlers; the gateway sends the
+int untouched as MCU frame `{0x02, key}`. Keys: 1–6 recall preset N, 7–12 store preset N, 13
+preset scan, 14/15 step down/up, 16/17 seek down/up, 18 auto-store (AMS), 19 stereo/mono, 20
+DX/LOC, 30 band FM, 31 band AM. `sendUserFreq(int freq, boolean fm)` → `{0x0C, hi, lo,
 fm ? 0 : 1}`, freq in the units `getRadioFreq()` reports. Claiming tuner audio is
 `setCurModeCallback(1, cb)` + `setRadioCallback(cb)` + `sendMode(1, wait)` (`eSrcMode.SRC_RADIO`
 = 1); the boolean means "wait for the MCU's ACK, frame 0x70" (`EventService.java:3933-3958`), so

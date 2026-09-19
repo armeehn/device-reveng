@@ -273,8 +273,7 @@ GSI and cannot be cleanly restored**. Its settings backbone `SysVarProvider` run
 `android.uid.system` under Choiceway's platform key, which no AOSP-signed GSI can satisfy, and
 we do not hold that private key. A full AOSP/Lineage
 port is months of expert work with no vendor source and is not realistic. The rational path at the time of writing was **stay on stock + Magisk**: root already delivers
-the debloat, tuning, Play Integrity and camera-fix wins people chase custom ROMs for. A GSI was
-a **reversible curiosity**: with the A/B layout and the full EDL backup you can flash a 14 GSI
-to a slot, watch it boot into a car-less tablet, and roll back in minutes with `fastboot
-set_active` or an EDL restore. Riposte OS 0.2 is what that curiosity became once the car layer
+the debloat, tuning, Play Integrity and camera-fix wins people chase custom ROMs for. A GSI was a **reversible curiosity**. With the A/B layout and the full EDL backup you can flash
+a 14 GSI to a slot, watch it boot into a car-less tablet, and roll back in minutes with
+`fastboot set_active` or an EDL restore. Riposte OS 0.2 is what that curiosity became once the car layer
 was rewritten (see the outcome note at the top).

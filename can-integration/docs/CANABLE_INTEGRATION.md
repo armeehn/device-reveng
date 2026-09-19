@@ -124,7 +124,7 @@ val source = CanCaptureService.shared(context)
 ```
 
 **One reader per process.** Two claims on the same bulk endpoint split the byte stream between
-them; that mistake was already made once on this project against the vendor MCU serial port, so
+them. That mistake was already made once on this project against the vendor MCU serial port, so
 the screen observes the service's instance rather than creating its own.
 
 Merge policy today: the raw bus is higher fidelity, so `applyHiworld` only fills fields the raw path

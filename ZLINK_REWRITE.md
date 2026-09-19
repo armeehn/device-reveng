@@ -1,11 +1,11 @@
 # Replacing `com.zjinnova.zlink` — specification from static analysis
 
 _Unit: Choiceway GT6-EAU, Qualcomm QCM6125 (`ro.board.platform=trinket`), Android 13, rooted.
-Subject: ZLink 5.4.62 (`versionCode 50462`), `/system/priv-app/zlink5/zlink5.apk`. Read-only inputs: the
-APK (manifest, resources, assets, 53 armeabi-v7a `.so`), the jadx decompile (13 stub classes; the DEX is
-SecShell-packed), the vendor decompiles that talk to it, one `getprop`/logcat capture from the unit._
-_Builds on `ZLINK_NATIVE_ANALYSIS.md` (library inventory, JNI table), `OEM_SYSTEM.md` §com.zjinnova.zlink
-(the gateway bridge) and `CARPLAY.md`. Not repeated here._
+Subject: ZLink 5.4.62 (`versionCode 50462`), `/system/priv-app/zlink5/zlink5.apk`. Read-only inputs: the APK (manifest, resources, assets, 53 armeabi-v7a `.so`), the jadx
+decompile (13 stub classes; the DEX is SecShell-packed), the vendor decompiles that talk to it,
+and one `getprop`/logcat capture from the unit._ _Builds on `ZLINK_NATIVE_ANALYSIS.md` (library
+inventory, JNI table), `OEM_SYSTEM.md` §com.zjinnova.zlink (the gateway bridge) and
+`CARPLAY.md`. Not repeated here._
 
 **Legend:** `[confirmed]` string/manifest/decompile/getprop evidence cited inline. `[inferred]` reasoned
 from that evidence. `[unknown]` needs the memory-dumped DEX or the kernel tree. Evidence is `lib:line` into

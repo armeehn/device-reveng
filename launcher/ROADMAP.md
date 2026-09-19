@@ -14,10 +14,10 @@ builds are meant to go on-device as the home launcher. CI builds every PR.
 
 ## Versioning — nothing to bump
 
-Both fields are derived from git in `app/build.gradle.kts` at build time: `versionCode` is
-the commit count at the merge-base with `origin/main` (each squash-merge raises it by one,
-so it is monotonic by construction), `versionName` is the bare base (`0.7`, shown as
-`0.7 (<versionCode>)` wherever a build is identified). `1.0.0` is
+Both fields are derived from git in `app/build.gradle.kts` at build time. `versionCode` is the
+commit count at the merge-base with `origin/main`; each squash-merge raises it by one, so it is
+monotonic by construction. `versionName` is the bare base (`0.7`, shown as `0.7
+(<versionCode>)` wherever a build is identified). `1.0.0` is
 reserved for the polished public release; only a deliberate milestone commit changes the
 base. **No PR touches a version line** — hand-claimed versionCodes made every squash-merge
 conflict every open sibling PR, and duplicates got claimed anyway.
@@ -95,9 +95,9 @@ now named by the base it ships, and the section below is the last one carrying a
 
 **Every item in this section is on `main`, verified by reading the code at `7cc818d`,
 not by the presence of a branch with the right name** (squash-merges leave branches behind, so
-`git branch --merged` says nothing here). Kept in full rather than deleted: each one records a
-decision, and two of them record a rule — an indicator with no source disappears, and a guessed
-decode is never written to the vehicle — that the next feature has to keep.
+`git branch --merged` says nothing here). Kept in full rather than deleted: each one records a decision. Two of them record a rule the
+next feature has to keep: an indicator with no source disappears, and a guessed decode is never
+written to the vehicle.
 
 The previous revision left this deliberately empty pending a week of daily driving. That week
 has not happened, but a full audit of the shipped code has, and it found enough real work to
@@ -174,10 +174,9 @@ port rotates on every reboot, so a crash on the road currently leaves no evidenc
   absent; `SIGNING.md` is the procedure. No key is committed.
 - ~~**No screenshot suite and no instrumented test of any kind.**~~ **DONE, twice.** The Compose
   suite in `app/src/androidTest` has pinned the status indicators since 2026-08-28, and PR #108
-  added a JVM half that runs in `./gradlew test` on every push with no emulator. Both assert the
-  *rule* — exactly the chips whose source answers are visible, the rest absent by whole-set
-  equality — because on an emulator there is no root, no vendor service and no car, so the
-  brightness and volume chips are *legitimately* missing. Making every chip render
+  added a JVM half that runs in `./gradlew test` on every push with no emulator. Both assert the *rule*: exactly the chips whose source answers are visible, the rest absent by
+whole-set equality. On an emulator there is no root, no vendor service and no car, so the
+brightness and volume chips are *legitimately* missing. Making every chip render
   unconditionally is the one "fix" that would destroy the property the invariant protects.
 - ~~**CI renders at the wrong geometry.**~~ **DONE.** Both emulator jobs boot 1920x720 @240dpi
   landscape via `headunit-avd.sh` and assert the geometry before measuring. The old
@@ -205,10 +204,9 @@ launcher knows about and styles.
 Shipped in this milestone:
 
 - **The launcher publishes its active palette.** `ThemeProvider` serves the resolved day/night
-  variant as a one-row cursor on `content://com.ripostelabs.carlauncher.theme/active`. Pull-based so
-  a cold-started app is themed before its first frame rather than flashing a fallback;
-  no runtime grant, so a freshly installed app is themed without a trip to the car; observable,
-  so an app on screen re-paints on a theme switch or a night crossing. Read-only — a suite app
+  variant as a one-row cursor on `content://com.ripostelabs.carlauncher.theme/active`. Pull-based, so a cold-started app is themed before its first frame rather than flashing a
+fallback. No runtime grant, so a freshly installed app is themed without a trip to the car.
+Observable, so an app on screen re-paints on a theme switch or a night crossing. Read-only — a suite app
   that could write the palette could restyle the home screen of a moving car.
 - **`RiposteSuite`, the registry of what the suite is.** Nothing on the device marks the
   twenty-eight as one family, and a `com.ripostelabs.` prefix match would swallow the launcher itself
@@ -231,10 +229,10 @@ Neither milestone changed the launcher, and the base jumps 0.5 → 0.7 with no 0
 between. That is deliberate, and recorded here because a reader comparing tags will otherwise
 assume a release went missing.
 
-**The base names the project's milestone, not this module's changes.** From 0.5 the launcher and
-the standalone `com.ripostelabs.*` suite (`armeehn/rav4-apps`) are one product: the launcher publishes
-the palette and the session registry, the suite consumes them, and a milestone is only real when
-both sides of the boundary work. 0.6 and 0.7 were entirely on the suite's side of it:
+**The base names the project's milestone, not this module's changes.** From 0.5 the launcher
+and the standalone `com.ripostelabs.*` suite (`armeehn/rav4-apps`) are one product. The
+launcher publishes the palette and the session registry, the suite consumes them, and a
+milestone is only real when both sides of the boundary work. 0.6 and 0.7 were entirely on the suite's side of it:
 
 - **0.6 — the suite paints the launcher's palette.** 0.5 shipped the provider; the suite's Java
   call sites followed, but colours written in *XML* resolve at inflate time and stayed on the
@@ -283,8 +281,8 @@ body bus** on the head unit itself — 1214 frames/s across 111 ids, measured in
   only on a confirmed `APPLIED`.
 
 What the car taught, and where it is written down: a **badly grounded CANable enumerates,
-prints its banner, and ignores every command** — the tell is bytes out with nothing in, and reads
-that time out cleanly rather than failing fast. `can-integration/docs/CANABLE_INTEGRATION.md`
+prints its banner, and ignores every command**. The tell is bytes out with nothing in, and
+reads that time out cleanly rather than failing fast. `can-integration/docs/CANABLE_INTEGRATION.md`
 carries the full account. **Exercised in the car on 2026-09-09:** the background service
 recorded a whole drive unattended, rotation produced several 16 MiB files, the Vehicle screen
 read the drive, and the capture host pulled the files off the car by itself.
@@ -319,10 +317,10 @@ exercised on the emulator farm against real software before touching the car.
   official `RetroArch_aarch64` build is staged on the share and installed by an internal watcher
   when absent.
 
-**What the emulator found that unit tests could not**, all fixed before merge: Android's default
-cleartext block made every board command "unreachable" with no reason logged; starting a sequence
-from the page threw `NetworkOnMainThreadException`; and the board poll running inside the runner's
-tick stretched a 2 s hold to 4 s. With those fixed, on the emulator: a light turned on and read
+**What the emulator found that unit tests could not**, all fixed before merge. Android's
+default cleartext block made every board command "unreachable" with no reason logged. Starting
+a sequence from the page threw `NetworkOnMainThreadException`. The board poll running inside
+the runner's tick stretched a 2 s hold to 4 s. With those fixed, on the emulator: a light turned on and read
 back, a three-step sequence ran with its 2 s hold exact, and RetroArch 1.22.2 launched from the
 Games page. The negative control ran there too: against a virtual board started with `--lie`,
 which answers 200 and changes nothing, the page stayed "off" after *Turn on* while the board
