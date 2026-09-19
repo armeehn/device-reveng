@@ -26,6 +26,7 @@ readonly LAUNCHER_DIR=priv-app                 # under the system root, see syst
 readonly LAUNCHER_NAME=CarLauncher
 readonly SUITE_DIR=product/app
 readonly PRIVAPP_XML=etc/permissions/privapp-permissions-ripostelabs.xml
+readonly DEFPERM_XML=product/etc/default-permissions/default-permissions-ripostelabs.xml   # beside SUITE_DIR
 readonly BOOTANIM=product/media/bootanimation.zip   # bootanimation looks in /product before /system
 readonly PASSTHROUGH="vendor system_ext boot dtbo vbmeta vbmeta_system"   # one matched set, never mixed across builds
 readonly EDITED="system product"
@@ -145,6 +146,31 @@ for apk in "$APPS"/suite/*.apk; do
   SUITE_N=$((SUITE_N + 1))
 done
 log "installed $LAUNCHER_NAME + $SUITE_N suite apps ($([ "$PROFILE" = gsi ] && echo "system image's" || echo "product image's") $SUITE_DIR)"
+
+# Default grants for the suite: a head unit has no one to tap a permission prompt, and 14 of
+# the 28 apps opened on one at first launch (bench, 2026-09-19). The framework grants what is
+# listed here at the first boot of a /data (DefaultPermissionGrantPolicy reads every
+# etc/default-permissions/*.xml on the product partition); non-runtime names are logged and
+# skipped, so every requested permission goes in. fixed="false" keeps them user-changeable.
+mkdir -p "$PRODUCT_ROOT/$(dirname "$DEFPERM_XML")"
+{
+  echo '<?xml version="1.0" encoding="utf-8"?>'
+  echo "<exceptions>"
+  for apk in "$APPS"/suite/*.apk; do
+    [ -f "$apk" ] || continue
+    echo "    <exception package=\"$(apk_package "$apk")\">"
+    perms=$("$AAPT2" dump permissions "$apk" | sed -n "s/^uses-permission: name='\([^']*\)'.*/\1/p")
+    # Android 14 pairs READ_MEDIA_IMAGES/VIDEO with an implicit READ_MEDIA_VISUAL_USER_SELECTED;
+    # with only the former granted the picker dialog still opens (bench, 2026-09-19).
+    case "$perms" in *READ_MEDIA_IMAGES*|*READ_MEDIA_VIDEO*) perms="$perms
+android.permission.READ_MEDIA_VISUAL_USER_SELECTED" ;; esac
+    for perm in $perms; do echo "        <permission name=\"$perm\" fixed=\"false\"/>"; done
+    echo "    </exception>"
+  done
+  echo "</exceptions>"
+} > "$PRODUCT_ROOT/$DEFPERM_XML"
+label_system_file "$PRODUCT_ROOT/$(dirname "$DEFPERM_XML")" "$PRODUCT_ROOT/$DEFPERM_XML"
+log "default grants for $SUITE_N suite apps"
 if [ -f "$APPS/bootanimation.zip" ]; then      # rendered by bootanim/make.py where Pillow lives
   mkdir -p "$PRODUCT_ROOT/$(dirname "$BOOTANIM")"
   cp "$APPS/bootanimation.zip" "$PRODUCT_ROOT/$BOOTANIM"

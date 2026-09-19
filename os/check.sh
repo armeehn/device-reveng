@@ -14,6 +14,7 @@ readonly LAUNCHER_PKG=com.ripostelabs.carlauncher
 # Relative to the system root (system_root): system/ on stock, system/system/ on a GSI.
 readonly LAUNCHER_APK=priv-app/CarLauncher/CarLauncher.apk
 readonly PRIVAPP_XML=etc/permissions/privapp-permissions-ripostelabs.xml
+readonly DEFPERM_XML=etc/default-permissions/default-permissions-ripostelabs.xml
 readonly FRAMEWORK=framework/framework.jar
 # Car-kit Bluetooth roles (overlay/props): on, off, and the class of device on a gsi output.
 readonly BT_CARKIT_ON="bluetooth.profile.a2dp.sink.enabled bluetooth.profile.hfp.hf.enabled
@@ -136,6 +137,14 @@ if [ -f "$PR/media/bootanimation.zip" ]; then
 else
   ok "none shipped"
 fi
+
+echo "suite default grants"
+check "python3 -c 'import xml.etree.ElementTree as E; E.parse(\"$PR/$DEFPERM_XML\")'" "default-permissions XML parses"
+# shellcheck disable=SC2034  # used inside the eval below
+SUITE_PKGS=$(for a in "$PR"/app/*/*.apk; do pkg_of "$a"; done | grep "^com\.ripostelabs\." | sort)
+# shellcheck disable=SC2034
+GRANT_PKGS=$(python3 -c 'import xml.etree.ElementTree as E,sys; print("\n".join(sorted(e.get("package") for e in E.parse(sys.argv[1]).iter("exception"))))' "$PR/$DEFPERM_XML")
+check "[ \"\$SUITE_PKGS\" = \"\$GRANT_PKGS\" ]" "every suite package has a default-permissions entry"
 
 echo "removed"
 if [ "$PROFILE" = gsi ]; then
