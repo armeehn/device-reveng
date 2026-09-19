@@ -23,6 +23,9 @@ ro.riposte.os.bt_carkit=${RIPOSTE_BT_CARKIT}
 @carkit bluetooth.profile.hfp.ag.enabled=false
 @carkit bluetooth.profile.avrcp.target.enabled=false
 @carkit bluetooth.device.class_of_device=38,4,8
+# The unit has no cell network for NITZ and no telephony time zone; without this the GSI boots
+# in GMT and every clock on the panel is off by seven or eight hours. Kelowna, BC.
+persist.sys.timezone=America/Vancouver
 # The vendor's SurfaceFlinger honours ro.sf.hwrotation=90 (set by ABL from the privdata2 screen
 # config); AOSP 14's only reads this one. Without it the GSI renders the 1920x720 panel portrait.
 @gsi ro.surface_flinger.primary_display_orientation=ORIENTATION_90
