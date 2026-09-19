@@ -48,7 +48,7 @@ door-held-open run. `blinkers 0x614` is not indicators; indicators are not on th
   reader has not been written; `LinClimateDecoder.kt` is the only LIN code in the repo.
 
 ### `docs/` and `probes/`
-- `CANABLE_INTEGRATION.md`, `LIN_INTEGRATION.md`, `H62_TAP_PLAN.md` — wiring, protocol, tap
+- `CANABLE_INTEGRATION.md`, `LIN_INTEGRATION.md`, `H62_TAP_PLAN.md`, `CANBOX_DESIGN.md` — wiring, protocol, tap, and the replacement CAN box
   points. `body-can-tap.html` — a field wiring guide.
 - `canable-probe.sh`, `lin-probe.sh` — laptop/adb hardware bring-up + toggle-and-diff.
 

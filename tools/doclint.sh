@@ -33,7 +33,15 @@ rm -f /tmp/doclint-links.$$
 # 4. Counts that drift: the suite has SUITE_APPS apps.
 while IFS= read -r line; do hit "count: $line"; done < <(grep -n -E '\b(2[0-7])[- ]app\b|\b(2[0-7]) (companion |suite )?apps\b' $files | grep -v "$SUITE_APPS" | cut -c1-160)
 
-# 5. Prose sentences past 40 words. Lists of codes and numbers (key tables, mode lists) are
+# 5. Pages no other page links to. A page nobody can reach is a page nobody maintains.
+for f in $files; do
+  b=$(basename "$f")
+  [ "$b" = README.md ] && continue
+  n=$(grep -l -F "$b" $files 2>/dev/null | grep -v "^$f$" | wc -l)
+  [ "$n" = 0 ] && hit "orphan: $f"
+done
+
+# 6. Prose sentences past 40 words. Lists of codes and numbers (key tables, mode lists) are
 #    exempt: a third or more of the tokens carrying a digit or a backtick is a list, not prose.
 while IFS= read -r line; do hit "long: $line"; done < <(python3 - $files <<'PY'
 import re, sys

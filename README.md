@@ -183,9 +183,9 @@ its `/vendor` partition provides.
 | [`LAUNCHER_DESIGN.md`](LAUNCHER_DESIGN.md) | UI/UX spec and capability tiers |
 | [`CUSTOMERUI_NOTES.md`](CUSTOMERUI_NOTES.md) | The stock launcher, decompiled |
 | [`CUSTOM_ANDROID.md`](CUSTOM_ANDROID.md) | Custom-ROM feasibility; why the platform key is out |
-| [`ZLINK_NATIVE_ANALYSIS.md`](ZLINK_NATIVE_ANALYSIS.md), [`CARPLAY.md`](CARPLAY.md) | The projection stack |
+| [`ZLINK_NATIVE_ANALYSIS.md`](ZLINK_NATIVE_ANALYSIS.md), [`ZLINK_REWRITE.md`](ZLINK_REWRITE.md), [`CARPLAY.md`](CARPLAY.md) | The projection stack: what Zlink is, and the specification for replacing it |
 | [`can-integration/`](can-integration/) | CANable / LIN tapping plans and decoders |
-| [`boot-speed/`](boot-speed/) | Boot-time measurement and tuning |
+| [`boot-speed/BOOT_SPEED.md`](boot-speed/BOOT_SPEED.md) | Cold-boot measurement and tuning |
 | [`FINDINGS.md`](FINDINGS.md), [`STATUS.md`](STATUS.md) | Raw findings, live status |
 | `backup.sh`, `root.sh`, `debloat.sh`, `camera-diag.sh` | Runbook scripts |
 

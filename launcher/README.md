@@ -25,6 +25,17 @@ Emulator shots are from the emulator farm at the unit's geometry; the two marked
 | ![Games, listing the installed RetroArch build](docs/screens/games.png) | Games, listing the installed RetroArch build |
 | ![RetroArch 1.22.2 launched from the Games page](docs/screens/retroarch.png) | RetroArch 1.22.2 launched from the Games page |
 
+### Earlier versions
+
+The launcher as it looked at each milestone, from the first grid to the home it has now.
+`riposte-os-0.2-home.png` is the same launcher on Riposte OS 0.2, our own system image.
+
+| | | |
+|---|---|---|
+| ![v0.1](../screenshots/launcher-v0.1.png) v0.1, the first grid | ![v0.2 live](../screenshots/launcher-v0.2-live.png) v0.2, live car state | ![v0.2 media](../screenshots/launcher-v0.2-media.png) v0.2, media |
+| ![v0.2b](../screenshots/launcher-v0.2b.png) v0.2, dashboard | ![v0.2c](../screenshots/launcher-v0.2c.png) v0.2, drawer | ![v1.0 as home](../screenshots/v1.0-as-home.png) v1.0, set as HOME |
+| ![v1.0 dashboard](../screenshots/v1.0-home-dashboard.png) v1.0, dashboard | ![v1.0 live](../screenshots/v1.0-home-live.png) v1.0, live | ![Riposte OS 0.2](../screenshots/riposte-os-0.2-home.png) on Riposte OS 0.2 |
+
 ## Module structure
 
 ```
