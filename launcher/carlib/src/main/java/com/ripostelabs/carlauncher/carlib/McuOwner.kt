@@ -394,6 +394,8 @@ class McuOwner(
         }
     }
 
+    private val loggedUnhandled = mutableSetOf<Int>()
+
     private fun dispatch(command: McuSerial.Command) {
         val awaited = awaitingAck
         if (awaited != null && McuOwnerProtocol.isModeAck(command, awaited)) {
@@ -430,7 +432,11 @@ class McuOwner(
             null -> Unit
         }
 
-        Log.i(LOG_TAG, "unhandled opcode 0x%02X (%d bytes)".format(command.opcode, command.payload.size))
+        // Once per opcode: the MCU streams 0x8E (G-sensor, RADAR_3DH) at 10 Hz for the whole
+        // drive and the vendor only stores the bytes; the log is for the first sighting.
+        if (loggedUnhandled.add(command.opcode)) {
+            Log.i(LOG_TAG, "unhandled opcode 0x%02X (%d bytes)".format(command.opcode, command.payload.size))
+        }
         listener.onOther(command)
     }
 
