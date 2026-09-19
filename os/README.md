@@ -43,6 +43,9 @@ serial link behind a public API, and the framework check closed the last unknown
 | `edl-restore.sh` | laptop at the car | Restores a slot backup over EDL in one go: verifies SHA256SUMS, reads the GPT, writes boot/dtbo/vbmeta/vbmeta_system, reads super's metadata, writes each logical image into its existing extents, resets. `EDL_RESTORE.md` has the steps by hand. |
 | `edl-extents.py` | laptop at the car | Turns an `lpdump` listing into `edl ws` writes, converting liblp's 512-byte sectors to the device's 4096-byte sectors. |
 | `test-edl-extents.sh`, `test-edl-restore.sh` | anywhere | Host-only tests of the two above against a stubbed `edl` (CI: `os-ci.yml`). |
+| `mksuper.sh` | laptop at the bench | Builds a full `super` image for any image set with the unit's own geometry (6 GiB, virtual A/B), for `edl-write-set.sh` when images no longer fit the extents the last flash left. |
+| `edl-write-set.sh` | laptop at the bench | Writes super + boot/dtbo/vbmeta over EDL from 9008, `WIPE=1` erases userdata, then resets. |
+| `fastboot-flash-set.sh` | laptop at the bench | Flashes an image set in place from fastbootd, shrinking the logical partitions first; `wipe` erases userdata. `BENCH.md` has the wiring, the doors and the rules. |
 
 ```
 os/build.sh --base share/carlauncher/os/base --apps APPS --out share/carlauncher/os/0.1 --profile tier2
