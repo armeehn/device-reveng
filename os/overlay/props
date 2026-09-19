@@ -26,6 +26,9 @@ ro.riposte.os.bt_carkit=${RIPOSTE_BT_CARKIT}
 # The vendor's SurfaceFlinger honours ro.sf.hwrotation=90 (set by ABL from the privdata2 screen
 # config); AOSP 14's only reads this one. Without it the GSI renders the 1920x720 panel portrait.
 @gsi ro.surface_flinger.primary_display_orientation=ORIENTATION_90
+# No software navigation bar: the vendor build never shows one and it covered the bottom 72 px
+# of the launcher on 0.2 (TrebleDroid's mainkeys switch, read at framework start).
+@gsi persist.sys.phh.mainkeys=1
 # Bench diagnostics while 0.2 is brought up: adb on Wi-Fi, the 4PIN port kept in peripheral
 # mode after boot (riposte-usbadb.sh), logcat persisted under /data/misc/logd across reboots.
 @gsi ro.riposte.os.bench=1
