@@ -127,9 +127,12 @@ else
   check "cmp -s <(grep '^bluetooth\.' $SB/build.prop) <(grep '^bluetooth\.' $S/build.prop)" "bluetooth.* props identical to the base"
 fi
 
+# A GSI links /product to its own /system/product, so build.sh puts product files there.
+PR=$T/product
+[ "$PROFILE" = gsi ] && PR=$S/product
 echo "boot animation"
-if [ -f "$T/product/media/bootanimation.zip" ]; then
-  check "python3 -c 'import zipfile,sys; z=zipfile.ZipFile(sys.argv[1]); assert {i.compress_type for i in z.infolist()}=={0}; assert \"desc.txt\" in z.namelist()' $T/product/media/bootanimation.zip" "bootanimation.zip is stored (uncompressed) with desc.txt"
+if [ -f "$PR/media/bootanimation.zip" ]; then
+  check "python3 -c 'import zipfile,sys; z=zipfile.ZipFile(sys.argv[1]); assert {i.compress_type for i in z.infolist()}=={0}; assert \"desc.txt\" in z.namelist()' $PR/media/bootanimation.zip" "bootanimation.zip is stored (uncompressed) with desc.txt"
 else
   ok "none shipped"
 fi
@@ -162,7 +165,7 @@ done
 [ "$PROFILE" = gsi ] || check "cmp -s $SB/$FRAMEWORK $S/$FRAMEWORK" "framework.jar byte-identical to base"
 
 echo "suite"
-N=$(find "$T/product/app" -name '*.apk' -exec "$AAPT2" dump packagename {} \; 2>/dev/null | grep -c '^com.ripostelabs\.' || true)
+N=$(find "$PR/app" -name '*.apk' -exec "$AAPT2" dump packagename {} \; 2>/dev/null | grep -c '^com.ripostelabs\.' || true)
 if [ -n "$SUITE" ]; then check "[ $N -eq $SUITE ]" "$N suite apps (expected $SUITE)"; else ok "$N suite apps"; fi
 
 echo "filesystem features the unit's kernel accepts"

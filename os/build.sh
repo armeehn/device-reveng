@@ -129,18 +129,23 @@ fi
 # ---- 3. add apps ---------------------------------------------------------------
 [ "$(apk_package "$APPS/carlauncher.apk")" = "$LAUNCHER_PKG" ] || die "carlauncher.apk is not $LAUNCHER_PKG"
 install_apk "$SYS" "$LAUNCHER_DIR" "$LAUNCHER_NAME" "$APPS/carlauncher.apk"
+# Where /product really is at runtime. A GSI ships its own /system/product and links /product
+# to it, so the super's product partition never mounts there (unit, 2026-09-19): the suite and
+# the boot animation go into the system image on that profile.
+PRODUCT_ROOT=$WORK/tree
+[ "$PROFILE" = gsi ] && PRODUCT_ROOT=$SYS
 SUITE_N=0
 for apk in "$APPS"/suite/*.apk; do
   [ -f "$apk" ] || continue
   name=$(apk_package "$apk"); [ -n "$name" ] || die "not an APK: $apk"
-  install_apk "$WORK/tree" "$SUITE_DIR" "$name" "$apk"
+  install_apk "$PRODUCT_ROOT" "$SUITE_DIR" "$name" "$apk"
   SUITE_N=$((SUITE_N + 1))
 done
-log "installed $LAUNCHER_NAME + $SUITE_N suite apps"
+log "installed $LAUNCHER_NAME + $SUITE_N suite apps ($([ "$PROFILE" = gsi ] && echo "system image's" || echo "product image's") $SUITE_DIR)"
 if [ -f "$APPS/bootanimation.zip" ]; then      # rendered by bootanim/make.py where Pillow lives
-  mkdir -p "$WORK/tree/$(dirname "$BOOTANIM")"
-  cp "$APPS/bootanimation.zip" "$WORK/tree/$BOOTANIM"
-  label_system_file "$WORK/tree/$(dirname "$BOOTANIM")" "$WORK/tree/$BOOTANIM"
+  mkdir -p "$PRODUCT_ROOT/$(dirname "$BOOTANIM")"
+  cp "$APPS/bootanimation.zip" "$PRODUCT_ROOT/$BOOTANIM"
+  label_system_file "$PRODUCT_ROOT/$(dirname "$BOOTANIM")" "$PRODUCT_ROOT/$BOOTANIM"
   log "installed boot animation"
 fi
 
