@@ -6,6 +6,8 @@
 #     bench-ui.sh tap <label>           tap the node whose text or content-desc is <label>
 #     bench-ui.sh find <label>          scroll down until <label> is on screen, then tap it
 #     bench-ui.sh doctor                open Settings -> Setup doctor and print its rows
+#     bench-ui.sh sweep                 launch every com.ripostelabs.* app; report the ones that
+#                                       do not come to the front or crash (logcat FATAL)
 #
 # Env: ADB (default: the SDK's platform-tools adb), UNIT (adb serial, default 10.0.10.14:5555).
 # A Compose screen that is off-screen is not in the dump; `find` swipes up to eight times.
@@ -80,10 +82,35 @@ doctor() {
   done
 }
 
+# Launch each suite app by its LAUNCHER activity and read what is in front two seconds later.
+# A crash shows up as a FATAL EXCEPTION line in the crash buffer for that package.
+sweep() {
+  local pkgs bad=0 pkg top
+  pkgs=$(a shell "pm list packages" | tr -d '\r' | sed 's/^package://' | grep '^com\.ripostelabs\.' | grep -v carlauncher | sort)
+  a logcat -b crash -c >/dev/null 2>&1 || true
+  for pkg in $pkgs; do
+    a shell "monkey -p $pkg -c android.intent.category.LAUNCHER 1" >/dev/null 2>&1
+    sleep 2
+    top=$(a shell "dumpsys activity activities" | tr -d '\r' | grep -o 'topResumedActivity=ActivityRecord{[^ ]* [^ ]* [^ /]*' | head -1 | awk '{print $NF}')
+    if a logcat -d -b crash 2>/dev/null | grep -q "Process: $pkg,"; then
+      echo "CRASH $pkg"; bad=$((bad + 1))
+    elif [ "$top" != "$pkg" ]; then
+      echo "NOT-FRONT $pkg (front: ${top:-none})"; bad=$((bad + 1))
+    else
+      echo "ok $pkg"
+    fi
+    a shell "am force-stop $pkg" >/dev/null 2>&1
+  done
+  a shell "input keyevent KEYCODE_HOME" >/dev/null 2>&1
+  echo "sweep: $bad problem(s) in $(echo "$pkgs" | wc -w) apps"
+  [ "$bad" = 0 ]
+}
+
 case "${1:-}" in
   texts) texts ;;
   tap) tap "${2:?label}" ;;
   find) find_tap "${2:?label}" ;;
   doctor) doctor ;;
-  *) sed -n '2,12p' "$0"; exit 1 ;;
+  sweep) sweep ;;
+  *) sed -n '2,14p' "$0"; exit 1 ;;
 esac
