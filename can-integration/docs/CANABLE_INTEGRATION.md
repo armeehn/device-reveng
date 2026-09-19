@@ -68,7 +68,7 @@ before grounding turned out to be the answer.
 The tell is asymmetric. Bytes come *out* of the adapter while `C`/`S6`/`O`/`V` are all ignored,
 and reads then time out cleanly at the full timeout rather than failing fast. A slcan adapter
 answers a command it dislikes with BELL, so **frames=0 with no BELL means the commands never
-landed**. If the adapter talks but never answers, check GND before anything else.
+arrived**. If the adapter talks but never answers, check GND before anything else.
 
 ## What the adapter volunteers
 

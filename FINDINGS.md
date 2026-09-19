@@ -53,10 +53,10 @@ firmware ("improves rear camera performance") is the deeper demod-level fix.
 - The truncated `canbus2.apk` was dex-carved and decompiled — full opcode set recovered.
 
 ## HVAC controls — likely a car limitation, not a bug
-The app HAS a full climate **control** path (builds `0x2E` frames, sends over ttyHS1), but:
-no **2019 RAV4 (XA50)** climate profile exists (only Gen4 + the Gen5 twins Wildlander/Harrier),
-the HiWorld TYF2 box lists Toyota climate as **display-only**, and Toyota's HVAC ECU doesn't
-accept injected set-commands. **[inferred, high]** Try Factory-Settings car-profile
+The app has a full climate **control** path (it builds `0x2E` frames and sends them over
+ttyHS1). Three things stop it: no **2019 RAV4 (XA50)** climate profile exists (only Gen4 and
+the Gen5 twins Wildlander/Harrier), the HiWorld TYF2 box lists Toyota climate as
+**display-only**, and Toyota's HVAC ECU does not accept injected set-commands. **[inferred, high]** Try Factory-Settings car-profile
 (`Sys_CarType`) + decoder flag (`persist.zxw.sys.zhty.decoder.flag`); realistic ceiling is
 accurate display. Live test: log ttyHS1 + logcat while tapping A/C vs. using the physical panel.
 

@@ -42,7 +42,7 @@ A 1280 dp-wide panel is far wider than any reach arc. Treat reach as **two thumb
   **display-only / glance content** (clock, media art, status) and rarely-pressed affordances.
 - Because the car may be RHD, the driver/passenger split is a **`Sys_CarType`-aware mirror
   option** (see §6, SysVar): a settings flag flips the media/quick-launch columns so the
-  quick-launch grid always lands under the driver's thumb.
+  quick-launch grid always sits under the driver's thumb.
 - **Touch target minimum: 76 × 76 dp** for any driving-relevant control (well above the 48 dp
   Material minimum — finger + vibration + glove). **Spacing ≥ 16 dp** between adjacent targets
   to prevent mis-taps. Corner-anchored controls get a larger 96 dp hit slop.

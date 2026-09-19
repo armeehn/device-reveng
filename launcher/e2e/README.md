@@ -32,7 +32,7 @@ models and the API keys; this side needs only Python 3.10+.
 - Ask for few keys, boolean or short-string valued. "Is a Settings gear visible"
   is answered reliably; "describe the screen" is not.
 - Keep `locked=True` (the default) so ARTEMIS stays inside the launcher package
-  and reports if it lands elsewhere.
+  and reports if it ends up elsewhere.
 - Coordinates, if a goal must use them, are in the 1920x720 panel space.
 
 Not part of CI: the suite needs a booted head unit and model credit.
@@ -62,7 +62,7 @@ needs `com.ripostelabs.radio` installed on the instance, else it skips).
 Media screen, `wheeldouble PLAY_PAUSE` a DoublePress. Chords are not
 simulated; one key id per frame is a car question.
 
-`test_carsim_brake.py` drives the `brake` scenario (RAV4-98): the launcher's
+`test_carsim_brake.py` drives the `brake` scenario: the launcher's
 SysVar mirror must serve `Sys_CurBreakSate` `0` with the brake on and `1`
 with it off, and the suite's video player must cover its picture on `1`.
 The player cases need `com.ripostelabs.video` on the instance and the

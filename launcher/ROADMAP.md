@@ -56,9 +56,9 @@ These are settled. Re-proposing them costs a session each time, so the reasoning
 
 ---
 
-## Landed on `main` (v2.5 → v3.1)
+## On `main` (v2.5 → v3.1)
 
-Verified present and wired by reading the code, not merely present as files. **"Landed" means
+Verified present and wired by reading the code, not merely present as files. **"On main" means
 built and merged, not validated in the car** — the recent series has not run on the head unit,
 so nothing below is confirmed working against real hardware. That is what the stability bar in
 "Deferred" exists to establish, and it is the single largest piece of unfinished business.
@@ -93,7 +93,7 @@ now named by the base it ships, and the section below is the last one carrying a
 
 ## v3.2 → v4.0 — the window, allocated and now closed
 
-**Every item in this section has landed on `main`, verified by reading the code at `7cc818d`,
+**Every item in this section is on `main`, verified by reading the code at `7cc818d`,
 not by the presence of a branch with the right name** (squash-merges leave branches behind, so
 `git branch --merged` says nothing here). Kept in full rather than deleted: each one records a
 decision, and two of them record a rule — an indicator with no source disappears, and a guessed
@@ -195,7 +195,7 @@ port rotates on every reboot, so a crash on the road currently leaves no evidenc
   `STATUS.md` has carried a Car Launcher section since 2026-09-01. It gained the raw-bus
   reading in this pass.
 
-## 0.5 — the suite lands
+## 0.5 — the suite arrives
 
 The 0.4 window was corrections. 0.5 is the release that makes the *rest* of the unit ours: the
 twenty-eight standalone rewrites in `armeehn/rav4-apps` (`com.ripostelabs.clock`, `…browser`,
@@ -311,7 +311,7 @@ exercised on the emulator farm against real software before touching the car.
   the wheel presses the launcher already resolves to UP/DOWN/LEFT/RIGHT/CENTER/BACK are
   forwarded to it as D-pad, A, B and START by root. HOME is never forwarded, so there is always
   a way out; the gate is the foreground *package* being a known frontend, read per press, so a
-  press never lands in the vendor's reverse window or a call. The emulator has no wheel, so
+  press never ends up in the vendor's reverse window or a call. The emulator has no wheel, so
   whether RetroArch accepts the injected keys is deferred to the car.
 - **Games screen** (`GameApps`, `GamesRepository`). Lists installed emulator frontends behind the
   existing parked-only gate, with exact package matching because RetroArch's ABI builds differ by

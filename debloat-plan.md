@@ -51,4 +51,4 @@ EDL backup. Nothing here deletes from /system. **Prefer this over deleting APKs.
 ## Separate wins (root-enabled, not debloat)
 - **Play/Android Auto reliability:** fingerprint is spoofed to Pixel 3 XL; use Magisk
   (Play Integrity Fix / Universal SafetyNet) for reliable Play + AA instead of the spoof.
-- **Reverse camera:** pin `persist.camera.sensorcfg.signal` (pending drive capture).
+- **Reverse camera:** pin `persist.camera.sensorcfg.signal` (see `FINDINGS.md`).

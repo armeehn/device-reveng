@@ -165,7 +165,7 @@ the buses into one flow. (This edit was *not* applied here because `VehicleState
 were read-only references for this task.)
 
 **(B) Standalone / compile-today seam — `combineWithVehicle(...)`:**
-Until edit (A) lands, `LinReaderService.kt` ships `UnifiedCarState(vehicle, climate)` and
+Until edit (A) is in, `LinReaderService.kt` ships `UnifiedCarState(vehicle, climate)` and
 ```kotlin
 fun combineWithVehicle(
     vehicle: StateFlow<VehicleState>,

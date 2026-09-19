@@ -151,7 +151,7 @@ MCU broadcast ──▶ HiworldCanDecoder ────────────�
   either port. The launcher claims the device with `UsbManager` and does the bulk transfers
   itself. A `USB_DEVICE_ATTACHED` filter grants permission on attach.
 - **Recording is a foreground service** and starts hands-free when the adapter is plugged in.
-  Captures land under the app's external files dir in candump log format, roll at 16 MB, and the
+  Captures go under the app's external files dir in candump log format, roll at 16 MB, and the
   newest six survive. `Settings → CAN frame capture` shows the live adapter state and can stop it.
 - **Grounding.** A badly grounded adapter enumerates and prints its banner but ignores every
   command. If it talks and never answers, check GND first.
@@ -287,7 +287,7 @@ the vendor's `Set_TouchBeep` preference instead of adding a competing one.
 ## Media & Radio screens (v2.6)
 
 The Home cards were always glance surfaces in a 30 %-wide column. `ui/MediaScreen.kt` and
-`ui/RadioScreen.kt` are the full screens you land on to actually operate playback and the
+`ui/RadioScreen.kt` are the full screens you arrive at to operate playback and the
 tuner (LAUNCHER_DESIGN §3.3 / §3.4). Reached three ways: tapping a card body, CENTER on a
 focused card, or the steering wheel's MEDIA / RADIO keys.
 
@@ -304,7 +304,7 @@ claims the tuner as the cabin's audio source the way the vendor radio app does
 (`CarService.claimRadio`); AM / FM send the MCU's direct band keys (30 / 31) and re-poll until
 the tuner reports the class. The `sendRadioKey` value table is in CAR_API §3.2.
 
-**PhoneScreen** (RAV4-50) — `ui/PhoneScreen.kt`, reached by the wheel's PHONE / TALK key or the
+**PhoneScreen** — `ui/PhoneScreen.kt`, reached by the wheel's PHONE / TALK key or the
 status-bar phone icon. The head unit's phone Bluetooth is owned by the vendor app
 `com.szchoiceway.btsuite`, which holds the serial protocol to the BT module and cannot be
 replaced, so the screen drives it: state (device name, HFP state, caller, in-call timer) comes
@@ -354,7 +354,7 @@ signature was never recovered, so registering it would be a guess. Blocking AIDL
 the composition body — doing them inline once spun a main-thread IPC recomposition loop while
 seeking.
 
-### CarPlay deep links (RAV4-52)
+### CarPlay deep links
 
 The Zlink receiver (`com.zjinnova.zlink`) is driven by intent, never bundled. `carlib/Zlink.kt`
 holds the contract recovered from the gateway's `ZlinkManage.java`. `CarEvents.carplayState`
@@ -397,9 +397,9 @@ while Home was on screen — every other screen ignored the wheel. Two pieces cl
   synthesises the KeyEvent through `Window.superDispatchKeyEvent` (which bypasses our own
   dispatcher, so a synthetic key cannot loop). **Wrap-around** has no framework API, so it is
   composed from the one that does: a refused move means an edge, and walking as far as possible in
-  the opposite direction lands on the far end.
+  the opposite direction arrives at the far end.
 
-`input/FocusRing.kt` draws where focus landed — Material's focus ripple is invisible at arm's
+`input/FocusRing.kt` draws where focus went — Material's focus ripple is invisible at arm's
 length in daylight. It is applied to the shared settings kit (`SettingRow`, `ActionRow`,
 `SettingsCategoryCard`, `SettingsIconTile`, `DialogTextButton`), which covers the whole settings
 suite, plus the Media, Radio and Themes screens.
@@ -722,7 +722,7 @@ That path needs no runtime permission on API 33. `Downloads` was rejected (scope
 plain `File` write there need MediaStore or `MANAGE_EXTERNAL_STORAGE` — a lot of permission surface
 for a colour file) and so was `ACTION_CREATE_DOCUMENT` (another un-theme-able system screen, which
 is the problem this release exists to reduce). Built-ins export too: pull a preset, edit the hex on
-a real keyboard, push it back. An import always lands as a **new** user theme with a fresh id, so a
+a real keyboard, push it back. An import always arrives as a **new** user theme with a fresh id, so a
 hand-edited file cannot shadow a preset or overwrite something already on the unit.
 
 **Clock day/night.** `CarEvents.illuminationSeen` (new) latches true the first time an
@@ -783,12 +783,12 @@ nothing**.
 
 **The collateral rule.** The vendor reports the key on release, so by the time a second press can
 be recognised the first press has already done its plain job (skipped a track, switched source). A
-double-press action always lands on top of that, which is why none are bound by default. A hold
+double-press action always sits on top of that, which is why none are bound by default. A hold
 has no such collateral on the launcher's own screens: after a LongPress the vendor's key for the
 same button, arriving within 1.5 s as an injected `KeyEvent` (NEXT/PREV/PLAY/RETURN) or as
 `MCU_KEY_INFOR`, is dropped (`carlib/WheelKeySwallow.kt`, one drop per path per hold). Two limits:
 with a third-party app in front (Spotify, CarPlay) the injected key goes to *that* window and
-lands there; and MODE (gateway `switchMode()`), MUTE (`sendSystemKey(12)`), TALK and VOICE act
+arrives there; and MODE (gateway `switchMode()`), MUTE (`sendSystemKey(12)`), TALK and VOICE act
 inside the gateway, so a hold on those always carries the vendor's short action too.
 
 Nothing above is verified on the car. The ~100 ms frame period behind the 300 ms gap is inferred
@@ -803,7 +803,7 @@ check.
 - **`ICallbackfn.aidl`** signature is a placeholder; verify against the device.
 - **Volume** is pushed: the gateway broadcasts `MCU_MSG_MAIL_VOL` (`(mute ? 0x80 : 0) | vol`) on
   every MCU volume/mute report, decoded by `CarEvents.volume`. The status-bar chip's AIDL poll
-  stays only until the first push lands. There is no LocalSocket; `SYSTEM_VOLUME:` rides the
+  stays only until the first push arrives. There is no LocalSocket; `SYSTEM_VOLUME:` rides the
   `ZXW_MESSAGE_TO_ICCOMMUNICATION` broadcast as text.
 - **Numeric speed.** `CAN_SPEED_TRUSTED` stays false, and now stays false for good. canbus2's
   `MCU_CAR_CAN_INFO` digest (`[speed, rpmH, rpmL]`) is decoded into `CarEvents.canSpeedKmh` and

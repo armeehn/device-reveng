@@ -2,8 +2,9 @@
 
 ## Scope
 
-This repository holds research notes and a side-loaded Android launcher for an
-aftermarket car head unit. It runs no server and stores no user accounts.
+This repository holds research notes, a side-loaded Android launcher and the build
+pipeline for a system image, all for an aftermarket car head unit. It runs no server,
+stores no user accounts and distributes no firmware images.
 
 Relevant issues include:
 
@@ -18,7 +19,7 @@ scope for this repo. Report those to the vendor.
 ## Reporting
 
 Email **sasha@ripostelabs.xyz**. Please include what you found, how to reproduce it,
-and the affected commit. Expect an acknowledgement within a few days — this is a
+and the affected commit. Expect an acknowledgement within a few days. This is a
 personal project, not a staffed product.
 
 Please do not open a public issue for a vulnerability that puts other owners' units

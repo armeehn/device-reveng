@@ -225,4 +225,4 @@ Separate root-enabled win: the build fingerprint is spoofed to a Pixel 3 XL for 
 
 Done: hardware identified, Wi-Fi ADB, unlocked-bootloader + permissive-SELinux confirmed, full verified EDL backup, rooted via TWRP + Magisk, EDL recovery proven, vendor apps decompiled, MCU/camera protocols mapped.
 
-Open: pin the reverse-camera signal (pending drive capture), run Tier-1 debloat, Play Integrity module, HVAC-over-CAN investigation, boot-time/perf. See `STATUS.md` for the live list.
+Since then: the launcher replaced the stock HOME, and Riposte OS (`os/`) replaced the whole Android layer above `/vendor` on a bench unit. `STATUS.md` has the live list.

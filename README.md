@@ -159,8 +159,8 @@ runs without a single OEM app: the launcher owns the serial link the vendor's ga
 to own, and the suite talks to the launcher instead.
 
 On the bench, 0.2 has these proven: boot, touch, gesture navigation, Wi-Fi, radio tuning and
-seek on the real MCU, volume from the MCU, the Bluetooth car-kit profiles, all 28 suite apps
-opening clean, and a Setup Doctor that reads green. Reverse camera, wheel keys, headlamps
+seek on the real MCU, and volume from the MCU. The Bluetooth car-kit profiles are up, all 28
+suite apps open clean, and Setup Doctor reads green. Reverse camera, wheel keys, headlamps
 and a paired phone wait for the car.
 
 The pipeline, the overlay, the car owner and the bench tools are documented in

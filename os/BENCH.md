@@ -26,9 +26,9 @@ loop from the laptop, and a bad boot costs a 2-minute test-point cycle instead o
 | Booted, no adb | none | 0.1 keeps the port in host mode after boot; 0.2 built with `--bench` keeps adb on it |
 | Anything else | EDL | test point, then `edl-write-set.sh DIR SUPER` (with `mksuper.sh` first) |
 
-Test point (vendor guide, step 4): unit unpowered, tweezers across the pads **1P8** and **B0**
-(beside RST, by the TO KB connector on the core board; photo in the workspace's `os/edl/`),
-power on with the short held, release after 5-10 s. Success: core-board LED off, backlight on,
+Test point (vendor guide, step 4): unit unpowered, tweezers across the pads **1P8** and **B0**,
+beside RST by the TO KB connector on the core board (photo in the workspace's `os/edl/`). Power
+on with the short held; release after 5 to 10 s. Success: core-board LED off, backlight on,
 `05c6:9008` on the laptop within seconds. Every reset variant (RST pinhole, ACC cycle, Sahara
 reset) leaves a crashed unit in `05c6:900e`; none of them reaches 9008.
 
@@ -62,8 +62,8 @@ The loader upload works on a fresh enumeration only. Arm the laptop *before* the
 - The GSI's compressed APEXes need free /data to unpack; `decapex.py` unpacks them at build
   time instead. Four logical images must sum under the 6 GiB super.
 - Panel: 1920x720 via a THCV33x SerDes; touch: Goodix GT9xx at i2c 1-0014, IRQ 221
-  (gpio 88). The GSI needs two things stock did for it: a reader on `/dev/zxw_io` (else no
-  interrupt; `riposte-zxwio.sh`) and the real axis ranges (the chip scales X to 0..720 and Y
-  to 0..1920, the driver advertises the reverse; `riposte-touchswap`, a uinput proxy, source
-  in `os/touchswap/`). Writing `/proc/gt9xx_config` is accepted and changes nothing; an IDC
+  (gpio 88). The GSI needs two things stock did for it. A reader on `/dev/zxw_io`, else no interrupt
+(`riposte-zxwio.sh`). And the real axis ranges: the chip scales X to 0..720 and Y to 0..1920
+while the driver advertises the reverse, so `riposte-touchswap` (a uinput proxy, source in
+`os/touchswap/`) re-emits the panel with the right ones. Writing `/proc/gt9xx_config` is accepted and changes nothing; an IDC
   cannot change a range. Read raw touches with `getevent -lt`, never from dumpsys.
