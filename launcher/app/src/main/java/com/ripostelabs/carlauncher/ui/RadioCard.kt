@@ -118,7 +118,7 @@ fun RadioCard(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
     ) {
         if (!info.available) {
-            RadioUnavailable()
+            RadioUnavailable(idle = carService.ownerAttached)
         } else {
             // The card lives in a fixed 180dp slot (HomeScreen right column). The v0.9 layout
             // over-filled it — header row + 40sp freq + presets + a row of borderless
@@ -311,8 +311,12 @@ private fun StationStrip(
     }
 }
 
+/**
+ * [idle]: on the owner path a null frequency means the tuner has not been asked yet (the MCU
+ * reports one only after the Radio screen sends SRC_RADIO), not that the gateway is missing.
+ */
 @Composable
-private fun RadioUnavailable() {
+private fun RadioUnavailable(idle: Boolean) {
     Box(modifier = Modifier.fillMaxSize().padding(20.dp), contentAlignment = Alignment.CenterStart) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(
@@ -323,7 +327,7 @@ private fun RadioUnavailable() {
             )
             Spacer(Modifier.width(12.dp))
             Text(
-                text = "Radio unavailable",
+                text = if (idle) "Radio idle. Tap to tune." else "Radio unavailable",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

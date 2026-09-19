@@ -151,6 +151,10 @@ class CarService(private val appContext: Context) {
     @Volatile
     private var owner: McuOwner? = null
 
+    /** Riposte OS 0.2: true while [owner] answers instead of the vendor gateway. */
+    val ownerAttached: Boolean
+        get() = owner != null
+
     fun attachOwner(mcuOwner: McuOwner) {
         owner = mcuOwner
         _connected.value = true
