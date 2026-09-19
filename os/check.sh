@@ -147,7 +147,8 @@ for list in $LISTS; do
   done
 done
 [ "$PROFILE" = gsi ] && check "[ -z \"\$(pkgs_matching $T $HERE/overlay/remove.gsi)\" ]" "no OEM package left in the image"
-[ "$PROFILE" = gsi ] && check "[ -z \"\$(ls $S/apex/*.capex 2>/dev/null)\" ] && [ -f $S/apex/com.android.resolv.apex ]" "no compressed APEX left (resolv unpacked)"
+# A real GSI ships com.android.resolv.capex; the test fixture ships no APEX at all.
+[ "$PROFILE" = gsi ] && check "[ -z \"\$(ls $S/apex/*.capex 2>/dev/null)\" ] && { [ ! -d $SB/apex ] || [ -f $S/apex/com.android.resolv.apex ]; }" "no compressed APEX left (resolv unpacked)"
 
 echo "kept"
 for p in $(pkgs_in "$KEEPFILE"); do

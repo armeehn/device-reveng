@@ -40,16 +40,46 @@ class McuOwnerProtocolTest {
     }
 
     @Test
-    fun startupIsPowerOnVersionSetupBacklight() {
+    fun startupIsPowerOnVersionSetupVendorBlocksBacklight() {
         val frames = McuOwnerProtocol.startup(McuOwnerProtocol.StartupConfig(rds = true, radioZone = 2, backlightDay = 100, backlightNight = 60))
 
-        assertEquals(5, frames.size)
+        val blocks = McuOwnerProtocol.vendorInit()
+        assertEquals(5 + blocks.size, frames.size)
         assertArrayEquals(McuOwnerProtocol.mode(McuOwnerProtocol.Mode.POWER_ON), frames[0])
         assertArrayEquals(McuOwnerProtocol.mode(McuOwnerProtocol.Mode.MCU_VERSION), frames[1])
         // sendSetup(0, rds ? 0 : 1): RDS on is a ZERO.
         assertArrayEquals(McuOwnerProtocol.setup(0, 0), frames[2])
         assertArrayEquals(McuOwnerProtocol.setup(1, 2), frames[3])
-        assertArrayEquals(McuOwnerProtocol.backlight(100, 60), frames[4])
+        for (i in blocks.indices) {
+            assertArrayEquals(blocks[i], frames[4 + i])
+        }
+        assertArrayEquals(McuOwnerProtocol.backlight(100, 60), frames.last())
+    }
+
+    /**
+     * The config blocks byte for byte as eventcenter wrote them to /dev/ttyHS1 on a restart
+     * (strace, unit on 0.1, 2026-09-18): sendFactorySet and friends, opcode 4F with a sub-id,
+     * then BT state 1. Header, LEN, CK and trailer come from McuSerial.encode and must match.
+     */
+    @Test
+    fun vendorInitBlocksMatchTheStraceCapture() {
+        val wire = listOf(
+            "0d0a334f10" + "0a".repeat(48) + "8d00",
+            "0d0a044f0e009e00",
+            "0d0a0d4f144e2000144e20001400008b00",
+            "0d0a084f15fa0c0000008d00",
+            "0d0a084f1200000000009600",
+            "0d0a094f130000000000009400",
+            "0d0a064f160000009400",
+            "0d0a054f0f00009c00",
+            "0d0a030b01f000",
+        )
+        val frames = McuOwnerProtocol.vendorInit()
+
+        assertEquals(wire.size, frames.size)
+        for (i in wire.indices) {
+            assertEquals("frame $i", wire[i], frames[i].joinToString("") { "%02x".format(it) })
+        }
     }
 
     /** `13 yy MM dd HH mm ss`, year from 2000; then SRC_POWEROFF (0x65) five times. */

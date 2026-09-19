@@ -24,6 +24,19 @@ service riposte_usbadb /system/bin/sh /system/bin/riposte-usbadb.sh
 on property:service.bootanim.exit=0
     start riposte_usbadb
 
+# Car-owner builds: keep /dev/zxw_io open the way eventcenter's GetTouchEvt thread does on
+# stock (EventService.java startGetTouchEvtThread). The vendor's zxw_io driver may gate the
+# touch path on an open reader; 0.2 without it never sees a touch interrupt (RAV4-84).
+service riposte_zxwio /system/bin/sh /system/bin/riposte-zxwio.sh
+    class core
+    user root
+    group root
+    seclabel u:r:su:s0
+    disabled
+
+on property:sys.boot_completed=1 && property:ro.riposte.os.car_owner=1
+    start riposte_zxwio
+
 # ro.riposte.os.bench=1 only: take the port back after the vendor's boot_completed host write.
 on property:sys.boot_completed=1 && property:ro.riposte.os.bench=1
     start riposte_usbadb
