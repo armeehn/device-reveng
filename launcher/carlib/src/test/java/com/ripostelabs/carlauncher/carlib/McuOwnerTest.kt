@@ -390,6 +390,26 @@ class McuOwnerTest {
         assertEquals(McuOpcode.SLEEP_STATE.code, recorder.other[0].opcode)
     }
 
+    /** The 10 Hz `8E` G-sensor stream is unhandled and still reaches onOther every time. */
+    @Test
+    fun repeatedUnhandledOpcodeReachesOnOtherEachTime() {
+        val link = FakeLink(ackNull = true)
+        val recorder = Recorder()
+        val owner = owner(link, recorder = recorder)
+        owner.start()
+        waitFor("running") { owner.status.value as? McuOwner.Status.Running }
+
+        repeat(3) {
+            link.feed(McuSerial.encode(McuOpcode.RADAR_3DH.code, bytes(0x00, 0x10, 0x00, 0x20, 0x03, 0xF0)))
+        }
+
+        waitFor("three frames") { (owner.status.value as? McuOwner.Status.Running)?.takeIf { it.frames == 4L } }
+        owner.stop()
+
+        assertEquals(3, recorder.other.size)
+        assertTrue(recorder.other.all { it.opcode == McuOpcode.RADAR_3DH.code })
+    }
+
     /** `83` reaches onRtc decoded, and not onOther. */
     @Test
     fun rtcFrameDispatchesOnRtc() {
