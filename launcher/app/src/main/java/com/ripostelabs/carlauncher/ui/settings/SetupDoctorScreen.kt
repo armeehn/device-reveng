@@ -379,6 +379,11 @@ private fun GatewayStateSection(controller: CarSettingsController, carService: C
 
     SettingsSection(title = "Gateway state") {
         InfoRow(label = "Source mode (getValidMode)", value = SrcModeNames.label(mode))
+        // Riposte OS 0.2: the SysVar rows are eventcenter's and there is no eventcenter.
+        if (carService?.ownerAttached == true) {
+            InfoRow(label = "SysVar", value = "none: the car owner replaces the gateway")
+            return@SettingsSection
+        }
         InfoRow(
             label = "Sys_SoundManager_Type",
             value = sysVarValue(sysVars, SettingKeys.SOUND_MANAGER_TYPE) +
