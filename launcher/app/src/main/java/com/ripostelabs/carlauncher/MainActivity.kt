@@ -271,6 +271,7 @@ class MainActivity : ComponentActivity() {
                 VendorBroadcastReemitter(applicationContext),
                 sysVarMirror,
                 McuClock(applicationContext),
+                carService.volumeState,
             )
             mcuOwner = McuOwner(
                 ownerGate,

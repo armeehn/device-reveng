@@ -167,6 +167,17 @@ class CarService(private val appContext: Context) {
      */
     val radioState = RadioStateHolder(onUpdate = { _radioEvents.update { it + 1 } })
 
+    /** The volume cache the owner's `79`/`78` frames feed (a FanOut target); the binder otherwise. */
+    val volumeState = VolumeStateHolder()
+
+    /** Owner attached: [read] the cache, null until the MCU has reported; otherwise the binder. */
+    private inline fun <T> volume(read: (VolumeState) -> T, binder: IEventService.() -> T?): T? {
+        if (owner == null) {
+            return call(binder)
+        }
+        return volumeState.state.value?.let(read)
+    }
+
     /** Owner attached: [read] the cache, null until the MCU has reported; otherwise the binder. */
     private inline fun <T> tuner(read: (RadioState) -> T, binder: IEventService.() -> T?): T? {
         if (owner == null) {
@@ -217,8 +228,8 @@ class CarService(private val appContext: Context) {
     fun isBackCarConnected(): Boolean = call { IsBackCarConneted() } ?: false
     fun getRadioFreq(): Int? = tuner({ it.freq }) { getRadioFreq() }
     fun getRadioBand(): Int? = tuner({ it.band }) { getRadioBand() }
-    fun getMainVolume(): Int? = call { getMainVolval().toInt() }
-    fun isMuteOn(): Boolean = call { IsMuteOn() } ?: false
+    fun getMainVolume(): Int? = volume({ it.level }) { getMainVolval().toInt() }
+    fun isMuteOn(): Boolean = volume({ it.muted }) { IsMuteOn() } ?: false
     fun getMcuVer(): String? = call { getMCUVer() }
 
     // ---- v2.6: vendor source identity (CAR_API §3.2) -----------------------
