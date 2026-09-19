@@ -32,6 +32,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.ripostelabs.carlauncher.carlib.BtCarKit
 import com.ripostelabs.carlauncher.carlib.CarEvents
+import com.ripostelabs.carlauncher.data.McuClock
 import com.ripostelabs.carlauncher.data.AccessoryRuntime
 import com.ripostelabs.carlauncher.carlib.RootShell
 import com.ripostelabs.carlauncher.input.WheelGamepad
@@ -269,6 +270,7 @@ class MainActivity : ComponentActivity() {
                 carEvents.ownerListener(CanCaptureService.vehicle(), carService.radioState),
                 VendorBroadcastReemitter(applicationContext),
                 sysVarMirror,
+                McuClock(applicationContext),
                 carService.volumeState,
             )
             mcuOwner = McuOwner(

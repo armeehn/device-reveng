@@ -3,6 +3,7 @@ package com.ripostelabs.carlauncher.carlib
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
+import java.time.LocalDateTime
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -80,6 +81,7 @@ class McuOwnerTest {
         val signals = CopyOnWriteArrayList<CanSignal>()
         val other = CopyOnWriteArrayList<McuSerial.Command>()
         val wakes = CopyOnWriteArrayList<Long>()
+        val rtc = CopyOnWriteArrayList<LocalDateTime>()
 
         override fun onSysEvent(event: McuOwnerProtocol.SysEvent) { sys.add(event) }
         override fun onMainVolume(volume: McuOwnerProtocol.MainVolume) { this.volume.add(volume) }
@@ -90,6 +92,7 @@ class McuOwnerTest {
         override fun onCanSignal(signal: CanSignal, atMs: Long) { signals.add(signal) }
         override fun onOther(command: McuSerial.Command) { other.add(command) }
         override fun onWake() { wakes.add(System.currentTimeMillis()) }
+        override fun onRtc(time: LocalDateTime) { rtc.add(time) }
     }
 
     // The write watchdog is off the clock here (a CI stall once declared a fake link dead
@@ -405,6 +408,24 @@ class McuOwnerTest {
 
         assertEquals(3, recorder.other.size)
         assertTrue(recorder.other.all { it.opcode == McuOpcode.RADAR_3DH.code })
+    }
+
+    /** `83` reaches onRtc decoded, and not onOther. */
+    @Test
+    fun rtcFrameDispatchesOnRtc() {
+        val link = FakeLink(ackNull = true)
+        val recorder = Recorder()
+        val owner = owner(link, recorder = recorder)
+        owner.start()
+        waitFor("running") { owner.status.value as? McuOwner.Status.Running }
+
+        link.feed(McuSerial.encode(McuOpcode.SYS_RTC_TIME.code, bytes(26, 9, 19, 14, 5, 7)))
+
+        waitFor("frame") { (owner.status.value as? McuOwner.Status.Running)?.takeIf { it.frames == 2L } }
+        owner.stop()
+
+        assertEquals(listOf(LocalDateTime.of(2026, 9, 19, 14, 5, 7)), recorder.rtc)
+        assertTrue(recorder.other.isEmpty())
     }
 
     /** FanOut forwards every callback, the tuner's `73` events and the key edges included. */

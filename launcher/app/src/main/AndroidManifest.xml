@@ -43,6 +43,10 @@
 
     <!-- v3.1 status chips: read-only Wi-Fi / network state for the top-bar indicators. -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Riposte OS 0.2: the owner path sets the clock from the MCU RTC while offline (McuClock).
+         Privileged; the OS build allowlists it, the vendor build never grants it. -->
+    <uses-permission android:name="android.permission.SET_TIME"
+        tools:ignore="ProtectedPermissions" />
     <!-- The CANable is claimed over USB host; this kernel has no CDC-ACM driver, so there is no
          serial node to open. Not required: the launcher must still install on a unit without
          host mode, it simply finds no adapter. -->

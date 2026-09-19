@@ -64,6 +64,8 @@ object McuOwnerProtocol {
     const val BT_DISCONNECTED = 0
 
     private const val RTC_EPOCH_YEAR = 2000
+    private const val RTC_UNSET_MAX_OFFSET = 18  // a year at or below 2018 is an RTC nobody set (:3054)
+    private const val RTC_FIELDS = 6
     private const val BYTE = 0xFF
     private const val SLEEP_STATE_WAKE = 0x01
     private const val BIT7 = 0x80
@@ -303,6 +305,28 @@ object McuOwnerProtocol {
         command.opcode == McuOpcode.SLEEP_STATE.code &&
             command.payload.isNotEmpty() &&
             (command.payload[0].toInt() and BYTE) == SLEEP_STATE_WAKE
+
+    /**
+     * `83 yy MM dd HH mm ss`, year from 2000: the MCU's battery-backed clock (onCmdSysRTCTimeEvt,
+     * EventService.java:3041-3058). Null for another opcode, a short body, an unset RTC (year at
+     * or below 2018) or a date the calendar rejects. The vendor sets the system clock from it
+     * only while it has neither a GPS fix nor a network; that gate is the caller's.
+     */
+    fun rtcTime(command: McuSerial.Command): LocalDateTime? {
+        if (command.opcode != McuOpcode.SYS_RTC_TIME.code || command.payload.size < RTC_FIELDS) {
+            return null
+        }
+
+        val p = command.payload
+        fun at(i: Int): Int = p[i].toInt() and BYTE
+        if (at(0) <= RTC_UNSET_MAX_OFFSET) {
+            return null
+        }
+
+        return runCatching {
+            LocalDateTime.of(RTC_EPOCH_YEAR + at(0), at(1), at(2), at(3), at(4), at(5))
+        }.getOrNull()
+    }
 
     /** MODE_ACK carries the mode it acknowledges in its first byte (onCmdModeAck, :2186-2190). */
     fun isModeAck(command: McuSerial.Command, mode: Mode): Boolean =
