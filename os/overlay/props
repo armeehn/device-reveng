@@ -26,9 +26,11 @@ ro.riposte.os.bt_carkit=${RIPOSTE_BT_CARKIT}
 # The vendor's SurfaceFlinger honours ro.sf.hwrotation=90 (set by ABL from the privdata2 screen
 # config); AOSP 14's only reads this one. Without it the GSI renders the 1920x720 panel portrait.
 @gsi ro.surface_flinger.primary_display_orientation=ORIENTATION_90
-# No software navigation bar: the vendor build never shows one and it covered the bottom 72 px
-# of the launcher on 0.2 (TrebleDroid's mainkeys switch, read at framework start).
-@gsi persist.sys.phh.mainkeys=1
+# Software navigation stays on (TrebleDroid's mainkeys switch, read at framework start): the
+# vendor build has none because its fascia keys inject HOME and BACK system-wide, which the
+# owner path cannot do from a priv-app. Without it a foreign app (Settings) is a trap. The
+# first-boot hook picks gesture mode, a thin pill instead of the 72 px three-button bar.
+@gsi persist.sys.phh.mainkeys=0
 # The MCU port on the GSI is system:system 0660 with the generic `device` label, which a
 # priv-app cannot open. riposte-mcubridge.sh (root, from init) puts /dev/ttyHS1 behind a
 # loopback socket and McuOwner rides that carrier (McuLinkSpec grammar).

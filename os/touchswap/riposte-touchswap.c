@@ -5,7 +5,7 @@
  * height scaled 0..1920 (corner taps on the bench, 2026-09-19: top-left (19, 189),
  * bottom-right (697, 1800)), while the kernel driver advertises X max 1920 and Y max 720.
  * The vendor's own framework coped; AOSP scales by the advertised ranges, so every touch
- * lands in the left third with Y clamped. The chip ignores config writes and an IDC cannot
+ * arrives in the left third with Y clamped. The chip ignores config writes and an IDC cannot
  * change a range, so this grabs the driver's device and re-emits every event unchanged on a
  * uinput touchscreen whose X and Y ranges are the ones the chip actually uses.
  *
