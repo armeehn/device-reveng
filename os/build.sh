@@ -147,8 +147,9 @@ for apk in "$APPS"/suite/*.apk; do
 done
 log "installed $LAUNCHER_NAME + $SUITE_N suite apps ($([ "$PROFILE" = gsi ] && echo "system image's" || echo "product image's") $SUITE_DIR)"
 
-# Default grants for the suite: a head unit has no one to tap a permission prompt, and 14 of
-# the 28 apps opened on one at first launch (bench, 2026-09-19). The framework grants what is
+# Default grants for the launcher and the suite: a head unit has no one to tap a permission
+# prompt, and 14 of the 28 apps opened on one at first launch, the launcher on the camera one
+# (bench, 2026-09-19). The framework grants what is
 # listed here at the first boot of a /data (DefaultPermissionGrantPolicy reads every
 # etc/default-permissions/*.xml on the product partition); non-runtime names are logged and
 # skipped, so every requested permission goes in. fixed="false" keeps them user-changeable.
@@ -156,7 +157,7 @@ mkdir -p "$PRODUCT_ROOT/$(dirname "$DEFPERM_XML")"
 {
   echo '<?xml version="1.0" encoding="utf-8"?>'
   echo "<exceptions>"
-  for apk in "$APPS"/suite/*.apk; do
+  for apk in "$APPS/carlauncher.apk" "$APPS"/suite/*.apk; do
     [ -f "$apk" ] || continue
     echo "    <exception package=\"$(apk_package "$apk")\">"
     perms=$("$AAPT2" dump permissions "$apk" | sed -n "s/^uses-permission: name='\([^']*\)'.*/\1/p")
@@ -170,7 +171,7 @@ android.permission.READ_MEDIA_VISUAL_USER_SELECTED" ;; esac
   echo "</exceptions>"
 } > "$PRODUCT_ROOT/$DEFPERM_XML"
 label_system_file "$PRODUCT_ROOT/$(dirname "$DEFPERM_XML")" "$PRODUCT_ROOT/$DEFPERM_XML"
-log "default grants for $SUITE_N suite apps"
+log "default grants for the launcher + $SUITE_N suite apps"
 if [ -f "$APPS/bootanimation.zip" ]; then      # rendered by bootanim/make.py where Pillow lives
   mkdir -p "$PRODUCT_ROOT/$(dirname "$BOOTANIM")"
   cp "$APPS/bootanimation.zip" "$PRODUCT_ROOT/$BOOTANIM"
