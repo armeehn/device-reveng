@@ -1,4 +1,5 @@
-# Host-side checks for the Riposte OS tooling in os/: no device, no images, python3 + bash only.
+# Host-side checks for the Riposte OS tooling in os/: no device, no images, python3 + bash,
+# plus the arm64 cross compiler for the touch proxy.
 name: os-ci
 
 on:
@@ -28,3 +29,7 @@ jobs:
         run: os/test-edl-restore.sh
       - name: vbmeta-flags
         run: os/test-vbmeta-flags.sh
+      - name: touchswap compiles
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq gcc-aarch64-linux-gnu
+          aarch64-linux-gnu-gcc -O2 -static -Wall -Wextra -Werror -o /tmp/riposte-touchswap os/touchswap/riposte-touchswap.c
