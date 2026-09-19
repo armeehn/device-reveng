@@ -41,7 +41,5 @@ our own hardware must offer so nothing above the line changes.
 - The suite is **untouched**: on 0.2 the launcher re-emits the vendor's action strings
   (`VendorBroadcastReemitter`) from `McuOwner` events, so apps that still register for
   `com.choiceway.eventcenter.*` keep working without a rebuild.
-- What the emulator cannot show (rows 1-11) is verified at the car with the acceptance list in
-  Plane RAV4-82, and on a Riposte board with the same list.
-
-Plane RAV4-85.
+- What the emulator cannot show (rows 1-11) is verified at the car with `ACCEPTANCE.md`,
+  and on a Riposte board with the same list.
