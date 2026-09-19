@@ -5,13 +5,15 @@
 #   base/{vendor,boot,dtbo,vbmeta*}.img ─────────────────── copied verbatim ──► out/
 #
 # Usage: build.sh --base DIR --apps DIR --out DIR [--profile tier1|tier2|gsi] [--system IMG]
-#                 [--version V] [--car-owner]
+#                 [--version V] [--car-owner] [--bench]
 #   --apps holds carlauncher.apk (release-signed) and suite/*.apk.
 #   --boot replaces base/boot.img (e.g. a magisk-patch.sh output for a rootable slot).
 #   --system replaces base/system.img (an AOSP GSI, .img or .img.xz); profile gsi removes the
 #   whole OEM stack from product and implies --car-owner.
 #   --car-owner sets ro.riposte.os.car_owner=1: McuOwner may take /dev/ttyHS1. ONLY for a
 #   build without eventcenter (0.2); on a stock-derived image two readers split the stream.
+#   --bench keeps the @bench props (adb on Wi-Fi 5555, USB port in peripheral mode, persisted
+#   logcat). Off by default: a car build must not answer adb on the car network.
 # Runs as root on x (loop mounts). See README.md for why each step exists.
 
 set -euo pipefail
@@ -28,7 +30,7 @@ readonly BOOTANIM=product/media/bootanimation.zip   # bootanimation looks in /pr
 readonly PASSTHROUGH="vendor system_ext boot dtbo vbmeta vbmeta_system"   # one matched set, never mixed across builds
 readonly EDITED="system product"
 
-BASE="" APPS="" OUT="" PROFILE=tier1 VERSION="" CAR_OWNER=0 BT_CARKIT=0 SYSTEM="" BOOT=""
+BASE="" APPS="" OUT="" PROFILE=tier1 VERSION="" CAR_OWNER=0 BT_CARKIT=0 SYSTEM="" BOOT="" BENCH=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --base) BASE=$2; shift 2 ;;
@@ -37,6 +39,7 @@ while [ $# -gt 0 ]; do
     --profile) PROFILE=$2; shift 2 ;;
     --version) VERSION=$2; shift 2 ;;
     --car-owner) CAR_OWNER=1; shift ;;
+    --bench) BENCH=1; shift ;;
     --system) SYSTEM=$2; shift 2 ;;
     --boot) BOOT=$2; shift 2 ;;
     *) die "unknown arg $1" ;;
@@ -183,8 +186,11 @@ VERSION=${VERSION:-$MILESTONE+$(date -u +%Y%m%d).vc$("$AAPT2" dump badging "$APP
 # lines only on the AOSP GSI base.
 CARKIT_SED=$([ "$BT_CARKIT" = 1 ] && echo 's/^@carkit //' || echo '/^@carkit /d')
 GSI_SED=$([ "$PROFILE" = gsi ] && echo 's/^@gsi //' || echo '/^@gsi /d')
+# `@bench ` lines (adb over Wi-Fi, the USB port held in peripheral mode, persisted logcat) are
+# for the bench only: a car build must not answer adb on the car's network.
+BENCH_SED=$([ "$BENCH" = 1 ] && echo 's/^@bench //' || echo '/^@bench /d')
 RIPOSTE_OS_VERSION=$VERSION RIPOSTE_CAR_OWNER=$CAR_OWNER RIPOSTE_BT_CARKIT=$BT_CARKIT \
-  envsubst < "$HERE/overlay/props" | sed -e "$CARKIT_SED" -e "$GSI_SED" >> "$SYS/build.prop"
+  envsubst < "$HERE/overlay/props" | sed -e "$CARKIT_SED" -e "$GSI_SED" -e "$BENCH_SED" >> "$SYS/build.prop"
 log "version $VERSION"
 
 # ---- 6. repack + passthrough ---------------------------------------------------
@@ -198,7 +204,7 @@ for part in $PASSTHROUGH; do
   [ -f "$src" ] && cp --reflink=auto "$src" "$OUT/$part.img"
 done
 {
-  echo "version=$VERSION"; echo "profile=$PROFILE"; echo "car_owner=$CAR_OWNER"; echo "bt_carkit=$BT_CARKIT"; echo "built=$(date -u +%FT%TZ)"
+  echo "version=$VERSION"; echo "profile=$PROFILE"; echo "car_owner=$CAR_OWNER"; echo "bt_carkit=$BT_CARKIT"; echo "bench=$BENCH"; echo "built=$(date -u +%FT%TZ)"
   echo "launcher=$(apk_package "$APPS/carlauncher.apk") vc$("$AAPT2" dump badging "$APPS/carlauncher.apk" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p")"
   echo "suite=$SUITE_N"; echo "system=${SYSTEM:-$BASE/system.img}"; echo "boot=${BOOT:-$BASE/boot.img}"
   echo "removed=$(awk -F'\t' 'NF{print $1}' <<<"$REMOVE" | paste -sd,)"
