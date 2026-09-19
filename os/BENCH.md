@@ -61,7 +61,7 @@ The loader upload works on a fresh enumeration only. Arm the laptop *before* the
   time instead. Four logical images must sum under the 6 GiB super.
 - Panel: 1920x720 via a THCV33x SerDes; touch: Goodix GT9xx at i2c 1-0014, IRQ 221
   (gpio 88). The GSI needs two things stock did for it: a reader on `/dev/zxw_io` (else no
-  interrupt; `riposte-zxwio.sh`) and the axes transposed (the chip reports raw X down the
-  height and raw Y across the width; `riposte-touchswap`, a uinput proxy, source in
-  `os/touchswap/`). Writing `/proc/gt9xx_config` is accepted and changes nothing; no IDC
-  rotation gives a transpose. Read raw touches with `getevent -lt`, never from dumpsys.
+  interrupt; `riposte-zxwio.sh`) and the real axis ranges (the chip scales X to 0..720 and Y
+  to 0..1920, the driver advertises the reverse; `riposte-touchswap`, a uinput proxy, source
+  in `os/touchswap/`). Writing `/proc/gt9xx_config` is accepted and changes nothing; an IDC
+  cannot change a range. Read raw touches with `getevent -lt`, never from dumpsys.

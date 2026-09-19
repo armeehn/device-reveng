@@ -45,10 +45,10 @@ service riposte_zxwio /system/bin/sh /system/bin/riposte-zxwio.sh
     seclabel u:r:su:s0
     disabled
 
-# The Goodix chip reports in the panel's portrait frame (raw X down the 720 px height, raw Y
-# across the 1920 px width) under a driver that advertises the reverse; the vendor framework
-# undid that, AOSP does not. riposte-touchswap grabs the driver's device and re-emits every
-# event transposed on a uinput touchscreen. Without it every touch lands in the left third.
+# The Goodix chip scales X (across the width) to 0..720 and Y (down the height) to 0..1920
+# under a driver that advertises the reverse; the vendor framework coped, AOSP does not.
+# riposte-touchswap grabs the driver's device and re-emits every event on a uinput touchscreen
+# with the real ranges. Without it every touch lands in the left third.
 service riposte_touchswap /system/bin/riposte-touchswap
     class core
     user root

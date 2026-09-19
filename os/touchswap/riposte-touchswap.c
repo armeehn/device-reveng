@@ -1,17 +1,17 @@
 /*
- * riposte-touchswap: transpose the GT9xx touch axes for the AOSP framework.
+ * riposte-touchswap: give the AOSP framework the touch panel's real axis ranges.
  *
- * The panel is mounted landscape but the Goodix chip reports in its native portrait frame:
- * raw X runs down the 720 px height and raw Y across the 1920 px width, while the kernel
- * driver advertises X max 1920 and Y max 720. The vendor's own framework undid that; AOSP
- * scales by the advertised ranges and every touch lands in the left third (bench,
- * 2026-09-19). No IDC rotation yields a transpose and the chip ignores config writes, so
- * this grabs the driver's device and re-emits every event on a uinput touchscreen with X
- * and Y exchanged.
+ * The Goodix chip reports X across the 1920 px width scaled 0..720 and Y down the 720 px
+ * height scaled 0..1920 (corner taps on the bench, 2026-09-19: top-left (19, 189),
+ * bottom-right (697, 1800)), while the kernel driver advertises X max 1920 and Y max 720.
+ * The vendor's own framework coped; AOSP scales by the advertised ranges, so every touch
+ * lands in the left third with Y clamped. The chip ignores config writes and an IDC cannot
+ * change a range, so this grabs the driver's device and re-emits every event unchanged on a
+ * uinput touchscreen whose X and Y ranges are the ones the chip actually uses.
  *
- *     /dev/input/eventN "TouchScreenZXW" ──EVIOCGRAB──▶ swap X<->Y ──▶ /dev/uinput "Riposte Touch"
+ *     /dev/input/eventN "TouchScreenZXW" ──EVIOCGRAB──▶ same events ──▶ /dev/uinput "Riposte Touch"
+ *                       X 0..1920, Y 0..720 advertised                    X 0..720, Y 0..1920
  *
- * Everything else (slots, tracking ids, major/minor, orientation, SYN) passes through as is.
  * Usage: riposte-touchswap [source-name]   (default TouchScreenZXW)
  */
 #include <dirent.h>
@@ -30,14 +30,15 @@
 #define INPUT_DIR "/dev/input"
 #define UINPUT_DEV "/dev/uinput"
 
-/* Every ABS axis the driver exposes; X and Y trade places on the way out. */
+/* Every ABS axis the driver exposes; X and Y trade ranges on the way out. */
 static const int MIRRORED_AXES[] = {
     ABS_MT_SLOT, ABS_MT_TOUCH_MAJOR, ABS_MT_TOUCH_MINOR, ABS_MT_ORIENTATION,
     ABS_MT_POSITION_X, ABS_MT_POSITION_Y, ABS_MT_TRACKING_ID, ABS_MT_PRESSURE,
     ABS_X, ABS_Y, ABS_PRESSURE,
 };
 
-static int swapped(int code) {
+/* The axis whose advertised range is the true range of [code]. */
+static int range_source(int code) {
     switch (code) {
     case ABS_MT_POSITION_X: return ABS_MT_POSITION_Y;
     case ABS_MT_POSITION_Y: return ABS_MT_POSITION_X;
@@ -82,9 +83,8 @@ static int open_source(const char *name) {
 }
 
 /*
- * Build the uinput device from the source's axes. The ranges stay with their codes: the
- * driver advertises X max 1920 and Y max 720, which is wrong for what the chip sends on
- * each axis and right for what leaves here once the events are transposed.
+ * Build the uinput device from the source's axes with the X and Y ranges exchanged: the
+ * driver's X max (1920) is what the chip really spans on Y, and its Y max (720) on X.
  */
 static int open_output(int src) {
     int fd = open(UINPUT_DEV, O_WRONLY);
@@ -106,7 +106,7 @@ static int open_output(int src) {
         }
 
         struct input_absinfo info;
-        if (ioctl(src, EVIOCGABS(code), &info) < 0) {
+        if (ioctl(src, EVIOCGABS(range_source(code)), &info) < 0) {
             continue;
         }
 
@@ -149,9 +149,6 @@ int main(int argc, char **argv) {
 
     struct input_event ev;
     while (read(src, &ev, sizeof(ev)) == (ssize_t)sizeof(ev)) {
-        if (ev.type == EV_ABS) {
-            ev.code = swapped(ev.code);
-        }
         if (write(out, &ev, sizeof(ev)) != (ssize_t)sizeof(ev)) {
             break;
         }
