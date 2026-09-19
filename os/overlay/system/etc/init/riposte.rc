@@ -9,3 +9,21 @@ service riposte_firstboot /system/bin/sh /system/bin/riposte-firstboot.sh
 
 on property:sys.boot_completed=1
     start riposte_firstboot
+
+# Bench aid on car-owner builds: adb on the 4PIN USB while the boot animation runs, so a
+# framework that never comes up still yields logcat. The vendor forces the port to host at
+# animation start and again at boot_completed; this flips it back to peripheral in between.
+service riposte_usbadb /system/bin/sh /system/bin/riposte-usbadb.sh
+    class core
+    user root
+    group root
+    seclabel u:r:su:s0
+    oneshot
+    disabled
+
+on property:service.bootanim.exit=0
+    start riposte_usbadb
+
+# ro.riposte.os.bench=1 only: take the port back after the vendor's boot_completed host write.
+on property:sys.boot_completed=1 && property:ro.riposte.os.bench=1
+    start riposte_usbadb

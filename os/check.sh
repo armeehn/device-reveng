@@ -147,6 +147,7 @@ for list in $LISTS; do
   done
 done
 [ "$PROFILE" = gsi ] && check "[ -z \"\$(pkgs_matching $T $HERE/overlay/remove.gsi)\" ]" "no OEM package left in the image"
+[ "$PROFILE" = gsi ] && check "[ -z \"\$(ls $S/apex/*.capex 2>/dev/null)\" ] && [ -f $S/apex/com.android.resolv.apex ]" "no compressed APEX left (resolv unpacked)"
 
 echo "kept"
 for p in $(pkgs_in "$KEEPFILE"); do
@@ -156,7 +157,8 @@ for p in $(pkgs_in "$KEEPFILE"); do
     ok "$p (not in base)"
   fi
 done
-check "cmp -s $SB/$FRAMEWORK $S/$FRAMEWORK" "framework.jar byte-identical to base"
+# On the GSI profile the framework is AOSP's, not the vendor's: the comparison is meaningless.
+[ "$PROFILE" = gsi ] || check "cmp -s $SB/$FRAMEWORK $S/$FRAMEWORK" "framework.jar byte-identical to base"
 
 echo "suite"
 N=$(find "$T/product/app" -name '*.apk' -exec "$AAPT2" dump packagename {} \; 2>/dev/null | grep -c '^com.ripostelabs\.' || true)

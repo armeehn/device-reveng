@@ -114,6 +114,14 @@ done <<<"$REMOVE"
 if [ "$CAR_OWNER" = 1 ] && grep -q "^com.szchoiceway.eventcenter	" <<<"$KEEP"; then
   die "--car-owner with eventcenter in the image: two readers on one tty split the stream"
 fi
+
+# The GSI's compressed APEXes would be decompressed into /data at first boot; a full /data then
+# leaves netd without its resolver and zygote in a restart loop (see decapex.py). Unpack them
+# into /system/apex now so the boot path never touches /data for them.
+if [ "$PROFILE" = gsi ] && [ -d "$SYS/apex" ]; then
+  python3 "$HERE/decapex.py" "$SYS/apex" | while read -r l; do log "$l"; done
+  for f in "$SYS"/apex/*.apex; do label_system_file "$f"; done
+fi
 if [ "$CAR_OWNER" = 1 ] && [ "$PROFILE" != gsi ]; then
   log "WARNING: --car-owner on a stock-derived system; eventcenter must not be in the image"
 fi
@@ -166,10 +174,12 @@ label_system_file "$SYS/$PRIVAPP_XML"
 done
 MILESTONE=$([ "$PROFILE" = gsi ] && echo 0.2 || echo 0.1)   # 0.1 stock re-mastered, 0.2 GSI base
 VERSION=${VERSION:-$MILESTONE+$(date -u +%Y%m%d).vc$("$AAPT2" dump badging "$APPS/carlauncher.apk" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p")}
-# `@carkit ` lines are kept (tag stripped) only when the stack runs the car-kit roles.
+# `@carkit ` lines are kept (tag stripped) only when the stack runs the car-kit roles; `@gsi `
+# lines only on the AOSP GSI base.
 CARKIT_SED=$([ "$BT_CARKIT" = 1 ] && echo 's/^@carkit //' || echo '/^@carkit /d')
+GSI_SED=$([ "$PROFILE" = gsi ] && echo 's/^@gsi //' || echo '/^@gsi /d')
 RIPOSTE_OS_VERSION=$VERSION RIPOSTE_CAR_OWNER=$CAR_OWNER RIPOSTE_BT_CARKIT=$BT_CARKIT \
-  envsubst < "$HERE/overlay/props" | sed "$CARKIT_SED" >> "$SYS/build.prop"
+  envsubst < "$HERE/overlay/props" | sed -e "$CARKIT_SED" -e "$GSI_SED" >> "$SYS/build.prop"
 log "version $VERSION"
 
 # ---- 6. repack + passthrough ---------------------------------------------------
