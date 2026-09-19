@@ -3,7 +3,8 @@
 # built here, shipped to the laptop at the bench, flashed over fastbootd without a wipe.
 #
 #     launcher.hq ──apk──▶ build.sh --profile gsi --bench ──▶ share/.../0.2-bench
-#         ──rsync──▶ zero:~/rav4-headunit/os/0.2-bench ──▶ adb reboot fastboot ──▶ fastboot-flash-set.sh
+#         ──rsync──▶ laptop:~/rav4-headunit/os/0.2-bench ──▶ adb reboot fastboot ──▶ fastboot-flash-set.sh
+#         ──boot──▶ bench-verify.sh (every logical partition hashed against SHA256SUMS over adb)
 #
 # Usage: bench-cycle.sh <vcNNN> [--wipe]        runs as root on x (build.sh loop-mounts)
 #   vcNNN   a launcher versionCode listed at launcher.hq (the release job publishes one per
@@ -49,7 +50,8 @@ rm -rf "$OUT"
 grep -E "^version=|^launcher=|^bench=" "$OUT/MANIFEST"
 chown -R sasha:smbshare "$OUT" 2>/dev/null || true
 
-# 3. ship to the bench laptop, then flash from fastbootd
+# 3. ship to the bench laptop (the images, and the two scripts the laptop runs), then flash
+scp -q -o BatchMode=yes "$HERE/fastboot-flash-set.sh" "$HERE/bench-verify.sh" "$BENCH_HOST:rav4-headunit/os/"
 FLASH_ARGS="~/rav4-headunit/os/0.2-bench"
 [ "$WIPE" = --wipe ] && FLASH_ARGS="$FLASH_ARGS wipe"
 # The remote shell is bash: pipefail so a flash that fails behind the tail still fails here.
@@ -64,3 +66,14 @@ ssh -o BatchMode=yes "$BENCH_HOST" "
   bash ~/rav4-headunit/os/fastboot-flash-set.sh $FLASH_ARGS 2>&1 | grep -v '^Sending\|^Writing' | tail -12
 " || die "flash failed: the unit is still in fastbootd, rerun fastboot-flash-set.sh there (BENCH.md)"
 log "flashed $VC; the unit is booting"
+
+# 4. Prove the bytes: fastboot has no payload checksum and a marginal link once wrote bad
+# blocks without an error. bench-verify.sh hashes each logical partition against SHA256SUMS
+# over adb root; the bench build's adbd is up from init, before the framework.
+ssh -o BatchMode=yes "$BENCH_HOST" "
+  set -eo pipefail
+  for i in \$(seq 1 60); do adb -s $BENCH_SERIAL get-state >/dev/null 2>&1 && break; sleep 5; done
+  sleep 15
+  UNIT=$BENCH_SERIAL bash ~/rav4-headunit/os/bench-verify.sh ~/rav4-headunit/os/0.2-bench
+" || die "verify failed: the flash did not write what was sent, reflash"
+log "verified $VC on the unit"

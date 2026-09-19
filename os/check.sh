@@ -141,10 +141,10 @@ fi
 echo "suite default grants"
 check "python3 -c 'import xml.etree.ElementTree as E; E.parse(\"$PR/$DEFPERM_XML\")'" "default-permissions XML parses"
 # shellcheck disable=SC2034  # used inside the eval below
-SUITE_PKGS=$(for a in "$PR"/app/*/*.apk; do pkg_of "$a"; done | grep "^com\.ripostelabs\." | sort)
+SUITE_PKGS=$( { for a in "$PR"/app/*/*.apk; do pkg_of "$a"; done | grep "^com\.ripostelabs\."; echo "$LAUNCHER_PKG"; } | sort)
 # shellcheck disable=SC2034
 GRANT_PKGS=$(python3 -c 'import xml.etree.ElementTree as E,sys; print("\n".join(sorted(e.get("package") for e in E.parse(sys.argv[1]).iter("exception"))))' "$PR/$DEFPERM_XML")
-check "[ \"\$SUITE_PKGS\" = \"\$GRANT_PKGS\" ]" "every suite package has a default-permissions entry"
+check "[ \"\$SUITE_PKGS\" = \"\$GRANT_PKGS\" ]" "the launcher and every suite package have a default-permissions entry"
 
 echo "removed"
 if [ "$PROFILE" = gsi ]; then
