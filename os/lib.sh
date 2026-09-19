@@ -92,10 +92,13 @@ system_root() { # tree-of-system-image -> path
 }
 
 # Bytes a tree will need as ext4: content + 15 % metadata/slack, rounded to blocks.
+# Read-only ext4 without journal or reserved blocks needs ~2 % for inode tables and bitmaps;
+# 6 % + 16 MiB keeps four images inside the unit's 6 GiB super once the GSI's APEXes are
+# unpacked (115 % overflowed it by 0.2 GiB on 2026-09-18). mke2fs -d fails loudly if short.
 ext4_size_for() { # tree
   local used
   used=$(du -sB1 --apparent-size "$1" | cut -f1)
-  echo $(( (used * 115 / 100 / BLOCK + 2048) * BLOCK ))
+  echo $(( (used * 106 / 100 / BLOCK + 4096) * BLOCK ))
 }
 
 # Rebuild an image from a tree in the same format the base used. ext4 output is
