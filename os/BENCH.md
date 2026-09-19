@@ -20,6 +20,7 @@ loop from the laptop, and a bad boot costs a 2-minute test-point cycle instead o
 
 | State | Door | How |
 |---|---|---|
+| Booted, on Wi-Fi | adb over TCP | `adb connect <unit-ip>:5555` from LXC 111 (`--bench` builds pin the port); launcher installs, logs, shell. No laptop needed. |
 | Booted, adb reachable, x online | `bench-cycle.sh <vcNNN>` on x | Build + ship + flash in one command (see README) |
 | Booted, adb reachable | fastbootd | `adb reboot fastboot`, then `fastboot-flash-set.sh DIR [wipe]` |
 | Booted, no adb | none | 0.1 keeps the port in host mode after boot; 0.2 built with `--bench` keeps adb on it |
