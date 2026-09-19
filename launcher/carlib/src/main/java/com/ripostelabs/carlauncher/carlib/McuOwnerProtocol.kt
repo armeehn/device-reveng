@@ -40,6 +40,9 @@ object McuOwnerProtocol {
     private const val OP_USER_FREQ = 0x0C     // sendUserFreq, :4300
     private const val OP_RTC = 0x13           // sendRTCTimer, :9469
     private const val OP_BACKLIGHT = 0x2E     // sendBacklight, :9639-9659
+    private const val OP_CONFIG = 0x4F        // sendFactoryMcuSet and the other 4F sub-id blocks
+    private const val CFG_FADER = 0x10        // the 48-byte fader/volume table, all 0x0a on this unit
+    private const val BT_STATE_ON = 1         // sendBTState(1), sent after the config blocks
 
     private const val SETUP_RDS = 0x00
     private const val SETUP_ZONE = 0x01
@@ -233,15 +236,40 @@ object McuOwnerProtocol {
 
     /**
      * Everything `initSysEventState` sends before its ACK-gated `SRC_NULL` (EventService.java:3790-3830),
-     * minus the config blocks named in the header. The caller sends [Mode.NULL] afterwards with
-     * [ACK_ATTEMPTS] tries of [ACK_TIMEOUT_MS] each, and continues either way, as the vendor does.
+     * with the config blocks replayed as [vendorInit] captured them. The caller sends [Mode.NULL]
+     * afterwards with [ACK_ATTEMPTS] tries of [ACK_TIMEOUT_MS] each, and continues either way,
+     * as the vendor does.
      */
     fun startup(config: StartupConfig): List<ByteArray> = listOf(
         mode(Mode.POWER_ON),
         mode(Mode.MCU_VERSION),
         setup(SETUP_RDS, if (config.rds) 0 else 1),
         setup(SETUP_ZONE, config.radioZone),
+    ) + vendorInit() + listOf(
         backlight(config.backlightDay, config.backlightNight),
+    )
+
+    /**
+     * The config blocks the vendor sends between the setups and the backlight, byte for byte as
+     * eventcenter wrote them on a restart (strace of /dev/ttyHS1 writes, unit on 0.1,
+     * 2026-09-18, `share/carlauncher/evidence/2026-09-18-riposte-os-0.1-first-boot/`):
+     * sendFactorySet, sendVolumeFader, sendEQMode, sendSleepTime, SendDspSndSet, sendVolumeGain
+     * all go out as opcode `4F` with a sub-id, then sendBTState(1). Their bit meanings are
+     * config-derived and undocumented, so this replays the unit's own defaults rather than
+     * modelling them. Why replay at all: 0.2 boots without them but the touch panel never
+     * raises an interrupt, while 0.1 (eventcenter) is fine on the same kernel; one of these is
+     * the suspected enable (RAV4-84).
+     */
+    fun vendorInit(): List<ByteArray> = listOf(
+        McuSerial.encode(OP_CONFIG, bytes(CFG_FADER) + ByteArray(48) { 0x0a }),
+        McuSerial.encode(OP_CONFIG, bytes(0x0e, 0x00)),
+        McuSerial.encode(OP_CONFIG, bytes(0x14, 0x4e, 0x20, 0x00, 0x14, 0x4e, 0x20, 0x00, 0x14, 0x00, 0x00)),
+        McuSerial.encode(OP_CONFIG, bytes(0x15, 0xfa, 0x0c, 0x00, 0x00, 0x00)),
+        McuSerial.encode(OP_CONFIG, bytes(0x12, 0x00, 0x00, 0x00, 0x00, 0x00)),
+        McuSerial.encode(OP_CONFIG, bytes(0x13, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00)),
+        McuSerial.encode(OP_CONFIG, bytes(0x16, 0x00, 0x00, 0x00)),
+        McuSerial.encode(OP_CONFIG, bytes(0x0f, 0x00, 0x00)),
+        btState(BT_STATE_ON),
     )
 
     /**
