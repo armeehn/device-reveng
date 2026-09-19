@@ -140,7 +140,7 @@ Two things shape the design:
 - **Siri's time budget for an intent is short and undocumented.** A claude-car
   turn using tools can run for minutes. `ClaudeAPI.answer(within:)` cuts the
   stream off at 20 s, speaks as far as it got, and says the rest is in the app.
-  With a claude-car backend the turn keeps running server-side and lands in
+  With a claude-car backend the turn keeps running server-side and arrives in
   the transcript; with the Anthropic backend a cut-off turn is lost, since
   nothing else is holding it.
 - **Spoken answers are listened to, not read.** The intent prefixes a short

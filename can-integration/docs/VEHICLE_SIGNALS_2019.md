@@ -48,11 +48,10 @@ bit never actually tested.
 
 ## How the driving signals were checked
 
-Names from opendbc's `toyota_2017_ref_pt.dbc` were not taken on trust. Each was checked against
-physics from the speed trace: steering angle tracks yaw rate at r=0.99, longitudinal
-acceleration tracks dv/dt at r=0.82, brake pressure averaged 0.27 MPa while decelerating and was
-exactly 0 while accelerating, engine rpm sat at 0 for 83% of the drive, and the odometer advanced
-4 km against 3.86 km of integrated ECU speed. All four speed fields hit zero median error
+Names from opendbc's `toyota_2017_ref_pt.dbc` were not taken on trust. Each was checked against physics from the speed trace. Steering angle tracks yaw rate at
+r=0.99; longitudinal acceleration tracks dv/dt at r=0.82. Brake pressure averaged 0.27 MPa
+while decelerating and was exactly 0 while accelerating. Engine rpm sat at 0 for 83% of the
+drive, and the odometer advanced 4 km against 3.86 km of integrated ECU speed. All four speed fields hit zero median error
 against PID `0x0D`; the residuals are sampling latency during acceleration, not scale.
 
 ## Method

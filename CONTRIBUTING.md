@@ -1,7 +1,7 @@
 # Contributing
 
-Thanks for looking. This started as personal research on one head unit and grew a
-launcher; outside help is welcome, especially from people with the same hardware.
+Thanks for looking. This started as research on one head unit and grew a launcher and
+then a system image. Help is welcome, most of all from people with the same hardware.
 
 ## Before you open a PR
 
@@ -13,7 +13,7 @@ adb shell getprop | grep -E "ro.product.(model|device)|ro.build.fingerprint|pers
 ```
 
 This project is developed against a **GT6-EAU** (MCU `RLC0_GT6E`, Qualcomm QCM6125,
-Android 13). A GT6-SE (`AT01_GT6SE`) is a different unit — findings may not carry over.
+Android 13). A GT6-SE (`AT01_GT6SE`) is a different unit; findings may not carry over.
 
 ## Ground rules
 
@@ -43,7 +43,10 @@ explicit message.
 `lint-baseline.xml` exists to carry pre-existing findings. **Shrink it, never grow
 it** — do not add a new entry to dodge a fresh lint error.
 
-CI runs unit tests, lint and a release assemble on every PR.
+CI runs unit tests, lint and a release assemble on every launcher PR. For `os/`, run
+`os/test-fixture.sh` (root, builds a synthetic base and checks the pipeline against it) and
+`tools/doclint.sh` for any Markdown; both are the gate, and `os-ci.yml` runs the host-only
+tests.
 
 ## Code style
 

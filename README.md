@@ -159,8 +159,8 @@ runs without a single OEM app: the launcher owns the serial link the vendor's ga
 to own, and the suite talks to the launcher instead.
 
 On the bench, 0.2 has these proven: boot, touch, gesture navigation, Wi-Fi, radio tuning and
-seek on the real MCU, volume from the MCU, the Bluetooth car-kit profiles, all 28 suite apps
-opening clean, and a Setup Doctor that reads green. Reverse camera, wheel keys, headlamps
+seek on the real MCU, and volume from the MCU. The Bluetooth car-kit profiles are up, all 28
+suite apps open clean, and Setup Doctor reads green. Reverse camera, wheel keys, headlamps
 and a paired phone wait for the car.
 
 The pipeline, the overlay, the car owner and the bench tools are documented in
@@ -183,11 +183,11 @@ its `/vendor` partition provides.
 | [`LAUNCHER_DESIGN.md`](LAUNCHER_DESIGN.md) | UI/UX spec and capability tiers |
 | [`CUSTOMERUI_NOTES.md`](CUSTOMERUI_NOTES.md) | The stock launcher, decompiled |
 | [`CUSTOM_ANDROID.md`](CUSTOM_ANDROID.md) | Custom-ROM feasibility; why the platform key is out |
-| [`ZLINK_NATIVE_ANALYSIS.md`](ZLINK_NATIVE_ANALYSIS.md), [`CARPLAY.md`](CARPLAY.md) | The projection stack |
+| [`ZLINK_NATIVE_ANALYSIS.md`](ZLINK_NATIVE_ANALYSIS.md), [`ZLINK_REWRITE.md`](ZLINK_REWRITE.md), [`CARPLAY.md`](CARPLAY.md) | The projection stack: what Zlink is, and the specification for replacing it |
 | [`can-integration/`](can-integration/) | CANable / LIN tapping plans and decoders |
-| [`boot-speed/`](boot-speed/) | Boot-time measurement and tuning |
+| [`boot-speed/BOOT_SPEED.md`](boot-speed/BOOT_SPEED.md) | Cold-boot measurement and tuning |
 | [`FINDINGS.md`](FINDINGS.md), [`STATUS.md`](STATUS.md) | Raw findings, live status |
-| `backup.sh`, `root.sh`, `debloat.sh`, `camera-diag.sh` | Runbook scripts |
+| `recon.sh`, `backup.sh`, `root.sh`, `debloat.sh`, `camera-diag.sh`, `analyze-capture.sh` | Runbook scripts, in the order they were used: identify the unit, back it up, root it, debloat, diagnose the camera |
 
 The runbook scripts expect the vendor files (Firehose loader, TWRP image, Magisk) in a
 workspace directory, `~/rav4-headunit` by default:

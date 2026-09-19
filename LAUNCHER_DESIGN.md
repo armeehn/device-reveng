@@ -42,7 +42,7 @@ A 1280 dp-wide panel is far wider than any reach arc. Treat reach as **two thumb
   **display-only / glance content** (clock, media art, status) and rarely-pressed affordances.
 - Because the car may be RHD, the driver/passenger split is a **`Sys_CarType`-aware mirror
   option** (see §6, SysVar): a settings flag flips the media/quick-launch columns so the
-  quick-launch grid always lands under the driver's thumb.
+  quick-launch grid always sits under the driver's thumb.
 - **Touch target minimum: 76 × 76 dp** for any driving-relevant control (well above the 48 dp
   Material minimum — finger + vibration + glove). **Spacing ≥ 16 dp** between adjacent targets
   to prevent mis-taps. Corner-anchored controls get a larger 96 dp hit slop.
@@ -348,8 +348,9 @@ Kept here rather than deleted, so it is not proposed again.
 
 **Why it cannot be built.** An app declaring `android.uid.system` must be signed with the *same
 platform key as the running framework*, and Choiceway's private platform key is **confirmed
-unobtainable** — `CUSTOM_ANDROID.md` §2b calls this the fatal blocker, and the launcher sources
-treat it as settled (`carlib/RootBroadcastHelper` and `ui/settings/RootTierSettingsScreen` KDoc).
+unobtainable**. `CUSTOM_ANDROID.md` §2b calls this the fatal blocker, and the launcher sources
+treat it as settled (`carlib/RootBroadcastHelper` and `ui/settings/RootTierSettingsScreen`
+KDoc).
 Supplying our own platform key means signing a whole framework, which breaks the vendor car stack
 for the very same signature reason (`CUSTOM_ANDROID.md` §2b) — a different project, not a build
 variant of this one.
@@ -438,16 +439,17 @@ its place, on a plain user install of the rooted unit:
 ## Summary
 
 CarLauncher is a Kotlin + Jetpack Compose home for the 1920×720 (~1280×480 dp) Choiceway head
-unit, built around glanceability (≥40 sp primary type, 2-second targets), a fixed non-reflowing
-three-column Home (far-left MediaCard glance zone, wide center NavTile, driver-thumb-zone
-QuickLaunch 2×3 grid + read-only ClimateReadout, plus a 40 dp status strip), and a full-screen
-Reverse overlay that seizes the foreground on `ACTION_BACKCAR_START`; it themes day/night from the
-illumination backlight broadcasts (with a SysVar fallback), drives an eyes-free 76 dp-target UI by
-SWC keys through a `SwcFocusManager` roving focus ring, sources every widget from the documented
+unit. It is built around glanceability (≥40 sp primary type, 2-second targets) and a fixed
+non-reflowing three-column Home: far-left MediaCard glance zone, wide center NavTile,
+driver-thumb-zone QuickLaunch 2×3 grid with a read-only ClimateReadout, and a 40 dp status
+strip. A full-screen Reverse overlay seizes the foreground on `ACTION_BACKCAR_START`. It
+themes day/night from the illumination backlight broadcasts (with a SysVar fallback) and drives
+an eyes-free 76 dp-target UI by SWC keys through a `SwcFocusManager` roving focus ring. Every
+widget is sourced from the documented
 CAR_API (MediaSession/`ZXW_MUSIC_*` media, AIDL `EventService` radio, `CarAirState` climate,
-`SysVarProvider` settings, `MCU_CAR_CAN_RADAR_INFO` radar), and ships first as a coexisting normal
-companion app that degrades gracefully around the protected `com.szchoiceway.permission.broadcast`
-and root-only SysVar writes, following an MVP→v1→root-tier path: the platform-signed
-`/system/priv-app` full replacement is ruled out for good because the vendor key is unobtainable,
-Magisk root stands in for the signature where it can, and native radar overlays and write-enabled
-climate/audio control remain unbuilt.
+`SysVarProvider` settings, `MCU_CAR_CAN_RADAR_INFO` radar). It ships first as a coexisting
+normal companion app that degrades gracefully around the protected
+`com.szchoiceway.permission.broadcast` and root-only SysVar writes, following an MVP → v1 →
+root-tier path. The platform-signed `/system/priv-app` full replacement is ruled out for good
+because the vendor key is unobtainable; Magisk root stands in for the signature where it can.
+Native radar overlays and write-enabled climate/audio control remain unbuilt.

@@ -7,17 +7,23 @@ _Assessment date: 2026-08-27. Companion docs: `FINDINGS.md`, `STATUS.md`, `CAR_A
 **Legend:** `[confirmed]` = from on-device recon / decompiled code / firmware. `[inferred]` =
 reasoned from Treble/GSI mechanics + this device's props (high confidence unless noted).
 
+> **Outcome, 2026-09-19.** The verdict below was written before the framework check in
+> section 2d. It held for the vendor's car layer, which does die on a GSI; it did not hold for
+> the car itself, which turned out to be one serial link behind a public protocol. Riposte OS
+> 0.2 (`os/`) runs an AOSP 14 GSI on the unit with our own process on that link: touch, radio,
+> volume, Bluetooth car-kit roles and the app suite work on the bench. The rest of this page is
+> kept as the assessment that led there; read "stay stock" as "until the car checks pass".
+
 ---
 
 ## TL;DR verdict
 
 A GSI **will almost certainly boot** on this unit — it's a textbook Treble device (arm64-v8a,
 A/B + Virtual A/B, dynamic `super`, `ro.treble.enabled=true`, first_api_level 30, permissive
-SELinux, unlocked bootloader). Core Android and most **vendor HALs survive**. But the entire
-**Choiceway car layer breaks and cannot be cleanly restored on an AOSP-signed GSI**, because the
-settings backbone (`SysVarProvider`) runs as `sharedUserId=android.uid.system` and is
-platform-signed — a signature that will never match an AOSP GSI's platform key (which we don't
-hold the private counterpart to). Result: no reverse-cam UI, no SWC, no radio, no climate display,
+SELinux, unlocked bootloader). Core Android and most **vendor HALs survive**. But the entire **Choiceway car layer breaks and cannot be cleanly restored on an AOSP-signed
+GSI**. Its settings backbone (`SysVarProvider`) runs as `sharedUserId=android.uid.system` and
+is platform-signed, a signature that never matches an AOSP GSI's platform key, whose private
+half we do not hold. Result: no reverse-cam UI, no SWC, no radio, no climate display,
 no ambient lighting, broken launcher. **Recommendation: stay stock + Magisk.** A GSI is worth
 doing **only as a reversible weekend experiment** (A/B + full EDL backup make it safe), not as a
 daily driver.
@@ -99,7 +105,7 @@ signed with public AOSP test-keys** — a different key. Therefore:
 | **CANBUS / SWC** (canbus2, EventCenter, LearnKey) over `/dev/ttyHS1` | `/product` | ⚠️ ttyHS1 is world-RW so the *port* is reachable, but the apps FC without SysVarProvider/framework → **effectively broken** |
 | **Radio** (Si479x UI) | `/product` | ❌ **Breaks** |
 | **Climate display**, ambient/multicolor light, DSP UI, dashboard | `/product` | ❌ **Break** |
-| **Launcher** (CustomerUI) | `/product` | ❌ Breaks → you land on the AOSP launcher |
+| **Launcher** (CustomerUI) | `/product` | ❌ Breaks → you get the AOSP launcher |
 | Car settings store (`SysVarProvider`) | **`/system/priv-app`** | ❌ **Deleted by the GSI flash** + can't be re-added (signature) |
 
 **Can the Choiceway apps be side-loaded onto a GSI as user/priv apps?** `[inferred, high]`
@@ -172,7 +178,7 @@ passes on the other one.
 
 ## 3. Ranked realistic paths
 
-### (a) Stay stock + Magisk — **RECOMMENDED** ✅
+### (a) Stay stock + Magisk — **the daily driver until Riposte OS passes the car checks** ✅
 - **Works:** everything (reverse cam, SWC, radio, climate display, launcher, DSP). Root already
   gives you the 90% that a "custom ROM" is usually chased for: debloat, de-spyware, governor/zram
   tuning, Play Integrity fix, service trimming, prop tweaks, the camera-signal pin fix.
@@ -189,11 +195,10 @@ passes on the other one.
 
 ### (c) Full AOSP / LineageOS device port — **not realistic** ❌
 - sm6125 has LineageOS support **for phones** (ginkgo/willoww etc.), and a TWRP device tree exists
-  (`twrpdtgen/android_device_qualcomm_trinket`), but **nothing for the GT6-CAR board**. You'd have
-  to author a device tree, adapt/blob every HAL (panel td4330/zxw, XS9922B/PR2000 camera decoder,
-  amp-over-serial audio, MCU), write sepolicy + kernel dtb — **and then reimplement the entire
-  Choiceway car stack from scratch** (CANBUS/HiWorld protocol, reverse cam, SWC, radio) with **no
-  vendor source**. **Effort:** many months, expert-level. **Verdict: do not attempt.**
+  (`twrpdtgen/android_device_qualcomm_trinket`), but **nothing for the GT6-CAR board**. You would have to author a device tree, adapt or blob every HAL (panel td4330/zxw,
+XS9922B/PR2000 camera decoder, amp-over-serial audio, MCU), and write sepolicy and a kernel
+dtb. **Then reimplement the entire Choiceway car stack from scratch** (CANBUS/HiWorld protocol,
+reverse cam, SWC, radio) with **no vendor source**. **Effort:** many months, expert-level. **Verdict: do not attempt.**
 
 ### (d) Newer-Android GSI (15/V) as a pure reversible experiment — **curiosity only** 🧪
 - Same breakage as (b), plus a higher chance of *not* booting (VNDK deprecation vs. vendor-30).
@@ -259,15 +264,16 @@ boot. Current `boot_b` is Magisk-patched; GSI+Magisk coexists, or restore the cl
 
 ## Honest closing verdict (1 paragraph)
 
-The GT6-EAU is a clean Treble target (arm64, A/B + Virtual-A/B, dynamic `super`, first_api_level
-30, permissive SELinux, unlocked bootloader), so an **Android 14 arm64 `-ab` GSI will almost
-certainly boot and keep most stock-vendor hardware working** — but that's a trap, because the
-entire Choiceway car experience (reverse camera, steering-wheel controls, radio, climate display,
-ambient lighting, DSP, and the launcher itself) **dies on a GSI and cannot be cleanly restored**:
-the settings backbone `SysVarProvider` runs as `android.uid.system` under Choiceway's platform
-key, which no AOSP-signed GSI can satisfy, and we don't hold that private key. A full AOSP/Lineage
-port is months of expert work with no vendor source and is not realistic. The rational path is
-**stay on stock + Magisk** — root already delivers the debloat/tuning/Play-Integrity/camera-fix
-wins people chase custom ROMs for — and treat a GSI strictly as a **reversible curiosity**: thanks
-to the A/B layout and the full EDL backup, you can flash a 14 GSI to a slot, watch it boot into a
-car-less tablet, and roll back in minutes with `fastboot set_active` or an EDL restore.
+The GT6-EAU is a clean Treble target (arm64, A/B + Virtual-A/B, dynamic `super`,
+first_api_level 30, permissive SELinux, unlocked bootloader), so an **Android 14 arm64 `-ab`
+GSI will almost certainly boot and keep most stock-vendor hardware working**. That is a trap
+for the vendor's software: the entire Choiceway car experience (reverse camera, steering-wheel
+controls, radio, climate display, ambient lighting, DSP, and the launcher itself) **dies on a
+GSI and cannot be cleanly restored**. Its settings backbone `SysVarProvider` runs as
+`android.uid.system` under Choiceway's platform key, which no AOSP-signed GSI can satisfy, and
+we do not hold that private key. A full AOSP/Lineage
+port is months of expert work with no vendor source and is not realistic. The rational path at the time of writing was **stay on stock + Magisk**: root already delivers
+the debloat, tuning, Play Integrity and camera-fix wins people chase custom ROMs for. A GSI was a **reversible curiosity**. With the A/B layout and the full EDL backup you can flash
+a 14 GSI to a slot, watch it boot into a car-less tablet, and roll back in minutes with
+`fastboot set_active` or an EDL restore. Riposte OS 0.2 is what that curiosity became once the car layer
+was rewritten (see the outcome note at the top).

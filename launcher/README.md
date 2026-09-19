@@ -25,6 +25,17 @@ Emulator shots are from the emulator farm at the unit's geometry; the two marked
 | ![Games, listing the installed RetroArch build](docs/screens/games.png) | Games, listing the installed RetroArch build |
 | ![RetroArch 1.22.2 launched from the Games page](docs/screens/retroarch.png) | RetroArch 1.22.2 launched from the Games page |
 
+### Earlier versions
+
+The launcher as it looked at each milestone, from the first grid to the home it has now.
+`riposte-os-0.2-home.png` is the same launcher on Riposte OS 0.2, our own system image.
+
+| | | |
+|---|---|---|
+| ![v0.1](../screenshots/launcher-v0.1.png) v0.1, the first grid | ![v0.2 live](../screenshots/launcher-v0.2-live.png) v0.2, live car state | ![v0.2 media](../screenshots/launcher-v0.2-media.png) v0.2, media |
+| ![v0.2b](../screenshots/launcher-v0.2b.png) v0.2, dashboard | ![v0.2c](../screenshots/launcher-v0.2c.png) v0.2, drawer | ![v1.0 as home](../screenshots/v1.0-as-home.png) v1.0, set as HOME |
+| ![v1.0 dashboard](../screenshots/v1.0-home-dashboard.png) v1.0, dashboard | ![v1.0 live](../screenshots/v1.0-home-live.png) v1.0, live | ![Riposte OS 0.2](../screenshots/riposte-os-0.2-home.png) on Riposte OS 0.2 |
+
 ## Module structure
 
 ```
@@ -110,10 +121,9 @@ GitHub Release against the tag, with the APK's SHA-256 in the release body.
 Both version fields are derived from git at build time (`app/build.gradle.kts`):
 `versionCode` is the commit count at the merge-base with `origin/main`, so every merge
 to `main` raises it by exactly one, and `versionName` is the bare base (`0.7`). Nobody
-bumps a version by hand, and no PR touches a version line. Because every build on a
-line shares its versionName, a build is always named with the code beside it —
-`0.7 (146)` in the app, `+146` in the tag — and the commit SHA stays in the tag as the
-belt-and-braces identity. Historical note: before versionCode 71 the fields
+bumps a version by hand, and no PR touches a version line. Every build on a line shares its versionName, so a build is always named with the code beside
+it: `0.7 (146)` in the app, `+146` in the tag. The commit SHA stays in the tag as the second
+identity. Historical note: before versionCode 71 the fields
 were hand-claimed per PR; they repeat in that range (two merges both shipped `61`), so
 only the SHA separates those builds.
 
@@ -151,7 +161,7 @@ MCU broadcast ──▶ HiworldCanDecoder ────────────�
   either port. The launcher claims the device with `UsbManager` and does the bulk transfers
   itself. A `USB_DEVICE_ATTACHED` filter grants permission on attach.
 - **Recording is a foreground service** and starts hands-free when the adapter is plugged in.
-  Captures land under the app's external files dir in candump log format, roll at 16 MB, and the
+  Captures go under the app's external files dir in candump log format, roll at 16 MB, and the
   newest six survive. `Settings → CAN frame capture` shows the live adapter state and can stop it.
 - **Grounding.** A badly grounded adapter enumerates and prints its banner but ignores every
   command. If it talks and never answers, check GND first.
@@ -217,34 +227,32 @@ so each guessed mapping is annotated in-code and the Advanced browser shows the 
 ### Vendor apps shadow
 
 The drawer hides a Choiceway app once ours stands in for it, the way it already shadows the
-retired `com.reveng.*` twins of the suite. `data/OemApps` is the single table: REMOVE
-(photoreader, apkinstall, weather, xbrowser, atslcarconsole: hidden always), REPLACED (radio,
-musicplayer, videoplayer, gps: hidden only while the `com.ripostelabs.*` rewrite is installed;
-the OEM System settings app only on an explicit opt-in, since it still hosts the factory menu;
-the camera viewer never, there is no replacement) and KEEP (gateway, canbus2, btsuite, zlink,
-the factory tools: never hidden). An OEM app whose replacement is missing stays visible, so a
+retired `com.reveng.*` twins of the suite. `data/OemApps` is the single table. REMOVE (photoreader, apkinstall, weather, xbrowser,
+atslcarconsole): hidden always. REPLACED (radio, musicplayer, videoplayer, gps): hidden only
+while the `com.ripostelabs.*` rewrite is installed; the OEM System settings app only on an
+explicit opt-in, since it still hosts the factory menu; the camera viewer never, there is no
+replacement. KEEP (gateway, canbus2, btsuite, zlink, the factory tools): never hidden. An OEM app whose replacement is missing stays visible, so a
 unit without the suite keeps working. Two toggles under Settings ▸ Launcher ▸ Vendor apps
-un-shadow either class. Setup doctor's "Vendor apps" section lists what is hidden, what is still
-visible and why, the exact `pm uninstall -k --user 0 <pkg>` line per REMOVE package (copy it;
-nothing is uninstalled from the launcher) and a warning for any KEEP package missing or
-disabled; its "Gateway state" rows show `getValidMode()` by `eSrcMode` name
+un-shadow either class. Setup doctor's "Vendor apps" section lists what is hidden, what is still visible and why, and
+the exact `pm uninstall -k --user 0 <pkg>` line per REMOVE package (copy it; nothing is
+uninstalled from the launcher). It warns about any KEEP package missing or disabled. Its
+"Gateway state" rows show `getValidMode()` by `eSrcMode` name
 (`data/SrcModeNames`) and the `Sys_SoundManager_Type` / `Sys_UINumber` / `Sys_Landscape` /
 `Sys_CustomerType` / `Sys_CarType` / `Sys_Vehicle_deries` SysVars, read-only. The matrix itself
 and every citation behind it is `OEM_SYSTEM.md` §1.
 
 ## Motion awareness (v2.5)
 
-`CarEvents.speedKmh` is real. The gateway broadcasts no numeric speed
-(`SHOW_CAR_SPEED_EVENT` is a show/hide toggle, CAR_API §1.3), so `carlib/GpsSpeedSource`
-reads it from the GNSS receiver — the one source a normal app can use — smooths the jitter,
-and reverts to unknown after 5 s without a fix rather than reporting a stationary car.
+`CarEvents.speedKmh` is real. The gateway broadcasts no numeric speed (`SHOW_CAR_SPEED_EVENT` is a show/hide toggle, CAR_API
+§1.3). `carlib/GpsSpeedSource` reads it from the GNSS receiver, the one source a normal app can
+use, smooths the jitter, and reverts to unknown after 5 s without a fix rather than reporting a
+stationary car.
 
 _Superseded 2026-09-09._ The gate now runs on **raw body-bus speed** (`RawCanDecoder`), the
 only reading verified against the car's own ECU, with GPS as the fallback. It is its own source
-(`SpeedSource.BUS`), not a promoted MCU digest. `pickSpeed` prefers a bus reading under
-`BUS_SPEED_STALE_MS` (2 s — the ids run at 15-39 Hz, so that is already ~30 missed frames) and
-falls back to GPS the moment the adapter is unplugged or the car goes quiet, rather than gating
-on a frozen number. The point of the change is where GPS is blind: a garage, a covered car park,
+(`SpeedSource.BUS`), not a promoted MCU digest. `pickSpeed` prefers a bus reading under `BUS_SPEED_STALE_MS` (2 s; the ids run at 15-39 Hz, so
+that is already ~30 missed frames). It falls back to GPS the moment the adapter is unplugged or
+the car goes quiet, rather than gating on a frozen number. The point of the change is where GPS is blind: a garage, a covered car park,
 and the first seconds after power-on are exactly where a parked-only gate has to be right.
 
 `CarEvents.motion` turns that into the `PARKED` / `MOVING` / `UNKNOWN` verdict behind the
@@ -253,7 +261,7 @@ traffic can't flap the gate.
 
 **Unknown fails open.** Blocking on `UNKNOWN` would lock the driver out of their own launcher
 in a garage, an underground car park, or on a unit where the location permission was never
-granted — permanently and with no signal as to why. We only ever fail open with *no* reading;
+granted. Permanently, and with no signal as to why. We only ever fail open with *no* reading;
 any live fix above 3 km/h resolves to `MOVING`.
 
 Parked-only, via the `LocalParkedOnlyLock` composition local (`ui/ParkedOnly.kt`):
@@ -287,7 +295,7 @@ the vendor's `Set_TouchBeep` preference instead of adding a competing one.
 ## Media & Radio screens (v2.6)
 
 The Home cards were always glance surfaces in a 30 %-wide column. `ui/MediaScreen.kt` and
-`ui/RadioScreen.kt` are the full screens you land on to actually operate playback and the
+`ui/RadioScreen.kt` are the full screens you arrive at to operate playback and the
 tuner (LAUNCHER_DESIGN §3.3 / §3.4). Reached three ways: tapping a card body, CENTER on a
 focused card, or the steering wheel's MEDIA / RADIO keys.
 
@@ -297,19 +305,19 @@ is a sustained, eyes-on gesture, so while moving the same progress renders as a 
 Transport stays available while moving — skip and play/pause are single forgiving presses that
 exist on the wheel anyway, and withholding them would push the driver to their phone.
 
-**RadioScreen** — 48 sp frequency, an AM / FM band toggle, a tune slider across the dial
-(parked-only, like media scrubbing; it snaps to the 100 kHz / 10 kHz step on release), seek,
+**RadioScreen**: 48 sp frequency, an AM / FM band toggle, a tune slider across the dial
+(parked-only, like media scrubbing; it snaps to the 100 kHz / 10 kHz step on release). Seek,
 six preset slots with save / recall / delete, and the tuner's status flags. Opening the screen
 claims the tuner as the cabin's audio source the way the vendor radio app does
 (`CarService.claimRadio`); AM / FM send the MCU's direct band keys (30 / 31) and re-poll until
 the tuner reports the class. The `sendRadioKey` value table is in CAR_API §3.2.
 
-**PhoneScreen** (RAV4-50) — `ui/PhoneScreen.kt`, reached by the wheel's PHONE / TALK key or the
-status-bar phone icon. The head unit's phone Bluetooth is owned by the vendor app
-`com.szchoiceway.btsuite`, which holds the serial protocol to the BT module and cannot be
-replaced, so the screen drives it: state (device name, HFP state, caller, in-call timer) comes
-from its `HBCP_EVT_*` broadcasts, and Answer / Hang up / dial go back as its own control
-broadcasts (`carlib/VendorBt.kt`, CAR_API §1.3 / §1.4). Recent calls are read from its
+**PhoneScreen** — `ui/PhoneScreen.kt`, reached by the wheel's PHONE / TALK key or the
+status-bar phone icon. The head unit's phone Bluetooth is owned by the vendor app `com.szchoiceway.btsuite`, which
+holds the serial protocol to the BT module and cannot be replaced, so the screen drives it.
+State (device name, HFP state, caller, in-call timer) comes from its `HBCP_EVT_*` broadcasts;
+Answer, Hang up and dial go back as its own control broadcasts (`carlib/VendorBt.kt`, CAR_API
+§1.3 / §1.4). Recent calls are read from its
 `CallListProvider` (CAR_API §2.4); when that yields nothing the vendor call-record page is
 offered instead, and Contacts / Bluetooth settings always open btsuite's own pages
 (`GotoPageNum`). The dial pad and the call list are parked-only; Answer, Hang up and the vendor
@@ -344,7 +352,7 @@ encoding of those SysVar values is documented nowhere, and writing a guessed for
 corrupt the vendor radio's presets irreversibly. RadioScreen displays the raw strings, which is
 exactly the capture needed to work the format out on-device — after which two-way sync is safe.
 
-Vendor *source* switching (Bluetooth / USB / built-in) is likewise read-only: `sendMode(int,
+Vendor *source* switching (Bluetooth / USB / built-in) is likewise read-only. `sendMode(int,
 boolean)` is ordinal 1 and confirmed, but its value table is not in the decompile, so
 MediaScreen names the current source via `getValidModeTitleInfor()` and does not offer to
 change it.
@@ -354,7 +362,7 @@ signature was never recovered, so registering it would be a guess. Blocking AIDL
 the composition body — doing them inline once spun a main-thread IPC recomposition loop while
 seeking.
 
-### CarPlay deep links (RAV4-52)
+### CarPlay deep links
 
 The Zlink receiver (`com.zjinnova.zlink`) is driven by intent, never bundled. `carlib/Zlink.kt`
 holds the contract recovered from the gateway's `ZlinkManage.java`. `CarEvents.carplayState`
@@ -397,9 +405,9 @@ while Home was on screen — every other screen ignored the wheel. Two pieces cl
   synthesises the KeyEvent through `Window.superDispatchKeyEvent` (which bypasses our own
   dispatcher, so a synthetic key cannot loop). **Wrap-around** has no framework API, so it is
   composed from the one that does: a refused move means an edge, and walking as far as possible in
-  the opposite direction lands on the far end.
+  the opposite direction arrives at the far end.
 
-`input/FocusRing.kt` draws where focus landed — Material's focus ripple is invisible at arm's
+`input/FocusRing.kt` draws where focus went — Material's focus ripple is invisible at arm's
 length in daylight. It is applied to the shared settings kit (`SettingRow`, `ActionRow`,
 `SettingsCategoryCard`, `SettingsIconTile`, `DialogTextButton`), which covers the whole settings
 suite, plus the Media, Radio and Themes screens.
@@ -457,9 +465,9 @@ thumb column (quick launch + radio) so the interactive set stays under the drive
 is now on the left. The centre column is symmetric and never moves.
 
 **Auto cannot infer this on this platform, and says so.** `Sys_CarType` is the model index
-within `Sys_Vehicle_deries` (RAV4 = 2 under Toyota = 1, CAR_API §2.3), the same on every market,
-and the steering side is a CAN-box car setting that canbus2 keeps in an in-process map for its
-console page — no SysVar, no broadcast. So `data/Reachability.kt` ships an **empty** RHD table
+within `Sys_Vehicle_deries` (RAV4 = 2 under Toyota = 1, CAR_API §2.3), the same on every
+market. The steering side is a CAN-box car setting that canbus2 keeps in an in-process map for
+its console page: no SysVar, no broadcast. So `data/Reachability.kt` ships an **empty** RHD table
 that must stay empty, Auto always resolves to LHD, and the settings screen prints the raw
 `Sys_CarType` next to the override so a user can confirm the vehicle profile.
 
@@ -481,10 +489,9 @@ dashboard that renders a guess identically to a confirmed reading is worse than 
 | Radar | `MCU_CAR_CAN_RADAR_INFO` | bank layout + distance codes **confirmed**; left→right order UNVERIFIED |
 | Session timer | measured here | not the car's trip computer |
 
-The steering tile shows **no number**. The value is the OEM raw/14 scale, never calibrated to
-degrees, and which side a negative value means is unverified, so printing "42°" would invent
-precision we do not have; a bar that leans the way the wheel leans is exactly as much as the
-signal supports. `CAN_CAR_TIRP_INFO` is never broadcast, so the real trip computer is not readable
+The steering tile shows **no number**. The value is the OEM raw/14 scale, never calibrated to degrees, and which side a negative value
+means is unverified. Printing "42°" would invent precision we do not have. A bar that leans the
+way the wheel leans is exactly as much as the signal supports. `CAN_CAR_TIRP_INFO` is never broadcast, so the real trip computer is not readable
 without decoding frame 0x13 ourselves — hence "this session".
 
 **Driver profiles** (`data/DriverProfilesStore.kt`, status bar ▸ account icon — two taps from
@@ -503,12 +510,11 @@ does not read this class; it follows the headlamps via `LAMP_STATUS`.
 
 ### HVAC write controls — sender only, no UI
 
-The roadmap gated these on STATUS goal #3 proving RAV4 climate is CAN-writable. That test has not
-been run, and STATUS still reads *"Investigating whether RAV4 climate is CAN-controllable or
-display-only (likely display-only)."* carlib now carries `ClimateControl`, which sends the CAN
-app's own `CAR_AIR_KEY_KEY` button broadcast (`CanUtils.CAR_AIR_KEY_*` values, decompile
-`CarAirClickWithVoice.java:432,462`), but nothing in the UI calls it and it is unverified on the
-car. The Climate settings screen continues to write only vendor *configuration* SysVars (panel
+The roadmap gated these on STATUS goal #3 proving RAV4 climate is CAN-writable. That test has not been run, and STATUS still reads *"Investigating whether RAV4 climate is
+CAN-controllable or display-only (likely display-only)."* carlib now carries `ClimateControl`,
+which sends the CAN app's own `CAR_AIR_KEY_KEY` button broadcast (`CanUtils.CAR_AIR_KEY_*`
+values, decompile `CarAirClickWithVoice.java:432,462`). Nothing in the UI calls it and it is
+unverified on the car. The Climate settings screen continues to write only vendor *configuration* SysVars (panel
 type, bus baud, seat heat, units) — never a live temperature or fan command.
 
 ### Stability bar — not claimable
@@ -559,9 +565,10 @@ entry.
 
 ### Vendor nav bar
 
-Settings ▸ Root tier ▸ **Hide vendor nav bar** sets the SysVar `Sys_Customer_NaviBar_Height_Key`
-to 0 (the factory page's own "No bottom bar" option) — the *persistent* config the gateway reads
-for itself at boot and re-applies live on `changeSetup`, so it survives a reboot. The gateway
+Settings ▸ Root tier ▸ **Hide vendor nav bar** sets the SysVar
+`Sys_Customer_NaviBar_Height_Key` to 0 (the factory page's own "No bottom bar" option). That is
+the *persistent* config the gateway reads for itself at boot and re-applies live on
+`changeSetup`, so it survives a reboot. The gateway
 honours the key only with `Sys_Landscape` = 1, and the toggle says so when that is not the case.
 
 The two earlier keys were wrong: `SYS_SHOW_TOOL_NAVI_BAR_WND` is a system property the gateway
@@ -623,10 +630,9 @@ package being gone is untested.
 ### Startup
 
 `app/src/main/baseline-prof.txt` + `androidx.profileinstaller` give the cold-start path an
-ART profile — the side-loaded install has no Play install step to deliver one. The profile is
-hand-written rather than generated from a macrobenchmark run, because we have one head unit
-and it is a car; the header of that file records the trade-off and what to do instead once a
-device run is possible.
+ART profile — the side-loaded install has no Play install step to deliver one. The profile is hand-written rather than generated from a macrobenchmark run, because we have
+one head unit and it is a car. The header of that file records the trade-off and what to do
+instead once a device run is possible.
 
 `.gitea/workflows/launcher-ci.yml` gains a `cold-start` job that installs the debug APK on
 an API 33 emulator, applies the profile with `pm compile -m speed-profile`, and fails if the
@@ -639,18 +645,18 @@ runs exist to calibrate it.
 ### Jellyfin ("jellybelly")
 
 The Jellyfin Android client is just another `MediaSession`, so the media stack already surfaced it
-with no work — the MediaCard source chip names it and the transport controls drive it. v2.7 adds
-the two things that were missing: a **quick-launch preset** (`media/JellyfinApp.pinFirst` moves the
-tile to the front of the driver's thumb column when a client is installed — ordering only, nothing
-new is added to the drawer) and a **parked-only "continue watching" shelf**.
+with no work — the MediaCard source chip names it and the transport controls drive it. v2.7 adds the two things that were missing. A **quick-launch preset**:
+`media/JellyfinApp.pinFirst` moves the tile to the front of the driver's thumb column when a
+client is installed (ordering only, nothing new is added to the drawer). And a **parked-only
+"continue watching" shelf**.
 
 **What the shelf is, precisely.** It lists what *this head unit* has played, recovered from the
 Jellyfin app's MediaSession metadata and persisted in `data/WatchHistoryStore`. It is **not** the
 server's Continue Watching row. That row is `GET /Users/{id}/Items/Resume` behind authentication,
 and reaching it would mean this APK carrying a private-network URL and a credential that belong
-to the owner, not to a launcher. **No API client was written and none should be.** The screen
-says so in its own subtitle, because a shelf that implied it had talked to the server would make the first
-missing episode read as a bug rather than a boundary.
+to the owner, not to a launcher. **No API client was written and none should be.** The screen says so in its own subtitle. A
+shelf that implied it had talked to the server would make the first missing episode read as a
+bug rather than a boundary.
 
 Consequences, stated once so nobody re-discovers them:
 
@@ -669,10 +675,10 @@ IDs; which one — if either — is installed on this unit is **GUESSED** and re
 ### Notification shelf
 
 `notif/ShelfListenerService` is a third `NotificationListenerService` (the media one is empty by
-design, the nav one reads only Maps). It keeps at most 40 recent notifications **in memory only**,
-never on disk, and drops what does not belong on a shelf: our own, ongoing ones (media transport
-and Maps' turn-by-turn already have cards; sync bars would pin themselves to the top forever),
-group summaries, and anything with neither title nor text.
+design, the nav one reads only Maps). It keeps at most 40 recent notifications **in memory only**, never on disk. It drops what does
+not belong on a shelf: our own; ongoing ones (media transport and Maps' turn-by-turn already
+have cards, and sync bars would pin themselves to the top forever); group summaries; anything
+with neither title nor text.
 
 Per-app filtering is a **deny** list (`data/NotificationFilterStore`) applied at render time, so
 un-muting an app brings its already-captured notifications straight back. An allow list would make
@@ -718,11 +724,11 @@ adb pull /sdcard/Android/data/com.ripostelabs.carlauncher/files/themes/
 adb push mytheme.json /sdcard/Android/data/com.ripostelabs.carlauncher/files/themes/
 ```
 
-That path needs no runtime permission on API 33. `Downloads` was rejected (scoped storage makes a
-plain `File` write there need MediaStore or `MANAGE_EXTERNAL_STORAGE` — a lot of permission surface
-for a colour file) and so was `ACTION_CREATE_DOCUMENT` (another un-theme-able system screen, which
-is the problem this release exists to reduce). Built-ins export too: pull a preset, edit the hex on
-a real keyboard, push it back. An import always lands as a **new** user theme with a fresh id, so a
+That path needs no runtime permission on API 33. `Downloads` was rejected: scoped storage makes a plain `File` write there need MediaStore or
+`MANAGE_EXTERNAL_STORAGE`, a lot of permission surface for a colour file. So was
+`ACTION_CREATE_DOCUMENT`, another un-theme-able system screen, which is the problem this
+release exists to reduce. Built-ins export too: pull a preset, edit the hex on
+a real keyboard, push it back. An import always arrives as a **new** user theme with a fresh id, so a
 hand-edited file cannot shadow a preset or overwrite something already on the unit.
 
 **Clock day/night.** `CarEvents.illuminationSeen` (new) latches true the first time an
@@ -738,9 +744,9 @@ install would start dimming screens at dusk without being asked. The section sta
 whether the car has actually reported illumination this session, for the same
 diagnosis-over-guesswork reason as the v2.5 motion status row.
 
-No solar calculation. Real civil twilight needs a date and a position, and this launcher's position
-comes from the same GPS the motion gate has to fail open around — no fix in a garage, none at
-power-on, none at all without the location grant. A window the driver sets is honest about being an
+No solar calculation. Real civil twilight needs a date and a position, and this launcher's position comes from the
+same GPS the motion gate has to fail open around. No fix in a garage, none at power-on, none at
+all without the location grant. A window the driver sets is honest about being an
 approximation; a sunset calculation would be wrong exactly when it matters.
 
 ### Not built, and why
@@ -750,46 +756,45 @@ approximation; a sunset calculation would be wrong exactly when it matters.
 - **Per-item resume / deep links into Jellyfin.** Same reason — item GUIDs come from the API.
 - **Notification actions and inline reply.** Deliberate, see above.
 - **Anything requiring the head unit.** None of v2.7 could be run on the physical device from
-  here. What is genuinely unverified: whether a Jellyfin client is installed at all and under
-  which package; whether `cmd notification allow_listener` grants the third listener as reliably
-  as the first two; how much of the shelf survives the vendor's own notification handling; and
-  whether the extracted keyboard's key sizes still read well on the real 240dpi panel.
+  here. What is genuinely unverified: whether a Jellyfin client is installed at all and under which
+package; whether `cmd notification allow_listener` grants the third listener as reliably as the
+first two. How much of the shelf survives the vendor's own notification handling. Also whether
+the extracted keyboard's key sizes still read well on the real 240dpi panel.
 
 ## Wheel gestures
 
 The RAV4's wheel keys reach the head unit as CAN frame `0x11` (`bArr[4]` = key id, `bArr[5]`
 = 1 on every frame while held, 0 on release), and the vendor CAN app throws the duration away:
 it emits one MCU key on the release frame whatever the hold
-(`HiworldCanParseToyota.java:831-891`). The launcher already receives those raw frames
-(`MCU_MSG_CAN_ALL_INFO`, the steering decode), so `carlib/WheelGestures.kt` reads the key byte off
-the same decode and turns the run of frames into one of **Press**, **LongPress** (held 600 ms,
-emitted while still held) or **DoublePress** (second press within 400 ms of a release). A gap of
+(`HiworldCanParseToyota.java:831-891`). The launcher already receives those raw frames (`MCU_MSG_CAN_ALL_INFO`, the steering decode).
+`carlib/WheelGestures.kt` reads the key byte off the same decode and turns the run of frames
+into one of **Press**, **LongPress** (held 600 ms, emitted while still held) or **DoublePress**
+(second press within 400 ms of a release). A gap of
 more than 300 ms with no frame is read as a release. VOL± are ignored: the CAN app owns their
 auto-repeat. Ids 8/13 and 9/14 both mean PREV/NEXT and are folded. On Riposte OS 0.2 there is
 no broadcast: McuOwner relays the box's own `0x11` under `0xA5` and the same engine reads the
 `HiworldCanDecoder` decode (`CarEvents.ownerListener`), so the thresholds are shared. Each
 gesture is logged as `CarEvents: wheel gesture: LongPress(key=MODE)`.
 
-Settings ▸ Wheel gestures binds a hold and a double press per key (NEXT, PREV, MODE, PLAY/PAUSE,
-TALK, RETURN, MUTE, VOICE) to one of: seek ±30/10 s, next/prev track, play/pause, open
-Media/Radio/Home, radio seek up/down, next preset, claim radio, hand audio back to Android, Siri
-(Zlink 1500), navigation (Zlink Maps 1504 while CarPlay reports connected, else the Nav card's
-app), mute toggle, the vendor voice assistant (`ZXW_CAN_KEY_EVT` 116, the CAN app's own path).
+Settings ▸ Wheel gestures binds a hold and a double press per key (NEXT, PREV, MODE,
+PLAY/PAUSE, TALK, RETURN, MUTE, VOICE) to one action. The actions: seek ±30/10 s, next/prev track, play/pause, open Media/Radio/Home, radio seek
+up/down, next preset, claim radio, hand audio back to Android, mute toggle. Also Siri (Zlink
+1500), navigation (Zlink Maps 1504 while CarPlay reports connected, else the Nav card's app)
+and the vendor voice assistant (`ZXW_CAN_KEY_EVT` 116, the CAN app's own path).
 Media actions go through the active `MediaController`; seek is `seekTo(position ± delta)`
-clamped to the track. Defaults: NEXT hold = +30 s, PREV hold = −10 s, PLAY/PAUSE hold = mute,
-RETURN hold = Home; MODE and TALK holds ship unbound (their plain action runs inside the gateway
-and cannot be swallowed, so binding them means "source switch AND …"); **every double press =
-nothing**.
+clamped to the track. Defaults: NEXT hold = +30 s, PREV hold = −10 s, PLAY/PAUSE hold = mute, RETURN hold = Home.
+MODE and TALK holds ship unbound: their plain action runs inside the gateway and cannot be
+swallowed, so binding them means "source switch AND …". **Every double press = nothing**.
 
 **The collateral rule.** The vendor reports the key on release, so by the time a second press can
 be recognised the first press has already done its plain job (skipped a track, switched source). A
-double-press action always lands on top of that, which is why none are bound by default. A hold
-has no such collateral on the launcher's own screens: after a LongPress the vendor's key for the
-same button, arriving within 1.5 s as an injected `KeyEvent` (NEXT/PREV/PLAY/RETURN) or as
-`MCU_KEY_INFOR`, is dropped (`carlib/WheelKeySwallow.kt`, one drop per path per hold). Two limits:
-with a third-party app in front (Spotify, CarPlay) the injected key goes to *that* window and
-lands there; and MODE (gateway `switchMode()`), MUTE (`sendSystemKey(12)`), TALK and VOICE act
-inside the gateway, so a hold on those always carries the vendor's short action too.
+double-press action always sits on top of that, which is why none are bound by default. A hold has no such collateral on the launcher's own screens. After a LongPress, the vendor's
+key for the same button is dropped when it arrives within 1.5 s as an injected `KeyEvent`
+(NEXT/PREV/PLAY/RETURN) or as `MCU_KEY_INFOR` (`carlib/WheelKeySwallow.kt`, one drop per path
+per hold). Two limits. With a third-party app in front (Spotify, CarPlay) the injected key goes to *that*
+window and arrives there. And MODE (gateway `switchMode()`), MUTE (`sendSystemKey(12)`), TALK
+and VOICE act inside the gateway, so a hold on those always carries the vendor's short action
+too.
 
 Nothing above is verified on the car. The ~100 ms frame period behind the 300 ms gap is inferred
 from the CAN app's per-frame counter; the settings screen's "Last gesture" line is the on-car
@@ -803,7 +808,7 @@ check.
 - **`ICallbackfn.aidl`** signature is a placeholder; verify against the device.
 - **Volume** is pushed: the gateway broadcasts `MCU_MSG_MAIL_VOL` (`(mute ? 0x80 : 0) | vol`) on
   every MCU volume/mute report, decoded by `CarEvents.volume`. The status-bar chip's AIDL poll
-  stays only until the first push lands. There is no LocalSocket; `SYSTEM_VOLUME:` rides the
+  stays only until the first push arrives. There is no LocalSocket; `SYSTEM_VOLUME:` rides the
   `ZXW_MESSAGE_TO_ICCOMMUNICATION` broadcast as text.
 - **Numeric speed.** `CAN_SPEED_TRUSTED` stays false, and now stays false for good. canbus2's
   `MCU_CAR_CAN_INFO` digest (`[speed, rpmH, rpmL]`) is decoded into `CarEvents.canSpeedKmh` and

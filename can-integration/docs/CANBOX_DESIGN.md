@@ -52,7 +52,7 @@ One 20-pin 2.0 mm connector carries everything: the car on one side, the head un
 
 **Three pins are confirmed by measurement and the rest are read from the vendor's manual.** A
 widely circulated generic table for this family has the CAN pair swapped and the serial on the
-wrong pins, so treat any pinout that disagrees with this one as suspect until measured. Confirm
+wrong pins. Treat any pinout that disagrees with this one as suspect until measured. Confirm
 each pin before relying on it, and note that the numbering mirrors between the connector face and
 the wire side.
 

@@ -37,9 +37,9 @@ Three facts decide what "replace" can mean here:
    ACC, keys, CAN data: all of it is an `IEventService` call or a broadcast the gateway (or
    canbus2) sends. Any app may bind it; most broadcasts are unprotected. So a replacement
    never needs system uid for the *car* side.
-3. **Audio follows the MCU's "mode".** Android audio (Spotify, our suite) plays with no mode
-   of its own; a hardware source (radio 1, BT 6, AUX 40…) is claimed with `sendMode` and must
-   be released with `exitCurMode` for Android audio to come back. The vendor radio does that
+3. **Audio follows the MCU's "mode".** Android audio (Spotify, our suite) plays with no mode of
+its own. A hardware source (radio 1, BT 6, AUX 40…) is claimed with `sendMode` and must be
+released with `exitCurMode` for Android audio to come back. The vendor radio does that
    on `AUDIOFOCUS_LOSS`, and so does CarLauncher since #31. `kill3rdAPK` — the gateway
    force-stopping third-party tasks on a mode change — is **off by default**
    (`Sys_SoundManager_Type` defaults to "1").
@@ -75,10 +75,10 @@ Not yet pulled from the unit (named in `debloat-plan.md`, absent from the local 
 UNRESOLVED), `zxw_dashboard`, `instructions`, `testtools`, `com.ivicar.avm`. Pull and
 decompile them before touching audio (dsp), lighting or the camera stack.
 
-Order of work that follows from the matrix: (1) finish the radio and prove it on the car;
-(2) settings keys and day/night echo, because they affect the launcher whether or not the OEM
-apps stay; (3) climate + radar + doors from canbus2's broadcasts; (4) Bluetooth *driven*, not
-replaced; (5) video brake gate, then hide the vendor players; (6) camera viewer last.
+Order of work that follows from the matrix. (1) Finish the radio and prove it on the car. (2)
+Settings keys and day/night echo, because they affect the launcher whether or not the OEM apps
+stay. (3) Climate, radar and doors from canbus2's broadcasts. (4) Bluetooth *driven*, not
+replaced. (5) Video brake gate, then hide the vendor players. (6) Camera viewer last.
 
 ---
 

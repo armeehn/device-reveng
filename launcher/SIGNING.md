@@ -1,10 +1,10 @@
 # Release signing
 
 Release builds fall back to the **debug** key until the owner supplies a real
-keystore. The debug keystore differs per machine and per CI runner, so two
-builds of one commit can carry different signatures; installing one over the
-other fails with `INSTALL_FAILED_UPDATE_INCOMPATIBLE`, and on a unit where the
-launcher is HOME that leaves the car with no launcher until a manual uninstall.
+keystore. The debug keystore differs per machine and per CI runner, so two builds of one commit can carry
+different signatures. Installing one over the other fails with
+`INSTALL_FAILED_UPDATE_INCOMPATIBLE`, and on a unit where the launcher is HOME that leaves the
+car with no launcher until a manual uninstall.
 
 ## What the owner must do (once)
 

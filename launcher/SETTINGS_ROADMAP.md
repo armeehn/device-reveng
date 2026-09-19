@@ -8,21 +8,21 @@ the vendor's fixed blue-on-grey look. Built on top of the v1.0 launcher.
 ## Architecture
 
 - **`carlib`** is the integration layer (unchanged contract, extended):
-  - [`SysVar`](carlib/.../SysVar.kt) — ContentResolver read + root `content` write of the vendor
+  - [`SysVar`](carlib/src/main/java/com/ripostelabs/carlauncher/carlib/SysVar.kt) — ContentResolver read + root `content` write of the vendor
     provider `content://com.szchoiceway.eventcenter.SysVarProvider/SysVar` (CAR_API §2).
-  - [`CarService`](carlib/.../CarService.kt) — bound `IEventService` AIDL; extended with EQ,
+  - [`CarService`](carlib/src/main/java/com/ripostelabs/carlauncher/carlib/CarService.kt) — bound `IEventService` AIDL; extended with EQ,
     radio RDS/TA, and system (versions / reboot / factory-reset) wrappers. Ordinals confirmed
     against `AIDL_ORDINALS.md`.
 - **`app/data`**:
-  - [`CarSettingsController`](app/.../data/CarSettingsController.kt) — a live `StateFlow` snapshot
+  - [`CarSettingsController`](app/src/main/java/com/ripostelabs/carlauncher/data/CarSettingsController.kt) — a live `StateFlow` snapshot
     of the whole SysVar table, optimistic off-main-thread writes (root fallback), change
     observation, root-availability probe.
-  - [`SettingKeys`](app/.../data/SettingKeys.kt) — the vendor keyname catalog the category screens
+  - [`SettingKeys`](app/src/main/java/com/ripostelabs/carlauncher/data/SettingKeys.kt) — the vendor keyname catalog the category screens
     reference.
 - **`app/ui/settings`**:
-  - [`SettingsComponents`](app/.../ui/settings/SettingsComponents.kt) — the reskinned kit
+  - [`SettingsComponents`](app/src/main/java/com/ripostelabs/carlauncher/ui/settings/SettingsComponents.kt) — the reskinned kit
     (scaffold, section card, category card, toggle / slider / picker / info / action rows).
-  - [`SettingsHost`](app/.../ui/settings/SettingsHost.kt) + `SettingsHub` — the settings app's own
+  - [`SettingsHost`](app/src/main/java/com/ripostelabs/carlauncher/ui/settings/SettingsHost.kt) + `SettingsHub` — the settings app's own
     back-stack and categorized menu; hosted by `MainActivity`'s `Screen.Settings`.
 
 ## Version milestones

@@ -334,10 +334,10 @@ platform perms `WRITE_SECURE_SETTINGS`, `INJECT_EVENTS`, `INTERNAL_SYSTEM_WINDOW
 `MANAGE_ACTIVITY_TASKS`, `START_TASKS_FROM_RECENTS`, `REMOVE_TASKS`, `READ_PRIVILEGED_PHONE_STATE`,
 `INTERACT_ACROSS_USERS`, `SET_WALLPAPER`, `NETWORK_STACK` (manifest lines 14-40).
 
-Consequence for our replacement is unchanged but the *mechanism* is now clear: **holding the Choiceway
-permission is not an option (it doesn't exist)**; to get protected broadcasts + SysVar writes we must
-ship as a **platform-signed system app under `android.uid.system`** (or `/system/priv-app` with those
-platform perms), which the rooted unit allows. As a plain HOME app we still get: SysVar reads, AIDL
+Consequence for our replacement is unchanged but the *mechanism* is now clear. **Holding the
+Choiceway permission is not an option (it does not exist).** To get protected broadcasts and
+SysVar writes we must ship as a **platform-signed system app under `android.uid.system`** (or
+`/system/priv-app` with those platform perms), which the rooted unit allows. As a plain HOME app we still get: SysVar reads, AIDL
 reads, unprotected broadcasts (media/radio/air/outside-temp/BT/`ALLAPPS`), app launching, day/night via
 SysVar — a usable first cut (CAR_API §6.4).
 
@@ -404,8 +404,8 @@ Everything is in `mcu-analysis/customerui-src/resources/res/` (base `layout/`, p
    `signature|system`-class.
 
 ### Net effect for our launcher
-Build the default-skin equivalent: full-screen `ViewPager`, **2 rows × 6 icon grid** (93 dp rounded-15
-icons, 20 sp labels, 40/45 dp insets, dot indicator), a **left ~14.6 % clock column (90 sp)** and
-negative-screen widgets (dashboard 72 % + weather 26 % + media). Media via AIDL `getValidModeInfor()`
+Build the default-skin equivalent: a full-screen `ViewPager` with a **2 rows × 6 icon grid**
+(93 dp rounded-15 icons, 20 sp labels, 40/45 dp insets, dot indicator). Plus a **left ~14.6 %
+clock column (90 sp)** and negative-screen widgets (dashboard 72 %, weather 26 %, media). Media via AIDL `getValidModeInfor()`
 (not raw music broadcasts); weather is Internet, not CAN; climate via `carairstruct`. First cut = plain
 app; platform-sign into `android.uid.system` later for protected reverse/SWC + SysVar writes.

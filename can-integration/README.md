@@ -17,9 +17,9 @@ That item is the headline this drop addresses. A **real capture** was taken park
 against the on-device vendor parser (`com.szchoiceway.canbus2 → HiworldCanParseToyota.java`).
 `HiworldCanDecoder.kt` is the decoder that item was waiting on.
 
-The rest (raw-bus CAN via a CANable, climate LIN via a TJA1020) are **further** "needs the
-car" hardware paths, beyond the shipped capture instrument — staged here so they exist when
-the hardware is installed, not because they're ready to wire today.
+The rest (raw-bus CAN via a CANable, climate LIN via a TJA1020) are **further** hardware paths
+that need the car, beyond the shipped capture instrument. They are staged here so they exist
+when the hardware is installed, not because they are ready to wire today.
 
 ## What's here
 
@@ -32,10 +32,9 @@ the hardware is installed, not because they're ready to wire today.
 - **`RawCanDecoder.kt`** — decodes **raw Toyota body-bus** frames. Now implemented and unit
   tested against real 2019 RAV4 captures (see `docs/VEHICLE_SIGNALS_2019.md`): doors **0x4A5**
   byte 3 bitfield, climate on/off **0x380**/**0x3B0**, blower **0x4AD** byte 6.
-  Two ids in the earlier 2023-derived list were re-verified on the 2019 and are **wrong**:
-  `doors 0x620` is a ~0.3 s activity *pulse*, not door state (it stayed clear for 47 s of a 60 s
-  door-held-open run), and `blinkers 0x614` is not indicators — indicators are not on this bus at
-  all. Speed 0xB4, gear 0x127, steer 0x25 and gas 0x245 remain plausible but are **not yet
+  Two ids in the earlier 2023-derived list were re-verified on the 2019 and are **wrong**. `doors
+0x620` is a ~0.3 s activity *pulse*, not door state: it stayed clear for 47 s of a 60 s
+door-held-open run. `blinkers 0x614` is not indicators; indicators are not on this bus at all. Speed 0xB4, gear 0x127, steer 0x25 and gas 0x245 remain plausible but are **not yet
   actuation-verified on this car**, so the decoder does not emit them.
 - **`LinClimateDecoder.kt`** — decodes the **A/C-amp climate LIN** (frames 0xB1 status /
   0x39 buttons). Only useful with a LIN transceiver tap.
@@ -49,7 +48,7 @@ the hardware is installed, not because they're ready to wire today.
   reader has not been written; `LinClimateDecoder.kt` is the only LIN code in the repo.
 
 ### `docs/` and `probes/`
-- `CANABLE_INTEGRATION.md`, `LIN_INTEGRATION.md`, `H62_TAP_PLAN.md` — wiring, protocol, tap
+- `CANABLE_INTEGRATION.md`, `LIN_INTEGRATION.md`, `H62_TAP_PLAN.md`, `CANBOX_DESIGN.md` — wiring, protocol, tap, and the replacement CAN box
   points. `body-can-tap.html` — a field wiring guide.
 - `canable-probe.sh`, `lin-probe.sh` — laptop/adb hardware bring-up + toggle-and-diff.
 
