@@ -224,7 +224,11 @@ class CarService(private val appContext: Context) {
     // Each returns null / false when unbound or on RemoteException. Remember the
     // ordinal caveat above: values are unverified until the AIDL is corrected.
 
-    fun getValidMode(): Int? = call { getValidMode() }
+    /** The source mode: the last one the owner set on 0.2, the gateway's answer otherwise. */
+    fun getValidMode(): Int? {
+        owner?.let { return it.lastMode?.code }
+        return call { getValidMode() }
+    }
     fun isBackCarConnected(): Boolean = call { IsBackCarConneted() } ?: false
     fun getRadioFreq(): Int? = tuner({ it.freq }) { getRadioFreq() }
     fun getRadioBand(): Int? = tuner({ it.band }) { getRadioBand() }
@@ -242,7 +246,10 @@ class CarService(private val appContext: Context) {
      * the vendor's source rather than offering to change it: sending an unverified opcode would
      * put the head unit into an unknown mode with no way to predict which.
      */
-    fun getValidModeTitle(): String? = call { getValidModeTitleInfor() }
+    fun getValidModeTitle(): String? {
+        owner?.let { return SourceTitle.of(it.lastMode) }
+        return call { getValidModeTitleInfor() }
+    }
 
     // ---- v2.0: System / About (CAR_API §3.2) -------------------------------
     /** MCU firmware version (getMCUVer, ordinal 32). */
