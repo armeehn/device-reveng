@@ -9,6 +9,7 @@ import android.graphics.drawable.Drawable
 import android.util.Log
 import com.ripostelabs.carlauncher.data.OemApps
 import com.ripostelabs.carlauncher.data.RiposteSuite
+import com.ripostelabs.carlauncher.data.SystemApps
 
 /** A launchable app resolved from the system (PackageManager). */
 data class AppInfo(
@@ -25,8 +26,7 @@ data class AppInfo(
  *
  * Apps are classified into "user" (main grid) vs "system" (tucked into a System folder) so
  * the home screen isn't cluttered with vendor/engineering tools (TestTools, CanbusDebug,
- * ApkInstall, the atslcarconsole shell, AOSP samples, …). Classification is data-driven via
- * [alwaysShow] / [alwaysHidePrefixes]; the raw FLAG_SYSTEM bit is the fallback.
+ * ApkInstall, the atslcarconsole shell, AOSP samples, …). [SystemApps] holds the rule.
  *
  * On API 30+ enumeration depends on package visibility — see QUERY_ALL_PACKAGES / <queries>
  * in AndroidManifest.xml.
@@ -39,23 +39,6 @@ class AppRepository(
 
     private val pm: PackageManager = context.packageManager
 
-    /** Curated launchers that ARE system apps but should always stay on the home grid. */
-    private val alwaysShow = setOf(
-        "com.android.vending",              // Play Store
-        "com.google.android.apps.maps",     // Maps
-        "com.android.settings",             // Settings
-        "com.topjohnwu.magisk",             // Magisk
-        "com.android.chrome",
-        "com.google.android.projection.gearhead", // Android Auto
-        "com.google.android.googlequicksearchbox",
-        "org.codeaurora.snapcam",           // camera
-        // Zlink phone-projection receiver. It keeps exactly one launcher alias enabled for
-        // whichever protocol is configured (features.launcher.CarPlayActivity today; the
-        // AutoActivity/HiCarActivity/... aliases when the unit is switched), so this surfaces
-        // a single "CarPlay" tile on the main grid rather than the whole vendor suite.
-        "com.zjinnova.zlink",
-    )
-
     /**
      * Never shown in the drawer, search, or app directory: the launcher itself (both build
      * variants — the release/debug sibling otherwise shows up as a second "Car Launcher")
@@ -67,26 +50,8 @@ class AppRepository(
         "com.ripostelabs.claudecar",
     )
 
-    /** Package prefixes to always push into the System folder regardless of flags. */
-    private val alwaysHidePrefixes = listOf(
-        "com.szchoiceway.",
-        "com.choiceway.",
-        "com.lfg.szchoiceway.",
-        "com.zjinnova.",                    // zlink internals (com.zjinnova.zlink itself is alwaysShow)
-        "com.ivicar.",
-        "com.syu.",
-        "com.android.atslcarconsole",       // vendor console shell
-        "com.example.android.",             // AOSP sample leftovers
-        "com.mmbox.",
-    )
-
-    private fun classifySystem(ai: ApplicationInfo): Boolean {
-        val pkg = ai.packageName
-        if (pkg in alwaysShow) return false
-        if (alwaysHidePrefixes.any { pkg.startsWith(it) }) return true
-        val sys = ai.flags and (ApplicationInfo.FLAG_SYSTEM or ApplicationInfo.FLAG_UPDATED_SYSTEM_APP)
-        return sys != 0
-    }
+    private fun classifySystem(ai: ApplicationInfo): Boolean =
+        SystemApps.isSystem(ai.packageName, ai.flags)
 
     /**
      * All MAIN/LAUNCHER activities, sorted by label, minus ourselves, tagged user/system.
