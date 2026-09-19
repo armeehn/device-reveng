@@ -9,6 +9,7 @@ import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.os.IBinder
 import android.util.Log
+import java.time.LocalDateTime
 import com.szchoiceway.eventcenter.ICallbackfn
 import com.szchoiceway.eventcenter.ICommunication
 import com.szchoiceway.eventcenter.IEventService
@@ -266,6 +267,11 @@ class CarService(private val appContext: Context) {
         call { sendMode(mode, flag) }
     }
     fun sendWheelKey(key: Int) { call { sendWheelKey(key) } }
+
+    /** Owner path only: write the clock into the MCU's RTC (`13` frame). The gateway does its own. */
+    fun sendRtc(now: LocalDateTime) {
+        owner?.send(McuOwnerProtocol.rtc(now))
+    }
     fun setMute(mute: Boolean) {
         owner?.let { it.send(McuOwnerProtocol.mute(mute)); return }
         call { sendMuteState(mute) }

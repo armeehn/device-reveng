@@ -266,11 +266,20 @@ class MainActivity : ComponentActivity() {
             lifecycleScope.launch {
                 settingsStore.settings.map { it.motionGateEnabled }.distinctUntilChanged().collect { sysVarMirror.refresh() }
             }
+            // The MCU gets the clock once this boot has one (McuClock.pushIfTrustworthy); the
+            // vendor only did that at power-off, which a bench unit never reaches.
+            val mcuClock = McuClock(applicationContext, sendRtc = carService::sendRtc)
+            lifecycleScope.launch {
+                while (true) {
+                    mcuClock.pushIfTrustworthy()
+                    delay(RTC_PUSH_POLL_MS)
+                }
+            }
             val ownerListener = McuOwner.FanOut(
                 carEvents.ownerListener(CanCaptureService.vehicle(), carService.radioState),
                 VendorBroadcastReemitter(applicationContext),
                 sysVarMirror,
-                McuClock(applicationContext),
+                mcuClock,
                 carService.volumeState,
             )
             mcuOwner = McuOwner(
@@ -1231,6 +1240,7 @@ class MainActivity : ComponentActivity() {
 
 /** v2.6 — the vendor source changes only when the driver changes it; polling it is a courtesy. */
 private const val VENDOR_SOURCE_POLL_MS = 5_000L
+private const val RTC_PUSH_POLL_MS = 60_000L
 
 /** The vendor stores exactly six radio favourites: `Rdo_MyFavorite0..5` (CAR_API §2.3). */
 private const val VENDOR_PRESET_SLOTS = 6

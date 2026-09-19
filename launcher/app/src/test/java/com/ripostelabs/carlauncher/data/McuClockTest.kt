@@ -19,6 +19,14 @@ class McuClockTest {
     }
 
     @Test
+    fun `pushes the clock to the MCU once, online, with a live year`() {
+        assertTrue(McuClock.shouldPush(online = true, year = 2026, alreadyPushed = false))
+        assertFalse(McuClock.shouldPush(online = false, year = 2026, alreadyPushed = false))
+        assertFalse(McuClock.shouldPush(online = true, year = 2024, alreadyPushed = false))
+        assertFalse(McuClock.shouldPush(online = true, year = 2026, alreadyPushed = true))
+    }
+
+    @Test
     fun `drift inside the floor leaves the clock alone`() {
         assertFalse(McuClock.shouldSet(online = false, driftMs = McuClock.DRIFT_FLOOR_MS))
         assertFalse(McuClock.shouldSet(online = false, driftMs = 0L))
