@@ -60,7 +60,8 @@ The loader upload works on a fresh enumeration only. Arm the laptop *before* the
 - The GSI's compressed APEXes need free /data to unpack; `decapex.py` unpacks them at build
   time instead. Four logical images must sum under the 6 GiB super.
 - Panel: 1920x720 via a THCV33x SerDes; touch: Goodix GT9xx at i2c 1-0014, IRQ 221
-  (gpio 88), `/proc/gt9xx_config`. The chip needs two things the GSI does not do by
-  itself: a reader on `/dev/zxw_io` (else no interrupt) and the driver's config table
-  written back to `/proc/gt9xx_config` (else raw touches are 720x1920 portrait and land in
-  the left third). `riposte-zxwio.sh` and `riposte-gt9cfg.sh` do both at boot_completed.
+  (gpio 88). The GSI needs two things stock did for it: a reader on `/dev/zxw_io` (else no
+  interrupt; `riposte-zxwio.sh`) and the axes transposed (the chip reports raw X down the
+  height and raw Y across the width; `riposte-touchswap`, a uinput proxy, source in
+  `os/touchswap/`). Writing `/proc/gt9xx_config` is accepted and changes nothing; no IDC
+  rotation gives a transpose. Read raw touches with `getevent -lt`, never from dumpsys.
