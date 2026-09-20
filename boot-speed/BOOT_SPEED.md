@@ -113,3 +113,36 @@ boot completes makes the wait *feel* far shorter even though wall-clock is the s
 - Airplane (step 3): set state false / `airplane_mode_on 0`.
 - boot.img (step 4): reflash `backup-*/lun4/boot_b.bin` (pre-root stock) or the
   Magisk-patched stock boot via `fastboot flash boot`.
+
+## Riposte OS 0.2 on the bench (2026-09-19)
+
+Measured on the verified `0.2+20260919.vc487` image from Android's own `boot_progress_*`
+events and `dmesg`, kernel start = 0 (the bootloader adds a few seconds before it):
+
+| From | To | Slice | What |
+|---|---|---|---|
+| 0 | 4.5 s | 4.5 | kernel, first-stage init, super/dm setup |
+| 4.5 | 6.5 s | 2.0 | vendor HALs, `e2fsck` on persist, vold |
+| 6.5 | 9.8 s | **3.3** | TrebleDroid's `rw-system.sh`, run with `exec` so init waits for it |
+| 10.0 | 12.7 s | 2.7 | apexd (no updatable APEX here), post-fs-data |
+| 12.7 | 18.2 s | 5.5 | two zygotes (64-bit at 12.7, 32-bit at 15.7: not a restart), class preload |
+| 18.2 | 26.3 s | 8.1 | system_server: package scan 3.3 s, then AMS, then `enable_screen` |
+| 26.3 | ~28 s | | launcher in front, boot animation stopped at boot_completed |
+
+The `rw-system.sh` cost is not one slow line: traced at runtime (`PS4='+$EPOCHREALTIME' sh -x`)
+it is 474 executed lines at 10 to 60 ms each, plus one `find /sys -name fts_gesture_mode` at
+0.85 s. On this unit its net effect is about thirty things: props (`ro.surface_flinger.
+use_color_management false`, `persist.adb.nonblocking_ffs false`, the `ro.keymaster.xxx.*`
+set, `ro.control_privapp_permissions log`, media volume steps), bind-mounts of an empty file
+over vendor pieces (SysuiDarkTheme overlay, `libpdx_default_transport`, qti-logkit, a stub
+keymaster 3.0 impl, `/vendor/etc/audio`), `/persist`, `/system/xbin`, and a `resize2fs` of
+the system partition. A device-specific replacement that does only those would save ~3 s; it
+touches audio and keymaster, so it needs a bench session with the acceptance list, not a
+quick edit.
+
+Magisk is not a cost: with the stock `boot.img` on 0.2 the timeline is the same (26.3 s to
+screen), and the owner path needs no root, so 0.2 can ship without Magisk.
+
+Ranked for 0.2: (1) the `rw-system.sh` fork, ~3 s; (2) dexpreopt of the launcher and suite at
+build time, 1 to 2 s off the package scan; (3) nothing else above 1 s short of the kernel.
+Floor for this SoC on AOSP 14 is around 20 s.
