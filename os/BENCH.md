@@ -57,6 +57,17 @@ The loader upload works on a fresh enumeration only. Arm the laptop *before* the
   tap once.
 - **Timed tap experiments with a human fail.** Read a counter (`grep gt9xx /proc/interrupts`),
   ask for "tapped" afterwards, read it again.
+- **The pigtail flips about 4 bits per GB on fastboot writes and reports nothing** (2026-09-20:
+  73 bad blocks across the four images; `libsqlite.so` and `init.qcom.sh` broke, zygote32
+  looped). A second fastboot pass flips other bits, so a reflash never converges. Run
+  `bench-blockfix.sh` from the laptop instead: it diffs each partition against its image over
+  USB adb and rewrites only the differing 4 KiB blocks, each hash-checked on the unit first.
+  It also stalls: `usbreset 18d1:4ee0` right before a single `fastboot` call gets a write
+  through, a run of commands in one script does not.
+- **`bench-verify.sh` can never match `system` after a boot on the GSI.** Its `rw-system.sh`
+  writes ~280 KB of ext4 metadata every boot (the same 24 blocks each time); the other three
+  partitions do match. A `system` mismatch alone is proven or refuted at file level:
+  `find /system -xdev -type f | xargs sha256sum` on the unit against the loop-mounted image.
 
 ## Facts about this unit
 
