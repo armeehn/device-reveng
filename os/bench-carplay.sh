@@ -60,7 +60,10 @@ else
   a shell "cmd wifi start-softap $SSID wpa2 $PSK -b 5" >/dev/null
 fi
 a shell "setprop riposte.ap.ssid $SSID; setprop riposte.ap.psk $PSK; setprop riposte.ap.iface wlan1"
-log "access point $SSID up"
+# The tethered AP idles out after ten minutes without a client; a loop on the unit puts it
+# back, as riposte-hotspot.sh does on the image.
+a shell "pkill -f ap-keeper; (setsid sh -c 'while true; do ip link show wlan1 >/dev/null 2>&1 || cmd wifi start-softap $SSID wpa2 $PSK -b 5 ${freq:+-f $freq} >/dev/null 2>&1; sleep 60; done' > /dev/null 2>&1 < /dev/null &)" 2>/dev/null || true
+log "access point $SSID up, keeper loop running"
 
 # 4. the app's runtime grants (the image's default-permissions XML does this at first boot)
 for perm in BLUETOOTH_CONNECT NEARBY_WIFI_DEVICES BLUETOOTH_ADVERTISE POST_NOTIFICATIONS; do
