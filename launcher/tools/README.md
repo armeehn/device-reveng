@@ -26,7 +26,9 @@ server for every session, spares included, so without it each session cost an
 ssh → `pct exec` → ARTEMIS import on the farm. The shim answers `initialize`,
 `tools/list` and `ping` from `/var/cache/headunit/artemis-mcp.json` and starts the
 real bridge (`headunit artemis mcp-real`) on the first `tools/call`. No cache yet:
-it proxies transparently and writes one.
+it proxies transparently and writes one. `resources/list`, `prompts/list` and
+`resources/templates/list` are answered as empty from the shim (ARTEMIS has none),
+so a session that never calls a tool never owns a bridge. `test_mcp_shim.py` pins it.
 
 ```
 install -d /usr/local/lib/headunit /var/cache/headunit
