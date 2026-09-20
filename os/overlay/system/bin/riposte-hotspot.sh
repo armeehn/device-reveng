@@ -44,7 +44,17 @@ raise() {
   setprop riposte.ap.iface "$IFACE"
 }
 
+# The channel hint the daemon reads: set once the STA is up too, since at boot the AP often
+# rises before the STA has joined and the hint stays empty.
+hint() {
+  f=$(sta_freq)
+  if [ -n "$f" ] && [ "$f" -ge 5000 ] && [ -z "$(getprop sys.wifiap.channel)" ]; then
+    setprop sys.wifiap.channel $(( (f - 5000) / 5 ))
+  fi
+}
+
 while true; do
   ip link show "$IFACE" > /dev/null 2>&1 || raise
+  hint
   sleep "$CHECK_S"
 done
