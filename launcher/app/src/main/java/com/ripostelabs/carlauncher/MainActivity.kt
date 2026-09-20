@@ -260,11 +260,17 @@ class MainActivity : ComponentActivity() {
             // The value behind the brake edge, served to the suite by SysVarMirrorProvider.
             // Detection follows the one opt-out safety switch: with parked-only gating off,
             // the suite's video player stays uncovered too (the vendor's Set_BreakDetected).
-            val sysVarMirror = SysVarMirror(detect = { settingsStore.settings.value.motionGateEnabled }) { key, value ->
+            val sysVarMirror = SysVarMirror(
+                detect = { settingsStore.settings.value.motionGateEnabled },
+                moving = { carEvents.motion.value == CarEvents.Motion.MOVING },
+            ) { key, value ->
                 SysVarMirrorProvider.publish(applicationContext, key, value)
             }
             lifecycleScope.launch {
                 settingsStore.settings.map { it.motionGateEnabled }.distinctUntilChanged().collect { sysVarMirror.refresh() }
+            }
+            lifecycleScope.launch {
+                carEvents.motion.collect { sysVarMirror.refresh() }
             }
             // The MCU gets the clock once this boot has one (McuClock.pushIfTrustworthy); the
             // vendor only did that at power-off, which a bench unit never reaches.

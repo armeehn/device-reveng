@@ -13,20 +13,22 @@ class SysVarMirrorTest {
     private val changes = mutableListOf<Pair<String, String>>()
 
     private var detect = true
+    private var moving = true
 
-    private val mirror = SysVarMirror(detect = { detect }) { k, v -> changes += k to v }
+    private val mirror = SysVarMirror(detect = { detect }, moving = { moving }) { k, v -> changes += k to v }
 
     private fun sys(brake: Boolean) = McuOwnerProtocol.SysEvent(
         disc = false, usb = false, rightTurn = false, illumination = false, brake = brake,
         reverse = false, accLine = false, mcan = false, startStop = false, hdmi = false, leftTurn = false,
     )
 
+    /** Gated only while moving; a handbrake seen on opens it; detection off opens it. */
     @Test
-    fun ruleMatchesTheVendor() {
-        assertEquals("1", SysVarMirror.brakeState(detect = true, connected = false))
-        assertEquals("0", SysVarMirror.brakeState(detect = true, connected = true))
-        assertEquals("0", SysVarMirror.brakeState(detect = false, connected = false))
-        assertEquals("0", SysVarMirror.brakeState(detect = false, connected = true))
+    fun gatesOnMotionNotOnTheDeadBit() {
+        assertEquals("1", SysVarMirror.brakeState(detect = true, connected = false, moving = true))
+        assertEquals("0", SysVarMirror.brakeState(detect = true, connected = false, moving = false))
+        assertEquals("0", SysVarMirror.brakeState(detect = true, connected = true, moving = true))
+        assertEquals("0", SysVarMirror.brakeState(detect = false, connected = false, moving = true))
     }
 
     @Test
@@ -53,6 +55,16 @@ class SysVarMirrorTest {
     fun detectionOffOpensTheGateWhateverTheLine() {
         detect = false
         mirror.onSysEvent(sys(brake = false))
+        assertEquals("0", mirror.get(SysVarMirror.KEY_CUR_BRAKE_STATE))
+    }
+
+    @Test
+    fun parkingOpensTheGateWithoutABrakeEdge() {
+        mirror.onSysEvent(sys(brake = false))
+        assertEquals("1", mirror.get(SysVarMirror.KEY_CUR_BRAKE_STATE))
+
+        moving = false
+        mirror.refresh()
         assertEquals("0", mirror.get(SysVarMirror.KEY_CUR_BRAKE_STATE))
     }
 
