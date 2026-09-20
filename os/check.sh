@@ -126,6 +126,8 @@ if [ "$PROFILE" = gsi ]; then
   # Our rw-system.sh replaces TrebleDroid's; init execs it by label, so the label is the test.
   check "cmp -s $HERE/overlay/system/bin/rw-system.sh $S/bin/rw-system.sh" "rw-system.sh is ours"
   check "[ \"\$(getfattr --absolute-names -n security.selinux --only-values $S/bin/rw-system.sh 2>/dev/null | tr -d '\\0')\" = $SELINUX_PHHSU_EXEC ]" "rw-system.sh labelled phhsu_exec"
+  check "[ -x $S/riposte/zlink/bin/z-link ] && [ -f $S/riposte/zlink/lib/libzjL10001.so ]" "OEM projection daemon lifted under riposte/zlink"
+  check "grep -q '^service riposte_zlink ' $S/etc/init/riposte.rc" "riposte_zlink init service"
 else
   check "[ ! -f $S/bin/rw-system.sh ]" "no rw-system.sh on a stock base"
   check "grep -q '^ro.riposte.os.bt_carkit=0$' $S/build.prop" "ro.riposte.os.bt_carkit=0"
