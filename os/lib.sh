@@ -14,6 +14,7 @@ readonly EXT4_MAGIC="53ef"            # ext4 superblock s_magic, offset 0x438
 readonly EROFS_MAGIC="e2e1f5e0"       # EROFS super_block magic, offset 0x400
 readonly BLOCK=4096
 readonly SELINUX_SYSTEM_FILE="u:object_r:system_file:s0"
+readonly SELINUX_PHHSU_EXEC="u:object_r:phhsu_exec:s0"   # init `exec` transitions it into su
 
 log() { printf '[os] %s\n' "$*" >&2; }
 die() { log "ERROR: $*"; exit 1; }

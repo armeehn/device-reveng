@@ -197,15 +197,21 @@ label_system_file "$SYS/$PRIVAPP_XML"
 
 # ---- 5. static overlay + props -------------------------------------------------
 # overlay/system/... lands under the system root, overlay/product/... under product.
+# system/bin/rw-system.sh replaces TrebleDroid's on the GSI base only (the stock base has
+# none); it keeps upstream's phhsu_exec label so init's `exec` still lands it in su.
 (cd "$HERE/overlay" && find . -type f -path './system/*' -o -type f -path './product/*' | sed 's|^\./||') | while read -r f; do
   case "$f" in
+    system/bin/rw-system.sh) [ "$PROFILE" = gsi ] || continue; dst="$SYS/${f#system/}" ;;
     system/*) dst="$SYS/${f#system/}" ;;
     *) dst="$WORK/tree/$f" ;;
   esac
   mkdir -p "$(dirname "$dst")"
   cp "$HERE/overlay/$f" "$dst"
   label_system_file "$dst"
-  case "$f" in system/bin/*) chmod 0755 "$dst" ;; esac
+  case "$f" in
+    system/bin/rw-system.sh) chmod 0755 "$dst"; setfattr -n security.selinux -v "$SELINUX_PHHSU_EXEC" "$dst" ;;
+    system/bin/*) chmod 0755 "$dst" ;;
+  esac
 done
 MILESTONE=$([ "$PROFILE" = gsi ] && echo 0.2 || echo 0.1)   # 0.1 stock re-mastered, 0.2 GSI base
 VERSION=${VERSION:-$MILESTONE+$(date -u +%Y%m%d).vc$("$AAPT2" dump badging "$APPS/carlauncher.apk" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p")}

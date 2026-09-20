@@ -122,7 +122,12 @@ if [ "$PROFILE" = gsi ]; then
     check "[ \"\$(last_prop $p $S/build.prop)\" = false ]" "$p=false"
   done
   check "[ \"\$(last_prop bluetooth.device.class_of_device $S/build.prop)\" = $BT_CARKIT_COD ]" "class of device $BT_CARKIT_COD (car audio)"
+
+  # Our rw-system.sh replaces TrebleDroid's; init execs it by label, so the label is the test.
+  check "cmp -s $HERE/overlay/system/bin/rw-system.sh $S/bin/rw-system.sh" "rw-system.sh is ours"
+  check "[ \"\$(getfattr --absolute-names -n security.selinux --only-values $S/bin/rw-system.sh 2>/dev/null | tr -d '\\0')\" = $SELINUX_PHHSU_EXEC ]" "rw-system.sh labelled phhsu_exec"
 else
+  check "[ ! -f $S/bin/rw-system.sh ]" "no rw-system.sh on a stock base"
   check "grep -q '^ro.riposte.os.bt_carkit=0$' $S/build.prop" "ro.riposte.os.bt_carkit=0"
   check "! grep -q '^@carkit ' $S/build.prop" "no @carkit tag leaked into build.prop"
   check "cmp -s <(grep '^bluetooth\.' $SB/build.prop) <(grep '^bluetooth\.' $S/build.prop)" "bluetooth.* props identical to the base"
