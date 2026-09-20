@@ -23,6 +23,12 @@ class SourceLabelsTest {
         assertFalse(SourceLabels.isCarPlay(null))
     }
 
+    @Test fun projectionSuiteReadsAsCarPlayOn02() {
+        // Riposte OS 0.2: the projection suite holds the session in the OEM app's place.
+        assertEquals("CarPlay", SourceLabels.of("com.ripostelabs.projection"))
+        assertTrue(SourceLabels.isCarPlay("com.ripostelabs.projection"))
+    }
+
     @Test fun projectionTitlesAreTheGatewaysOwn() {
         // ZlinkManage.setCarPlayValidModeInfor spells it "Carplay", lower-case p.
         assertTrue(SourceLabels.isProjection("Carplay"))
