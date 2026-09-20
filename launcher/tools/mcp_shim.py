@@ -21,6 +21,12 @@ import threading
 CACHE = "/var/cache/headunit/artemis-mcp.json"
 REAL = ["/usr/local/bin/headunit", "artemis", "mcp-real"]
 CACHED_METHODS = ("initialize", "tools/list")
+# ARTEMIS registers no resources or prompts, so these are constant. Claude
+# Code asks for all three right after initialize; answering them here is
+# what keeps a session that never calls a tool from owning a bridge in 124.
+EMPTY_LISTS = {"resources/list": {"resources": []},
+               "prompts/list": {"prompts": []},
+               "resources/templates/list": {"resourceTemplates": []}}
 SHIM_INIT_ID = "headunit-shim-init"
 
 
@@ -116,6 +122,9 @@ class Shim:
                 return
             if method in CACHED_METHODS and method in self.cache and has_id:
                 self.reply({"jsonrpc": "2.0", "id": msg["id"], "result": self.cache[method]})
+                return
+            if method in EMPTY_LISTS and has_id:
+                self.reply({"jsonrpc": "2.0", "id": msg["id"], "result": EMPTY_LISTS[method]})
                 return
             if not has_id:
                 return   # a notification with no bridge to notify
