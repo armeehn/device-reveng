@@ -1,0 +1,23 @@
+# The debug toolbelt Riposte OS carries for work on the unit itself: what a Kali box has in
+# reach when the target is an Android head unit. Static aarch64 builds, pinned by sha256.
+# fetch.sh downloads this into a cache; build.sh --tools CACHE copies it into the image.
+#
+#   name          kind   sha256                                                            url[!zip member]
+#
+#   kind  bin   one static binary  -> /system/riposte/bin/<name>, symlinked from /system/bin
+#         tar   a tarball          -> /system/riposte/<name>/ (nmap: nmap ncat nping + data/)
+#         apk   an app             -> product/app/<name> (Termux, the terminal on the panel)
+#         data  too big for /system (200 MB left under the 6 GiB super): install-data.sh pushes
+#               it to /data/local/riposte/bin over adb instead
+#
+# busybox is the static arm64 one Magisk ships inside its APK (bionic, built for Android);
+# busybox.net only publishes 32-bit ARM. Regenerate busybox.applets when its sha changes.
+busybox       bin    4d60ab3f5a59ebb2ca863f2f514e6924401b581e9b64f602665c008177626651  https://github.com/topjohnwu/Magisk/releases/download/v30.7/app-debug.apk!lib/arm64-v8a/libbusybox.so
+tcpdump       bin    b438c618026a8fd71a1d21b28151185a2569aaa90e21a03a4686b6c7f8887bb8  https://github.com/ernw/static-toolbox/releases/download/tcpdump-v4.9.3/tcpdump-4.9.3-aarch64
+socat         bin    758f023d9a27ae3b7f5f633ef41bed65b812af0dd86b4afede37925e405ddc3d  https://github.com/ernw/static-toolbox/releases/download/socat-v1.7.4.4/socat-1.7.4.4-aarch64
+strace        bin    c6e211c6e29311bc00457c876da53cc6c7299146f324a9b80700c34908055d6d  https://github.com/ernw/static-toolbox/releases/download/strace-v6.3/strace-6.3-aarch64
+gdb           bin    ff660b5b8b28cfec5ab2c676797a7d167254d8c0a3270ffb97ba03875e810d6a  https://github.com/ernw/static-toolbox/releases/download/gdb-v10.1/gdb-10.1-aarch64
+gdbserver     bin    7698b65c4c4ca086aca26dfd3a6ac5b92f9db4ac2093dd93ce3facb3e3131eba  https://github.com/ernw/static-toolbox/releases/download/gdb-v10.1/gdbserver-10.1-aarch64
+nmap          tar    f216aa148e11837033e3eef70fe06292d1e6815e599048218acc4c7389656ee2  https://github.com/ernw/static-toolbox/releases/download/nmap-v7.94SVN/nmap-7.94SVN-aarch64-portable.tar.gz
+com.termux    apk    72fdb596045116bf5ba1b5bdf5b26fddb9acc0bd074ad9f2da9eb0ae85e83a4e  https://github.com/termux/termux-app/releases/download/v0.118.3/termux-app_v0.118.3%2Bgithub-debug_arm64-v8a.apk
+frida-server  data   77c2a4aadf6010c69766abea5b6a408c66f5e2da43b3f2c920cf75a5fa1ec7f5  https://github.com/frida/frida/releases/download/17.18.0/frida-server-17.18.0-android-arm64.xz
