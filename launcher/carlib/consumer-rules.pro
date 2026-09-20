@@ -9,3 +9,11 @@
 -keep class com.ripostelabs.carlauncher.carlib.RootBroadcastHelper {
     public static void main(java.lang.String[]);
 }
+
+# McuStateExport names JSON fields after the data-class fields through reflection, and Helm
+# reads those names over the wire. Keep them: on the first release build R8 sent {"a":false,...}.
+-keepclassmembernames class com.ripostelabs.carlauncher.carlib.McuOwnerProtocol$** { <fields>; }
+-keepclassmembernames class com.ripostelabs.carlauncher.carlib.CanSignal$** { <fields>; }
+-keepclassmembernames class com.ripostelabs.carlauncher.carlib.RawCanSignal$** { <fields>; }
+-keepnames class com.ripostelabs.carlauncher.carlib.McuOwnerProtocol$RadioEvent$**
+-keepnames class com.ripostelabs.carlauncher.carlib.CanSignal$**
