@@ -318,7 +318,7 @@ fun HomeScreen(
                                     onCycleSource = nowPlaying::cycleSession,
                                     // RAV4-52: the CarPlay chip deep-links into the receiver.
                                     onOpenSource = if (SourceLabels.isCarPlay(cardMedia?.sourcePackage)) {
-                                        { Zlink.open().start(appContext) }
+                                        { Zlink.openAny(appContext) }
                                     } else {
                                         null
                                     },

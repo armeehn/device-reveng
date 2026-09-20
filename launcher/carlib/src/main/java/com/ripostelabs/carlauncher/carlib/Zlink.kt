@@ -1,5 +1,7 @@
 package com.ripostelabs.carlauncher.carlib
 
+import android.content.Context
+
 /**
  * The Zlink phone-projection receiver (`com.zjinnova.zlink`: CarPlay, Android Auto, HiCar,
  * mirror, DLNA) as the vendor gateway drives it (`eventcenter/manager/ZlinkManage.java`).
@@ -93,6 +95,20 @@ object Zlink {
 
     /** The launcher's CarPlay deep link (RAV4-52): [mainPage] with the [PAGE_MAIN] guess. */
     fun open(): IntentSpec = mainPage(PAGE_MAIN, FEATURE_CARPLAY)
+
+    // ---- Riposte OS 0.2: our own CarPlay screen in place of the packed OEM app ----
+    const val PROJECTION_PACKAGE = "com.ripostelabs.projection"
+    const val PROJECTION_CARPLAY_ACTIVITY = "com.ripostelabs.projection.CarPlayActivity"
+
+    /** The projection suite's CarPlay screen (rav4-apps), which answers the same daemon. */
+    fun openProjection(): IntentSpec = IntentSpec(
+        action = ACTION_MAIN,
+        packageName = PROJECTION_PACKAGE,
+        className = PROJECTION_CARPLAY_ACTIVITY,
+    )
+
+    /** Whichever CarPlay screen this unit carries: ours on 0.2, the OEM app's on stock. */
+    fun openAny(context: Context): Boolean = openProjection().start(context) || open().start(context)
 
     /**
      * `ZlinkManage.sendKeyCodeToCarplay`. ⚠ UNVERIFIED whether Zlink 5.4.62 honours any code
