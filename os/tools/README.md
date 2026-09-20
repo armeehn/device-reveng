@@ -4,7 +4,7 @@ What a Kali box keeps in reach, carried by Riposte OS itself so the unit can be 
 its own panel or a plain `adb shell`, without a laptop in the loop.
 
 ```
-tools.lock ──fetch.sh──▶ share/carlauncher/os/tools/unit ──build.sh --tools──▶ the image
+tools.lock ──fetch.sh──▶ CACHE (on the build host) ──build.sh --tools──▶ the image
                                                           └─install-data.sh──▶ /data/local/riposte/bin
 ```
 
@@ -29,7 +29,7 @@ busybox published for bionic. busybox.net offers 32-bit ARM only.
 ## Adding a tool
 
 1. Add a line to `tools.lock` (name, kind, sha256, url). Kinds: `bin`, `tar`, `apk`, `data`.
-2. `tools/fetch.sh` on x (root), then `bench-cycle.sh <vc>`.
+2. `tools/fetch.sh CACHE` on the build host (root), then `bench-cycle.sh <vc>`.
 3. A new busybox: regenerate `busybox.applets` with `busybox --list` on the unit.
 
 Size budget: the four GSI images sit 200 MB under the 6 GiB super. Anything past a few MB
