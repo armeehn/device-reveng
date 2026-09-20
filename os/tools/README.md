@@ -10,7 +10,8 @@ tools.lock ──fetch.sh──▶ CACHE (on the build host) ──build.sh --to
 
 | On the unit | What |
 |---|---|
-| `/system/bin/{nmap,ncat,nping,tcpdump,socat,strace,gdb,gdbserver,busybox}` | on PATH for every shell; links into `/system/riposte/bin` |
+| `/system/bin/{nmap,ncat,nping,socat,gdb,gdbserver,busybox}` | on PATH for every shell; links into `/system/riposte/bin` |
+| `/system/riposte/bin/{tcpdump,strace}` | the static builds; `/system/bin` keeps the GSI's own (tcpdump 4.99, strace 4.25) |
 | `/system/riposte/bin/bb/*` | one link per busybox applet (358); `export PATH=$PATH:/system/riposte/bin/bb` or `busybox <applet>` |
 | `/system/riposte/nmap/` | the portable nmap tree; `/system/bin/nmap` is a wrapper that sets `NMAPDIR` |
 | Termux (`com.termux`, product app) | the terminal on the panel; `pkg install python openssh git` and so on over the unit's Wi-Fi. ssh/sshd come from here: a static musl OpenSSH dies on Android's missing `/etc/passwd` |

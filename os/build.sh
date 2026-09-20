@@ -206,8 +206,14 @@ if [ -n "$TOOLS" ]; then
         cp "$TOOLS/$name" "$SYS/$TOOLS_BIN/$name"
         label_system_file "$SYS/$TOOLS_BIN/$name"
         chmod 0755 "$SYS/$TOOLS_BIN/$name"
-        ln -s "/system/$TOOLS_BIN/$name" "$SYS/bin/$name"
-        label_link "$SYS/bin/$name"
+        # The GSI ships tcpdump and strace of its own (userdebug); what the base carries stays,
+        # and the static one is still at /system/riposte/bin/<name>.
+        if [ -e "$SYS/bin/$name" ]; then
+          log "kept the base's own $name in bin; the static build sits under $TOOLS_BIN"
+        else
+          ln -s "/system/$TOOLS_BIN/$name" "$SYS/bin/$name"
+          label_link "$SYS/bin/$name"
+        fi
         ;;
       tar)
         # The portable nmap finds its data through NMAPDIR; ncat and nping need nothing.
