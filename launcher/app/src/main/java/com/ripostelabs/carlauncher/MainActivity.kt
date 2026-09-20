@@ -43,6 +43,7 @@ import com.ripostelabs.carlauncher.carlib.CarService
 import com.ripostelabs.carlauncher.tuner.CarTunerPort
 import com.ripostelabs.carlauncher.tuner.TunerHub
 import com.ripostelabs.carlauncher.carlib.McuOwner
+import com.ripostelabs.carlauncher.carlib.McuStateExport
 import com.ripostelabs.carlauncher.carlib.SlcanLinkSource
 import com.ripostelabs.carlauncher.carlib.SysVarMirror
 import com.ripostelabs.carlauncher.carlib.VendorBroadcastReemitter
@@ -140,6 +141,9 @@ class MainActivity : ComponentActivity() {
 
     /** Riposte OS 0.2 only: our MCU port owner. Null on a stock or 0.1 slot. */
     private var mcuOwner: McuOwner? = null
+
+    /** Riposte OS 0.2 only: the decoded MCU events on 127.0.0.1:5589 for Helm, the car computer. */
+    private var mcuStateExport: McuStateExport? = null
 
     /** Riposte OS 0.2 only: the phone through the stock stack's car-kit profiles. */
     private var btCarKit: BtCarKit? = null
@@ -287,6 +291,7 @@ class MainActivity : ComponentActivity() {
                 sysVarMirror,
                 mcuClock,
                 carService.volumeState,
+                McuStateExport().also { mcuStateExport = it; it.start() },
             )
             mcuOwner = McuOwner(
                 ownerGate,
@@ -1193,6 +1198,7 @@ class MainActivity : ComponentActivity() {
         // found the old one still open would report "Device or resource busy" as a silent MCU.
         busSource?.stop()
         mcuOwner?.stop()
+        mcuStateExport?.stop()
         btCarKit?.stop()
         gatewayHandshake.unregister() // v3.0
         carEvents.unregister()
