@@ -42,6 +42,7 @@ import com.ripostelabs.carlauncher.carlib.AndroidOwnerGate
 import com.ripostelabs.carlauncher.carlib.CarService
 import com.ripostelabs.carlauncher.tuner.CarTunerPort
 import com.ripostelabs.carlauncher.tuner.TunerHub
+import com.ripostelabs.carlauncher.carlib.CarCommandPort
 import com.ripostelabs.carlauncher.carlib.McuOwner
 import com.ripostelabs.carlauncher.carlib.McuStateExport
 import com.ripostelabs.carlauncher.carlib.SlcanLinkSource
@@ -144,6 +145,9 @@ class MainActivity : ComponentActivity() {
 
     /** Riposte OS 0.2 only: the decoded MCU events on 127.0.0.1:5589 for Helm, the car computer. */
     private var mcuStateExport: McuStateExport? = null
+
+    /** Riposte OS 0.2 only: Helm's allow-listed writes (volume, mute, source) on 127.0.0.1:5590. */
+    private var carCommandPort: CarCommandPort? = null
 
     /** Riposte OS 0.2 only: the phone through the stock stack's car-kit profiles. */
     private var btCarKit: BtCarKit? = null
@@ -300,6 +304,7 @@ class MainActivity : ComponentActivity() {
             ).also {
                 carService.attachOwner(it)
                 it.start()
+                carCommandPort = CarCommandPort(carService.asCommandTarget()).also { port -> port.start() }
                 mcuSleepWake = McuSleepWake.forOwner(it, AndroidAccSource()).also { sw -> sw.start() }
             }
             // The raw body bus on a second carrier (`riposte.canbus.link`), when the rig has one.
@@ -1199,6 +1204,7 @@ class MainActivity : ComponentActivity() {
         busSource?.stop()
         mcuOwner?.stop()
         mcuStateExport?.stop()
+        carCommandPort?.stop()
         btCarKit?.stop()
         gatewayHandshake.unregister() // v3.0
         carEvents.unregister()

@@ -268,6 +268,17 @@ class CarService(private val appContext: Context) {
     }
     fun sendWheelKey(key: Int) { call { sendWheelKey(key) } }
 
+    /** The three calls [CarCommandPort] may make, on whichever path (owner or vendor) is live. */
+    fun asCommandTarget(): CarCommandPort.Target = object : CarCommandPort.Target {
+        override fun setVolume(level: Int) = this@CarService.setVolume(level)
+        override fun setMute(on: Boolean) = this@CarService.setMute(on)
+        override fun setMode(mode: McuOwnerProtocol.Mode): Boolean {
+            owner?.let { return it.setMode(mode) }
+            sendMode(mode.code, true)
+            return true
+        }
+    }
+
     /** Owner path only: write the clock into the MCU's RTC (`13` frame). The gateway does its own. */
     fun sendRtc(now: LocalDateTime) {
         owner?.send(McuOwnerProtocol.rtc(now))
