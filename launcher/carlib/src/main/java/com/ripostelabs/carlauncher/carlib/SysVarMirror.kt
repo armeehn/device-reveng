@@ -20,11 +20,14 @@ package com.ripostelabs.carlauncher.carlib
  * `Set_BreakDetected` was a vendor setting defaulting to off; on the owner path the launcher is
  * the policy: [detect] is read on every SYS_EVENT (MainActivity hands it the parked-only motion
  * gate, the one opt-out safety switch) and defaults to on because a player that never covers
- * itself in a moving car is the wrong failure. Rows are announced on change only, so a caller
+ * itself in a moving car is the wrong failure. What decides "moving" is [moving], the
+ * launcher's motion state, not the MCU's brake bit, which this unit never raises. Rows are announced on change only, so a caller
  * can notify observers from [onChange] without a storm.
  */
 class SysVarMirror(
     private val detect: () -> Boolean = { true },
+    /** The launcher's own motion state (GPS or CAN speed, unknown fails open): true while moving. */
+    private val moving: () -> Boolean = { false },
     private val onChange: (key: String, value: String) -> Unit,
 ) : McuOwner.Listener {
 
@@ -38,12 +41,12 @@ class SysVarMirror(
 
     override fun onSysEvent(event: McuOwnerProtocol.SysEvent) {
         last = event
-        put(KEY_CUR_BRAKE_STATE, brakeState(detect(), event.brake))
+        put(KEY_CUR_BRAKE_STATE, brakeState(detect(), event.brake, moving()))
     }
 
     /**
-     * Recompute from the last SYS_EVENT: the MCU reports `71` on change, so a [detect] flip
-     * would otherwise wait for the next brake edge. Nothing until the first event.
+     * Recompute from the last SYS_EVENT: the MCU reports `71` on change, so a [detect] flip or a
+     * motion change would otherwise wait for the next brake edge. Nothing until the first event.
      */
     fun refresh() {
         last?.let(::onSysEvent)
@@ -64,8 +67,15 @@ class SysVarMirror(
         const val BRAKE_GATED = "1"
         const val BRAKE_OPEN = "0"
 
-        /** The vendor's rule, pure. [connected] is SYS_EVENT bit 0x04 (handbrake on). */
-        fun brakeState(detect: Boolean, connected: Boolean): String =
-            if (detect && !connected) BRAKE_GATED else BRAKE_OPEN
+        /**
+         * The gate, pure. [connected] is SYS_EVENT bit 0x04 (handbrake on); on the GT6-EAU it
+         * never goes high whatever the harness BRAKE wire does (bench, 2026-09-19), and stock
+         * shipped with detection off, so the vendor's "gate unless the bit says parked" would
+         * cover the video forever. Gate on the launcher's own motion instead: moving covers,
+         * parked or unknown opens (the same fail-open rule the parked-only screens use), a
+         * handbrake seen on opens regardless.
+         */
+        fun brakeState(detect: Boolean, connected: Boolean, moving: Boolean): String =
+            if (detect && !connected && moving) BRAKE_GATED else BRAKE_OPEN
     }
 }
