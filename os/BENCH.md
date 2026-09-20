@@ -7,10 +7,13 @@ loop from the laptop, and a bad boot costs a 2-minute test-point cycle instead o
  12 V PSU (5 A) ─┬─ B+  (constant)      head unit ── 4PIN USB pigtail ── USB-A ── laptop
                  └─ ACC (tied to B+)                      │
  GND ────────────┬─ GND                                   └── Wi-Fi: adb <ip>:5555 (pinned)
-                 └─ BRAKE (grounded = parked)
+                 └─ BRAKE (grounded = parked; the MCU never reports it, see below)
  open: ILL, AMP, BACK, KEY1/2, speakers, CAN box
 ```
 
+- The harness BRAKE wire does nothing the MCU reports: its `71` brake bit stayed 0 at GND and
+  at 12 V (raw frames, 2026-09-19). Stock ships with brake detection off. Do not gate anything
+  on that bit.
 - The unit wakes only with ACC high. Idle ~1 A, boot peaks ~3 A, the amp draws nothing
   without speakers. No CAN box needed: the car tiles stay empty.
 - The 4PIN header is plain USB 2.0: `5V D- D+ GND`. Find 5 V and GND with a meter (the two
