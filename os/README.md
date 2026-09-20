@@ -25,8 +25,8 @@ provides.
 | Base | stock Android 13 system, re-mastered | TrebleDroid AOSP 14 GSI (`ci-20240226`, the last one that boots on kernel 4.14) |
 | OEM apps | phone-home and adware removed, car apps kept | none |
 | Car link | vendor gateway | `McuOwner`, our process on the serial link |
-| Proven on the unit | boots, touch, launcher | boot, touch, gesture navigation, Wi-Fi, radio tune and seek, volume from the MCU, Bluetooth car-kit profiles, 28 suite apps launch clean, Setup Doctor green |
-| Waiting for the car | reverse camera, wheel keys, headlamps, a paired phone | the same |
+| Proven on the unit | boots, touch, launcher | boot, touch, gesture navigation, Wi-Fi, radio tune and seek, volume from the MCU, Bluetooth car-kit profiles, 28 suite apps launch clean, Setup Doctor green, wireless CarPlay on the panel (the OEM daemon with the projection suite as its app, `ZLINK_REWRITE.md` §9) |
+| Waiting for the car | reverse camera, wheel keys, headlamps, a paired phone | reverse camera, wheel keys, headlamps, CarPlay audio through the amp, wired CarPlay |
 
 Switching between 0.1 and 0.2 on one unit needs a `/data` wipe: Android 13 refuses a
 `/data` that Android 14 has touched.
