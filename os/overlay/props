@@ -14,6 +14,8 @@ ro.riposte.os.bt_carkit=${RIPOSTE_BT_CARKIT}
 # (packages/services/Car car_product/properties/bluetooth.prop). init keeps the LAST value
 # of a duplicated non-ro key (init/property_service.cpp LoadProperties), so this overrides
 # the GSI's phone-side lines above.
+# What a phone sees while pairing; the GSI's own default is its build name.
+@carkit bluetooth.device.default_name=RAV4
 @carkit bluetooth.profile.a2dp.sink.enabled=true
 @carkit bluetooth.profile.hfp.hf.enabled=true
 @carkit bluetooth.profile.avrcp.controller.enabled=true

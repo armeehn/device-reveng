@@ -25,6 +25,9 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 
 readonly LAUNCHER_PKG=com.ripostelabs.carlauncher
 readonly LAUNCHER_DIR=priv-app                 # under the system root, see system_root()
+readonly ZLINK_DIR=riposte/zlink               # the OEM projection daemon on gsi, see step 3b
+readonly ZLINK_APP_LIBS=priv-app/zlink5/lib/arm   # where the stock image keeps its libraries
+readonly ZLINK_BINS="z-link z-mdnsd z-usbmuxd"    # the loader and the two helpers it spawns
 readonly LAUNCHER_NAME=CarLauncher
 readonly SUITE_DIR=product/app
 readonly TOOLS_BIN=riposte/bin                 # the debug toolbelt, see step 3c
@@ -152,6 +155,29 @@ for apk in "$APPS"/suite/*.apk; do
   SUITE_N=$((SUITE_N + 1))
 done
 log "installed $LAUNCHER_NAME + $SUITE_N suite apps ($([ "$PROFILE" = gsi ] && echo "system image's" || echo "product image's") $SUITE_DIR)"
+
+# ---- 3b. the OEM projection daemon (gsi only) ---------------------------------
+# CarPlay on the GSI base runs through the vendor's own daemon, lifted from the owner's stock
+# system image at build time (never from the repo): the daemon and its libraries land under
+# /system/riposte/zlink, and overlay/system/bin/riposte-zlink.sh starts it from init. Its own
+# app cannot run on the GSI (vendor platform key); com.ripostelabs.projection answers it instead.
+if [ "$PROFILE" = gsi ]; then
+  ZMNT=$WORK/base-system
+  mkdir -p "$ZMNT" "$SYS/$ZLINK_DIR/bin" "$SYS/$ZLINK_DIR/lib"
+  unsparse "$BASE/system.img" "$WORK/base-system.raw"
+  mount -o ro,loop "$WORK/base-system.raw" "$ZMNT" || die "cannot mount $BASE/system.img"
+  ZSRC=$(system_root "$ZMNT")
+  [ -f "$ZSRC/$ZLINK_APP_LIBS/libzjL10001.so" ] || die "$BASE/system.img carries no zlink5"
+  cp "$ZSRC/$ZLINK_APP_LIBS"/*.so "$SYS/$ZLINK_DIR/lib/"
+  for b in $ZLINK_BINS; do cp "$ZSRC/bin/$b" "$SYS/$ZLINK_DIR/bin/"; done
+  # The daemon looks for its mDNS responder at /system/bin/z-mdnsd and a few fixed siblings,
+  # never on PATH (bench, 2026-09-20: "z-mdnsd not found" until this copy existed).
+  cp "$ZSRC/bin/z-mdnsd" "$SYS/bin/z-mdnsd"
+  umount "$ZMNT"
+  label_system_file "$SYS/${ZLINK_DIR%%/*}" "$SYS/$ZLINK_DIR" "$SYS/$ZLINK_DIR/bin" "$SYS/$ZLINK_DIR/lib" "$SYS/$ZLINK_DIR"/bin/* "$SYS/$ZLINK_DIR"/lib/* "$SYS/bin/z-mdnsd"
+  chmod 0755 "$SYS/$ZLINK_DIR"/bin/* "$SYS/bin/z-mdnsd"
+  log "lifted the OEM projection daemon: $(ls "$SYS/$ZLINK_DIR/lib" | wc -l) libs + $ZLINK_BINS"
+fi
 
 # Default grants for the launcher and the suite: a head unit has no one to tap a permission
 # prompt, and 14 of the 28 apps opened on one at first launch, the launcher on the camera one
