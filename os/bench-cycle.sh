@@ -10,7 +10,8 @@
 #   vcNNN   a launcher versionCode listed at launcher.hq (the release job publishes one per
 #           push to main); its .sha256 is checked before the build.
 #   --wipe  erase userdata on the flash (needed when crossing 0.1 <-> 0.2, see BENCH.md).
-# Env: BENCH_HOST (default sasha@100.107.107.95), BENCH_SERIAL (adb serial, default da40e9ac),
+# Env: ALLOW_BRANCH=1 to bench a branch checkout (default: main only),
+#      BENCH_HOST (default sasha@100.107.107.95), BENCH_SERIAL (adb serial, default da40e9ac),
 #      SHARE_HOST (how the laptop reaches this share, default sasha@x.hq.ripostelabs.xyz),
 #      SHARE (default /z1-pool/share/carlauncher/os), APPS (default $SHARE/apps-bench),
 #      TOOLS (the debug toolbelt cache, default $SHARE/tools/unit; tools/fetch.sh fills it),
@@ -38,7 +39,9 @@ die() { echo "[bench] ERROR: $*" >&2; exit 1; }
 
 [ "$(id -u)" = 0 ] || die "run as root (build.sh loop-mounts)"
 [ -d "$APPS/suite" ] || die "$APPS/suite missing: the suite APKs and bootanimation.zip live there"
-[ "$(cat "$HERE/../.git/HEAD" 2>/dev/null)" = "ref: refs/heads/main" ] || die "checkout is not on main"
+# A PR that touches the image gets its bench run before the merge: ALLOW_BRANCH=1 lifts the
+# guard, and RESULT.md then names the branch, not main.
+[ "${ALLOW_BRANCH:-0}" = 1 ] || [ "$(cat "$HERE/../.git/HEAD" 2>/dev/null)" = "ref: refs/heads/main" ] || die "checkout is not on main (ALLOW_BRANCH=1 to bench a branch)"
 
 # 1. the release launcher, checksum verified against launcher.hq
 curl -sf -o "$APPS/carlauncher.apk" "$LAUNCHER_URL/carlauncher-0.7-$VC.apk" || die "no $VC at $LAUNCHER_URL"
