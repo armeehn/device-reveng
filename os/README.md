@@ -69,12 +69,19 @@ os/check.sh --base BASE --out OUT --profile tier2 --suite 28
 ```
 ```
 os/build.sh --base BASE --system system-td-arm64-ab-vanilla-ci20240226.img.xz \
-            --apps APPS --out OUT --profile gsi [--bench]
+            --apps APPS --out OUT --profile gsi [--bench] [--tools CACHE]
 ```
 
 `APPS/carlauncher.apk` is a release-signed launcher; `APPS/suite/*.apk` the suite;
 `APPS/bootanimation.zip` optional. The version is `0.1+<date>.vc<launcher versionCode>`
 (stock base) or `0.2+…` (GSI base), written to `ro.riposte.os.version`.
+
+`--tools CACHE` adds the debug toolbelt (`tools/README.md`): static nmap, ncat, nping,
+tcpdump, socat, strace, gdb, gdbserver and busybox under `/system/riposte/bin`,
+each on PATH through `/system/bin`, plus Termux as a product app. `tools/fetch.sh CACHE`
+fills the cache from `tools/tools.lock` (sha256-pinned); `bench-cycle.sh` passes it by
+default and pushes the data-side tools (frida-server) to `/data/local/riposte/bin` after
+the flash.
 
 Profile `gsi` takes an AOSP GSI as `--system` (`.img` or `.img.xz`), removes every OEM
 package (`overlay/remove.gsi`, prefix matches) and implies `--car-owner`. TrebleDroid

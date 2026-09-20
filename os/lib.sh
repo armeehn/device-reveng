@@ -136,6 +136,15 @@ label_system_file() { # path...
   done
 }
 
+# A symlink we add: label the link itself, never what it points at.
+label_link() { # path...
+  local p
+  for p in "$@"; do
+    chown -h root:root "$p"
+    setfattr -h -n security.selinux -v "$SELINUX_SYSTEM_FILE" "$p" 2>/dev/null || true
+  done
+}
+
 # Install an APK as <part>/<dir>/<Name>/<Name>.apk, the shape PackageManager scans.
 install_apk() { # tree appdir Name apk
   local tree=$1 appdir=$2 name=$3 apk=$4 dst

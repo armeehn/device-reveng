@@ -19,6 +19,7 @@ ANDROID_JAR=$(ls "$SDK"/platforms/android-*/android.jar | sort -V | tail -1)
 WEBROOT=${WEBROOT:-/z1-pool/subvol-104-disk-1/var/www/launcher}
 LAUNCHER_APK=${LAUNCHER_APK:-$(ls "$WEBROOT"/carlauncher-*-vc*.apk | sort -t c -k3 -V | tail -1)}
 
+TOOLS_CACHE=${TOOLS_CACHE:-/z1-pool/share/carlauncher/os/tools/unit}
 W=$(mktemp -d "${TMPDIR:-/var/tmp}/riposte-fx.XXXXXX")
 trap 'rm -rf "$W"' EXIT
 mkdir -p "$W/base" "$W/apps/suite" "$W/out" "$W/sys" "$W/prod"
@@ -79,10 +80,16 @@ ln -s /system/etc "$W/sar/etc"
 ln -s /system/bin "$W/sar/bin"
 repack_image ext4 "$W/sar" "$W/sar.img" system
 xz -c "$W/sar.img" > "$W/gsi.img.xz"
-"$HERE/build.sh" --base "$W/base" --system "$W/gsi.img.xz" --apps "$W/apps" --out "$W/out-gsi" --profile gsi
+# The toolbelt rides along when the share cache is filled (tools/fetch.sh); the fixture never
+# downloads 70 MB itself.
+TOOLS_ARG="" TOOLS_CHECK=""
+if [ -f "$TOOLS_CACHE/busybox" ]; then TOOLS_ARG="--tools $TOOLS_CACHE"; TOOLS_CHECK=--tools; fi
+# shellcheck disable=SC2086
+"$HERE/build.sh" --base "$W/base" --system "$W/gsi.img.xz" --apps "$W/apps" --out "$W/out-gsi" --profile gsi $TOOLS_ARG
 grep -q '^car_owner=1$' "$W/out-gsi/MANIFEST" || die "gsi profile did not imply --car-owner"
 grep -q '^bt_carkit=1$' "$W/out-gsi/MANIFEST" || die "gsi profile did not turn the car-kit roles on"
-"$HERE/check.sh" --base "$W/base" --system "$W/gsi.img.xz" --out "$W/out-gsi" --profile gsi --suite "$N"
+# shellcheck disable=SC2086
+"$HERE/check.sh" --base "$W/base" --system "$W/gsi.img.xz" --out "$W/out-gsi" --profile gsi --suite "$N" $TOOLS_CHECK
 
 echo "== negative control: --car-owner with eventcenter in the base must refuse"
 if "$HERE/build.sh" --base "$W/base" --apps "$W/apps" --out "$W/out-owner" --car-owner >/dev/null 2>&1; then
