@@ -153,35 +153,40 @@ fun QuickControlsPanel(
     val context = LocalContext.current
     val settings by settingsStore.settings.collectAsStateSafe(initial = LauncherSettings())
 
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(18.dp)) {
-        Text(
-            text = "Quick controls",
-            style = MaterialTheme.typography.titleLarge,
-            color = MaterialTheme.colorScheme.onSurface,
-            fontWeight = FontWeight.SemiBold,
-        )
-
-        VolumeControl(carService = carService)
-        BrightnessControl(carService = carService)
-        DayNightControl(
-            mode = settings.dayNightMode,
-            onSelect = settingsStore::setDayNightMode,
-        )
-
-        // ---- Wi-Fi / Bluetooth system-panel shortcuts (Intents) -------------
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            ShortcutChip(
-                icon = Icons.Filled.Wifi,
-                label = "Wi-Fi",
-                modifier = Modifier.weight(1f),
-                onClick = { launchSettings(context, Settings.ACTION_WIFI_SETTINGS) },
+    // Two columns: the panel is 300 dp tall (1920x720 at 240 dpi) and one column of five rows
+    // pushed the Wi-Fi / Bluetooth row off the bottom of the shade.
+    Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Text(
+                text = "Quick controls",
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.SemiBold,
             )
-            ShortcutChip(
-                icon = Icons.Filled.Bluetooth,
-                label = "Bluetooth",
-                modifier = Modifier.weight(1f),
-                onClick = { launchSettings(context, Settings.ACTION_BLUETOOTH_SETTINGS) },
+            VolumeControl(carService = carService)
+            BrightnessControl(carService = carService)
+        }
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            DayNightControl(
+                mode = settings.dayNightMode,
+                onSelect = settingsStore::setDayNightMode,
             )
+
+            // ---- Wi-Fi / Bluetooth system-panel shortcuts (Intents) -------------
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                ShortcutChip(
+                    icon = Icons.Filled.Wifi,
+                    label = "Wi-Fi",
+                    modifier = Modifier.weight(1f),
+                    onClick = { launchSettings(context, Settings.ACTION_WIFI_SETTINGS) },
+                )
+                ShortcutChip(
+                    icon = Icons.Filled.Bluetooth,
+                    label = "Bluetooth",
+                    modifier = Modifier.weight(1f),
+                    onClick = { launchSettings(context, Settings.ACTION_BLUETOOTH_SETTINGS) },
+                )
+            }
         }
     }
 }
