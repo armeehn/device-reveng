@@ -60,6 +60,7 @@ API, which is what 0.2 replaces.
 | `edl-write-set.sh` | laptop at the bench | Writes super + boot/dtbo/vbmeta over EDL from 9008; `WIPE=1` erases userdata; then resets. |
 | `fastboot-flash-set.sh` | laptop at the bench | Flashes an image set in place from fastbootd, shrinking the logical partitions first; `wipe` erases userdata. `BENCH.md` has the wiring, the doors and the rules. |
 | `bench-verify.sh` | laptop at the bench | Hashes every logical partition on the unit against the set's `SHA256SUMS` over adb root, before the first boot is trusted. fastboot has no payload checksum and a marginal link once flipped bits in a dozen files without an error. |
+| `bench-blockfix.sh` | laptop at the bench | Repairs a flash the pigtail corrupted without another fastboot pass: diffs each logical partition against its image over USB adb and rewrites only the differing 4 KiB blocks, each hash-checked on the unit before it is written, then re-hashes the partition. |
 | `bench-cycle.sh` | build host, root | One 0.2 bench iteration: a release launcher (checksum verified), `build.sh --profile gsi --bench`, rsync to the laptop, `fastboot-flash-set.sh`, then `bench-verify.sh`. Fails loudly on a failed flash or a partition that differs. |
 | `bench-ui.sh` | any host with adb | Reads the panel without a camera: `texts`, `tap <label>`, `find <label>`, `doctor` (opens Setup Doctor, prints its rows), `sweep` (launches every suite app, reports the ones that crash or stay behind a dialog). Compose exposes its texts to uiautomator. |
 

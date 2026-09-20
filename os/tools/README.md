@@ -18,7 +18,11 @@ tools.lock ──fetch.sh──▶ CACHE (on the build host) ──build.sh --to
 | `/data/local/riposte/bin/frida-server` | data side, 100 MB: pushed by `install-data.sh`, survives a no-wipe flash |
 
 `adb shell` is already root on the GSI (`u:r:su:s0`), so `tcpdump -i wlan0 -w /data/local/tmp/x.pcap`,
-`strace -p <pid>` and `frida-server &` need no `su`. Inside Termux use `tsu` (phh-su answers it).
+`strace -p <pid>` and `frida-server &` need no `su`. Termux's PATH is its own prefix only:
+`export PATH=$PATH:/system/riposte/bin:/system/bin` (in `~/.bashrc`) brings the toolbelt in; nmap,
+ncat, busybox and socat then run as the app. Root inside Termux is not wired yet: phh's
+`sudaemon` grants root, system, radio and shell only, every other uid needs a row in its
+`su.sqlite`.
 
 ## Sources
 
