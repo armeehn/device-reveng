@@ -516,6 +516,9 @@ class CarService(private val appContext: Context) {
      * broadcast and never reaches the MCU (`EventService.java:4847-4854`).
      */
     fun sendBacklight(day: Int, night: Int) {
+        // Owner path: the `2E` frame straight to the MCU; the binder otherwise. Without this branch
+        // the Display slider moved and the panel stayed put on Riposte OS 0.2.
+        owner?.let { it.send(McuOwnerProtocol.backlight(clampBacklight(day), clampBacklight(night))); return }
         call { sendBacklight(clampBacklight(day).toByte(), clampBacklight(night).toByte()) }
     }
 
