@@ -62,6 +62,8 @@
     <!-- v0.7 auto-updater: HTTPS to the GitHub releases API (UpdateController). The app's
          first and only network user; everything else on this unit talks AIDL or binder. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- The launcher-drawn nav bar over foreign apps (ui/nav/NavBar); appop granted by root. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <!--
       v3.1 status chips: Bluetooth state. BLUETOOTH_CONNECT is a *runtime* permission on

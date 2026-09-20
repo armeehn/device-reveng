@@ -215,11 +215,12 @@ fun LauncherPrefsScreen(
                 onChange = settingsStore::setShadeEnabled,
             )
             ToggleSetting(
-                label = "Replace the system top bar",
+                label = "Replace the system bars",
                 description = if (rootAvailable)
                     "Hide the vendor status bar and Android pull-down so only the " +
-                        "launcher shade shows. Reversible; either way SystemUI restarts once " +
-                        "(about a second of blank chrome) so the change applies at once."
+                        "launcher shade shows, and draw the launcher's own Back, Home and Apps " +
+                        "bar over other apps in place of the Android pill. Reversible; either " +
+                        "way SystemUI restarts once (about a second of blank chrome)."
                 else "Needs root — the vendor bars can't be suppressed on this build without it.",
                 checked = settings.replaceSystemBars,
                 onChange = settingsStore::setReplaceSystemBars,

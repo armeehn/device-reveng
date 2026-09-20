@@ -76,6 +76,7 @@ import com.ripostelabs.carlauncher.data.RootTierController // v2.9
 import com.ripostelabs.carlauncher.data.SettingKeys // v2.5 touch beep
 import com.ripostelabs.carlauncher.data.SettingsStore // v0.6
 import com.ripostelabs.carlauncher.data.SystemChrome // v2.5
+import com.ripostelabs.carlauncher.ui.nav.NavBar
 import com.ripostelabs.carlauncher.data.ThemeSnapshotStore
 import com.ripostelabs.carlauncher.data.ThemeStore
 import com.ripostelabs.carlauncher.data.UpdateController // v0.7 auto-updater
@@ -164,6 +165,8 @@ class MainActivity : ComponentActivity() {
     private lateinit var appRepository: AppRepository
     private lateinit var nowPlaying: NowPlayingRepository
     private lateinit var themeStore: ThemeStore
+    /** The launcher-drawn Back/Home/Apps strip that stands in for the suppressed system bar. */
+    private lateinit var navBar: NavBar
     private lateinit var settingsStore: SettingsStore // v0.6
     private lateinit var speechController: com.ripostelabs.carlauncher.media.SpeechController // v0.4.2 TTS
     private lateinit var radioPresetsStore: RadioPresetsStore // v0.9
@@ -325,6 +328,7 @@ class MainActivity : ComponentActivity() {
         appRepository = AppRepository(this, ownerActive = mcuOwner != null)
         nowPlaying = NowPlayingRepository(applicationContext).also { it.start(lifecycleScope) }
         themeStore = ThemeStore(applicationContext)
+        navBar = NavBar(applicationContext)
 
         // v2.7: the notification shelf's mute filter. Constructed before the speech controller
         // below, which shares it.
@@ -599,6 +603,12 @@ class MainActivity : ComponentActivity() {
 
             val activeTheme by themeStore.activeTheme.collectAsStateWithLifecycle()
             val allThemes by themeStore.allThemes.collectAsStateWithLifecycle()
+
+            // The nav bar overlay follows the theme and only exists while the system bars are
+            // suppressed (that switch takes SystemUI's gesture pill with it on the 0.2 base).
+            LaunchedEffect(activeTheme, night, settings.replaceSystemBars) {
+                navBar.update(if (night) activeTheme.night else activeTheme.day, settings.replaceSystemBars)
+            }
 
             var screen by screenState // v0.8: hoisted to a field (Back/Home keys)
 
@@ -1193,10 +1203,18 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        navBar.hide() // our own screens carry their own way home
+    }
+
+    /** Another app is in front: give the driver a way back, since SystemUI's pill is gone. */
+    override fun onPause() {
+        super.onPause()
+        if (!isFinishing) navBar.show()
     }
 
     override fun onDestroy() {
         super.onDestroy()
+        navBar.hide()
         TunerHub.detach()
         keyPump.cancel() // v2.8: drop any held key and its repeat timer
         // Release the carriers: a virtio port admits one opener, so a recreated activity that
