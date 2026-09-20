@@ -24,15 +24,29 @@ readonly APP=com.ripostelabs.projection
 a() { $ADB -s "$UNIT" "$@"; }
 log() { echo "[carplay] $*" >&2; }
 
+# The daemon exits with every session; a loop on the unit brings it back (init does that on
+# the image). One loop only: the old one is killed by its script name.
 start_daemon() {
-  a shell "pkill -x z-link; cd $DAEMON_DIR && export LD_LIBRARY_PATH=$DAEMON_DIR/lib PATH=$DAEMON_DIR:\$PATH && (setsid ./z-link -c zhuoxw > run.out 2>&1 &); sleep 2; pgrep -x z-link" >/dev/null
-  log "daemon running"
+  a shell "cat > $DAEMON_DIR/keeper.sh <<'EOS'
+#!/system/bin/sh
+cd $DAEMON_DIR
+export LD_LIBRARY_PATH=$DAEMON_DIR/lib PATH=$DAEMON_DIR:\$PATH
+while true; do
+  pgrep -x z-link > /dev/null || ./z-link -c zhuoxw > run.out 2>&1
+  sleep 3
+done
+EOS
+chmod 755 $DAEMON_DIR/keeper.sh; pkill -f keeper.sh; pkill -x z-link" >/dev/null
+  a shell "(setsid sh $DAEMON_DIR/keeper.sh > $DAEMON_DIR/keeper.out 2>&1 < /dev/null &); sleep 5; pgrep -x z-link" >/dev/null
+  log "daemon running, with a respawn loop"
 }
 
 $ADB connect "$UNIT" >/dev/null
 a root >/dev/null 2>&1 || true; sleep 2; $ADB connect "$UNIT" >/dev/null
 
 if [ "${1:-}" = --restart ]; then
+  # A reinstall kills the service; the daemon needs its servers before it redials.
+  a shell "am start-foreground-service -n $APP/.ZlinkService" >/dev/null 2>&1 || true
   start_daemon; exit 0
 fi
 
