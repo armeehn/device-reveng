@@ -164,9 +164,12 @@ if [ "$PROFILE" = gsi ]; then
   [ -f "$ZSRC/$ZLINK_APP_LIBS/libzjL10001.so" ] || die "$BASE/system.img carries no zlink5"
   cp "$ZSRC/$ZLINK_APP_LIBS"/*.so "$SYS/$ZLINK_DIR/lib/"
   for b in $ZLINK_BINS; do cp "$ZSRC/bin/$b" "$SYS/$ZLINK_DIR/bin/"; done
+  # The daemon looks for its mDNS responder at /system/bin/z-mdnsd and a few fixed siblings,
+  # never on PATH (bench, 2026-09-20: "z-mdnsd not found" until this copy existed).
+  cp "$ZSRC/bin/z-mdnsd" "$SYS/bin/z-mdnsd"
   umount "$ZMNT"
-  label_system_file "$SYS/${ZLINK_DIR%%/*}" "$SYS/$ZLINK_DIR" "$SYS/$ZLINK_DIR/bin" "$SYS/$ZLINK_DIR/lib" "$SYS/$ZLINK_DIR"/bin/* "$SYS/$ZLINK_DIR"/lib/*
-  chmod 0755 "$SYS/$ZLINK_DIR"/bin/*
+  label_system_file "$SYS/${ZLINK_DIR%%/*}" "$SYS/$ZLINK_DIR" "$SYS/$ZLINK_DIR/bin" "$SYS/$ZLINK_DIR/lib" "$SYS/$ZLINK_DIR"/bin/* "$SYS/$ZLINK_DIR"/lib/* "$SYS/bin/z-mdnsd"
+  chmod 0755 "$SYS/$ZLINK_DIR"/bin/* "$SYS/bin/z-mdnsd"
   log "lifted the OEM projection daemon: $(ls "$SYS/$ZLINK_DIR/lib" | wc -l) libs + $ZLINK_BINS"
 fi
 

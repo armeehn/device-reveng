@@ -46,6 +46,15 @@ service riposte_zlink /system/bin/sh /system/bin/riposte-zlink.sh
 
 on property:sys.boot_completed=1 && property:ro.riposte.os.car_owner=1
     start riposte_zlink
+    start riposte_hotspot
+
+# Car-owner builds: the 5 GHz access point wireless CarPlay needs (see riposte-hotspot.sh).
+service riposte_hotspot /system/bin/sh /system/bin/riposte-hotspot.sh
+    class main
+    user root
+    group root
+    seclabel u:r:su:s0
+    disabled
 
 # Car-owner builds: keep /dev/zxw_io open the way eventcenter's GetTouchEvt thread does on
 # stock (EventService.java startGetTouchEvtThread). The vendor's zxw_io driver may gate the
