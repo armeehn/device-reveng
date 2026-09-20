@@ -34,6 +34,8 @@ mint_apk() { # pkg out
 # ---- system: ext4, every file labelled like a real build ----------------------
 mkdir -p "$W/sys/framework" "$W/sys/priv-app/SysVarProvider" "$W/sys/etc/permissions" "$W/sys/bin"
 head -c 1048576 /dev/urandom > "$W/sys/framework/framework.jar"
+# A userdebug GSI ships its own tcpdump; the toolbelt must leave it in place (build.sh 3c).
+printf '#!/system/bin/sh\n' > "$W/sys/bin/tcpdump"; chmod 0755 "$W/sys/bin/tcpdump"
 mint_apk com.szchoiceway.providers.settings "$W/sys/priv-app/SysVarProvider/SysVarProvider.apk"
 # Phone-side Bluetooth roles as a stock or GSI build.prop carries them: tier2 must keep them
 # byte for byte, gsi must override them (init keeps the last value of a duplicated key).
@@ -88,6 +90,12 @@ if [ -f "$TOOLS_CACHE/busybox" ]; then TOOLS_ARG="--tools $TOOLS_CACHE"; TOOLS_C
 "$HERE/build.sh" --base "$W/base" --system "$W/gsi.img.xz" --apps "$W/apps" --out "$W/out-gsi" --profile gsi $TOOLS_ARG
 grep -q '^car_owner=1$' "$W/out-gsi/MANIFEST" || die "gsi profile did not imply --car-owner"
 grep -q '^bt_carkit=1$' "$W/out-gsi/MANIFEST" || die "gsi profile did not turn the car-kit roles on"
+if [ -n "$TOOLS_ARG" ]; then
+  OUTSYS=$(mktemp -d "$W/outsys.XXXXXX"); unsparse "$W/out-gsi/system.img" "$W/out-gsi-system.raw"
+  mount -o ro,loop "$W/out-gsi-system.raw" "$OUTSYS"
+  [ -f "$OUTSYS/system/bin/tcpdump" ] && [ ! -L "$OUTSYS/system/bin/tcpdump" ] || { umount "$OUTSYS"; die "toolbelt replaced the base's own tcpdump"; }
+  umount "$OUTSYS"
+fi
 # shellcheck disable=SC2086
 "$HERE/check.sh" --base "$W/base" --system "$W/gsi.img.xz" --out "$W/out-gsi" --profile gsi --suite "$N" $TOOLS_CHECK
 

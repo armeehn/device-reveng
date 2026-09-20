@@ -185,7 +185,8 @@ if [ "$TOOLS" = 1 ]; then
   while read -r name kind sha url; do
     case "$name" in ''|'#'*) continue ;; esac
     case "$kind" in
-      bin) check "[ -x $S/riposte/bin/$name ] && [ -L $S/bin/$name ]" "$name under riposte/bin, linked from bin" ;;
+      # Links carry absolute /system targets, so -x on them resolves against the host: test -L.
+      bin) check "[ -x $S/riposte/bin/$name ] && { [ -L $S/bin/$name ] || [ -x $S/bin/$name ]; }" "$name under riposte/bin and on PATH via bin" ;;
       tar) check "[ -x $S/riposte/nmap/nmap ] && [ -d $S/riposte/nmap/data ] && [ -x $S/bin/nmap ] && [ -L $S/bin/ncat ]" "nmap tree + wrapper, ncat linked" ;;
       apk) check "[ -f $PR/app/$name/$name.apk ] && ls $PR/app/$name/lib/arm64/*.so >/dev/null 2>&1" "$name installed with lib/arm64 extracted" ;;
     esac
