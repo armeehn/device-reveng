@@ -43,8 +43,10 @@ have=$(sha256sum "$APPS/carlauncher.apk" | awk '{print $1}')
 [ "$want" = "$have" ] || die "launcher $VC checksum mismatch"
 log "launcher $VC ok"
 
-# 2. build
-rm -rf "$OUT"
+# 2. build. The images are replaced; RESULT.md, the record ACCEPTANCE.md asks for next to
+# them, stays (a rebuild once deleted it).
+mkdir -p "$OUT"
+find "$OUT" -mindepth 1 -maxdepth 1 ! -name RESULT.md -exec rm -rf {} +
 "$HERE/build.sh" --base "$SHARE/base-ota" --boot "$SHARE/base-ota/boot-magisk.img" --apps "$APPS" \
   --out "$OUT" --profile gsi --bench --system "$GSI"
 grep -E "^version=|^launcher=|^bench=" "$OUT/MANIFEST"
