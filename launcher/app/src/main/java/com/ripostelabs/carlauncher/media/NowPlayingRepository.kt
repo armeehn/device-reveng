@@ -8,6 +8,8 @@ import android.media.MediaMetadata
 import android.media.session.MediaController
 import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
+import android.net.Uri
+import android.graphics.BitmapFactory
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -105,6 +107,11 @@ class NowPlayingRepository(private val context: Context) {
         context.getSystemService(Context.MEDIA_SESSION_SERVICE) as? MediaSessionManager
 
     private val _state = MutableStateFlow<NowPlaying?>(null)
+    /** The art URI the last publish() saw, and its decoded bitmap: one fetch per track. */
+    private var artUri: String? = null
+    private var artFromUri: Bitmap? = null
+    private var scope: CoroutineScope? = null
+    private var loggedTitle: String? = null
     val state: StateFlow<NowPlaying?> = _state.asStateFlow()
 
     private val _sources = MutableStateFlow<List<MediaSource>>(emptyList())
@@ -150,6 +157,7 @@ class NowPlayingRepository(private val context: Context) {
      * MediaController callbacks are actually installed (previously they never were).
      */
     fun start(scope: CoroutineScope) {
+        this.scope = scope
         val mgr = sessionManager ?: return
         if (registerSessionsListener(mgr)) return
         scope.launch(Dispatchers.IO) {
@@ -260,6 +268,12 @@ class NowPlayingRepository(private val context: Context) {
         val ps = c.playbackState
         val actions = ps?.actions ?: 0L
         val durationMs = md?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: -1L
+        // One line per track: which keys a source fills (art as bitmap, as URI, or not at all).
+        val title = md?.getText(MediaMetadata.METADATA_KEY_TITLE)?.toString()
+        if (title != loggedTitle) {
+            loggedTitle = title
+            Log.i(TAG, "${c.packageName} track \"$title\" keys ${md?.keySet()?.sorted()} actions $actions")
+        }
         _state.value = NowPlaying(
             title = md?.getText(MediaMetadata.METADATA_KEY_TITLE)?.toString()?.ifBlank { "Unknown" }
                 ?: "Unknown",
@@ -267,7 +281,8 @@ class NowPlayingRepository(private val context: Context) {
                 ?: md?.getText(MediaMetadata.METADATA_KEY_ALBUM_ARTIST)?.toString()
                 ?: "",
             art = md?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
-                ?: md?.getBitmap(MediaMetadata.METADATA_KEY_ART),
+                ?: md?.getBitmap(MediaMetadata.METADATA_KEY_ART)
+                ?: uriArt(md),
             isPlaying = ps?.state == PlaybackState.STATE_PLAYING,
             hasPrev = actions and PlaybackState.ACTION_SKIP_TO_PREVIOUS != 0L,
             hasNext = actions and PlaybackState.ACTION_SKIP_TO_NEXT != 0L,
@@ -281,6 +296,39 @@ class NowPlayingRepository(private val context: Context) {
             sessionCount = lastControllers.size.coerceAtLeast(1),
             isVideo = VideoApps.isVideo(c.packageName), // v4.1
         )
+    }
+
+    /**
+     * Art a session offers only as a content URI (the Bluetooth stack's AVRCP cover art, some
+     * players). The first publish() for a track starts the fetch and answers null; the fetch
+     * publishes again with the bitmap.
+     */
+    private fun uriArt(md: MediaMetadata?): Bitmap? {
+        val uri = md?.getString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI)
+            ?: md?.getString(MediaMetadata.METADATA_KEY_ART_URI)
+            ?: md?.getString(MediaMetadata.METADATA_KEY_DISPLAY_ICON_URI)
+        if (uri == null) {
+            artUri = null
+            artFromUri = null
+            return null
+        }
+        if (uri == artUri) {
+            return artFromUri
+        }
+        artUri = uri
+        artFromUri = null
+        scope?.launch(Dispatchers.IO) {
+            val bitmap = runCatching {
+                context.contentResolver.openInputStream(Uri.parse(uri))?.use(BitmapFactory::decodeStream)
+            }.onFailure { Log.w(TAG, "art $uri: $it") }.getOrNull() ?: return@launch
+            withContext(Dispatchers.Main) {
+                if (artUri == uri) {
+                    artFromUri = bitmap
+                    publish()
+                }
+            }
+        }
+        return null
     }
 
     /**
