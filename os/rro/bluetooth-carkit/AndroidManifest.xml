@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Runtime resource overlay on the Bluetooth stack for the car-kit roles (bt_carkit=1).
+     Static and pre-installed under /product/overlay, so it applies without a signature match
+     and without <overlayable> in the target (the stack declares none). -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.ripostelabs.overlay.bluetooth"
+    android:versionCode="1"
+    android:versionName="1">
+    <application android:hasCode="false"/>
+    <overlay android:targetPackage="com.android.bluetooth"
+        android:isStatic="true"
+        android:priority="100"/>
+</manifest>
