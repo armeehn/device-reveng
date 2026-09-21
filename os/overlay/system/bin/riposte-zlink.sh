@@ -15,6 +15,13 @@ echo 1 > /config/usb_gadget/g1/configs/b.1/MaxPower
 mkdir /config/usb_gadget/g1/functions/iap.gs0 2>/dev/null
 mkdir /config/usb_gadget/g1/functions/ncm.gs1 2>/dev/null
 
+# QoS: the daemon decodes AirPlay and feeds the app in real time. The launcher and background
+# syncs must yield to it, so it runs at the app tier (nice -10, big cores of top-app) with
+# real-time I/O. exec keeps the pid, so what is set here is what z-link inherits.
+renice -n -10 $$
+ionice -c 1 -n 0 -p $$
+echo $$ > /dev/cpuset/top-app/tasks
+
 export LD_LIBRARY_PATH=$ZLINK/lib
 export PATH="$ZLINK/bin:$PATH"
 exec "$ZLINK/bin/z-link" -c zhuoxw
