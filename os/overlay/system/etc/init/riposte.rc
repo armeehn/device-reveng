@@ -77,9 +77,19 @@ service riposte_touchswap /system/bin/riposte-touchswap
     seclabel u:r:su:s0
     disabled
 
+# Car-owner builds: the always-on diagnostics recorder (riposte-diag.sh), read back with
+# `rav4 car diag pull` and os/diag/check.py.
+service riposte_diag /system/bin/sh /system/bin/riposte-diag.sh
+    class main
+    user root
+    group root
+    seclabel u:r:su:s0
+    disabled
+
 on property:sys.boot_completed=1 && property:ro.riposte.os.car_owner=1
     start riposte_touchswap
     start riposte_zxwio
+    start riposte_diag
 
 # ro.riposte.os.bench=1 only: take the port back after the vendor's boot_completed host write.
 on property:sys.boot_completed=1 && property:ro.riposte.os.bench=1
