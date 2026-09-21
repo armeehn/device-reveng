@@ -70,6 +70,14 @@
         pm grant com.ripostelabs.carlauncher android.permission.BLUETOOTH_CONNECT
     -->
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <!--
+      Riposte OS: connect the A2DP sink to the CarPlay phone (BtCarKit.connectSink), so the
+      stack's AVRCP session carries the track for the media card while the audio itself
+      runs over Wi-Fi. signature|privileged: granted through the image's privapp allowlist,
+      never on a stock slot.
+    -->
+    <uses-permission android:name="android.permission.BLUETOOTH_PRIVILEGED"
+        tools:ignore="ProtectedPermissions" />
 
     <!--
       Riposte OS 0.2 reverse camera: with the vendor's AUXCamera gone, the launcher opens
