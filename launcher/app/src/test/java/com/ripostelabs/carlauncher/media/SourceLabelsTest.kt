@@ -29,6 +29,19 @@ class SourceLabelsTest {
         assertTrue(SourceLabels.isCarPlay("com.ripostelabs.projection"))
     }
 
+    @Test fun bluetoothStackTrackIsCarPlayOnlyWhileProjected() {
+        // Wireless CarPlay: the title rides the stack's AVRCP session, the audio rides Wi-Fi.
+        val bt = NowPlaying(
+            title = "Dark Days", artist = "Art d'Ecco", art = null, isPlaying = true,
+            hasPrev = true, hasNext = true, sourcePackage = "com.android.bluetooth", sourceLabel = "Bluetooth",
+        )
+        assertEquals("CarPlay", SourceLabels.viaCarPlay(bt, projected = true).sourceLabel)
+        assertEquals("Bluetooth", SourceLabels.viaCarPlay(bt, projected = false).sourceLabel)
+        assertTrue(SourceLabels.isCarPlay("com.android.bluetooth", projected = true))
+        assertFalse(SourceLabels.isCarPlay("com.android.bluetooth", projected = false))
+        assertFalse(SourceLabels.isCarPlay("com.ripostelabs.music", projected = true))
+    }
+
     @Test fun projectionTitlesAreTheGatewaysOwn() {
         // ZlinkManage.setCarPlayValidModeInfor spells it "Carplay", lower-case p.
         assertTrue(SourceLabels.isProjection("Carplay"))

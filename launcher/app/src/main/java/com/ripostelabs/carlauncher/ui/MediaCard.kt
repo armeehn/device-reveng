@@ -256,7 +256,9 @@ private fun SeekBar(now: NowPlaying, onSeek: (Long) -> Unit) {
 
     val displayMs = if (scrubbing) scrubValue.toLong() else livePos
     Column(modifier = Modifier.fillMaxWidth()) {
-        if (locked) {
+        // A phone over CarPlay or Bluetooth reports no seek (AVRCP has none): the plain bar,
+        // as while moving, instead of a slider that takes no drag.
+        if (locked || !now.canSeek) {
             LinearProgressIndicator(
                 progress = { displayMs.coerceIn(0L, duration).toFloat() / duration.toFloat() },
                 modifier = Modifier
