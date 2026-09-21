@@ -313,6 +313,7 @@ label_system_file "$SYS/$PRIVAPP_XML"
   case "$f" in
     system/bin/rw-system.sh) [ "$PROFILE" = gsi ] || continue; dst="$SYS/${f#system/}" ;;
     system/*) dst="$SYS/${f#system/}" ;;
+    product/*) dst="$PRODUCT_ROOT/$f" ;;   # the GSI's /product is /system/product
     *) dst="$WORK/tree/$f" ;;
   esac
   mkdir -p "$(dirname "$dst")"
