@@ -283,7 +283,14 @@ class MainActivity : ComponentActivity() {
             // A phone session coming up brings its screen forward, as the vendor gateway did
             // for the OEM app (ZlinkManage.startZlinkActivity); on 0.2 that screen is ours.
             lifecycleScope.launch {
-                carEvents.zlinkConnected.collect { up -> if (up) { Zlink.openAny(applicationContext) } }
+                carEvents.zlinkConnected.collect { up ->
+                    if (up) {
+                        Zlink.openAny(applicationContext)
+                        // The track for the media card rides the stack's AVRCP session, which
+                        // needs the phone as its A2DP device (BtCarKit.connectSink).
+                        btCarKit?.connectSink()
+                    }
+                }
             }
             // The MCU gets the clock once this boot has one (McuClock.pushIfTrustworthy); the
             // vendor only did that at power-off, which a bench unit never reaches.

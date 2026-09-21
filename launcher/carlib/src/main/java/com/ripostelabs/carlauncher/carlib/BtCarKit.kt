@@ -131,6 +131,29 @@ class BtCarKit(context: Context) {
         worker.shutdown()
     }
 
+    /**
+     * Ask the A2DP sink to connect to the phone (`BluetoothA2dpSink.connect`, privileged). A
+     * wireless CarPlay phone keeps AVRCP up but drops A2DP, and the stack publishes the track
+     * only for its active A2DP device; an idle A2DP link brings the metadata back while the
+     * audio stays on Wi-Fi. The phone is the HFP one, else the AVRCP one, else every bonded one.
+     */
+    fun connectSink() {
+        worker.execute {
+            val sink = proxies[PROFILE_A2DP_SINK] ?: return@execute
+            if (connectedDevice(sink) != null) {
+                return@execute
+            }
+            val phone = proxies[PROFILE_HEADSET_CLIENT]?.let(::connectedDevice)
+                ?: proxies[PROFILE_AVRCP_CONTROLLER]?.let(::connectedDevice)
+            val targets = phone?.let { listOf(it) } ?: runCatching { adapter?.bondedDevices?.toList() }.getOrNull().orEmpty()
+            for (device in targets) {
+                runCatching { sink.method("connect", BluetoothDevice::class.java).invoke(sink, device) }
+                    .onSuccess { Log.i(TAG, "A2DP sink connect ${device.address}: $it") }
+                    .onFailure { Log.w(TAG, "A2DP sink connect ${device.address} failed", it) }
+            }
+        }
+    }
+
     /** Accept the ringing call (`acceptCall(device, CALL_ACCEPT_NONE)`). */
     fun answer() = hfCall { hf, device ->
         hf.method("acceptCall", BluetoothDevice::class.java, Int::class.javaPrimitiveType!!)
