@@ -4,6 +4,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.net.InetAddress
+import java.net.ServerSocket
 
 /** Helm's write side: the allow-list is the contract, so every refusal is a test. */
 class CarCommandPortTest {
@@ -53,5 +55,19 @@ class CarCommandPortTest {
         assertFalse(port.handle("not json").getBoolean("ok"))
         assertFalse(port.handle("""{"cmd":"volume"}""").getBoolean("ok"))
         assertTrue(calls.isEmpty())
+    }
+
+    @Test
+    fun takenPortLeavesTheLauncherStanding() {
+        // MainActivity.onCreate calls start(); an unguarded bind took the whole launcher down
+        // when a second build held the port.
+        val holder = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))
+        try {
+            val blocked = CarCommandPort(target, port = holder.localPort)
+            blocked.start()
+            blocked.stop()
+        } finally {
+            holder.close()
+        }
     }
 }

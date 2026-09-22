@@ -1,5 +1,7 @@
 package com.ripostelabs.carlauncher.carlib
 
+import android.util.Log
+
 import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.BufferedWriter
@@ -38,6 +40,7 @@ class CarCommandPort(
     companion object {
         const val DEFAULT_PORT = 5590
         private const val LOOPBACK = "127.0.0.1"
+        private const val TAG = "CarCommandPort"
         private const val BACKLOG = 2
         private const val CMD = "cmd"
         private const val OK = "ok"
@@ -60,12 +63,19 @@ class CarCommandPort(
     val boundPort: Int
         get() = server?.localPort ?: port
 
+    /**
+     * Bind and serve. A port already taken (a second launcher build, or an instance the system
+     * has not reaped) must not take the launcher down: Helm control is optional, the car UI is
+     * not. The bind failure is logged and the port stays off, as in [McuStateExport].
+     */
     fun start() {
         if (server != null) {
             return
         }
 
-        val socket = ServerSocket(port, BACKLOG, InetAddress.getByName(LOOPBACK))
+        val socket = runCatching { ServerSocket(port, BACKLOG, InetAddress.getByName(LOOPBACK)) }
+            .onFailure { Log.w(TAG, "command port off: port $port is taken ($it)") }
+            .getOrNull() ?: return
         server = socket
         Thread({ acceptLoop(socket) }, "car-command-port").also {
             it.isDaemon = true
