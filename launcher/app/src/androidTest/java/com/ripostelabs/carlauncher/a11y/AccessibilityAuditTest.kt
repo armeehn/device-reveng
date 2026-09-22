@@ -18,6 +18,7 @@ import com.google.android.apps.common.testing.accessibility.framework.Parameters
 import com.google.android.apps.common.testing.accessibility.framework.uielement.AccessibilityHierarchyAndroid
 import com.google.android.apps.common.testing.accessibility.framework.utils.contrast.BitmapImage
 import com.ripostelabs.carlauncher.MainActivity
+import com.ripostelabs.carlauncher.data.DayNightMode
 import com.ripostelabs.carlauncher.data.SettingsStore
 import org.junit.Assert.assertTrue
 import org.junit.After
@@ -76,7 +77,11 @@ class AccessibilityAuditTest {
                 runCatching { instrumentation.uiAutomation.grantRuntimePermission(pkg, permission) }
             }
         }
-        SettingsStore(instrumentation.targetContext).setFirstRunComplete()
+        val settings = SettingsStore(instrumentation.targetContext)
+        settings.setFirstRunComplete()
+        // Day, always: the contrast figures depend on the palette, and a run that inherits
+        // whatever mode the last one left is not comparable with the one before it.
+        settings.setDayNightMode(DayNightMode.FORCE_DAY)
         Thread.sleep(FLAG_SETTLE_MS)   // the store writes on its own scope
         scenario = ActivityScenario.launch(MainActivity::class.java)
         scenario.onActivity { activity = it }

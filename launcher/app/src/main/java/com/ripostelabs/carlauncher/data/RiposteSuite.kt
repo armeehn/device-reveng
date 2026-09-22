@@ -102,7 +102,10 @@ object RiposteSuite {
      * the gateway proxied. Hidden from the drawer while the owner is active; unchanged on a
      * stock or 0.1 slot, where the gateway answers them.
      */
-    val VENDOR_BOUND: Set<String> = setOf("com.ripostelabs.radio", "com.ripostelabs.bluetooth")
+    /** The suite Radio app: its media session speaks for the tuner when the MCU is silent. */
+    const val RADIO_PACKAGE = "com.ripostelabs.radio"
+
+    val VENDOR_BOUND: Set<String> = setOf(RADIO_PACKAGE, "com.ripostelabs.bluetooth")
 
     /** The members to drop from the drawer: [VENDOR_BOUND] when the owner is active, else none. */
     fun hiddenOnOwner(ownerActive: Boolean): Set<String> =

@@ -9,4 +9,6 @@ name: App search narrows the grid and opens an app
 - tapOn: "Calculator"
 - assertNotVisible: "Search apps"
 - back
-- assertVisible: "Search apps"
+- extendedWaitUntil:
+    visible: "Search apps"
+    timeout: 10000

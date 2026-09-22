@@ -258,12 +258,15 @@ private fun VolumeControl(carService: CarService) {
 
     ControlRow(
         icon = if (muted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
+        // "(unavailable)" twice in one dialog is two identical labels to a screen reader:
+        // each row says which control it is (accessibility audit, 2026-09-22).
         title = when {
-            available == false -> "Volume (unavailable)"
-            available == true && level == null -> "Volume (unavailable)"
+            available == false -> "Volume unavailable"
+            available == true && level == null -> "Volume unavailable"
             else -> "Volume"
         },
         onIconClick = if (available == true) toggleMute else null,
+        iconAction = if (muted) "Unmute" else "Mute",
     ) {
         Slider(
             value = level ?: 0f,
@@ -382,13 +385,16 @@ private fun ControlRow(
     icon: ImageVector,
     title: String,
     onIconClick: (() -> Unit)? = null,
+    // What tapping the icon does, when it does anything. The icon used to repeat the row's
+    // own title, so a screen reader read every row twice (accessibility audit, 2026-09-22).
+    iconAction: String? = null,
     content: @Composable () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(
                 imageVector = icon,
-                contentDescription = title,
+                contentDescription = if (onIconClick != null) iconAction else null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier
                     .size(24.dp)

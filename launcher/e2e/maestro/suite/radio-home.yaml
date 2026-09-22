@@ -1,0 +1,19 @@
+appId: com.ripostelabs.radio
+name: Home agrees with itself while the suite Radio plays
+# The media card and the Radio tile both describe the radio: one source of truth. The MCU
+# tuner is silent on the farm, so without the session fallback the tile read "Radio idle"
+# beside a card playing 87.50 MHz (FINDINGS.md 4).
+---
+- launchApp:
+    appId: com.ripostelabs.radio
+    stopApp: true
+- extendedWaitUntil:
+    visible: "FM"
+    timeout: 8000
+- pressKey: Home
+- extendedWaitUntil:
+    visible: "Search apps"
+    timeout: 8000
+- assertNotVisible: "Radio idle. Tap to tune."
+- assertNotVisible: "Radio unavailable"
+- takeScreenshot: radio-home-agrees

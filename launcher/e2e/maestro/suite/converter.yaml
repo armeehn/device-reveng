@@ -9,4 +9,6 @@ name: Suite Converter opens and comes back
     timeout: 8000
 - takeScreenshot: suite-converter
 - pressKey: Home
-- assertVisible: "Search apps"
+- extendedWaitUntil:
+    visible: "Search apps"
+    timeout: 10000

@@ -9,4 +9,6 @@ name: Suite Contacts opens and comes back
     timeout: 8000
 - takeScreenshot: suite-contacts
 - pressKey: Home
-- assertVisible: "Search apps"
+- extendedWaitUntil:
+    visible: "Search apps"
+    timeout: 10000

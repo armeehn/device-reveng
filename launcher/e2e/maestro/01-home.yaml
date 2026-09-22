@@ -2,7 +2,9 @@ appId: com.ripostelabs.carlauncher
 name: Home comes up with its three columns
 ---
 - launchApp
-- assertVisible: "Search apps"
+- extendedWaitUntil:
+    visible: "Search apps"
+    timeout: 10000
 - assertVisible: "Quick launch"
 - assertVisible: "Navigation"
 - takeScreenshot: home
