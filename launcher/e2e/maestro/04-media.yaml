@@ -1,0 +1,16 @@
+appId: com.ripostelabs.carlauncher
+name: Media card transport acts and the card opens the player
+---
+- launchApp
+- tapOn: "Play/Pause"
+- takeScreenshot: media-toggled
+- tapOn: "Play/Pause"
+- tapOn: "Next"
+- tapOn: "Previous"
+- tapOn:
+    text: "Music"
+    optional: true
+- takeScreenshot: media-source
+# The source chip opens the source app; its own Back stack is not the launcher's.
+- pressKey: Home
+- assertVisible: "Search apps"

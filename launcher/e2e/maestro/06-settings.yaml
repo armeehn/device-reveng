@@ -1,0 +1,16 @@
+appId: com.ripostelabs.carlauncher
+name: Settings hub scrolls to its end and every row has a label
+---
+- launchApp
+- tapOn: { point: "96%,7%" }        # Settings
+- assertVisible: "Launcher"
+- takeScreenshot: settings-top
+- scroll
+- scroll
+- takeScreenshot: settings-mid
+- scroll
+- scroll
+- scroll
+- takeScreenshot: settings-end
+- back
+- assertVisible: "Search apps"

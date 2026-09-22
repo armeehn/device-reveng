@@ -171,6 +171,8 @@ usage: headunit [-i N] <command> [args]
     e2e [pytest args]                            launcher e2e suite (device-reveng/launcher/e2e)
     doctor | trace <args> | env                  environment check / trace inspector / resync .env
 
+  maestro [N] [out]   Maestro journeys (launcher/e2e/maestro) on instance N; JUnit + PNGs into out/
+
   sweep [N] [what]    layout checks on instance N, read back from the panel over adb:
     launcher (default)   test_layout_sweep + test_phone_pad + test_dashboard_notes (pytest)
     suite                install the served rav4-apps suite, then suite_sweep, suite_theme,
@@ -644,6 +646,23 @@ cmd_sweep() {
   esac
 }
 
+# Maestro (mobile.dev) journeys from launcher/e2e/maestro on an instance: the flows are copied
+# into the CT, run there against the instance, and the JUnit + PNGs come back to x.
+cmd_maestro() {
+  if [ -n "${1:-}" ] && [[ "$1" =~ ^[0-9]+$ ]]; then instance="$1"; shift; fi
+  local flows="${MAESTRO_FLOWS:-/z1-pool/subvol-111-disk-0/home/user/device-reveng/launcher/e2e/maestro}" out="${1:-./maestro-out}"   # the 111 checkout, seen from x
+  [ -d "$flows" ] || die "no flows at $flows"
+  pct exec "$EMU_CT" -- su emu -c 'test -x ~/.maestro/bin/maestro' || die "maestro is not installed in the CT: curl -Ls https://get.maestro.mobile.dev | bash (as emu)"
+  wait_boot
+  local staged="/tmp/maestro-$$"
+  tar -C "$flows" -cf - . | pct exec "$EMU_CT" -- su emu -c "rm -rf $staged && mkdir -p $staged/flows $staged/out && tar -C $staged/flows -xf -"
+  pct exec "$EMU_CT" -- su emu -c "bash $staged/flows/run.sh $(serial) $staged/flows $staged/out"
+  mkdir -p "$out"
+  pct exec "$EMU_CT" -- su emu -c "cd $staged/out && tar -cf - ." | tar -C "$out" -xf -
+  pct exec "$EMU_CT" -- su emu -c "rm -rf $staged"
+  echo "results in $out ($(find "$out" -name '*.png' | wc -l) screenshots, junit.xml)"
+}
+
 cmd_carsim() {
   local sub="${1:-}"; shift || true
   case "$sub" in
@@ -687,6 +706,7 @@ case "${1:-}" in
   artemis)    shift; cmd_artemis "$@" ;;
   carsim)     shift; cmd_carsim "$@" ;;
   sweep)      shift; cmd_sweep "$@" ;;
+  maestro)    shift; cmd_maestro "$@" ;;
   ''|help|-h) usage ;;
   *)          die "unknown command '$1' (try: headunit help)" ;;
 esac

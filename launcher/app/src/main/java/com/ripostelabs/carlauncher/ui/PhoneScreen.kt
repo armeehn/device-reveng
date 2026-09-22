@@ -39,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -220,14 +221,17 @@ private fun PhoneHeader(onBack: () -> Unit) {
 /** Device, HFP state, and while a call is up the other party and the timer. */
 @Composable
 private fun CallStatus(vendor: VendorBtState) {
-    val device = vendor.deviceName?.takeIf { it.isNotBlank() } ?: "No phone"
+    val device = vendor.deviceName?.takeIf { it.isNotBlank() }
+    val state = PhoneLogic.stateLabel(vendor.hfp)
+    // With no phone linked the state already says "No phone": one label, not "No phone · No phone".
+    val status = if (device == null) state else "$device · $state"
     val timer = vendor.speakingSec?.let(PhoneLogic::timer)
     val party = PhoneLogic.party(vendor)
 
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = "$device · ${PhoneLogic.stateLabel(vendor.hfp)}",
+                text = status,
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.weight(1f),
@@ -241,14 +245,19 @@ private fun CallStatus(vendor: VendorBtState) {
             }
         }
         // The party line keeps its height while idle so the buttons below do not jump when
-        // a call arrives.
-        Text(
-            text = party ?: " ",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onBackground,
-            maxLines = 1,
-        )
+        // a call arrives. Idle is a spacer, not a blank label a screen reader would announce.
+        if (party == null) {
+            val lineHeight = with(LocalDensity.current) { MaterialTheme.typography.headlineSmall.lineHeight.toDp() }
+            Spacer(Modifier.height(lineHeight))
+        } else {
+            Text(
+                text = party,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onBackground,
+                maxLines = 1,
+            )
+        }
     }
 }
 
