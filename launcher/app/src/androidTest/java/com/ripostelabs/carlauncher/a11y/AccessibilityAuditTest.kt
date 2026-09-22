@@ -1,7 +1,10 @@
 package com.ripostelabs.carlauncher.a11y
 
+import android.content.pm.PackageManager
+import android.content.pm.PermissionInfo
 import android.util.Log
-import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.test.core.app.ActivityScenario
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
@@ -17,6 +20,7 @@ import com.google.android.apps.common.testing.accessibility.framework.utils.cont
 import com.ripostelabs.carlauncher.MainActivity
 import com.ripostelabs.carlauncher.data.SettingsStore
 import org.junit.Assert.assertTrue
+import org.junit.After
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -36,8 +40,12 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class AccessibilityAuditTest {
 
+    // Empty rule + a scenario launched after the first-run flag is written: a rule that owns
+    // the activity launches it before @Before, and a fresh CI emulator then shows onboarding.
     @get:Rule
-    val rule = createAndroidComposeRule<MainActivity>()
+    val rule = createEmptyComposeRule()
+    private lateinit var scenario: ActivityScenario<MainActivity>
+    private lateinit var activity: MainActivity
 
     private val screens = listOf(
         "Home" to null,
@@ -53,8 +61,30 @@ class AccessibilityAuditTest {
     )
 
     @Before
-    fun skipOnboarding() {
-        SettingsStore(InstrumentationRegistry.getInstrumentation().targetContext).setFirstRunComplete()
+    fun skipOnboardingAndLaunch() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val pkg = instrumentation.targetContext.packageName
+        // A fresh install asks for location, then camera, on first draw; each dialog covers
+        // Home. Every dangerous permission the manifest requests is granted up front.
+        val pm = instrumentation.targetContext.packageManager
+        val requested = pm.getPackageInfo(pkg, PackageManager.GET_PERMISSIONS).requestedPermissions.orEmpty()
+        for (permission in requested) {
+            val dangerous = runCatching {
+                pm.getPermissionInfo(permission, 0).protection == PermissionInfo.PROTECTION_DANGEROUS
+            }.getOrDefault(false)
+            if (dangerous) {
+                runCatching { instrumentation.uiAutomation.grantRuntimePermission(pkg, permission) }
+            }
+        }
+        SettingsStore(instrumentation.targetContext).setFirstRunComplete()
+        Thread.sleep(FLAG_SETTLE_MS)   // the store writes on its own scope
+        scenario = ActivityScenario.launch(MainActivity::class.java)
+        scenario.onActivity { activity = it }
+    }
+
+    @After
+    fun close() {
+        if (::scenario.isInitialized) scenario.close()
     }
 
     @Test
@@ -130,6 +160,7 @@ class AccessibilityAuditTest {
     private companion object {
         const val TAG = "A11yAudit"
         const val HOME_WAIT_MS = 60_000L
+        const val FLAG_SETTLE_MS = 1_000L
         const val ROOT_TRIES = 20
         const val ROOT_WAIT_MS = 250L
     }
