@@ -1,0 +1,65 @@
+appId: com.ripostelabs.carlauncher
+name: First run walks from Welcome to Home
+# The screens a driver sees once, on a unit fresh from a flash — and a flash follows every OS
+# update. Nothing else in the suite ever sees them: every other flow starts at Home, and the
+# a11y audit writes the first-run flag before it launches.
+#
+# `clearState` wipes the DataStore, so the first-run flag is unset. `all: deny` matters as much:
+# Maestro's launchApp grants every permission unless told otherwise, and a unit fresh from a
+# flash has none. The launcher is started by package, not by the HOME key, because a cleared
+# unit may hand HOME back to the system launcher.
+---
+- launchApp:
+    clearState: true
+    permissions:
+      all: deny
+- extendedWaitUntil:
+    visible: "Welcome to Car Launcher"
+    timeout: 20000
+# Step 1. This assert also holds the line against a system permission dialog covering the
+# welcome screen: the launcher used to fire its own location ask from onCreate, and while that
+# dialog is up the accessibility tree holds nothing of ours at all.
+- assertVisible: "Pick a theme"
+- takeScreenshot: onboarding-theme
+- tapOn:
+    text: "Daylight"
+    optional: true
+- tapOn: "Next"
+
+# Step 2.
+- extendedWaitUntil:
+    visible: "Choose favourite apps"
+    timeout: 20000
+- takeScreenshot: onboarding-favourites
+- tapOn: "Next"
+
+# Step 3. Both actions must be on the panel: they used to be laid out past its bottom edge,
+# which left the one screen that asks for permissions unable to grant any.
+- extendedWaitUntil:
+    visible: "Grant permissions"
+    timeout: 20000
+- assertVisible: "Grant location & Bluetooth"
+- assertVisible: "Notification access"
+- takeScreenshot: onboarding-permissions
+- tapOn: "Next"
+
+# Step 4, then out to Home.
+- extendedWaitUntil:
+    visible: "Finish"
+    timeout: 20000
+- takeScreenshot: onboarding-default-home
+- tapOn: "Finish"
+- extendedWaitUntil:
+    visible: "Search apps"
+    timeout: 20000
+- assertVisible: "Quick launch"
+- takeScreenshot: onboarding-home
+
+# Put back the grants `clearState` dropped, so this flow leaves the instance where a fresh
+# `headunit build` leaves it and the flows that run after it are not judged on a stripped unit.
+- launchApp:
+    permissions:
+      all: allow
+- extendedWaitUntil:
+    visible: "Search apps"
+    timeout: 20000

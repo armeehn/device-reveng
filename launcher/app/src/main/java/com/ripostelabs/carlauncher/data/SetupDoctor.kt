@@ -15,6 +15,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
+ * What a check is. A GRANT is something the driver can answer — a permission, an appop, a listener
+ * binding — so first-run onboarding offers it. A REPORT only states what is on the unit; onboarding
+ * leaves those to Settings ▸ Setup doctor, where there is room for them.
+ */
+enum class CheckKind { GRANT, REPORT }
+
+/**
  * One environment check the launcher needs to actually work, and how to fix it. [ok] is the live
  * state; [adbCommand] is the copy-paste fix over adb (always available); [rootCommand] is the same
  * fix runnable in-app via [RootShell] when root is present, or null when only adb can do it.
@@ -33,6 +40,8 @@ data class DoctorCheck(
      * defined once, here, rather than re-hardcoded there.
      */
     val runtimePermission: String? = null,
+    /** Whether a driver can act on this check at all; see [CheckKind]. */
+    val kind: CheckKind = CheckKind.GRANT,
 )
 
 /**
@@ -201,6 +210,7 @@ class SetupDoctor(
             ok = missing.isEmpty() && retired.isEmpty(),
             adbCommand = adbCommand,
             rootCommand = null,
+            kind = CheckKind.REPORT,
         )
     }
 

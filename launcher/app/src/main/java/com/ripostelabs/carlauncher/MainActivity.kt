@@ -63,6 +63,7 @@ import com.ripostelabs.carlauncher.data.SysVarMirrorProvider // RAV4-98
 import com.ripostelabs.carlauncher.data.CarSettingsController // v1.1 settings suite
 import com.ripostelabs.carlauncher.data.parseVendorHidden // v0.4.9
 import com.ripostelabs.carlauncher.data.CrashLog // v0.4.3.7
+import com.ripostelabs.carlauncher.data.FirstRunGate // v2.9
 import com.ripostelabs.carlauncher.data.AppDirectoryStore // v0.4.2
 import com.ripostelabs.carlauncher.data.AppOrderStore // v3.0
 import com.ripostelabs.carlauncher.data.DriverProfilesStore // v3.0
@@ -115,6 +116,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay // v2.6
 import kotlinx.coroutines.flow.combine // v0.4.7.1 muted-aware TTS
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first // v2.9
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -407,12 +409,25 @@ class MainActivity : ComponentActivity() {
             beepEnabled = { carSettingsController.getBoolean(SettingKeys.TOUCH_BEEP, false) },
         )
 
-        // v2.5: ask once for the location permission behind the parked-only gate.
-        requestLocationPermissionIfNeeded()
+        // v2.9: neither ask runs on a first run. Fired straight from onCreate they appeared on top
+        // of the welcome screen, so the first thing a driver ever saw was "Allow Car Launcher to
+        // access this device's location?" over text they had not read — and on a 720 px panel
+        // the dialog's "Don't allow" is clipped to a sliver (farm, 2026-09-22). Onboarding's own
+        // permissions step is the ask then, with a reason beside it. A driver who skipped it is
+        // asked on the next start; asking the moment Finish is pressed nags whoever just said no.
+        lifecycleScope.launch {
+            val firstRun = settingsStore.firstRun.first { it != null }
+            if (!FirstRunGate.mayPrompt(firstRun)) {
+                return@launch
+            }
 
-        // Riposte OS 0.2: the reverse camera is ours only when the MCU owner is; ask only then.
-        if (mcuOwner != null) {
-            requestCameraPermissionIfNeeded()
+            // v2.5: ask once for the location permission behind the parked-only gate.
+            requestLocationPermissionIfNeeded()
+
+            // Riposte OS 0.2: the reverse camera is ours only when the MCU owner is; ask only then.
+            if (mcuOwner != null) {
+                requestCameraPermissionIfNeeded()
+            }
         }
 
         keyPump = KeyPump(lifecycleScope, ::onNavEvent) // v2.8
