@@ -7,28 +7,28 @@ name: Every top-bar screen opens by name and one Back returns Home
 - extendedWaitUntil:
     visible: "Search apps"
     timeout: 20000
-- tapOn: { point: "55%,7%" }        # Power & sleep
+- tapOn: { point: "54%,7%" }        # Power & sleep
 - assertVisible: "Power & sleep"
 - takeScreenshot: topbar-power
 - back
 - extendedWaitUntil:
     visible: "Search apps"
     timeout: 20000
-- tapOn: { point: "61%,7%" }        # Notifications
+- tapOn: { point: "59%,7%" }        # Notifications
 - assertVisible: "Notifications"
 - takeScreenshot: topbar-notifications
 - back
 - extendedWaitUntil:
     visible: "Search apps"
     timeout: 20000
-- tapOn: { point: "66%,7%" }        # Continue watching
+- tapOn: { point: "64%,7%" }        # Continue watching
 - assertVisible: "Continue watching"
 - takeScreenshot: topbar-continue
 - back
 - extendedWaitUntil:
     visible: "Search apps"
     timeout: 20000
-- tapOn: { point: "71%,7%" }        # Themes
+- tapOn: { point: "70%,7%" }        # Themes
 - assertVisible: "Themes"
 - takeScreenshot: topbar-themes
 - back

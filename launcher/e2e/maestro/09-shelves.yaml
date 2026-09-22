@@ -7,7 +7,7 @@ name: The shelves and cockpit screens carry content or say why not
 - extendedWaitUntil:
     visible: "Search apps"
     timeout: 20000
-- tapOn: { point: "61%,7%" }        # Notifications
+- tapOn: { point: "59%,7%" }        # Notifications
 - extendedWaitUntil:
     visible: "Notifications"
     timeout: 20000
@@ -16,7 +16,7 @@ name: The shelves and cockpit screens carry content or say why not
 - extendedWaitUntil:
     visible: "Search apps"
     timeout: 20000
-- tapOn: { point: "66%,7%" }        # Continue watching
+- tapOn: { point: "64%,7%" }        # Continue watching
 - extendedWaitUntil:
     visible: "Continue watching"
     timeout: 20000

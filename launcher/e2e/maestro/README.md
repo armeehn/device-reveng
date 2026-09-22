@@ -70,7 +70,7 @@ boot, and it runs `run.sh` verbatim. The APK it installs is the `farm` variant: 
 name the release application id, which the debug build is not.
 `.gitea/scripts/launcher-e2e.sh` is the whole procedure.
 
-Nine of the ten run there. `05-apps` searches the grid for Calculator, which the farm has
+11 of the 12 run there. `05-apps` searches the grid for Calculator, which the farm has
 and a bare `aosp_atd` image does not.
 
 The screenshots stay the farm's job. CI's emulator renders host-side and reads every frame
