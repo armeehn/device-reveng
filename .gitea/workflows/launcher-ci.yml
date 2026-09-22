@@ -202,6 +202,10 @@ jobs:
           sudo apt-get install -y -qq \
             libx11-xcb1 libxcb1 libx11-6 libgl1 libglu1-mesa libnss3 \
             libxcomposite1 libxcursor1 libxi6 libxtst6 libpulse0
+          # The emulator's modem dials ::1:<port>; the runner's container resolves no IPv6
+          # loopback, and the run dies with "address resolution failed for ::1" (twice on
+          # #244, once before). Named here, it resolves.
+          grep -q '^::1' /etc/hosts || echo '::1 localhost ip6-localhost ip6-loopback' | sudo tee -a /etc/hosts
 
       - name: Measure cold start
         uses: reactivecircus/android-emulator-runner@v2
@@ -269,6 +273,10 @@ jobs:
           sudo apt-get install -y -qq \
             libx11-xcb1 libxcb1 libx11-6 libgl1 libglu1-mesa libnss3 \
             libxcomposite1 libxcursor1 libxi6 libxtst6 libpulse0
+          # The emulator's modem dials ::1:<port>; the runner's container resolves no IPv6
+          # loopback, and the run dies with "address resolution failed for ::1" (twice on
+          # #244, once before). Named here, it resolves.
+          grep -q '^::1' /etc/hosts || echo '::1 localhost ip6-localhost ip6-loopback' | sudo tee -a /etc/hosts
 
       - name: Run Compose UI tests
         uses: reactivecircus/android-emulator-runner@v2
