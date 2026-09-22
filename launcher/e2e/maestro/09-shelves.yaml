@@ -4,7 +4,10 @@ name: The shelves and cockpit screens carry content or say why not
 # A screen with neither content nor an explanation is the defect these assertions catch.
 ---
 - launchApp
-- tapOn: { point: "61%,7%" }        # Notifications
+- extendedWaitUntil:
+    visible: "Search apps"
+    timeout: 20000
+- tapOn: { point: "59%,7%" }        # Notifications
 - extendedWaitUntil:
     visible: "Notifications"
     timeout: 20000
@@ -13,7 +16,7 @@ name: The shelves and cockpit screens carry content or say why not
 - extendedWaitUntil:
     visible: "Search apps"
     timeout: 20000
-- tapOn: { point: "66%,7%" }        # Continue watching
+- tapOn: { point: "64%,7%" }        # Continue watching
 - extendedWaitUntil:
     visible: "Continue watching"
     timeout: 20000

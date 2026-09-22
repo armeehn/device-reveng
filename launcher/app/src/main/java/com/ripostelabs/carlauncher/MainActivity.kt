@@ -654,9 +654,10 @@ class MainActivity : ComponentActivity() {
             // Back; from Notifications, Themes, Vehicle or Media it left the launcher
             // altogether and showed whatever app sat behind it (farm, 2026-09-22). Settings
             // owns its own stack in SettingsHost and is left to it; Onboarding must not be
-            // escapable by Back at all.
-            BackHandler(enabled = shownScreen != Screen.Home && shownScreen !is Screen.Settings) {
-                if (shownScreen != Screen.Onboarding) {
+            // escapable by Back at all. Home swallows Back: the launcher is the floor, and
+            // letting it through moved the task back and showed the last app (farm, 2026-09-22).
+            BackHandler(enabled = shownScreen !is Screen.Settings) {
+                if (shownScreen != Screen.Home && shownScreen != Screen.Onboarding) {
                     screen = Screen.Home
                     launcherFocus.reset()
                 }

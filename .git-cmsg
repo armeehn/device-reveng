@@ -1,0 +1,27 @@
+Run the Maestro journey flows in CI
+
+The ten launcher journeys and their screenshot baselines only ran on the
+farm, by hand. A pull request could break a journey or move a screen and
+nothing said so until somebody looked. This adds a `journeys` job to
+launcher-ci: the same 1920x720 @240dpi emulator the other two emulator
+jobs boot, the flows run by e2e/maestro/run.sh unchanged, and shots.py
+checking every takeScreenshot against the blessed baseline.
+
+The flows name com.ripostelabs.carlauncher, which the debug build is not
+(applicationIdSuffix ".debug"). The build job now assembles the `farm`
+variant too - the debug build under the release application id - so CI
+drives the same package identity the flows were written against and no
+flow is parameterised for CI.
+
+First run is cleared the way AccessibilityAuditTest clears it, from the
+shell: every dangerous permission the installed package requests is
+granted with pm grant, then a preparation flow taps onboarding's Skip,
+which is what calls setFirstRunComplete(). The launcher is made HOME
+with set-home-activity so the KEYCODE_HOME run.sh sends does not raise a
+chooser.
+
+Only the emulator is retried, once, and only when adb never answered:
+launcher-e2e.sh drops a marker the moment it sees a device, so a failed
+journey is reported rather than run again.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
