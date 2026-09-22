@@ -50,3 +50,14 @@ The clock is masked, so only the UI is judged. Flows never screenshot mid-scroll
 stops a few pixels off every run and the shot drifts ~10% with nothing wrong. Waits
 are 20 s because a loaded farm host makes the emulator slow; a quiet host returns Home in
 well under a second.
+
+`baseline-suite/` is the same for the suite flows, minus three shots whose content is live:
+News fetches real headlines, Music's now-playing bar advances, and Converter's input field
+carries a caret. Check a suite run with those out:
+
+    python3 shots.py check <run-dir> baseline-suite \
+      --ignore 'suite-news' --ignore 'music-playing' --ignore 'suite-converter'
+
+`run.sh` sets all three animation scales to 0 before a run: a screenshot taken during an entry
+fade differs from the same screen a frame later, which cost the suite shots up to 41% drift
+between runs of one build.
