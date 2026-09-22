@@ -387,7 +387,12 @@ jobs:
           arch: x86_64
           avd-name: ${{ env.AVD_NAME }}
           force-avd-creation: true
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          # -feature -Vulkan: run 5191 answered every tap and composed every screen, and
+          # still read every framebuffer back as 4,147,200 zero bytes. Vulkan through
+          # gfxstream keeps the colour buffers on the host, where screencap cannot see
+          # them; the GLES path hands them to the guest. launcher-e2e.sh probes the
+          # capture before the flows, so the log says which one this run got.
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -feature -Vulkan
           disable-animations: true
           pre-emulator-launch-script: .gitea/scripts/headunit-avd.sh
           # The flows tap the top-bar icons by panel percentage, so a fall back to a phone
@@ -420,7 +425,7 @@ jobs:
           arch: x86_64
           avd-name: ${{ env.AVD_NAME }}
           force-avd-creation: true
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -feature -Vulkan
           disable-animations: true
           pre-emulator-launch-script: .gitea/scripts/headunit-avd.sh
           script: |

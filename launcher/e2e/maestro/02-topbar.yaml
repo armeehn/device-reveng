@@ -4,6 +4,9 @@ name: Every top-bar screen opens by name and one Back returns Home
 # Phone app in the grid. Bounds from `maestro hierarchy` on Home.
 ---
 - launchApp
+- extendedWaitUntil:
+    visible: "Search apps"
+    timeout: 20000
 - tapOn: { point: "55%,7%" }        # Power & sleep
 - assertVisible: "Power & sleep"
 - takeScreenshot: topbar-power

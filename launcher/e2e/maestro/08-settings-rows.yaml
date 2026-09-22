@@ -6,6 +6,9 @@ name: Every Settings row opens a screen that names itself
 # (advanced)" -> "All settings") is not part of the name the screen must carry.
 ---
 - launchApp
+- extendedWaitUntil:
+    visible: "Search apps"
+    timeout: 20000
 - tapOn: { point: "96%,7%" }        # Settings
 - extendedWaitUntil:
     visible: "Launcher"

@@ -8,8 +8,6 @@
 #
 #   farm APK ──install──▶ emulator ──set-home-activity──▶ HOME
 #                            │
-#                   pm grant every dangerous permission
-#                            │
 #              launcher-first-run.yaml taps Skip (clears the onboarding flag)
 #                            │
 #            e2e/maestro/run.sh ──▶ JUnit + PNGs ──▶ shots.py check ──▶ red on drift
@@ -20,6 +18,10 @@
 # — exactly what the emulator farm installs. Building it here means CI drives the same
 # package identity the flows were written and blessed against, and no flow is parameterised
 # for CI.
+#
+# WHY NO `pm grant`. Maestro grants every permission the manifest asks for on each
+# `launchApp` (maestro.log, Maestro.setPermissionInternal), so a shell grant loop before
+# the run only repeats what Maestro does anyway.
 #
 # WHY THE /opt SYMLINKS. run.sh is the farm's script, run verbatim: it hard-codes the farm
 # container's JDK and platform-tools paths. Pointing those names at this runner's toolchain
@@ -37,6 +39,10 @@ MAESTRO_HOME="$HOME/.maestro"
 FLOW_SRC="launcher/e2e/maestro"
 FIRST_RUN_FLOW=".gitea/scripts/launcher-first-run.yaml"
 BASELINE="$FLOW_SRC/baseline"
+# 05-apps searches the grid for "Calculator". The farm instance carries the 28 suite APKs;
+# a bare aosp_atd image has no calculator at all and the grid answers "No matching apps"
+# (run 5191 hierarchy dump). The journey is sound, the app simply is not here.
+CI_SKIP_FLOW="05-apps.yaml"
 # The launcher writes its first-run flag on its own coroutine scope; give it a moment to
 # reach disk before the next launch reads it back (AccessibilityAuditTest waits 1 s too).
 FLAG_SETTLE_S=3
@@ -76,25 +82,6 @@ if ! printf '%s' "$home" | grep -q 'Success'; then
   exit 1
 fi
 
-# ------------------------------------------------------------------------ permissions
-# Every dangerous permission the manifest asks for, granted up front: on a fresh /data the
-# first draw raises a runtime dialog that covers Home and the first flow fails on it. Read
-# from the installed package rather than hard-coded, so a new permission is covered the day
-# it is declared. A non-dangerous permission simply refuses the grant; that is not an error.
-granted=0
-while read -r permission; do
-  [ -n "$permission" ] || continue
-  if adb -s "$SERIAL" shell pm grant "$PACKAGE" "$permission" >/dev/null 2>&1; then
-    granted=$((granted + 1))
-  fi
-done < <(adb -s "$SERIAL" shell dumpsys package "$PACKAGE" \
-  | tr -d '\r' \
-  | sed -n '/requested permissions:/,/^$/p' \
-  | grep -oE '^[[:space:]]+[a-z][a-zA-Z0-9_.]*\.[A-Z][A-Z0-9_]+' \
-  | tr -d '[:blank:]' \
-  | sort -u)
-echo "granted $granted runtime permissions"
-
 # ------------------------------------------------------------------------ the toolchain
 # run.sh expects the farm container's layout; give this runner the same names.
 sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
@@ -111,19 +98,55 @@ maestro --version || true
 maestro --device "$SERIAL" test "$FIRST_RUN_FLOW"
 sleep "$FLAG_SETTLE_S"
 
+# ------------------------------------------------------------------- capture self-check
+# Every PNG of run 5191 was 4,147,200 zero bytes: the emulator composed and answered taps,
+# but the framebuffer read back black, which would make a pixel baseline a gate that proves
+# nothing. Probe the capture path before the flows so the log says which it was.
+probe="$OUT_DIR/.capture-probe.png"
+adb -s "$SERIAL" exec-out screencap -p >"$probe" 2>/dev/null || true
+python3 - "$probe" <<'PY' || true
+import os
+import sys
+
+path = sys.argv[1]
+if not os.path.exists(path) or os.path.getsize(path) == 0:
+    print("capture probe: adb screencap produced nothing")
+    raise SystemExit(0)
+
+sys.path.insert(0, "launcher/e2e/maestro")
+import shots
+
+image = shots.read_png(path)
+nonzero = sum(1 for byte in image.data if byte)
+print("capture probe: %dx%d, %d of %d bytes non-zero" % (
+    image.width, image.height, nonzero, len(image.data)))
+PY
+
 # ------------------------------------------------------------------------------- flows
-# Staged: run.sh hands the whole directory to `maestro test`, and only the ten journey
-# flows belong in CI. The nine suite flows need the 28 suite APKs, which are not built here.
+# Staged: run.sh hands the whole directory to `maestro test`, and only the journey flows
+# this image can satisfy belong in CI. The nine under e2e/maestro/suite need the 28 suite
+# APKs, which are not built here.
 flows="$(dirname "$OUT_DIR")/flows"
 rm -rf "$flows"
 mkdir -p "$flows"
 cp "$FLOW_SRC"/*.yaml "$flows/"
+rm -f "$flows/$CI_SKIP_FLOW"
 echo "running $(ls "$flows" | wc -l) journey flows"
 
-bash "$FLOW_SRC/run.sh" "$SERIAL" "$flows" "$OUT_DIR"
+status=0
+bash "$FLOW_SRC/run.sh" "$SERIAL" "$flows" "$OUT_DIR" || status=$?
 
 # ---------------------------------------------------------------------------- baseline
-# Fails on drift. The verdict table goes to the job log verbatim, so a red run can be read
-# without downloading the artifact.
+# Maestro writes its artefacts into a timestamped directory under --test-output-dir, and
+# that directory is the run shots.py reads (README: `shots.py check maestro-out/<stamp>`).
+run_dir="$(find "$OUT_DIR" -mindepth 1 -maxdepth 1 -type d | sort | tail -n1)"
+if [ -z "$run_dir" ]; then
+  echo "::error::Maestro left no run directory under $OUT_DIR"
+  exit 1
+fi
+
 echo "----"
-python3 "$FLOW_SRC/shots.py" check "$OUT_DIR" "$BASELINE"
+echo "screenshot baseline: $(basename "$run_dir") against $BASELINE"
+python3 "$FLOW_SRC/shots.py" check "$run_dir" "$BASELINE" || status=$?
+
+exit "$status"

@@ -5,6 +5,9 @@ name: Settings hub scrolls to its end and every row has a label
 # (screenshot differ, 2026-09-22).
 ---
 - launchApp
+- extendedWaitUntil:
+    visible: "Search apps"
+    timeout: 20000
 - tapOn: { point: "96%,7%" }        # Settings
 - extendedWaitUntil:
     visible: "Launcher"
