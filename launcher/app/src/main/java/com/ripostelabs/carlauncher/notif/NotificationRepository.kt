@@ -60,12 +60,26 @@ object NotificationRepository {
     @Volatile
     private var service: ShelfListenerService? = null
 
+    private val _connected = MutableStateFlow(false)
+
+    /**
+     * Whether the OS currently has our listener bound.
+     *
+     * The shelf reads [isListenerEnabled] once when it opens, which cannot notice access being
+     * withdrawn while it is on screen — the list emptied and the screen then said "Nothing new",
+     * which is a claim about the phone rather than about the launcher. This flips on the
+     * disconnect, so the screen has something to re-read against.
+     */
+    val connected: StateFlow<Boolean> = _connected.asStateFlow()
+
     fun attach(listener: ShelfListenerService) {
         service = listener
+        _connected.value = true
     }
 
     fun detach() {
         service = null
+        _connected.value = false
         _items.value = emptyList()
     }
 

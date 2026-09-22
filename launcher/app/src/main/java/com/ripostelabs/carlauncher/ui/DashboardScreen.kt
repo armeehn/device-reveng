@@ -43,6 +43,20 @@ import com.ripostelabs.carlauncher.ui.theme.carShape
 import com.ripostelabs.carlauncher.ui.theme.carCard
 import kotlinx.coroutines.delay
 
+/** The ignition tile's reading. null = no ACC state has arrived, so there is nothing to claim. */
+internal fun ignitionValue(accOn: Boolean?): String = when (accOn) {
+    null -> IGNITION_NO_READING
+    true -> "ACC on"
+    false -> "ACC off"
+}
+
+/** Where that reading came from, or that it has not come at all. */
+internal fun ignitionNote(accOn: Boolean?): String =
+    if (accOn == null) "no reading yet" else "vendor ACC broadcast"
+
+/** The em dash every other tile on this screen uses for an absent reading. */
+internal const val IGNITION_NO_READING = "\u2014"
+
 /**
  * v3.0 — the cockpit dashboard: everything the car tells us, on one glanceable surface.
  *
@@ -69,6 +83,7 @@ fun DashboardScreen(
     val outsideTemp by carEvents.outsideTemp.collectAsStateSafe(initial = null)
     val steering by carEvents.steeringAngle.collectAsStateSafe(initial = null)
     val accOn by carEvents.accOn.collectAsStateSafe(initial = true)
+    val accSeen by carEvents.accSeen.collectAsStateSafe(initial = false)
     val radar by carEvents.radar.collectAsStateSafe(initial = null)
     val sessionStartMs by (ignitionSession?.startedAt?.collectAsStateSafe(initial = null)
         ?: remember { androidx.compose.runtime.mutableStateOf<Long?>(null) })
@@ -113,8 +128,10 @@ fun DashboardScreen(
                 )
                 ValueTile(
                     label = "Ignition",
-                    value = if (accOn) "ACC on" else "ACC off",
-                    note = "vendor ACC broadcast",
+                    // Not `accOn` alone: its fail-open default read as a live "ACC on" on a unit
+                    // that had never heard the car say anything (see CarEvents.accSeen).
+                    value = ignitionValue(accOn.takeIf { accSeen }),
+                    note = ignitionNote(accOn.takeIf { accSeen }),
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f),

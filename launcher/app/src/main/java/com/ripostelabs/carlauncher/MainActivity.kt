@@ -936,7 +936,16 @@ class MainActivity : ComponentActivity() {
                                 // main thread the first time the shelf opened. null = not
                                 // resolved yet, read as enabled so the "access is off" warning
                                 // never flashes before the answer arrives.
-                                val listenerEnabled by produceState<Boolean?>(initialValue = null) {
+                                //
+                                // Keyed on the listener binding, so access withdrawn while the
+                                // shelf is open re-runs the query instead of leaving the screen
+                                // claiming there is simply nothing to show.
+                                val listenerBound by NotificationRepository.connected
+                                    .collectAsStateWithLifecycle()
+                                val listenerEnabled by produceState<Boolean?>(
+                                    initialValue = null,
+                                    listenerBound,
+                                ) {
                                     value = withContext(Dispatchers.IO) {
                                         NotificationRepository.isListenerEnabled(applicationContext)
                                     }

@@ -105,6 +105,10 @@ fun PhoneScreen(
         spec.broadcast(context)
     }
 
+    // A btsuite page that is not installed resolves to nothing. The launch then did nothing at
+    // all and said nothing either, so the button read as broken rather than as absent.
+    var missingPage by remember { mutableStateOf<VendorBt.Page?>(null) }
+
     fun open(page: VendorBt.Page) {
         feedback?.tap()
         if (carKit != null) {
@@ -114,7 +118,7 @@ fun PhoneScreen(
             )
             return
         }
-        VendorBt.openPage(page).start(context)
+        missingPage = if (VendorBt.openPage(page).start(context)) null else page
     }
 
     // The three call actions, on whichever stack carries the phone this slot.
@@ -188,7 +192,7 @@ fun PhoneScreen(
                         modifier = Modifier.weight(1f),
                     )
                 }
-                VendorPages(onOpen = ::open)
+                VendorPages(onOpen = ::open, missing = missingPage)
             }
         }
     }
@@ -524,21 +528,31 @@ private fun CallRow(entry: VendorCallLog.Entry, canDial: Boolean, onDial: (Strin
 
 /** The btsuite pages this screen does not replace. Never gated: they are the escape hatch. */
 @Composable
-private fun VendorPages(onOpen: (VendorBt.Page) -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(VENDOR_BUTTON_HEIGHT_DP.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        for ((label, page) in VENDOR_PAGES) {
-            BigButton(
-                label = label,
-                enabled = true,
-                color = MaterialTheme.colorScheme.secondary,
-                onClick = { onOpen(page) },
-                modifier = Modifier.weight(1f),
+private fun VendorPages(onOpen: (VendorBt.Page) -> Unit, missing: VendorBt.Page?) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (missing != null) {
+            Text(
+                text = "That page is not installed on this unit.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(VENDOR_BUTTON_HEIGHT_DP.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            for ((label, page) in VENDOR_PAGES) {
+                BigButton(
+                    label = label,
+                    enabled = true,
+                    color = MaterialTheme.colorScheme.secondary,
+                    onClick = { onOpen(page) },
+                    modifier = Modifier.weight(1f),
+                )
+            }
         }
     }
 }

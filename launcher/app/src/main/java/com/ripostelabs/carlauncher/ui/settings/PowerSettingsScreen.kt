@@ -26,12 +26,17 @@ fun PowerSettingsScreen(
     val snap by controller.snapshot.collectAsStateWithLifecycle()
     snap
     val accOn by carEvents.accOn.collectAsStateWithLifecycle()
+    val accSeen by carEvents.accSeen.collectAsStateWithLifecycle()
     val closeScreenActive =
         controller.getInt(SettingKeys.CUSTOMER_TYPE) == PowerOptions.CLOSE_SCREEN_CUSTOMER_TYPE
 
     SettingsScaffold(title = "Power & sleep", onBack = onBack) {
         SettingsSection(title = "Status") {
-            InfoRow(label = "ACC (ignition)", value = if (accOn) "On" else "Off")
+            // "Off" was never right for a unit that has simply never been told; see accSeen.
+            InfoRow(
+                label = "ACC (ignition)",
+                value = if (!accSeen) "Not reported" else if (accOn) "On" else "Off",
+            )
         }
 
         SettingsSection(title = "ACC power delays") {
