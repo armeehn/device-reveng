@@ -86,8 +86,9 @@ fun QuickControlsButton(
         contentDescription = "Quick controls",
         tint = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = modifier
-            .size(28.dp)
-            .clickable(onClick = press),
+            .size(STRIP_TARGET_DP.dp)
+            .clickable(onClick = press)
+            .padding(STRIP_ICON_PAD_DP.dp),
     )
     if (open) {
         QuickControlsDialog(
@@ -397,10 +398,10 @@ private fun ControlRow(
                 contentDescription = if (onIconClick != null) iconAction else null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier
-                    .size(24.dp)
-                    .then(if (onIconClick != null) Modifier.clickable(onClick = onIconClick) else Modifier),
+                    .size(ROW_TARGET_DP.dp)
+                    .then(if (onIconClick != null) Modifier.clickable(onClick = onIconClick) else Modifier)
+                    .padding(ROW_ICON_PAD_DP.dp),
             )
-            Spacer(Modifier.width(12.dp))
             AutoSizeText(
                 text = title,
                 style = MaterialTheme.typography.titleMedium,
@@ -483,3 +484,20 @@ private fun launchSettings(context: Context, action: String) {
         context.startActivity(Intent(action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 }
+
+/**
+ * Tap-target geometry. §1.2's 48 dp floor applies to the glyph's *box*, not to the glyph: each
+ * icon below is drawn at the size it always was, inside a 48 dp clickable box whose inner
+ * padding makes up the difference, so nothing on screen grew.
+ *
+ *   status strip   48 - 2*10 = 28 dp glyph, identical to StatusBar's sibling icons
+ *   dialog rows    48 - 2*12 = 24 dp glyph; the box's 12 dp right gutter replaces the Spacer
+ *                  that used to sit between the icon and the row title
+ *
+ * The row box is sized whether or not the icon is tappable, so a tappable row and an inert one
+ * keep the same icon column and the panel stays aligned.
+ */
+private const val STRIP_TARGET_DP = 48
+private const val STRIP_ICON_PAD_DP = 10
+private const val ROW_TARGET_DP = 48
+private const val ROW_ICON_PAD_DP = 12

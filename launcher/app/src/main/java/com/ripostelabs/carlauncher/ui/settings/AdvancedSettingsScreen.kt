@@ -21,6 +21,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -125,7 +126,7 @@ private fun RawRow(key: String, value: String, lockedReason: String?, onClick: (
             .padding(vertical = 10.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Column(modifier = Modifier.weight(1f)) {
+        Column(modifier = Modifier.weight(KEY_WEIGHT)) {
             Text(
                 text = key,
                 style = MaterialTheme.typography.bodyMedium,
@@ -141,10 +142,15 @@ private fun RawRow(key: String, value: String, lockedReason: String?, onClick: (
             }
         }
         Spacer(Modifier.size(12.dp))
+        // The value is weighted too. Unweighted it was measured first at the Row's full width,
+        // so a long value (a URL, a JSON blob) left nothing for the weighted key beside it and
+        // pushed the key off the row. Weights split the row before either child is measured.
         Text(
             text = value.ifBlank { "\"\"" },
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.primary,
+            textAlign = TextAlign.End,
+            modifier = Modifier.weight(VALUE_WEIGHT),
         )
     }
 }
@@ -194,3 +200,11 @@ private fun RawEditDialog(
         }
     }
 }
+
+/**
+ * SysVar row split. Keys are short identifiers, values are arbitrary vendor strings, so the
+ * value gets the larger share and wraps inside it instead of stealing the key's column.
+ * On the 1920 px panel that is roughly 210 dp of key against 420 dp of value.
+ */
+private const val KEY_WEIGHT = 1f
+private const val VALUE_WEIGHT = 2f
