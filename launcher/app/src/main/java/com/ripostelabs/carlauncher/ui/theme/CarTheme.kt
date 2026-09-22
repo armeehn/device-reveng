@@ -135,7 +135,26 @@ data class CarTheme(
     fun variant(night: Boolean): ThemeColors = if (night) this.night else this.day
 }
 
-/** The presets shipped with the launcher. [DEFAULT] is the fallback active theme. */
+/**
+ * The presets shipped with the launcher. [DEFAULT] is the fallback active theme.
+ *
+ * Every night variant is derived from its own day variant by one rule, so the day/night
+ * flip is a real change in emitted light rather than a repaint (a UI audit measured the
+ * Home screen at 23.8 vs 22.2 of 255 — 7% — before this):
+ *
+ *   field/panels   hue kept, relative luminance cut to 30% of the day value and capped at
+ *                  0.0030 (light presets flip onto a dark field); cards sit 2.4x and
+ *                  recessed panels 3.8x above the night field so the depth survives.
+ *   body text      the day palette's light pole, dimmed to 5.6:1 on the night card — day
+ *                  text runs 9-18:1, so the text pixels (most of the screen's light) drop
+ *                  hard while staying over the WCAG 4.5:1 body-text bar.
+ *   muted text     4.9:1 on the recessed panel it is drawn on (onSurfaceVariant's pair).
+ *   accents        4.6:1 on the night card, never brighter than by day, floor 3.2:1.
+ *   error          4.6:1 and NOT capped: a fault must read the same at 02:00 as at noon.
+ *
+ * NightModeContrastTest holds every one of those numbers, so a new preset that pastes in a
+ * night variant from the wrong palette fails the build instead of the driver's eyes.
+ */
 object BuiltInThemes {
 
     /** "Midnight" — the original v0.2 dark car palette (day) + dimmed night variant. */
@@ -154,14 +173,14 @@ object BuiltInThemes {
             error = 0xFFE5534B,
         ),
         night = ThemeColors(
-            background = 0xFF05070A,
-            surface = 0xFF0D1117,
-            surfaceVariant = 0xFF0D1117,
-            primary = 0xFF1F5FB0,
-            onBackground = 0xFF8B98A5,
-            onSurface = 0xFF8B98A5,
-            onSurfaceMuted = 0xFF7C8894,   // 4.9:1 on the night surface; 5B6672 read 3.3 (audit)
-            error = 0xFFE5534B,
+            background = 0xFF030506,
+            surface = 0xFF080A0F,
+            surfaceVariant = 0xFF0C0F15,
+            primary = 0xFF4477D5,
+            onBackground = 0xFF84898C,
+            onSurface = 0xFF84898C,
+            onSurfaceMuted = 0xFF77828E,
+            error = 0xFFCC524C,
         ),
     )
 
@@ -177,19 +196,19 @@ object BuiltInThemes {
             primary = 0xFF1565C0,
             onBackground = 0xFF10141A,
             onSurface = 0xFF10141A,
-            onSurfaceMuted = 0xFF7C8894,   // 4.9:1 on the night surface; 5B6672 read 3.3 (audit)
+            onSurfaceMuted = 0xFF5A646D,   // 4.9:1 on Bone Dim; 7C8894 read 2.9 (audit)
             error = 0xFFC62828,
         ),
         // Even a light theme dims down at night (a head unit must never flash white).
         night = ThemeColors(
-            background = 0xFF11161C,
-            surface = 0xFF1B222B,
-            surfaceVariant = 0xFF262F3A,
-            primary = 0xFF5B9BE0,
-            onBackground = 0xFFDDE4EC,
-            onSurface = 0xFFDDE4EC,
-            onSurfaceMuted = 0xFF8B98A5,
-            error = 0xFFE5534B,
+            background = 0xFF0A0A0A,
+            surface = 0xFF141414,
+            surfaceVariant = 0xFF1B1B1D,
+            primary = 0xFF1564BD, // the day blue, a shade down: any dimmer loses the 3:1 bar
+            onBackground = 0xFF8C8E8F,
+            onSurface = 0xFF8C8E8F,
+            onSurfaceMuted = 0xFF87898A,
+            error = 0xFFC66161,
         ),
     )
 
@@ -209,14 +228,14 @@ object BuiltInThemes {
             error = 0xFFE5534B,
         ),
         night = ThemeColors(
-            background = 0xFF0B0805,
-            surface = 0xFF17110A,
-            surfaceVariant = 0xFF17110A,
-            primary = 0xFFC98A1E,
-            onBackground = 0xFFB39A6B,
-            onSurface = 0xFFB39A6B,
-            onSurfaceMuted = 0xFF7A6944,
-            error = 0xFFE5534B,
+            background = 0xFF070603,
+            surface = 0xFF110C06,
+            surfaceVariant = 0xFF181108,
+            primary = 0xFF9D7338,
+            onBackground = 0xFF8F897E,
+            onSurface = 0xFF8F897E,
+            onSurfaceMuted = 0xFF957F58,
+            error = 0xFFCE534C,
         ),
     )
 
@@ -236,18 +255,18 @@ object BuiltInThemes {
             primary = 0xFFCBA6F7,
             onBackground = 0xFFCDD6F4,
             onSurface = 0xFFCDD6F4,
-            onSurfaceMuted = 0xFFA6ADC8,
+            onSurfaceMuted = 0xFFB8BDD2,
             error = 0xFFF38BA8,
         ),
         night = ThemeColors(
-            background = 0xFF11111B,
-            surface = 0xFF181825,
-            surfaceVariant = 0xFF181825,
-            primary = 0xFF9576C4,
-            onBackground = 0xFFA6ADC8,
-            onSurface = 0xFFA6ADC8,
-            onSurfaceMuted = 0xFF6C7086,
-            error = 0xFFF38BA8,
+            background = 0xFF0A0A12,
+            surface = 0xFF13141D,
+            surfaceVariant = 0xFF1A1B25,
+            primary = 0xFF8C77A7,
+            onBackground = 0xFF878DA2,
+            onSurface = 0xFF878DA2,
+            onSurfaceMuted = 0xFF858998,
+            error = 0xFFB36A7E,
         ),
     )
 
@@ -259,22 +278,22 @@ object BuiltInThemes {
         day = ThemeColors(
             background = 0xFF282828,
             surface = 0xFF32302F,
-            surfaceVariant = 0xFF504945,
+            surfaceVariant = 0xFF4E4744,
             primary = 0xFFFABD2F,
             onBackground = 0xFFEBDBB2,
             onSurface = 0xFFEBDBB2,
-            onSurfaceMuted = 0xFFA89984,
+            onSurfaceMuted = 0xFFC6BDB2,
             error = 0xFFFB4934,
         ),
         night = ThemeColors(
-            background = 0xFF1D2021,
-            surface = 0xFF282828,
-            surfaceVariant = 0xFF282828,
-            primary = 0xFFD79921,
-            onBackground = 0xFFA89984,
-            onSurface = 0xFFA89984,
-            onSurfaceMuted = 0xFF7C6F64,
-            error = 0xFFCC241D,
+            background = 0xFF0A0A0A,
+            surface = 0xFF151414,
+            surfaceVariant = 0xFF1F1B1A,
+            primary = 0xFF9B7A40,
+            onBackground = 0xFF988D72,
+            onSurface = 0xFF988D72,
+            onSurfaceMuted = 0xFF8F8980,
+            error = 0xFFE04C3D,
         ),
     )
 
@@ -290,18 +309,18 @@ object BuiltInThemes {
             primary = 0xFF88C0D0,
             onBackground = 0xFFECEFF4,
             onSurface = 0xFFECEFF4,
-            onSurfaceMuted = 0xFF8C99AF,
-            error = 0xFFBF616A,
+            onSurfaceMuted = 0xFFBDC4CF,
+            error = 0xFFC88489,   // aurora red lifted to 3.4:1 on nord1; BF616A read 2.5 (audit)
         ),
         night = ThemeColors(
-            background = 0xFF242933,
-            surface = 0xFF2E3440,
-            surfaceVariant = 0xFF2E3440,
-            primary = 0xFF5E81AC,
-            onBackground = 0xFF8C99AF,
-            onSurface = 0xFF8C99AF,
-            onSurfaceMuted = 0xFF616E88,
-            error = 0xFFBF616A,
+            background = 0xFF08090E,
+            surface = 0xFF11141B,
+            surfaceVariant = 0xFF171C24,
+            primary = 0xFF65848D,
+            onBackground = 0xFF8C8E91,
+            onSurface = 0xFF8C8E91,
+            onSurfaceMuted = 0xFF848991,
+            error = 0xFFBA676E,
         ),
     )
 
@@ -313,22 +332,22 @@ object BuiltInThemes {
         day = ThemeColors(
             background = 0xFF1A1B26,
             surface = 0xFF24283B,
-            surfaceVariant = 0xFF414868,
+            surfaceVariant = 0xFF373D59,
             primary = 0xFF7AA2F7,
             onBackground = 0xFFC0CAF5,
             onSurface = 0xFFC0CAF5,
-            onSurfaceMuted = 0xFF737AA2,
+            onSurfaceMuted = 0xFFACAFC3,
             error = 0xFFF7768E,
         ),
         night = ThemeColors(
-            background = 0xFF16161E,
-            surface = 0xFF1A1B26,
-            surfaceVariant = 0xFF1A1B26,
-            primary = 0xFF3D59A1,
-            onBackground = 0xFF737AA2,
-            onSurface = 0xFF737AA2,
-            onSurfaceMuted = 0xFF565F89,
-            error = 0xFFDB4B4B,
+            background = 0xFF090A10,
+            surface = 0xFF111420,
+            surfaceVariant = 0xFF181B2A,
+            primary = 0xFF667FB7,
+            onBackground = 0xFF858DAB,
+            onSurface = 0xFF858DAB,
+            onSurfaceMuted = 0xFF868898,
+            error = 0xFFC26273,
         ),
     )
 
@@ -344,18 +363,18 @@ object BuiltInThemes {
             primary = 0xFFBD93F9,
             onBackground = 0xFFF8F8F2,
             onSurface = 0xFFF8F8F2,
-            onSurfaceMuted = 0xFF6272A4,
+            onSurfaceMuted = 0xFFB9BDD0,
             error = 0xFFFF5555,
         ),
         night = ThemeColors(
-            background = 0xFF1E1F29,
-            surface = 0xFF282A36,
-            surfaceVariant = 0xFF282A36,
-            primary = 0xFF7B5FAE,
-            onBackground = 0xFF9DA0B0,
-            onSurface = 0xFF9DA0B0,
-            onSurfaceMuted = 0xFF6272A4,
-            error = 0xFFFF5555,
+            background = 0xFF09090F,
+            surface = 0xFF13141C,
+            surfaceVariant = 0xFF1A1C25,
+            primary = 0xFF8E73B5,
+            onBackground = 0xFF8F8F8B,
+            onSurface = 0xFF8F8F8B,
+            onSurfaceMuted = 0xFF868998,
+            error = 0xFFDA5151,
         ),
     )
 
@@ -375,14 +394,14 @@ object BuiltInThemes {
             error = 0xFFEB6F92,
         ),
         night = ThemeColors(
-            background = 0xFF100E17,
-            surface = 0xFF191724,
-            surfaceVariant = 0xFF191724,
-            primary = 0xFFAD8A88,
-            onBackground = 0xFF908CAA,
-            onSurface = 0xFF908CAA,
-            onSurfaceMuted = 0xFF6E6A86,
-            error = 0xFFEB6F92,
+            background = 0xFF0A0810,
+            surface = 0xFF14131F,
+            surfaceVariant = 0xFF1B182B,
+            primary = 0xFF937A78,
+            onBackground = 0xFF8E8C9B,
+            onSurface = 0xFF8E8C9B,
+            onSurfaceMuted = 0xFF8985A2,
+            error = 0xFFC1617B,
         ),
     )
 
@@ -392,7 +411,7 @@ object BuiltInThemes {
         name = "Phosphor",
         isBuiltIn = true,
         day = ThemeColors(
-            background = 0xFF000000,
+            background = 0xFF040A04,
             surface = 0xFF0A120A,
             surfaceVariant = 0xFF0F1E0F,
             primary = 0xFF33FF66,
@@ -402,14 +421,14 @@ object BuiltInThemes {
             error = 0xFFFF4444,
         ),
         night = ThemeColors(
-            background = 0xFF000000,
-            surface = 0xFF071007,
-            surfaceVariant = 0xFF071007,
-            primary = 0xFF1FA046,
-            onBackground = 0xFF3FA53F,
-            onSurface = 0xFF3FA53F,
-            onSurfaceMuted = 0xFF2A7A2A,
-            error = 0xFFCC3333,
+            background = 0xFF010301,
+            surface = 0xFF030703,
+            surfaceVariant = 0xFF040B04,
+            primary = 0xFF3C8848,
+            onBackground = 0xFF589458,
+            onSurface = 0xFF589458,
+            onSurfaceMuted = 0xFF368F36,
+            error = 0xFFD64343,
         ),
     )
 
@@ -441,16 +460,16 @@ object BuiltInThemes {
             accent3 = 0xFFFE9A0D, // Riposte Marigold (8.12:1 — ink-text safe)
         ),
         night = ThemeColors(
-            background = 0xFF14110E, // ink field, dimmed below brand Ink for night
-            surface = 0xFF1D1A17, // Ink
-            surfaceVariant = 0xFF241F1B, // Ink Raised
-            primary = 0xFFC9891F, // dimmed marigold — low-blue night accent
-            onBackground = 0xFFCFC7B8, // dimmed bone
-            onSurface = 0xFFCFC7B8,
-            onSurfaceMuted = 0xFF8A8172,
-            error = 0xFFCC4A44,
-            accent2 = 0xFF17806A, // dimmed teal
-            accent3 = 0xFF9C3555, // dimmed pink
+            background = 0xFF0A0A09, // ink field, dimmed for night
+            surface = 0xFF151513, // Ink, dimmed
+            surfaceVariant = 0xFF1D1B19, // Ink Raised, dimmed
+            primary = 0xFFA96E39, // dimmed marigold — low-blue night accent
+            onBackground = 0xFF928E88, // dimmed bone
+            onSurface = 0xFF928E88, // dimmed bone
+            onSurfaceMuted = 0xFF8B8883, // dimmed bone, muted
+            error = 0xFFB96968,
+            accent2 = 0xFF3C8D77, // dimmed teal
+            accent3 = 0xFFC13353, // dimmed pink
         ),
     )
 
@@ -481,14 +500,14 @@ object BuiltInThemes {
             error = 0xFFB3261E,
         ),
         night = ThemeColors(
-            background = 0xFF14110E, // ink field, dimmed below brand Ink for night
-            surface = 0xFF1D1A17, // Ink
-            surfaceVariant = 0xFF241F1B, // Ink Raised
-            primary = 0xFFCFC7B8, // dimmed bone — the only accent
-            onBackground = 0xFFCFC7B8,
-            onSurface = 0xFFCFC7B8,
-            onSurfaceMuted = 0xFF8A8172, // dimmed bone at 0.7 over ink
-            error = 0xFFCC4A44,
+            background = 0xFF0A0A09, // ink field, dimmed for night
+            surface = 0xFF151513, // Ink, dimmed
+            surfaceVariant = 0xFF1D1B19, // Ink Raised, dimmed
+            primary = 0xFF928E88, // dimmed bone — the only accent
+            onBackground = 0xFF928E88, // dimmed bone
+            onSurface = 0xFF928E88, // dimmed bone
+            onSurfaceMuted = 0xFF8B8883, // dimmed bone at 0.7 over ink
+            error = 0xFFB96968,
         ),
     )
 
