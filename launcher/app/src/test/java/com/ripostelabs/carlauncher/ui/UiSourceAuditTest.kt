@@ -10,7 +10,7 @@ import org.junit.Test
  * every settings sub-screen, dialog, overlay and onboarding page is invisible to it. These three
  * rules are the part of that audit a compiler-free read of the source can prove everywhere.
  *
- * Each rule carries an allow-list. An entry is a deliberate, reasoned exception with the reason
+ * Rules 2 and 3 carry an allow-list. An entry is a deliberate, reasoned exception with the reason
  * beside it — not a backlog. A new violation fails with the file, the line and what to do.
  */
 class UiSourceAuditTest {
@@ -20,24 +20,12 @@ class UiSourceAuditTest {
 
     // ---- rule 1: touch targets ------------------------------------------------------------
 
-    /**
-     * Files whose sub-48 dp clickable is known and deliberately left. Reason per entry.
-     *
-     * QuickControls.kt — the status-bar "tune" icon (28 dp) and the row icon-actions (24 dp) are
-     * real findings, reported in PR "Fix car-UI defects a static sweep finds". The file is owned
-     * by an in-flight change, so fixing it here would collide.
-     */
-    private val smallTargetExempt = setOf("QuickControls.kt")
-
+    /** No exemption. Every clickable under `ui/` meets the floor; a new one that does not fails. */
     @Test
     fun clickableTargetsAreNotSmallerThan48Dp() {
         val found = mutableListOf<String>()
 
         for (file in uiSources()) {
-            if (file.name in smallTargetExempt) {
-                continue
-            }
-
             val lines = file.readTextLines()
             val constants = DP_CONSTANT.findAll(file.readText())
                 .associate { it.groupValues[1] to it.groupValues[2].toInt() }
