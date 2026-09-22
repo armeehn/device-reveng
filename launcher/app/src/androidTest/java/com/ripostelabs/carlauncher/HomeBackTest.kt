@@ -1,5 +1,7 @@
 package com.ripostelabs.carlauncher
 
+import android.content.pm.PackageManager
+import android.content.pm.PermissionInfo
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.lifecycle.Lifecycle
@@ -26,6 +28,7 @@ class HomeBackTest {
 
     @Test
     fun backOnHomeKeepsTheLauncher() {
+        grantDangerous()
         val settings = SettingsStore(InstrumentationRegistry.getInstrumentation().targetContext)
         settings.setFirstRunComplete()
         Thread.sleep(FLAG_SETTLE_MS)   // the store writes on its own scope
@@ -40,6 +43,28 @@ class HomeBackTest {
             InstrumentationRegistry.getInstrumentation().waitForIdleSync()
 
             assertEquals(Lifecycle.State.RESUMED, scenario.state)
+        }
+    }
+
+    /**
+     * A launcher past first run asks for its grants on start, and the system dialog covers Home
+     * (CI run 5285: no Compose root). Grant every dangerous permission up front, as
+     * AccessibilityAuditTest does.
+     */
+    private fun grantDangerous() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val pkg = instrumentation.targetContext.packageName
+        val pm = instrumentation.targetContext.packageManager
+        val requested = pm.getPackageInfo(pkg, PackageManager.GET_PERMISSIONS).requestedPermissions.orEmpty()
+
+        for (permission in requested) {
+            val dangerous = runCatching {
+                pm.getPermissionInfo(permission, 0).protection == PermissionInfo.PROTECTION_DANGEROUS
+            }.getOrDefault(false)
+            if (!dangerous) {
+                continue
+            }
+            runCatching { instrumentation.uiAutomation.grantRuntimePermission(pkg, permission) }
         }
     }
 
