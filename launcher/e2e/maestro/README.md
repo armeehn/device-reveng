@@ -65,9 +65,10 @@ between runs of one build.
 ## In CI
 
 `launcher-ci`'s `journeys` job runs these flows on every pull request that touches
-`launcher/**`: the same 1920x720 @240dpi emulator the other two emulator jobs boot, the
-`farm` APK (the flows name the release application id, which the debug build is not), and
-`run.sh` verbatim. `.gitea/scripts/launcher-e2e.sh` is the whole procedure.
+`launcher/**`. It boots the same 1920x720 @240dpi emulator the other two emulator jobs
+boot, and it runs `run.sh` verbatim. The APK it installs is the `farm` variant: the flows
+name the release application id, which the debug build is not.
+`.gitea/scripts/launcher-e2e.sh` is the whole procedure.
 
 Nine of the ten run there. `05-apps` searches the grid for Calculator, which the farm has
 and a bare `aosp_atd` image does not.
