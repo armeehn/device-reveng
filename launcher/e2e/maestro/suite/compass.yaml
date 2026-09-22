@@ -1,0 +1,12 @@
+appId: com.ripostelabs.compass
+name: Suite Compass opens and comes back
+---
+- launchApp:
+    appId: com.ripostelabs.compass
+    stopApp: true
+- extendedWaitUntil:
+    visible: "Compass"
+    timeout: 8000
+- takeScreenshot: suite-compass
+- pressKey: Home
+- assertVisible: "Search apps"

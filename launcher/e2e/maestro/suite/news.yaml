@@ -1,0 +1,12 @@
+appId: com.ripostelabs.news
+name: Suite News opens and comes back
+---
+- launchApp:
+    appId: com.ripostelabs.news
+    stopApp: true
+- extendedWaitUntil:
+    visible: "News"
+    timeout: 8000
+- takeScreenshot: suite-news
+- pressKey: Home
+- assertVisible: "Search apps"
