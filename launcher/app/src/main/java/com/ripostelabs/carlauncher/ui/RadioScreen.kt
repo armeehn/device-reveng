@@ -535,11 +535,12 @@ private fun PresetSlot(
             contentDescription = "Delete preset",
             tint = fg,
             modifier = Modifier
-                .size(36.dp)
+                .size(PRESET_DELETE_TARGET_DP.dp)
                 .clip(carShape(8.dp))
                 .focusRing(cornerRadiusDp = 10)
                 .clickable(onClick = withTapFeedback(onDelete))
-                .padding(6.dp),
+                // Padding grows with the target so the glyph stays the 24 dp it always drew.
+                .padding(12.dp),
         )
     }
 }
@@ -698,6 +699,9 @@ private const val PRESET_SLOTS = 6
 private const val FREQUENCY_SP = 48f
 private const val TRANSPORT_TARGET_DP = 96
 private const val PRESET_HEIGHT_DP = 64
+
+/** Destructive, and it sits inside the preset it deletes: never under the 48 dp floor. */
+private const val PRESET_DELETE_TARGET_DP = 48
 
 /** Safety net behind the pushed events: a missed callback costs at most this. */
 private const val POLL_INTERVAL_MS = 3_000L

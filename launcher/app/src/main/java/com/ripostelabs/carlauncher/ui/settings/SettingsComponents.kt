@@ -524,7 +524,7 @@ private fun StepButton(glyph: String, enabled: Boolean, onClick: () -> Unit) {
     val press = withTapFeedback(onClick) // v2.5
     Box(
         modifier = Modifier
-            .size(44.dp)
+            .size(STEP_TARGET_DP.dp)
             .clip(carShape(12.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant)
             .clickable(enabled = enabled, onClick = press),
@@ -641,3 +641,6 @@ internal fun rememberSliderEcho(value: Float): SliderEcho {
     LaunchedEffect(value) { echo.sync(value) }
     return echo
 }
+
+/** The slider's − / + buttons are the eyes-free way to nudge a value: 48 dp floor, not 44. */
+private const val STEP_TARGET_DP = 48

@@ -120,7 +120,7 @@ fun VideoMiniCard(
                 IconButton(onClick = onExpand) {
                     Icon(
                         Icons.Filled.Fullscreen,
-                        contentDescription = "Expand video",
+                        contentDescription = stringResource(R.string.video_mini_expand),
                         tint = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.size(28.dp),
                     )
@@ -128,7 +128,7 @@ fun VideoMiniCard(
                 IconButton(onClick = onClose) {
                     Icon(
                         Icons.Filled.Close,
-                        contentDescription = "Close mini screen",
+                        contentDescription = stringResource(R.string.video_mini_close),
                         tint = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.size(28.dp),
                     )

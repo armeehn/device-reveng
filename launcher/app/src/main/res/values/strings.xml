@@ -7,5 +7,7 @@
     <string name="media_playing">Now playing</string>
     <string name="media_carplay_idle">Connected</string>
     <string name="video_mini_opening">Opening video window…</string>
+    <string name="video_mini_expand">Expand video</string>
+    <string name="video_mini_close">Close mini screen</string>
     <string name="reverse_overlay_hint">Reverse camera</string>
 </resources>
