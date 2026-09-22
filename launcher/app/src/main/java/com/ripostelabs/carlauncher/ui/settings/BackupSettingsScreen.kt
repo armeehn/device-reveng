@@ -179,10 +179,13 @@ private fun BackupRow(
             contentDescription = "Delete backup",
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier
-                .size(40.dp)
+                .size(DELETE_TARGET_DP.dp)
                 .clip(carShape(10.dp))
                 .clickable(onClick = onDelete)
-                .padding(8.dp),
+                .padding(12.dp),
         )
     }
 }
+
+/** Destructive tap on a list row; kept on the 48 dp floor rather than the 40 dp glyph box. */
+private const val DELETE_TARGET_DP = 48

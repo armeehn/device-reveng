@@ -80,7 +80,9 @@ fun <T> OptionPickerDialog(
                         Icon(
                             imageVector = if (selected) Icons.Filled.CheckCircle
                             else Icons.Outlined.Circle,
-                            contentDescription = null,
+                            // The filled ring is the only mark of the current choice, so a screen
+                            // reader reads every option identically without this.
+                            contentDescription = if (selected) "Selected" else null,
                             tint = if (selected) MaterialTheme.colorScheme.primary
                             else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(22.dp),
