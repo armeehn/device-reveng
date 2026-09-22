@@ -7,6 +7,8 @@ import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.printToString
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.espresso.Espresso
@@ -134,7 +136,9 @@ class AccessibilityAuditTest {
                 rule.onAllNodesWithContentDescription(description)[0].performClick()
                 rule.waitForIdle()
             }
-            report.add(name, audit())
+            val results = audit()
+            report.add(name, results)
+            dumpSemanticsOnError(name, results)
             if (description != null) {
                 backToHome()
             }
@@ -159,11 +163,25 @@ class AccessibilityAuditTest {
             // A parked-only screen (the SysVar browser) shows its gate panel instead of the
             // content when the car is moving. The emulator reports 0 km/h so the content is
             // what appears; if it ever does not, the gate is a screen and gets audited too.
-            report.add(row, audit())
+            val results = audit()
+            report.add(row, results)
+            dumpSemanticsOnError(row, results)
             backToHub(row)
         }
         val findings = report.publish(settingsRows.size)
         assertTrue("${report.errors()} accessibility errors:\n$findings", report.errors() == 0)
+    }
+
+    /**
+     * A failing screen takes its semantics tree out with it. The check says what is wrong and
+     * the bounds say where, but neither names the control; without the tree, reading "this item
+     * may not have a label" against a screen of thirty rows costs another 15-minute CI round.
+     */
+    private fun dumpSemanticsOnError(screen: String, results: List<AccessibilityHierarchyCheckResult>) {
+        if (results.none { it.type == AccessibilityCheckResultType.ERROR }) return
+        for (line in rule.onRoot().printToString().lines()) {
+            Log.i(TAG, "$screen | $line")
+        }
     }
 
     /** Scroll the hub row into view, tap it, and wait for the hub to hand over. */
