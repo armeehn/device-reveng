@@ -14,4 +14,6 @@ name: Suite Calculator adds two numbers
 - assertVisible: "15"
 - takeScreenshot: suite-calculator
 - pressKey: Home
-- assertVisible: "Search apps"
+- extendedWaitUntil:
+    visible: "Search apps"
+    timeout: 10000

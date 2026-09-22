@@ -35,23 +35,42 @@ data class ThemeColors(
      * from the background luminance so unspecified slots (scrim, outline, inverse…) get
      * sensible defaults, then the roles we care about are copied over the top.
      */
+    /**
+     * The readable label colour on [accent]: whichever of the two carries more contrast.
+     * WCAG asks 4.5:1 for body text; a theme whose accent clears neither is the theme's
+     * problem, and the better of the two is still the right pick.
+     */
+    private fun onAccent(accent: Color): Color {
+        val light = Color(0xFFF2F4F8)
+        val dark = Color(0xFF14161A)
+        return if (contrast(accent, light) >= contrast(accent, dark)) light else dark
+    }
+
+    /** WCAG relative-luminance contrast ratio, 1.0 (same) to 21.0 (black on white). */
+    private fun contrast(a: Color, b: Color): Float {
+        val hi = maxOf(a.luminance(), b.luminance())
+        val lo = minOf(a.luminance(), b.luminance())
+        return (hi + 0.05f) / (lo + 0.05f)
+    }
+
     fun toColorScheme(): ColorScheme {
         val bg = Color(background)
         val base = if (bg.luminance() < 0.5f) darkColorScheme() else lightColorScheme()
         val second = Color(if (accent2 != 0L) accent2 else primary)
         val third = Color(if (accent3 != 0L) accent3 else primary)
-        // Pastel accents (Catppuccin, Rosé Pine…) are light — onSurface text would wash
-        // out on them, so pick black/white by the accent's own luminance instead.
-        val onPrimary =
-            if (Color(primary).luminance() < 0.4f) Color(0xFFF2F4F8) else Color(0xFF14161A)
+        // Pastel accents (Catppuccin, Rosé Pine…) are light — onSurface text would wash out
+        // on them, so the label is black or white by the accent itself. By CONTRAST, not by a
+        // luminance threshold: the default blue sits at 0.23, under the old 0.4 cut, and the
+        // white it got reads 3.4:1 on it (accessibility audit, 2026-09-22). Black reads 4.8.
+        val onPrimary = onAccent(Color(primary))
         return base.copy(
             primary = Color(primary),
             secondary = second,
-            onSecondary = Color(surface),
+            onSecondary = onAccent(second),
             secondaryContainer = second.copy(alpha = 0.30f).compositeOverOpaque(bg),
             onSecondaryContainer = Color(onSurface),
             tertiary = third,
-            onTertiary = Color(surface),
+            onTertiary = onAccent(third),
             tertiaryContainer = third.copy(alpha = 0.30f).compositeOverOpaque(bg),
             onTertiaryContainer = Color(onSurface),
             onPrimary = onPrimary,
@@ -141,7 +160,7 @@ object BuiltInThemes {
             primary = 0xFF1F5FB0,
             onBackground = 0xFF8B98A5,
             onSurface = 0xFF8B98A5,
-            onSurfaceMuted = 0xFF5B6672,
+            onSurfaceMuted = 0xFF7C8894,   // 4.9:1 on the night surface; 5B6672 read 3.3 (audit)
             error = 0xFFE5534B,
         ),
     )
@@ -158,7 +177,7 @@ object BuiltInThemes {
             primary = 0xFF1565C0,
             onBackground = 0xFF10141A,
             onSurface = 0xFF10141A,
-            onSurfaceMuted = 0xFF5B6672,
+            onSurfaceMuted = 0xFF7C8894,   // 4.9:1 on the night surface; 5B6672 read 3.3 (audit)
             error = 0xFFC62828,
         ),
         // Even a light theme dims down at night (a head unit must never flash white).

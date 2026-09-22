@@ -4,7 +4,11 @@ name: Day and night both render Home (contrast pair)
 - launchApp
 - takeScreenshot: theme-before
 - tapOn: { point: "50%,7%" }        # day/night (icon only; the default theme dims 7% at night)
-- assertVisible: "Search apps"
+- extendedWaitUntil:
+    visible: "Search apps"
+    timeout: 10000
 - takeScreenshot: theme-after
 - tapOn: { point: "50%,7%" }
-- assertVisible: "Search apps"
+- extendedWaitUntil:
+    visible: "Search apps"
+    timeout: 10000

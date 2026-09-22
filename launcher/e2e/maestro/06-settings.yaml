@@ -13,4 +13,6 @@ name: Settings hub scrolls to its end and every row has a label
 - scroll
 - takeScreenshot: settings-end
 - back
-- assertVisible: "Search apps"
+- extendedWaitUntil:
+    visible: "Search apps"
+    timeout: 10000

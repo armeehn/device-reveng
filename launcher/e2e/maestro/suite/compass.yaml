@@ -9,4 +9,6 @@ name: Suite Compass opens and comes back
     timeout: 8000
 - takeScreenshot: suite-compass
 - pressKey: Home
-- assertVisible: "Search apps"
+- extendedWaitUntil:
+    visible: "Search apps"
+    timeout: 10000

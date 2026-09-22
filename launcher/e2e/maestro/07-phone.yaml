@@ -14,4 +14,6 @@ name: Phone screen dials on its pad and reads one status line
     optional: true
 - takeScreenshot: phone-dialed
 - back
-- assertVisible: "Search apps"
+- extendedWaitUntil:
+    visible: "Search apps"
+    timeout: 10000

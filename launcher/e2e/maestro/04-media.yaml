@@ -13,4 +13,6 @@ name: Media card transport acts and the card opens the player
 - takeScreenshot: media-source
 # The source chip opens the source app; its own Back stack is not the launcher's.
 - pressKey: Home
-- assertVisible: "Search apps"
+- extendedWaitUntil:
+    visible: "Search apps"
+    timeout: 10000

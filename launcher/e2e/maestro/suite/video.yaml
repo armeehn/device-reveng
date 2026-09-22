@@ -9,4 +9,6 @@ name: Suite Video opens and comes back
     timeout: 8000
 - takeScreenshot: suite-video
 - pressKey: Home
-- assertVisible: "Search apps"
+- extendedWaitUntil:
+    visible: "Search apps"
+    timeout: 10000

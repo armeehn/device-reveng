@@ -36,10 +36,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -549,11 +552,16 @@ private fun BigButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val fill = if (enabled) color else color.copy(alpha = DISABLED_ALPHA)
+    // Disabled dims the whole button, fill and label together (dimming only the fill left the
+    // label at full strength on a washed-out blue), and says so in semantics: a screen reader
+    // announces it, and the contrast checks know not to judge a control nobody can press
+    // (accessibility audit, 2026-09-22).
     Row(
         modifier = modifier
+            .alpha(if (enabled) 1f else DISABLED_ALPHA)
+            .then(if (enabled) Modifier else Modifier.semantics { disabled() })
             .clip(carShape(14.dp))
-            .background(fill)
+            .background(color)
             .then(if (enabled) Modifier.clickable(onClick = withTapFeedback(onClick)) else Modifier)
             .padding(horizontal = 16.dp),
         horizontalArrangement = Arrangement.Center,
