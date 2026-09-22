@@ -8,6 +8,7 @@ import android.os.Bundle
 import android.view.KeyEvent
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts // v2.5
@@ -626,6 +627,19 @@ class MainActivity : ComponentActivity() {
             // what releases the route; nothing is written during composition any more.
             val shownScreen =
                 if (firstRun == true && screen == Screen.Home) Screen.Onboarding else screen
+
+            // The system Back button and the gesture: every screen above Home returns Home, as
+            // the wheel's BACK already did (NavKey.BACK). Without this only Settings caught
+            // Back; from Notifications, Themes, Vehicle or Media it left the launcher
+            // altogether and showed whatever app sat behind it (farm, 2026-09-22). Settings
+            // owns its own stack in SettingsHost and is left to it; Onboarding must not be
+            // escapable by Back at all.
+            BackHandler(enabled = shownScreen != Screen.Home && shownScreen !is Screen.Settings) {
+                if (shownScreen != Screen.Onboarding) {
+                    screen = Screen.Home
+                    launcherFocus.reset()
+                }
+            }
 
             // v2.5: the parked-only verdict. Gated features block on MOVING only — UNKNOWN
             // fails open, see CarEvents.motion.
