@@ -301,7 +301,7 @@ jobs:
           # laid out off-screen and fail for a reason that is not a regression.
           script: |
             .gitea/scripts/assert-geometry.sh
-            cd launcher && ./gradlew --no-daemon connectedDebugAndroidTest
+            .gitea/scripts/run-instrumentation.sh
 
       # Always upload: a red emulator run is exactly when the HTML report matters.
       - name: Upload instrumentation reports
