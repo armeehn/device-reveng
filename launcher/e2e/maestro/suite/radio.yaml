@@ -6,7 +6,7 @@ name: Suite Radio opens with a band switch and says when the tuner is absent
     stopApp: true
 - extendedWaitUntil:
     visible: "FM"
-    timeout: 8000
+    timeout: 20000
 - assertVisible: "AM"
 - takeScreenshot: suite-radio
 - tapOn: "AM"
@@ -15,4 +15,4 @@ name: Suite Radio opens with a band switch and says when the tuner is absent
 - pressKey: Home
 - extendedWaitUntil:
     visible: "Search apps"
-    timeout: 10000
+    timeout: 20000

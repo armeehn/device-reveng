@@ -15,4 +15,4 @@ name: Media card transport acts and the card opens the player
 - pressKey: Home
 - extendedWaitUntil:
     visible: "Search apps"
-    timeout: 10000
+    timeout: 20000

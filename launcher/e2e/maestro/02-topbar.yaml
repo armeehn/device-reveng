@@ -10,60 +10,60 @@ name: Every top-bar screen opens by name and one Back returns Home
 - back
 - extendedWaitUntil:
     visible: "Search apps"
-    timeout: 10000
+    timeout: 20000
 - tapOn: { point: "61%,7%" }        # Notifications
 - assertVisible: "Notifications"
 - takeScreenshot: topbar-notifications
 - back
 - extendedWaitUntil:
     visible: "Search apps"
-    timeout: 10000
+    timeout: 20000
 - tapOn: { point: "66%,7%" }        # Continue watching
 - assertVisible: "Continue watching"
 - takeScreenshot: topbar-continue
 - back
 - extendedWaitUntil:
     visible: "Search apps"
-    timeout: 10000
+    timeout: 20000
 - tapOn: { point: "71%,7%" }        # Themes
 - assertVisible: "Themes"
 - takeScreenshot: topbar-themes
 - back
 - extendedWaitUntil:
     visible: "Search apps"
-    timeout: 10000
+    timeout: 20000
 - tapOn: { point: "76%,7%" }        # Quick controls
 - assertVisible: "Quick controls"
 - takeScreenshot: topbar-quick
 - back
 - extendedWaitUntil:
     visible: "Search apps"
-    timeout: 10000
+    timeout: 20000
 - tapOn: { point: "80%,7%" }        # Vehicle dashboard
 - assertVisible: "Vehicle"
 - takeScreenshot: topbar-vehicle
 - back
 - extendedWaitUntil:
     visible: "Search apps"
-    timeout: 10000
+    timeout: 20000
 - tapOn: { point: "86%,7%" }        # Driver profiles
 - assertVisible: "Driver profiles"
 - takeScreenshot: topbar-profiles
 - back
 - extendedWaitUntil:
     visible: "Search apps"
-    timeout: 10000
+    timeout: 20000
 - tapOn: { point: "91%,7%" }        # Phone
 - assertVisible: "Enter number"
 - takeScreenshot: topbar-phone
 - back
 - extendedWaitUntil:
     visible: "Search apps"
-    timeout: 10000
+    timeout: 20000
 - tapOn: { point: "96%,7%" }        # Settings
 - assertVisible: "Launcher"
 - takeScreenshot: topbar-settings
 - back
 - extendedWaitUntil:
     visible: "Search apps"
-    timeout: 10000
+    timeout: 20000

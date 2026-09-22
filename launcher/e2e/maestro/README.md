@@ -37,3 +37,16 @@ run and belong there until the flow pins its position.
 No Pillow, no numpy: the PNG decoder is inside the tool. `test_shots.sh`
 generates its own fixtures and runs in CI (launcher-ci, `build` job), so the
 differ is covered without an emulator.
+
+## Blessed screenshots
+
+`baseline/` holds one PNG per flow screenshot, taken on farm instance 0 from a green 10/10 run
+of the launcher flows. After a run:
+
+    python3 shots.py check <run-dir> baseline      # 0 = no drift, 1 = something moved
+    python3 shots.py accept <run-dir> baseline     # bless a run as the new truth
+
+The clock is masked, so only the UI is judged. Flows never screenshot mid-scroll: a scroll
+stops a few pixels off every run and the shot drifts ~10% with nothing wrong. Waits
+are 20 s because a loaded farm host makes the emulator slow; a quiet host returns Home in
+well under a second.

@@ -6,7 +6,7 @@ name: Suite Music lists tracks, plays one, and the launcher card follows
     stopApp: true
 - extendedWaitUntil:
     visible: "Music"
-    timeout: 8000
+    timeout: 20000
 - takeScreenshot: suite-music
 - tapOn:
     text: "track"

@@ -6,9 +6,9 @@ name: Suite Compass opens and comes back
     stopApp: true
 - extendedWaitUntil:
     visible: "Compass"
-    timeout: 8000
+    timeout: 20000
 - takeScreenshot: suite-compass
 - pressKey: Home
 - extendedWaitUntil:
     visible: "Search apps"
-    timeout: 10000
+    timeout: 20000
