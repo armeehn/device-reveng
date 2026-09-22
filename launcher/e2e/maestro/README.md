@@ -61,3 +61,18 @@ carries a caret. Check a suite run with those out:
 `run.sh` sets all three animation scales to 0 before a run: a screenshot taken during an entry
 fade differs from the same screen a frame later, which cost the suite shots up to 41% drift
 between runs of one build.
+
+## In CI
+
+`launcher-ci`'s `journeys` job runs these flows on every pull request that touches
+`launcher/**`: the same 1920x720 @240dpi emulator the other two emulator jobs boot, the
+`farm` APK (the flows name the release application id, which the debug build is not), and
+`run.sh` verbatim. `.gitea/scripts/launcher-e2e.sh` is the whole procedure.
+
+Nine of the ten run there. `05-apps` searches the grid for Calculator, which the farm has
+and a bare `aosp_atd` image does not.
+
+The screenshots stay the farm's job. CI's emulator renders host-side and reads every frame
+back black, so a baseline of them would be green whatever the launcher drew. The job probes
+the capture, says so in its log, and runs `shots.py check` against `baseline-ci/` the day an
+image hands real pixels back.

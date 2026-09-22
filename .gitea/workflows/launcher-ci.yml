@@ -9,9 +9,8 @@ name: launcher-ci
 #   3. An APK size budget, because R8 failures are usually silent growth.
 #   4. Compose UI tests on an emulator, pinning the status indicators.
 #   5. A cold-start budget on the same emulator.
-#   6. The Maestro journey flows on the same emulator, with every screenshot
-#      diffed against a blessed baseline, so a broken journey or a moved
-#      pixel fails the pull request that caused it.
+#   6. The Maestro journey flows on the same emulator, so a pull request that
+#      breaks a user journey fails by itself.
 #
 # All three emulator jobs boot the head unit's geometry (1920x720 @240dpi
 # landscape), not a phone profile — see .gitea/scripts/headunit-avd.sh.
@@ -327,9 +326,13 @@ jobs:
           if-no-files-found: ignore
 
   # v3.2 — the launcher's user journeys, as Maestro flows, on the same 1920x720 @240dpi
-  # emulator. Two things go red here that nothing else catches: a journey that stops
-  # working (a screen that no longer opens, a Back that leaves the app) and a screen that
-  # moved (shots.py diffs every takeScreenshot against a blessed baseline).
+  # emulator. A journey that stops working — a screen that no longer opens, a Back that
+  # leaves the app — goes red here and nowhere else.
+  #
+  # The screenshot half of the story stays on the farm. This image captures a fully black
+  # frame (runs 5191 and 5202, with Vulkan on and off), so shots.py would be diffing
+  # nothing against nothing; launcher-e2e.sh probes the capture, says so in the log, and
+  # runs the diff the day an image hands real pixels back.
   #
   # The whole workflow is already gated on `launcher/**`, `.gitea/workflows/launcher-ci.yml`
   # and `.gitea/scripts/**` (see `on:` above), so an unrelated PR never boots this emulator.
@@ -387,12 +390,7 @@ jobs:
           arch: x86_64
           avd-name: ${{ env.AVD_NAME }}
           force-avd-creation: true
-          # -feature -Vulkan: run 5191 answered every tap and composed every screen, and
-          # still read every framebuffer back as 4,147,200 zero bytes. Vulkan through
-          # gfxstream keeps the colour buffers on the host, where screencap cannot see
-          # them; the GLES path hands them to the guest. launcher-e2e.sh probes the
-          # capture before the flows, so the log says which one this run got.
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -feature -Vulkan
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           disable-animations: true
           pre-emulator-launch-script: .gitea/scripts/headunit-avd.sh
           # The flows tap the top-bar icons by panel percentage, so a fall back to a phone
@@ -425,7 +423,7 @@ jobs:
           arch: x86_64
           avd-name: ${{ env.AVD_NAME }}
           force-avd-creation: true
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -feature -Vulkan
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           disable-animations: true
           pre-emulator-launch-script: .gitea/scripts/headunit-avd.sh
           script: |
