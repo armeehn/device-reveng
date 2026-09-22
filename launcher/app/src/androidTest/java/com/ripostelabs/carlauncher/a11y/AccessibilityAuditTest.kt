@@ -59,6 +59,7 @@ class AccessibilityAuditTest {
 
     @Test
     fun everyTopBarScreenPassesTheAccessibilityPreset() {
+        waitForHome()
         val report = StringBuilder()
         var errors = 0
         for ((name, description) in screens) {
@@ -106,6 +107,17 @@ class AccessibilityAuditTest {
         return results.filter { it.type == AccessibilityCheckResultType.ERROR || it.type == AccessibilityCheckResultType.WARNING }
     }
 
+    /**
+     * Home composes late on a cold CI emulator (services, first-run gate): a node query before
+     * setContent throws "No compose hierarchies found", so the audit waits for the search field.
+     */
+    private fun waitForHome() {
+        rule.waitUntil(HOME_WAIT_MS) {
+            runCatching { rule.onAllNodesWithText("Search apps").fetchSemanticsNodes().isNotEmpty() }
+                .getOrDefault(false)
+        }
+    }
+
     /** Back until Home shows its search field; one screen needs two (a finding of its own). */
     private fun backToHome() {
         repeat(3) {
@@ -117,6 +129,7 @@ class AccessibilityAuditTest {
 
     private companion object {
         const val TAG = "A11yAudit"
+        const val HOME_WAIT_MS = 60_000L
         const val ROOT_TRIES = 20
         const val ROOT_WAIT_MS = 250L
     }
