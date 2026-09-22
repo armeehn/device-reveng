@@ -7,9 +7,11 @@
 #
 # Procedure, and why each step is there:
 #   1. Install the debug APK (release is arm64-only, so it will not run on the emulator).
-#   2. `pm compile -m speed-profile` — applies the baseline profile the same way a real
-#      second launch would. Measuring the very first, still-interpreted launch would
-#      report the one number the profile is there to avoid.
+#   2. `pm compile -m speed-profile` — a no-op on this APK, kept so the log shows it. The
+#      debug build is debuggable, so AGP leaves the baseline profile out of it and ART
+#      never AOT-compiles it: `dumpsys package` reports status=verify after any
+#      `pm compile`, even `-m speed -f`. What is timed below is the interpreted launcher,
+#      slower than the release build the car runs.
 #   3. `am start -W` COLD_START runs, force-stopped between each, and take the MEDIAN
 #      TotalTime. A shared CI runner produces the occasional 2x outlier; a median of five
 #      absorbs one without hiding a real regression.
@@ -57,11 +59,14 @@ if echo "$warm" | grep -qi 'error'; then
 fi
 sleep 5
 adb shell pm compile -m speed-profile "$PACKAGE"
+# What ART did with it (step 2): `verify` means the runs below are interpreted.
+adb shell dumpsys package "$PACKAGE" | grep -m1 -o 'status=[a-z-]*' || true
 
 times=()
 for i in $(seq 1 "$RUNS"); do
   adb shell am force-stop "$PACKAGE"
   sleep 2
+  adb logcat -c || true
   out="$(adb shell am start -W -n "$PACKAGE/$ACTIVITY")"
   total="$(echo "$out" | awk -F': *' '/^TotalTime:/ {print $2}')"
   if [ -z "$total" ]; then
@@ -69,7 +74,9 @@ for i in $(seq 1 "$RUNS"); do
     echo "$out" >&2
     exit 1
   fi
-  echo "run $i: ${total} ms"
+  # The launcher's own share: MainActivity logs its onCreate time under the `Startup` tag.
+  oncreate="$(adb logcat -d -s Startup:I | grep -o 'onCreate [0-9]* ms' | tail -n1 || true)"
+  echo "run $i: ${total} ms${oncreate:+ ($oncreate)}"
   times+=("$total")
 done
 
