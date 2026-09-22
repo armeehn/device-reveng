@@ -251,7 +251,10 @@ class AccessibilityAuditTest {
         )
 
         private val counts = LinkedHashMap<Finding, Int>()
-        private val firstBounds = HashMap<Finding, String>()
+        // Class and bounds of the first element that raised each finding: the check's message
+        // says what is wrong, never which control, and on a settings screen of thirty rows
+        // that is the difference between a fix and a hunt.
+        private val firstElement = HashMap<Finding, String>()
         private var total = 0
 
         fun add(screen: String, results: List<AccessibilityHierarchyCheckResult>) {
@@ -263,7 +266,9 @@ class AccessibilityAuditTest {
                     message = result.getMessage(java.util.Locale.ENGLISH).toString(),
                 )
                 counts[finding] = (counts[finding] ?: 0) + 1
-                firstBounds.getOrPut(finding) { result.element?.boundsInScreen.toString() }
+                firstElement.getOrPut(finding) {
+                    "${result.element?.className} @${result.element?.boundsInScreen}"
+                }
                 total++
             }
         }
@@ -277,7 +282,7 @@ class AccessibilityAuditTest {
             for ((finding, count) in counts) {
                 val repeats = if (count > 1) " x$count" else ""
                 val line = "${finding.screen}: ${finding.type} ${finding.check} ${finding.message}" +
-                    " @${firstBounds[finding]}$repeats"
+                    " ${firstElement[finding]}$repeats"
                 Log.i(TAG, line)
                 report.append(line).append('\n')
             }
