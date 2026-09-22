@@ -20,6 +20,8 @@ a() { "$ADB" -s "$UNIT" "$@"; }
 
 a root >/dev/null 2>&1 || true
 sleep 3
+# Over TCP (car-flash.sh via the unit's AP) `adb root` restarts adbd and the link drops: dial again.
+case "$UNIT" in *:*) adb connect "$UNIT" >/dev/null 2>&1 ;; esac
 a wait-for-device
 [ "$(a shell id -u | tr -d '\r')" = 0 ] || { echo "[verify] adb is not root"; exit 1; }
 
