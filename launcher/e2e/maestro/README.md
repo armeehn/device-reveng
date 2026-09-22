@@ -78,3 +78,12 @@ The screenshots stay the farm's job. CI's emulator renders host-side and reads e
 back black, so a baseline of them would be green whatever the launcher drew. The job probes
 the capture, says so in its log, and runs `shots.py check` against `baseline-ci/` the day an
 image hands real pixels back.
+
+## Measuring a touch target
+
+A uiautomator dump does NOT prove a target's size. Compose expands hit testing to 48 dp
+wherever a neighbour leaves room, so the dump reports the expanded box: the Quick controls
+tune icon read 72x72 px both before and after it was actually fixed. Read the GAPS instead,
+or the laid-out size in the source. Before the fix that icon sat in a 42 px box with 15 px of
+slack either side; after it, every strip icon is a real 72 px box with uniform 30 px gaps
+(device-reveng #253).
