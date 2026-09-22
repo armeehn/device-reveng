@@ -2,7 +2,8 @@ name: launcher-ci
 
 # Compile and test the head-unit launcher on every push/PR that touches it.
 # Five signals, in order of how fast they fail:
-#   1. JVM unit tests over the pure logic (no device, no emulator).
+#   1. JVM unit tests over the pure logic, plus the Maestro screenshot
+#      differ's own test (no device, no emulator).
 #   2. The release assemble with R8 + resource shrinking — exactly what
 #      gets side-loaded, so a keep-rule regression shows up here.
 #   3. An APK size budget, because R8 failures are usually silent growth.
@@ -82,6 +83,12 @@ jobs:
           name: carlauncher-test-reports
           path: launcher/*/build/reports/tests/
           if-no-files-found: ignore
+
+      # Screenshot-baseline diffing for the Maestro flows (launcher/e2e/maestro).
+      # Host-side: the test writes its own PNGs, so it pins the decoder and the
+      # OK/DRIFT/NEW/MISSING verdicts without an emulator or a stored run.
+      - name: Screenshot differ
+        run: e2e/maestro/test_shots.sh
 
       # The only lint run anywhere: assembleRelease deliberately skips
       # lint-vital (app/build.gradle.kts). Errors fail the job, warnings do
