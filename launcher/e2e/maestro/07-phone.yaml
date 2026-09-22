@@ -1,0 +1,22 @@
+appId: com.ripostelabs.carlauncher
+name: Phone screen dials on its pad and reads one status line
+---
+- launchApp
+- extendedWaitUntil:
+    visible: "Search apps"
+    timeout: 20000
+- tapOn: { point: "91%,7%" }        # Phone (by position: the grid has a "Phone" app too)
+- assertVisible: "Enter number"
+- assertNotVisible: "No phone . No phone"     # regex: the dot stands for the middle dot
+- takeScreenshot: phone
+- tapOn:
+    text: "1"
+    optional: true
+- tapOn:
+    text: "2"
+    optional: true
+- takeScreenshot: phone-dialed
+- back
+- extendedWaitUntil:
+    visible: "Search apps"
+    timeout: 20000

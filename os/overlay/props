@@ -14,6 +14,8 @@ ro.riposte.os.bt_carkit=${RIPOSTE_BT_CARKIT}
 # (packages/services/Car car_product/properties/bluetooth.prop). init keeps the LAST value
 # of a duplicated non-ro key (init/property_service.cpp LoadProperties), so this overrides
 # the GSI's phone-side lines above.
+# What a phone sees while pairing; the GSI's own default is its build name.
+@carkit bluetooth.device.default_name=RAV4
 @carkit bluetooth.profile.a2dp.sink.enabled=true
 @carkit bluetooth.profile.hfp.hf.enabled=true
 @carkit bluetooth.profile.avrcp.controller.enabled=true
@@ -38,8 +40,11 @@ persist.sys.timezone=America/Vancouver
 # priv-app cannot open. riposte-mcubridge.sh (root, from init) puts /dev/ttyHS1 behind a
 # loopback socket and McuOwner rides that carrier (McuLinkSpec grammar).
 @gsi riposte.mcu.link=tcp:127.0.0.1:5588
-# Bench diagnostics (build.sh --bench): adb on Wi-Fi, the 4PIN port kept in peripheral mode
-# after boot (riposte-usbadb.sh), logcat persisted under /data/misc/logd across reboots.
+# Every car-owner build: adb on Wi-Fi (the car's own network, for the driveway) and logcat
+# persisted under /data/misc/logd across reboots, next to the diagnostics recorder's files.
+@gsi persist.adb.tcp.port=5555
+@gsi persist.logd.logpersistd=logcatd
+# Bench only (build.sh --bench): the 4PIN port kept in peripheral mode after boot
+# (riposte-usbadb.sh). In the car that port is the host for the CANable, so never on a car
+# build (the 2026-09-21 car install ran a bench build: no CANable, no wheel keys).
 @bench ro.riposte.os.bench=1
-@bench persist.adb.tcp.port=5555
-@bench persist.logd.logpersistd=logcatd

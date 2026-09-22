@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- With the phone linked as an AVRCP target, the stack answers every "playing" it reports
+     with an AVRCP PAUSE when the A2DP sink holds no audio focus (AvrcpControllerStateMachine,
+     MESSAGE_PROCESS_PLAY_STATUS_CHANGED). Wireless CarPlay plays over Wi-Fi, never over A2DP,
+     so the sink never holds focus and Spotify pauses the instant it starts (bench,
+     2026-09-21). With this flag the stack asks for focus instead of pausing the source. -->
+<resources>
+    <bool name="a2dp_sink_automatically_request_audio_focus">true</bool>
+</resources>

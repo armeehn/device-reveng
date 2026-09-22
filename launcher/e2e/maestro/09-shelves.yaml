@@ -1,0 +1,45 @@
+appId: com.ripostelabs.carlauncher
+name: The shelves and cockpit screens carry content or say why not
+# Notifications, Continue watching, Vehicle and Driver profiles each open from the top bar.
+# A screen with neither content nor an explanation is the defect these assertions catch.
+---
+- launchApp
+- extendedWaitUntil:
+    visible: "Search apps"
+    timeout: 20000
+- tapOn: { point: "59%,7%" }        # Notifications
+- extendedWaitUntil:
+    visible: "Notifications"
+    timeout: 20000
+- takeScreenshot: shelf-notifications
+- back
+- extendedWaitUntil:
+    visible: "Search apps"
+    timeout: 20000
+- tapOn: { point: "64%,7%" }        # Continue watching
+- extendedWaitUntil:
+    visible: "Continue watching"
+    timeout: 20000
+- takeScreenshot: shelf-continue
+- back
+- extendedWaitUntil:
+    visible: "Search apps"
+    timeout: 20000
+- tapOn: { point: "80%,7%" }        # Vehicle dashboard
+- extendedWaitUntil:
+    visible: "Vehicle"
+    timeout: 20000
+- takeScreenshot: cockpit-vehicle
+- back
+- extendedWaitUntil:
+    visible: "Search apps"
+    timeout: 20000
+- tapOn: { point: "86%,7%" }        # Driver profiles
+- extendedWaitUntil:
+    visible: "Driver profiles"
+    timeout: 20000
+- takeScreenshot: cockpit-profiles
+- back
+- extendedWaitUntil:
+    visible: "Search apps"
+    timeout: 20000

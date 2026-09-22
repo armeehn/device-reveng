@@ -208,10 +208,10 @@ private fun ProfileRow(
             contentDescription = "Rename ${profile.name}",
             tint = fg,
             modifier = Modifier
-                .size(44.dp)
+                .size(ROW_ACTION_TARGET_DP.dp)
                 .clip(carShape(10.dp))
                 .clickable(onClick = withTapFeedback { renaming = true })
-                .padding(8.dp),
+                .padding(10.dp),
         )
         Spacer(Modifier.width(4.dp))
         Icon(
@@ -219,10 +219,10 @@ private fun ProfileRow(
             contentDescription = "Delete ${profile.name}",
             tint = fg,
             modifier = Modifier
-                .size(44.dp)
+                .size(ROW_ACTION_TARGET_DP.dp)
                 .clip(carShape(10.dp))
                 .clickable(onClick = withTapFeedback(onDelete))
-                .padding(8.dp),
+                .padding(10.dp),
         )
     }
 }
@@ -244,3 +244,6 @@ private fun EmptyProfiles() {
 }
 
 private const val ROW_HEIGHT_DP = 88
+
+/** Rename and delete, one thumb-width apart in a moving car: the 48 dp floor, not 44. */
+private const val ROW_ACTION_TARGET_DP = 48

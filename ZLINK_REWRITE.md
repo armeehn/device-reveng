@@ -447,3 +447,48 @@ Extra sysprops it reads: `sys.gen.zlink.wifiap`, `persist.sys.zlink.{mode.regist
 - The AT dialogue with the BT module (`AT#SH/DR/SG/ZA`, §3.1) — daemon strings only.
 Next step that answers the first two: `ss -ltnp`, `ls -l /dev/i2c-* /dev/zjinnova_iap2` and
 `i2cdetect -y 0` on the live unit; the kernel tree for the gadget function.
+
+---
+
+## 9. Answered on the bench: the daemon's own protocol (2026-09-20)
+
+_The daemon runs on Riposte OS 0.2 without its app. Everything below came from running it
+against a listener, sweeping message ids with empty frames (it names every id it does not
+handle), and reading its protobuf-c descriptors, which carry field names and numbers in data.
+The app that answers it is `com.ripostelabs.projection` in rav4-apps (`zlink/` package)._
+
+**Transport** `[confirmed]`. The daemon is the client. It dials four servers on 127.0.0.1:
+1777 control, 1666 audio, 1888 video, 1999 Bluetooth relay. It listens on 1555 (metadata) and
+7722 (dashboard). Every frame on every channel is `ff ff ff 10 | u32 length | u32 id |
+payload`, big-endian; control payloads are protobuf-lite whose field 1 repeats the id.
+
+**Control ids** `[confirmed]`. `0x101` SessionState (state 2, link type 3: states 1 WAIT_INIT,
+2 WAITING_LINK, 3 SESSION_STARTING, 4 session, 6 stopped), `0x102` InitInfo (31 fields as
+`zj.control.InitInfo`; field 7 is a bit set: 1 wired CarPlay, 2 wireless CarPlay, 4 wired AA,
+8 wireless AA, 16 and 32 HiCar; changing it restarts the daemon), `0x111` multi-touch, `0x112`
+touch (x, y, is_down), `0x113` key (Android key code, is_down), `0x114` MFi request → `0x115`
+MFi info (is_fake, uuid; `is_fake=0` on this unit). `0x116` is a handshake request (empty; the
+session does not wait for an answer) and `0x118` a heartbeat every 2 s (not to be echoed).
+`0x503` is AP state, `0x607` the AP request every 5 s → `0x608` AP info (ssid, passphrase,
+band, interface). The rest: `0x705`/`0x706` night, `0x710` call state, `0x712` stop, `0x801`
+device time from the phone, `0xa02` daemon build hash, `0xb02` video resize.
+
+**Bluetooth relay** `[confirmed]`. `0x602` request on connect, `0x603` BT_INFO (local MAC,
+the matched service UUID as 32 uppercase hex digits, paired, pair mode, pair code), `0x604`
+raw RFCOMM bytes both ways, `0x605` release (the session is on Wi-Fi), `0x606` closed. An
+empty body on this channel closes it. BT_INFO naming `00000000DECAFADEDECADEAFDECACAFE` is
+what moves the session to wireless CarPlay; the daemon then does the whole iAP2 exchange
+(identification, `RequestAuthenticationCertificate`, challenge, Wi-Fi configuration) through
+the relayed bytes.
+
+**Media** `[confirmed]`. Video frames on 1888 are id `0x302`: a 20-byte header (width,
+height, available width, available height, zero) then one Annex-B H.264 access unit, SPS and
+PPS first. Audio frames on 1666 are id `0x202`: a 24-byte header (sample rate, channels,
+bits, zero, audio type, zero) then PCM, 3840 bytes at 44.1 kHz stereo.
+
+**What the daemon needs from the unit** `[confirmed]`. Its mDNS responder at
+`/system/bin/z-mdnsd` (a fixed path list, never `PATH`). The AP interface name and channel
+(`sys.wifiap.channel`, else the hostapd config file). A 5 GHz access point, since the phone
+refuses 2.4 GHz. For the wired path, the iAP2 gadget: `mkdir functions/iap.gs0` creates
+`/dev/zjinnova_iap2` on the stock kernel. The phone's session over that stack rendered on
+the panel on 2026-09-20.

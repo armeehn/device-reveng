@@ -86,8 +86,9 @@ fun QuickControlsButton(
         contentDescription = "Quick controls",
         tint = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = modifier
-            .size(28.dp)
-            .clickable(onClick = press),
+            .size(STRIP_TARGET_DP.dp)
+            .clickable(onClick = press)
+            .padding(STRIP_ICON_PAD_DP.dp),
     )
     if (open) {
         QuickControlsDialog(
@@ -153,35 +154,40 @@ fun QuickControlsPanel(
     val context = LocalContext.current
     val settings by settingsStore.settings.collectAsStateSafe(initial = LauncherSettings())
 
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(18.dp)) {
-        Text(
-            text = "Quick controls",
-            style = MaterialTheme.typography.titleLarge,
-            color = MaterialTheme.colorScheme.onSurface,
-            fontWeight = FontWeight.SemiBold,
-        )
-
-        VolumeControl(carService = carService)
-        BrightnessControl(carService = carService)
-        DayNightControl(
-            mode = settings.dayNightMode,
-            onSelect = settingsStore::setDayNightMode,
-        )
-
-        // ---- Wi-Fi / Bluetooth system-panel shortcuts (Intents) -------------
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            ShortcutChip(
-                icon = Icons.Filled.Wifi,
-                label = "Wi-Fi",
-                modifier = Modifier.weight(1f),
-                onClick = { launchSettings(context, Settings.ACTION_WIFI_SETTINGS) },
+    // Two columns: the panel is 300 dp tall (1920x720 at 240 dpi) and one column of five rows
+    // pushed the Wi-Fi / Bluetooth row off the bottom of the shade.
+    Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Text(
+                text = "Quick controls",
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.SemiBold,
             )
-            ShortcutChip(
-                icon = Icons.Filled.Bluetooth,
-                label = "Bluetooth",
-                modifier = Modifier.weight(1f),
-                onClick = { launchSettings(context, Settings.ACTION_BLUETOOTH_SETTINGS) },
+            VolumeControl(carService = carService)
+            BrightnessControl(carService = carService)
+        }
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            DayNightControl(
+                mode = settings.dayNightMode,
+                onSelect = settingsStore::setDayNightMode,
             )
+
+            // ---- Wi-Fi / Bluetooth system-panel shortcuts (Intents) -------------
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                ShortcutChip(
+                    icon = Icons.Filled.Wifi,
+                    label = "Wi-Fi",
+                    modifier = Modifier.weight(1f),
+                    onClick = { launchSettings(context, Settings.ACTION_WIFI_SETTINGS) },
+                )
+                ShortcutChip(
+                    icon = Icons.Filled.Bluetooth,
+                    label = "Bluetooth",
+                    modifier = Modifier.weight(1f),
+                    onClick = { launchSettings(context, Settings.ACTION_BLUETOOTH_SETTINGS) },
+                )
+            }
         }
     }
 }
@@ -253,12 +259,15 @@ private fun VolumeControl(carService: CarService) {
 
     ControlRow(
         icon = if (muted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
+        // "(unavailable)" twice in one dialog is two identical labels to a screen reader:
+        // each row says which control it is (accessibility audit, 2026-09-22).
         title = when {
-            available == false -> "Volume (unavailable)"
-            available == true && level == null -> "Volume (unavailable)"
+            available == false -> "Volume unavailable"
+            available == true && level == null -> "Volume unavailable"
             else -> "Volume"
         },
         onIconClick = if (available == true) toggleMute else null,
+        iconAction = if (muted) "Unmute" else "Mute",
     ) {
         Slider(
             value = level ?: 0f,
@@ -377,19 +386,22 @@ private fun ControlRow(
     icon: ImageVector,
     title: String,
     onIconClick: (() -> Unit)? = null,
+    // What tapping the icon does, when it does anything. The icon used to repeat the row's
+    // own title, so a screen reader read every row twice (accessibility audit, 2026-09-22).
+    iconAction: String? = null,
     content: @Composable () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(
                 imageVector = icon,
-                contentDescription = title,
+                contentDescription = if (onIconClick != null) iconAction else null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier
-                    .size(24.dp)
-                    .then(if (onIconClick != null) Modifier.clickable(onClick = onIconClick) else Modifier),
+                    .size(ROW_TARGET_DP.dp)
+                    .then(if (onIconClick != null) Modifier.clickable(onClick = onIconClick) else Modifier)
+                    .padding(ROW_ICON_PAD_DP.dp),
             )
-            Spacer(Modifier.width(12.dp))
             AutoSizeText(
                 text = title,
                 style = MaterialTheme.typography.titleMedium,
@@ -472,3 +484,20 @@ private fun launchSettings(context: Context, action: String) {
         context.startActivity(Intent(action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 }
+
+/**
+ * Tap-target geometry. §1.2's 48 dp floor applies to the glyph's *box*, not to the glyph: each
+ * icon below is drawn at the size it always was, inside a 48 dp clickable box whose inner
+ * padding makes up the difference, so nothing on screen grew.
+ *
+ *   status strip   48 - 2*10 = 28 dp glyph, identical to StatusBar's sibling icons
+ *   dialog rows    48 - 2*12 = 24 dp glyph; the box's 12 dp right gutter replaces the Spacer
+ *                  that used to sit between the icon and the row title
+ *
+ * The row box is sized whether or not the icon is tappable, so a tappable row and an inert one
+ * keep the same icon column and the panel stays aligned.
+ */
+private const val STRIP_TARGET_DP = 48
+private const val STRIP_ICON_PAD_DP = 10
+private const val ROW_TARGET_DP = 48
+private const val ROW_ICON_PAD_DP = 12

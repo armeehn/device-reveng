@@ -425,6 +425,17 @@ class CarEvents(private val appContext: Context) {
     /** true while ACC (ignition accessory) is on. */
     val accOn: StateFlow<Boolean> = _accOn.asStateFlow()
 
+    private val _accSeen = MutableStateFlow(false)
+    /**
+     * true once an ACC state has actually arrived, from either the vendor broadcast or the MCU.
+     *
+     * [accOn] cannot answer this: it defaults to `true` so a silent unit stays fully usable, and
+     * that default is indistinguishable from a real "ACC is on". Behaviour wants the fail-open
+     * default; a readout wants to know it is a default. Latched like [illuminationSeen] — one
+     * event proves the signal exists for the rest of the session.
+     */
+    val accSeen: StateFlow<Boolean> = _accSeen.asStateFlow()
+
     private val _dayNight = MutableStateFlow(DayNight.DAY)
     /** Latest day/night illumination state for theming. */
     val dayNight: StateFlow<DayNight> = _dayNight.asStateFlow()
@@ -796,6 +807,7 @@ class CarEvents(private val appContext: Context) {
                 ACTION_ACC_OPEN_CLOSE_EVT -> {
                     val on = intent.getIntExtra(EXTRA_ACC_STATUS, ACC_STATUS_ON) == ACC_STATUS_ON
                     _accOn.value = on
+                    _accSeen.value = true
                     listeners.forEach { it.onAcc(on) }
                 }
 
@@ -1079,6 +1091,7 @@ class CarEvents(private val appContext: Context) {
     fun ownerListener(vehicle: VehicleState?, radio: RadioStateHolder? = null): McuOwner.Listener = object : McuOwner.Listener {
         override fun onSysEvent(event: McuOwnerProtocol.SysEvent) {
             updateReverse(event.reverse)
+            _accSeen.value = true
             if (_accOn.value != event.accLine) {
                 _accOn.value = event.accLine
                 listeners.forEach { it.onAcc(event.accLine) }

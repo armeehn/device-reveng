@@ -10,10 +10,13 @@
 #   vcNNN   a launcher versionCode listed at launcher.hq (the release job publishes one per
 #           push to main); its .sha256 is checked before the build.
 #   --wipe  erase userdata on the flash (needed when crossing 0.1 <-> 0.2, see BENCH.md).
-# Env: BENCH_HOST (default sasha@100.107.107.95), BENCH_SERIAL (adb serial, default da40e9ac),
+# Env: ALLOW_BRANCH=1 to bench a branch checkout (default: main only),
+#      BENCH_HOST (default sasha@100.107.107.95), BENCH_SERIAL (adb serial, default da40e9ac),
 #      SHARE_HOST (how the laptop reaches this share, default sasha@x.hq.ripostelabs.xyz),
 #      SHARE (default /z1-pool/share/carlauncher/os), APPS (default $SHARE/apps-bench),
-#      LAUNCHER_URL (default https://launcher.hq.ripostelabs.xyz), AAPT2 (build.sh finds one).
+#      TOOLS (the debug toolbelt cache, default $SHARE/tools/unit; tools/fetch.sh fills it),
+#      LAUNCHER_URL (default https://launcher.hq.ripostelabs.xyz), AAPT2 (build.sh finds one),
+#      UNIT_ADB (the unit on Wi-Fi from here, default 10.0.10.14:5555; the data-side tools go there).
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 
@@ -24,7 +27,9 @@ BENCH_SERIAL=${BENCH_SERIAL:-da40e9ac}
 SHARE_HOST=${SHARE_HOST:-sasha@x.hq.ripostelabs.xyz}
 SHARE=${SHARE:-/z1-pool/share/carlauncher/os}
 APPS=${APPS:-$SHARE/apps-bench}
+TOOLS=${TOOLS:-$SHARE/tools/unit}
 LAUNCHER_URL=${LAUNCHER_URL:-https://launcher.hq.ripostelabs.xyz}
+UNIT_ADB=${UNIT_ADB:-10.0.10.14:5555}
 OUT=$SHARE/0.2-bench
 GSI=$SHARE/gsi/system-td-arm64-ab-vanilla-ci20240226.img.xz   # the last Android 14 GSI that boots on kernel 4.14
 readonly FASTBOOTD_USB_ID=18d1:4ee0
@@ -34,7 +39,9 @@ die() { echo "[bench] ERROR: $*" >&2; exit 1; }
 
 [ "$(id -u)" = 0 ] || die "run as root (build.sh loop-mounts)"
 [ -d "$APPS/suite" ] || die "$APPS/suite missing: the suite APKs and bootanimation.zip live there"
-[ "$(cat "$HERE/../.git/HEAD" 2>/dev/null)" = "ref: refs/heads/main" ] || die "checkout is not on main"
+# A PR that touches the image gets its bench run before the merge: ALLOW_BRANCH=1 lifts the
+# guard, and RESULT.md then names the branch, not main.
+[ "${ALLOW_BRANCH:-0}" = 1 ] || [ "$(cat "$HERE/../.git/HEAD" 2>/dev/null)" = "ref: refs/heads/main" ] || die "checkout is not on main (ALLOW_BRANCH=1 to bench a branch)"
 
 # 1. the release launcher, checksum verified against launcher.hq
 curl -sf -o "$APPS/carlauncher.apk" "$LAUNCHER_URL/carlauncher-0.7-$VC.apk" || die "no $VC at $LAUNCHER_URL"
@@ -48,8 +55,8 @@ log "launcher $VC ok"
 mkdir -p "$OUT"
 find "$OUT" -mindepth 1 -maxdepth 1 ! -name RESULT.md -exec rm -rf {} +
 "$HERE/build.sh" --base "$SHARE/base-ota" --boot "$SHARE/base-ota/boot-magisk.img" --apps "$APPS" \
-  --out "$OUT" --profile gsi --bench --system "$GSI"
-grep -E "^version=|^launcher=|^bench=" "$OUT/MANIFEST"
+  --out "$OUT" --profile gsi --bench --system "$GSI" --tools "$TOOLS"
+grep -E "^version=|^launcher=|^bench=|^tools=" "$OUT/MANIFEST"
 chown -R sasha:smbshare "$OUT" 2>/dev/null || true
 
 # 3. ship to the bench laptop (the images, and the two scripts the laptop runs), then flash
@@ -79,3 +86,8 @@ ssh -o BatchMode=yes "$BENCH_HOST" "
   UNIT=$BENCH_SERIAL bash ~/rav4-headunit/os/bench-verify.sh ~/rav4-headunit/os/0.2-bench
 " || die "verify failed: the flash did not write what was sent, reflash"
 log "verified $VC on the unit"
+
+# 5. the toolbelt's data side (frida-server): too big for /system, so it lives in /data, which a
+# no-wipe flash keeps and --wipe empties. Pushed over the unit's Wi-Fi adb once it is up.
+"$HERE/tools/install-data.sh" "$TOOLS" "$UNIT_ADB" \
+  || log "data tools not pushed: run os/tools/install-data.sh $TOOLS $UNIT_ADB once the unit is on Wi-Fi"

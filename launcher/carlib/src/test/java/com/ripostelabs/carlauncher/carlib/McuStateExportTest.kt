@@ -8,6 +8,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.BufferedReader
 import java.io.InputStreamReader
+import java.net.InetAddress
+import java.net.ServerSocket
 import java.net.Socket
 
 /** Helm reads these lines over `adb forward`; the shape here is the contract. */
@@ -69,5 +71,20 @@ class McuStateExportTest {
         assertEquals("VehicleInfo", line.getString("type"))
         assertEquals(800, line.getInt("rpm"))
         assertTrue(line.isNull("coolantC"))
+    }
+
+    @Test
+    fun takenPortLeavesTheLauncherStanding() {
+        // MainActivity.onCreate calls start(); an unguarded bind took the whole launcher down
+        // when a second build held the port (farm, 2026-09-22).
+        val holder = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))
+        try {
+            val blocked = McuStateExport(port = holder.localPort, now = { 1_000L })
+            blocked.start()
+            blocked.onSysEvent(sysEvent(acc = true))
+            blocked.stop()
+        } finally {
+            holder.close()
+        }
     }
 }

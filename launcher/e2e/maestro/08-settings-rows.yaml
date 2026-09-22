@@ -1,0 +1,340 @@
+appId: com.ripostelabs.carlauncher
+name: Every Settings row opens a screen that names itself
+# One row, one screen, one Back. A row that opens nothing, or a screen that does not carry the
+# row's name, is a dead route or a naming drift. The hub returns to the top after each visit,
+# so every row is scrolled to again; a parenthetical qualifier on a row ("All settings
+# (advanced)" -> "All settings") is not part of the name the screen must carry.
+---
+- launchApp
+- extendedWaitUntil:
+    visible: "Search apps"
+    timeout: 20000
+- tapOn: { point: "96%,7%" }        # Settings
+- extendedWaitUntil:
+    visible: "Launcher"
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      text: "Launcher"
+    direction: DOWN
+    timeout: 30000
+- tapOn: "Launcher"
+- extendedWaitUntil:
+    visible: "Launcher"
+    timeout: 20000
+- back
+- extendedWaitUntil:
+    visible: "App directory"
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      text: "App directory"
+    direction: DOWN
+    timeout: 30000
+- tapOn: "App directory"
+- extendedWaitUntil:
+    visible: "App directory"
+    timeout: 20000
+- back
+- extendedWaitUntil:
+    visible: "App directory"
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      text: "Display & Illumination"
+    direction: DOWN
+    timeout: 30000
+- tapOn: "Display & Illumination"
+- extendedWaitUntil:
+    visible: "Display & Illumination"
+    timeout: 20000
+- back
+- extendedWaitUntil:
+    visible: "App directory"
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      text: "Reverse camera"
+    direction: DOWN
+    timeout: 30000
+- tapOn: "Reverse camera"
+- extendedWaitUntil:
+    visible: "Reverse camera"
+    timeout: 20000
+- back
+- extendedWaitUntil:
+    visible: "App directory"
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      text: "Parking radar"
+    direction: DOWN
+    timeout: 30000
+- tapOn: "Parking radar"
+- extendedWaitUntil:
+    visible: "Parking radar"
+    timeout: 20000
+- back
+- extendedWaitUntil:
+    visible: "App directory"
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      text: "Audio & EQ"
+    direction: DOWN
+    timeout: 30000
+- tapOn: "Audio & EQ"
+- extendedWaitUntil:
+    visible: "Audio & EQ"
+    timeout: 20000
+- back
+- extendedWaitUntil:
+    visible: "App directory"
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      text: "Climate"
+    direction: DOWN
+    timeout: 30000
+- tapOn: "Climate"
+- extendedWaitUntil:
+    visible: "Climate"
+    timeout: 20000
+- back
+- extendedWaitUntil:
+    visible: "App directory"
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      text: "Radio"
+    direction: DOWN
+    timeout: 30000
+- tapOn: "Radio"
+- extendedWaitUntil:
+    visible: "Radio"
+    timeout: 20000
+- back
+- extendedWaitUntil:
+    visible: "App directory"
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      text: "Steering wheel"
+    direction: DOWN
+    timeout: 30000
+- tapOn: "Steering wheel"
+- extendedWaitUntil:
+    visible: "Steering wheel"
+    timeout: 20000
+- back
+- extendedWaitUntil:
+    visible: "App directory"
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      text: "Wheel gestures"
+    direction: DOWN
+    timeout: 30000
+- tapOn: "Wheel gestures"
+- extendedWaitUntil:
+    visible: "Wheel gestures"
+    timeout: 20000
+- back
+- extendedWaitUntil:
+    visible: "App directory"
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      text: "Power & sleep"
+    direction: DOWN
+    timeout: 30000
+- tapOn: "Power & sleep"
+- extendedWaitUntil:
+    visible: "Power & sleep"
+    timeout: 20000
+- back
+- extendedWaitUntil:
+    visible: "App directory"
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      text: "Root tier"
+    direction: DOWN
+    timeout: 30000
+- tapOn: "Root tier"
+- extendedWaitUntil:
+    visible: "Root tier"
+    timeout: 20000
+- back
+- extendedWaitUntil:
+    visible: "App directory"
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      text: "Setup doctor"
+    direction: DOWN
+    timeout: 30000
+- tapOn: "Setup doctor"
+- extendedWaitUntil:
+    visible: "Setup doctor"
+    timeout: 20000
+- back
+- extendedWaitUntil:
+    visible: "App directory"
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      text: "Backup & restore"
+    direction: DOWN
+    timeout: 30000
+- tapOn: "Backup & restore"
+- extendedWaitUntil:
+    visible: "Backup & restore"
+    timeout: 20000
+- back
+- extendedWaitUntil:
+    visible: "App directory"
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      text: "Updates"
+    direction: DOWN
+    timeout: 30000
+- tapOn: "Updates"
+- extendedWaitUntil:
+    visible: "Updates"
+    timeout: 20000
+- back
+- extendedWaitUntil:
+    visible: "App directory"
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      text: "System & about"
+    direction: DOWN
+    timeout: 30000
+- tapOn: "System & about"
+- extendedWaitUntil:
+    visible: "System & about"
+    timeout: 20000
+- back
+- extendedWaitUntil:
+    visible: "App directory"
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      text: "Vehicle"
+    direction: DOWN
+    timeout: 30000
+- tapOn: "Vehicle"
+- extendedWaitUntil:
+    visible: "Vehicle"
+    timeout: 20000
+- back
+- extendedWaitUntil:
+    visible: "App directory"
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      text: "Accessories"
+    direction: DOWN
+    timeout: 30000
+- tapOn: "Accessories"
+- extendedWaitUntil:
+    visible: "Accessories"
+    timeout: 20000
+- back
+- extendedWaitUntil:
+    visible: "App directory"
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      text: "Games"
+    direction: DOWN
+    timeout: 30000
+- tapOn: "Games"
+- extendedWaitUntil:
+    visible: "Games"
+    timeout: 20000
+- back
+- extendedWaitUntil:
+    visible: "App directory"
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      text: "Guided car tests"
+    direction: DOWN
+    timeout: 30000
+- tapOn: "Guided car tests"
+- extendedWaitUntil:
+    visible: "Guided car tests"
+    timeout: 20000
+- back
+- extendedWaitUntil:
+    visible: "App directory"
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      text: "CAN frame capture"
+    direction: DOWN
+    timeout: 30000
+- tapOn: "CAN frame capture"
+- extendedWaitUntil:
+    visible: "CAN frame capture"
+    timeout: 20000
+- back
+- extendedWaitUntil:
+    visible: "App directory"
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      text: "Radio info capture"
+    direction: DOWN
+    timeout: 30000
+- tapOn: "Radio info capture"
+- extendedWaitUntil:
+    visible: "Radio info capture"
+    timeout: 20000
+- back
+- extendedWaitUntil:
+    visible: "App directory"
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      text: "Vehicle data capture"
+    direction: DOWN
+    timeout: 30000
+- tapOn: "Vehicle data capture"
+- extendedWaitUntil:
+    visible: "Vehicle data capture"
+    timeout: 20000
+- back
+- extendedWaitUntil:
+    visible: "App directory"
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      text: "All settings (advanced)"
+    direction: DOWN
+    timeout: 30000
+- tapOn: "All settings (advanced)"
+- extendedWaitUntil:
+    visible: "All settings"
+    timeout: 20000
+- back
+- extendedWaitUntil:
+    visible: "App directory"
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      text: "SysVar export"
+    direction: DOWN
+    timeout: 30000
+- tapOn: "SysVar export"
+- extendedWaitUntil:
+    visible: "SysVar export"
+    timeout: 20000
+- back
+- extendedWaitUntil:
+    visible: "App directory"
+    timeout: 20000

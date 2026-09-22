@@ -1,0 +1,14 @@
+appId: com.ripostelabs.carlauncher
+name: App search narrows the grid and opens an app
+---
+- launchApp
+- tapOn: "Search apps"
+- inputText: "calc"
+- assertVisible: "Calculator"
+- takeScreenshot: apps-search
+- tapOn: "Calculator"
+- assertNotVisible: "Search apps"
+- back
+- extendedWaitUntil:
+    visible: "Search apps"
+    timeout: 20000

@@ -1,5 +1,7 @@
 package com.ripostelabs.carlauncher.carlib
 
+import android.util.Log
+
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedWriter
@@ -37,6 +39,7 @@ class McuStateExport(
         private const val VALUE = "value"
         private const val TYPE = "type"
         private const val LOOPBACK = "127.0.0.1"
+        private const val TAG = "McuStateExport"
         private const val BACKLOG = 4
     }
 
@@ -54,12 +57,20 @@ class McuStateExport(
     val boundPort: Int
         get() = server?.localPort ?: port
 
+    /**
+     * Bind and serve. A port already taken (a second launcher build on the same device, or an
+     * instance the system has not reaped yet) is not a reason to lose the launcher: the export
+     * is a diagnostic, Helm reconnects, and the car UI must come up regardless. It crashed
+     * MainActivity.onCreate before this guard (farm, 2026-09-22).
+     */
     fun start() {
         if (server != null) {
             return
         }
 
-        val socket = ServerSocket(port, BACKLOG, InetAddress.getByName(LOOPBACK))
+        val socket = runCatching { ServerSocket(port, BACKLOG, InetAddress.getByName(LOOPBACK)) }
+            .onFailure { Log.w(TAG, "state export off: port $port is taken ($it)") }
+            .getOrNull() ?: return
         server = socket
         acceptor = Thread({ acceptLoop(socket) }, "mcu-state-export").also {
             it.isDaemon = true

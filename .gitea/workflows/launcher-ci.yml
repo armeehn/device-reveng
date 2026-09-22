@@ -1,15 +1,18 @@
 name: launcher-ci
 
 # Compile and test the head-unit launcher on every push/PR that touches it.
-# Five signals, in order of how fast they fail:
-#   1. JVM unit tests over the pure logic (no device, no emulator).
+# Six signals, in order of how fast they fail:
+#   1. JVM unit tests over the pure logic, plus the Maestro screenshot
+#      differ's own test (no device, no emulator).
 #   2. The release assemble with R8 + resource shrinking — exactly what
 #      gets side-loaded, so a keep-rule regression shows up here.
 #   3. An APK size budget, because R8 failures are usually silent growth.
 #   4. Compose UI tests on an emulator, pinning the status indicators.
 #   5. A cold-start budget on the same emulator.
+#   6. The Maestro journey flows on the same emulator, so a pull request that
+#      breaks a user journey fails by itself.
 #
-# Both emulator jobs boot the head unit's geometry (1920x720 @240dpi
+# All three emulator jobs boot the head unit's geometry (1920x720 @240dpi
 # landscape), not a phone profile — see .gitea/scripts/headunit-avd.sh.
 
 on:
@@ -83,6 +86,12 @@ jobs:
           path: launcher/*/build/reports/tests/
           if-no-files-found: ignore
 
+      # Screenshot-baseline diffing for the Maestro flows (launcher/e2e/maestro).
+      # Host-side: the test writes its own PNGs, so it pins the decoder and the
+      # OK/DRIFT/NEW/MISSING verdicts without an emulator or a stored run.
+      - name: Screenshot differ
+        run: e2e/maestro/test_shots.sh
+
       # The only lint run anywhere: assembleRelease deliberately skips
       # lint-vital (app/build.gradle.kts). Errors fail the job, warnings do
       # not; pre-existing errors are frozen in app/lint-baseline.xml.
@@ -111,7 +120,7 @@ jobs:
           RELEASE_KEYSTORE_PASS: ${{ secrets.RELEASE_KEYSTORE_PASS }}
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           RELEASE_KEY_PASS: ${{ secrets.RELEASE_KEY_PASS }}
-        run: ./gradlew --no-daemon assembleRelease assembleDebug
+        run: ./gradlew --no-daemon assembleRelease assembleDebug assembleFarm
 
       # R8 and resource shrinking fail quietly: a lost keep rule or a newly
       # unshrunk dependency shows up as a bigger APK, never as a build error.
@@ -146,6 +155,17 @@ jobs:
         with:
           name: carlauncher-debug-apk
           path: launcher/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
+      # The `farm` variant is the debug build under the RELEASE application id, x86_64
+      # only (app/build.gradle.kts). The Maestro flows name com.ripostelabs.carlauncher,
+      # so the plain debug build — com.ripostelabs.carlauncher.debug — is invisible to
+      # every one of them. This is the APK the journeys job installs.
+      - name: Upload farm APK
+        uses: christopherHX/gitea-upload-artifact@v4
+        with:
+          name: carlauncher-farm-apk
+          path: launcher/app/build/outputs/apk/farm/*.apk
           if-no-files-found: error
 
   # v2.9 — a cold-start budget, so a startup regression fails a PR instead of
@@ -202,6 +222,10 @@ jobs:
           sudo apt-get install -y -qq \
             libx11-xcb1 libxcb1 libx11-6 libgl1 libglu1-mesa libnss3 \
             libxcomposite1 libxcursor1 libxi6 libxtst6 libpulse0
+          # The emulator's modem dials ::1:<port>; the runner's container resolves no IPv6
+          # loopback, and the run dies with "address resolution failed for ::1" (twice on
+          # #244, once before). Named here, it resolves.
+          grep -q '^::1' /etc/hosts || echo '::1 localhost ip6-localhost ip6-loopback' | sudo tee -a /etc/hosts
 
       - name: Measure cold start
         uses: reactivecircus/android-emulator-runner@v2
@@ -269,6 +293,10 @@ jobs:
           sudo apt-get install -y -qq \
             libx11-xcb1 libxcb1 libx11-6 libgl1 libglu1-mesa libnss3 \
             libxcomposite1 libxcursor1 libxi6 libxtst6 libpulse0
+          # The emulator's modem dials ::1:<port>; the runner's container resolves no IPv6
+          # loopback, and the run dies with "address resolution failed for ::1" (twice on
+          # #244, once before). Named here, it resolves.
+          grep -q '^::1' /etc/hosts || echo '::1 localhost ip6-localhost ip6-loopback' | sudo tee -a /etc/hosts
 
       - name: Run Compose UI tests
         uses: reactivecircus/android-emulator-runner@v2
@@ -286,7 +314,7 @@ jobs:
           # laid out off-screen and fail for a reason that is not a regression.
           script: |
             .gitea/scripts/assert-geometry.sh
-            cd launcher && ./gradlew --no-daemon connectedDebugAndroidTest
+            .gitea/scripts/run-instrumentation.sh
 
       # Always upload: a red emulator run is exactly when the HTML report matters.
       - name: Upload instrumentation reports
@@ -297,6 +325,132 @@ jobs:
           path: launcher/app/build/reports/androidTests/
           if-no-files-found: ignore
 
+  # v3.2 — the launcher's user journeys, as Maestro flows, on the same 1920x720 @240dpi
+  # emulator. A journey that stops working — a screen that no longer opens, a Back that
+  # leaves the app — goes red here and nowhere else.
+  #
+  # The screenshot half of the story stays on the farm. This image captures a fully black
+  # frame (runs 5191 and 5202, with Vulkan on and off), so shots.py would be diffing
+  # nothing against nothing; launcher-e2e.sh probes the capture, says so in the log, and
+  # runs the diff the day an image hands real pixels back.
+  #
+  # The whole workflow is already gated on `launcher/**`, `.gitea/workflows/launcher-ci.yml`
+  # and `.gitea/scripts/**` (see `on:` above), so an unrelated PR never boots this emulator.
+  #
+  # Only the ten LAUNCHER flows run. The nine under e2e/maestro/suite drive the 28 suite
+  # APKs, which are not built here; launcher-e2e.sh stages the top-level flows only.
+  journeys:
+    # Only one self-hosted runner exposes /dev/kvm. The label is what keeps
+    # these jobs on it -- the runners otherwise all advertise ubuntu-latest,
+    # so placement would be a coin toss and a failure would read as flake.
+    runs-on: kvm
+    needs: build
+    # Two emulator attempts fit inside this: boot (~5 min) plus ten flows whose waits are
+    # 20 s each. One retry only, and only for an emulator that never appeared.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: christopherHX/gitea-download-artifact@v4
+        with:
+          name: carlauncher-farm-apk
+          path: apk
+
+      # Pinned: the CLI is what renders and names the screenshots the baseline is made of,
+      # so an unpinned install would let a Maestro release move pixels with no commit.
+      - name: Install the Maestro CLI
+        env:
+          MAESTRO_VERSION: "2.10.0"
+        run: |
+          curl -Ls https://get.maestro.mobile.dev | bash
+          "$HOME/.maestro/bin/maestro" --version
+
+      # Same libraries the other two emulator jobs need; see their comments for why a
+      # -no-window emulator still dlopens X11, and why ::1 has to resolve.
+      - name: Install emulator runtime libraries
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            libx11-xcb1 libxcb1 libx11-6 libgl1 libglu1-mesa libnss3 \
+            libxcomposite1 libxcursor1 libxi6 libxtst6 libpulse0 unzip
+          grep -q '^::1' /etc/hosts || echo '::1 localhost ip6-localhost ip6-loopback' | sudo tee -a /etc/hosts
+
+      - name: Journey flows
+        id: attempt1
+        continue-on-error: true
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 33
+          target: aosp_atd
+          arch: x86_64
+          avd-name: ${{ env.AVD_NAME }}
+          force-avd-creation: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          disable-animations: true
+          pre-emulator-launch-script: .gitea/scripts/headunit-avd.sh
+          # The flows tap the top-bar icons by panel percentage, so a fall back to a phone
+          # profile would tap empty space and fail for a reason that is not a regression.
+          script: |
+            .gitea/scripts/assert-geometry.sh
+            .gitea/scripts/launcher-e2e.sh apk "$PWD/maestro-out"
+
+      # Retry the EMULATOR, never the verdict. launcher-e2e.sh drops .device-reached the
+      # moment adb answers, so a failure with that marker present is a real one and burning
+      # another 15 minutes on it would only teach people to ignore this check.
+      - name: Did the emulator come up?
+        if: always()
+        id: booted
+        run: |
+          if [ -f maestro-out/.device-reached ]; then
+            echo "reached=yes" >> "$GITHUB_OUTPUT"
+          else
+            echo "reached=no" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Journey flows (retry — the emulator never appeared)
+        id: attempt2
+        if: steps.attempt1.outcome == 'failure' && steps.booted.outputs.reached == 'no'
+        continue-on-error: true
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 33
+          target: aosp_atd
+          arch: x86_64
+          avd-name: ${{ env.AVD_NAME }}
+          force-avd-creation: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          disable-animations: true
+          pre-emulator-launch-script: .gitea/scripts/headunit-avd.sh
+          script: |
+            .gitea/scripts/assert-geometry.sh
+            .gitea/scripts/launcher-e2e.sh apk "$PWD/maestro-out"
+
+      # Always upload: a red run is exactly when the PNGs matter — the differ names what
+      # moved, the images say whether it is a regression or a new truth to bless.
+      - name: Upload journey results
+        if: always()
+        uses: christopherHX/gitea-upload-artifact@v4
+        with:
+          name: carlauncher-maestro-journeys
+          path: maestro-out/
+          if-no-files-found: ignore
+
+      # Both attempts run with continue-on-error, so this is what makes the job red.
+      - name: Journey verdict
+        if: always()
+        run: |
+          if [ "${{ steps.attempt1.outcome }}" = "success" ] || [ "${{ steps.attempt2.outcome }}" = "success" ]; then
+            echo "journey flows and screenshot baseline are green"
+            exit 0
+          fi
+          echo "::error::the launcher journey flows failed — see the log above and the carlauncher-maestro-journeys artifact"
+          exit 1
+
   # Release traceability. A green build of main gets an annotated tag naming the
   # exact version it was built from, and the release APK from *that same run* is
   # published against the tag with its SHA-256. That is what turns "which APK is
@@ -305,7 +459,7 @@ jobs:
   # Needs both build jobs, so a red run is never tagged and never publishes.
   release:
     runs-on: ubuntu-latest
-    needs: [build, cold-start, instrumentation]
+    needs: [build, cold-start, instrumentation, journeys]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     timeout-minutes: 10
     permissions:

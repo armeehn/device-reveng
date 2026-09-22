@@ -14,6 +14,8 @@
 #   build without eventcenter (0.2); on a stock-derived image two readers split the stream.
 #   --bench keeps the @bench props (adb on Wi-Fi 5555, USB port in peripheral mode, persisted
 #   logcat). Off by default: a car build must not answer adb on the car network.
+#   --tools carries the debug toolbelt (tools/tools.lock, cached by tools/fetch.sh): static
+#   nmap/tcpdump/strace/... under /system/riposte/bin and Termux as a product app. See step 3c.
 # Runs as root on x (loop mounts). See README.md for why each step exists.
 
 set -euo pipefail
@@ -23,15 +25,21 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 
 readonly LAUNCHER_PKG=com.ripostelabs.carlauncher
 readonly LAUNCHER_DIR=priv-app                 # under the system root, see system_root()
+readonly ZLINK_DIR=riposte/zlink               # the OEM projection daemon on gsi, see step 3b
+readonly ZLINK_APP_LIBS=priv-app/zlink5/lib/arm   # where the stock image keeps its libraries
+readonly ZLINK_BINS="z-link z-mdnsd z-usbmuxd"    # the loader and the two helpers it spawns
 readonly LAUNCHER_NAME=CarLauncher
 readonly SUITE_DIR=product/app
+readonly TOOLS_BIN=riposte/bin                 # the debug toolbelt, see step 3c
+readonly TOOLS_BB=riposte/bin/bb               # one symlink per busybox applet
+readonly TOOLS_NMAP=riposte/nmap               # the portable nmap tree: nmap ncat nping data/
 readonly PRIVAPP_XML=etc/permissions/privapp-permissions-ripostelabs.xml
 readonly DEFPERM_XML=product/etc/default-permissions/default-permissions-ripostelabs.xml   # beside SUITE_DIR
 readonly BOOTANIM=product/media/bootanimation.zip   # bootanimation looks in /product before /system
 readonly PASSTHROUGH="vendor system_ext boot dtbo vbmeta vbmeta_system"   # one matched set, never mixed across builds
 readonly EDITED="system product"
 
-BASE="" APPS="" OUT="" PROFILE=tier1 VERSION="" CAR_OWNER=0 BT_CARKIT=0 SYSTEM="" BOOT="" BENCH=0
+BASE="" APPS="" OUT="" PROFILE=tier1 VERSION="" CAR_OWNER=0 BT_CARKIT=0 SYSTEM="" BOOT="" BENCH=0 TOOLS=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --base) BASE=$2; shift 2 ;;
@@ -43,6 +51,7 @@ while [ $# -gt 0 ]; do
     --bench) BENCH=1; shift ;;
     --system) SYSTEM=$2; shift 2 ;;
     --boot) BOOT=$2; shift 2 ;;
+    --tools) TOOLS=$2; shift 2 ;;
     *) die "unknown arg $1" ;;
   esac
 done
@@ -147,6 +156,29 @@ for apk in "$APPS"/suite/*.apk; do
 done
 log "installed $LAUNCHER_NAME + $SUITE_N suite apps ($([ "$PROFILE" = gsi ] && echo "system image's" || echo "product image's") $SUITE_DIR)"
 
+# ---- 3b. the OEM projection daemon (gsi only) ---------------------------------
+# CarPlay on the GSI base runs through the vendor's own daemon, lifted from the owner's stock
+# system image at build time (never from the repo): the daemon and its libraries land under
+# /system/riposte/zlink, and overlay/system/bin/riposte-zlink.sh starts it from init. Its own
+# app cannot run on the GSI (vendor platform key); com.ripostelabs.projection answers it instead.
+if [ "$PROFILE" = gsi ]; then
+  ZMNT=$WORK/base-system
+  mkdir -p "$ZMNT" "$SYS/$ZLINK_DIR/bin" "$SYS/$ZLINK_DIR/lib"
+  unsparse "$BASE/system.img" "$WORK/base-system.raw"
+  mount -o ro,loop "$WORK/base-system.raw" "$ZMNT" || die "cannot mount $BASE/system.img"
+  ZSRC=$(system_root "$ZMNT")
+  [ -f "$ZSRC/$ZLINK_APP_LIBS/libzjL10001.so" ] || die "$BASE/system.img carries no zlink5"
+  cp "$ZSRC/$ZLINK_APP_LIBS"/*.so "$SYS/$ZLINK_DIR/lib/"
+  for b in $ZLINK_BINS; do cp "$ZSRC/bin/$b" "$SYS/$ZLINK_DIR/bin/"; done
+  # The daemon looks for its mDNS responder at /system/bin/z-mdnsd and a few fixed siblings,
+  # never on PATH (bench, 2026-09-20: "z-mdnsd not found" until this copy existed).
+  cp "$ZSRC/bin/z-mdnsd" "$SYS/bin/z-mdnsd"
+  umount "$ZMNT"
+  label_system_file "$SYS/${ZLINK_DIR%%/*}" "$SYS/$ZLINK_DIR" "$SYS/$ZLINK_DIR/bin" "$SYS/$ZLINK_DIR/lib" "$SYS/$ZLINK_DIR"/bin/* "$SYS/$ZLINK_DIR"/lib/* "$SYS/bin/z-mdnsd"
+  chmod 0755 "$SYS/$ZLINK_DIR"/bin/* "$SYS/bin/z-mdnsd"
+  log "lifted the OEM projection daemon: $(ls "$SYS/$ZLINK_DIR/lib" | wc -l) libs + $ZLINK_BINS"
+fi
+
 # Default grants for the launcher and the suite: a head unit has no one to tap a permission
 # prompt, and 14 of the 28 apps opened on one at first launch, the launcher on the camera one
 # (bench, 2026-09-19). The framework grants what is
@@ -179,6 +211,84 @@ if [ -f "$APPS/bootanimation.zip" ]; then      # rendered by bootanim/make.py wh
   log "installed boot animation"
 fi
 
+# ---- 3c. the debug toolbelt --------------------------------------------------------
+# What a Kali box keeps in reach, on the unit itself: static aarch64 nmap/ncat/nping, tcpdump,
+# socat, strace, gdb(server) and busybox under /system/riposte/bin, each linked from
+# /system/bin so `adb shell` and Termux find them on PATH; Termux itself as a product app.
+# adb shell is root on the GSI, so `tcpdump -i wlan0` works from a plain adb shell.
+#
+#   tools/tools.lock ──fetch.sh──▶ TOOLS cache ──▶ /system/riposte/bin/<tool> ◀── /system/bin/<tool>
+#                                             ├─▶ /system/riposte/nmap/{nmap,ncat,nping,data/}
+#                                             └─▶ product/app/com.termux (+ lib/arm64, pre-extracted)
+TOOLS_N=0
+if [ -n "$TOOLS" ]; then
+  [ -f "$TOOLS/busybox" ] || die "$TOOLS holds no toolbelt: run tools/fetch.sh $TOOLS"
+  mkdir -p "$SYS/$TOOLS_BIN" "$SYS/$TOOLS_BB"
+  while read -r name kind sha url; do
+    case "$name" in ''|'#'*) continue ;; esac
+    case "$kind" in
+      bin)
+        [ "$(sha256sum "$TOOLS/$name" | cut -d' ' -f1)" = "$sha" ] || die "$TOOLS/$name does not match tools.lock"
+        cp "$TOOLS/$name" "$SYS/$TOOLS_BIN/$name"
+        label_system_file "$SYS/$TOOLS_BIN/$name"
+        chmod 0755 "$SYS/$TOOLS_BIN/$name"
+        # The GSI ships tcpdump and strace of its own (userdebug); what the base carries stays,
+        # and the static one is still at /system/riposte/bin/<name>.
+        if [ -e "$SYS/bin/$name" ]; then
+          log "kept the base's own $name in bin; the static build sits under $TOOLS_BIN"
+        else
+          ln -s "/system/$TOOLS_BIN/$name" "$SYS/bin/$name"
+          label_link "$SYS/bin/$name"
+        fi
+        ;;
+      tar)
+        # The portable nmap finds its data through NMAPDIR; ncat and nping need nothing.
+        mkdir -p "$SYS/$TOOLS_NMAP"
+        tar -xzf "$TOOLS/$name.tar.gz" -C "$SYS/$TOOLS_NMAP"
+        find "$SYS/$TOOLS_NMAP" -type d -exec chmod 0755 {} + -o -type f -exec chmod 0644 {} +
+        chmod 0755 "$SYS/$TOOLS_NMAP"/nmap "$SYS/$TOOLS_NMAP"/ncat "$SYS/$TOOLS_NMAP"/nping
+        chown -R root:root "$SYS/$TOOLS_NMAP"
+        find "$SYS/$TOOLS_NMAP" -exec setfattr -n security.selinux -v "$SELINUX_SYSTEM_FILE" {} + 2>/dev/null || true
+        printf '#!/system/bin/sh\nNMAPDIR=/system/%s/data exec /system/%s/nmap "$@"\n' "$TOOLS_NMAP" "$TOOLS_NMAP" > "$SYS/bin/nmap"
+        label_system_file "$SYS/bin/nmap"
+        chmod 0755 "$SYS/bin/nmap"
+        for t in ncat nping; do
+          ln -s "/system/$TOOLS_NMAP/$t" "$SYS/bin/$t"
+          label_link "$SYS/bin/$t"
+        done
+        ;;
+      apk)
+        # A system app gets no native-library extraction: PackageManager expects the .so files
+        # already at <appdir>/lib/arm64. Termux's bootstrap lives in one of them.
+        install_apk "$PRODUCT_ROOT" "$SUITE_DIR" "$name" "$TOOLS/$name.apk"
+        python3 - "$TOOLS/$name.apk" "$PRODUCT_ROOT/$SUITE_DIR/$name/lib/arm64" <<'PY'
+import os, sys, zipfile
+apk, out = sys.argv[1], sys.argv[2]
+os.makedirs(out, exist_ok=True)
+with zipfile.ZipFile(apk) as z:
+    for m in z.namelist():
+        if m.startswith("lib/arm64-v8a/") and m.endswith(".so"):
+            open(os.path.join(out, os.path.basename(m)), "wb").write(z.read(m))
+PY
+        label_system_file "$PRODUCT_ROOT/$SUITE_DIR/$name/lib" "$PRODUCT_ROOT/$SUITE_DIR/$name/lib/arm64" "$PRODUCT_ROOT/$SUITE_DIR/$name/lib/arm64"/*.so
+        ;;
+      data) continue ;;   # tools/install-data.sh pushes these to /data after the flash
+      *) die "tools.lock: unknown kind $kind for $name" ;;
+    esac
+    TOOLS_N=$((TOOLS_N + 1))
+  done < "$HERE/tools/tools.lock"
+
+  # busybox applets as symlinks, off PATH on purpose: toybox stays the default userland and
+  # `export PATH=$PATH:/system/riposte/bin/bb` (or `busybox <applet>`) brings these in.
+  while read -r applet; do
+    case "$applet" in ''|'#'*) continue ;; esac
+    ln -s "/system/$TOOLS_BIN/busybox" "$SYS/$TOOLS_BB/$applet"
+    label_link "$SYS/$TOOLS_BB/$applet"
+  done < "$HERE/tools/busybox.applets"
+  label_system_file "$SYS/${TOOLS_BIN%%/*}" "$SYS/$TOOLS_BIN" "$SYS/$TOOLS_BB"
+  log "debug toolbelt: $TOOLS_N tools under /system/$TOOLS_BIN, $(ls "$SYS/$TOOLS_BB" | wc -l) busybox applets"
+fi
+
 # ---- 4. privapp allowlist ------------------------------------------------------
 # ro.control_privapp_permissions=enforce: a priv-app requesting a privileged
 # permission missing here stops the boot. Every requested permission goes in;
@@ -197,15 +307,22 @@ label_system_file "$SYS/$PRIVAPP_XML"
 
 # ---- 5. static overlay + props -------------------------------------------------
 # overlay/system/... lands under the system root, overlay/product/... under product.
+# system/bin/rw-system.sh replaces TrebleDroid's on the GSI base only (the stock base has
+# none); it keeps upstream's phhsu_exec label so init's `exec` still lands it in su.
 (cd "$HERE/overlay" && find . -type f -path './system/*' -o -type f -path './product/*' | sed 's|^\./||') | while read -r f; do
   case "$f" in
+    system/bin/rw-system.sh) [ "$PROFILE" = gsi ] || continue; dst="$SYS/${f#system/}" ;;
     system/*) dst="$SYS/${f#system/}" ;;
+    product/*) dst="$PRODUCT_ROOT/$f" ;;   # the GSI's /product is /system/product
     *) dst="$WORK/tree/$f" ;;
   esac
   mkdir -p "$(dirname "$dst")"
   cp "$HERE/overlay/$f" "$dst"
   label_system_file "$dst"
-  case "$f" in system/bin/*) chmod 0755 "$dst" ;; esac
+  case "$f" in
+    system/bin/rw-system.sh) chmod 0755 "$dst"; setfattr -n security.selinux -v "$SELINUX_PHHSU_EXEC" "$dst" ;;
+    system/bin/*) chmod 0755 "$dst" ;;
+  esac
 done
 MILESTONE=$([ "$PROFILE" = gsi ] && echo 0.2 || echo 0.1)   # 0.1 stock re-mastered, 0.2 GSI base
 VERSION=${VERSION:-$MILESTONE+$(date -u +%Y%m%d).vc$("$AAPT2" dump badging "$APPS/carlauncher.apk" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p")}
@@ -233,7 +350,7 @@ done
 {
   echo "version=$VERSION"; echo "profile=$PROFILE"; echo "car_owner=$CAR_OWNER"; echo "bt_carkit=$BT_CARKIT"; echo "bench=$BENCH"; echo "built=$(date -u +%FT%TZ)"
   echo "launcher=$(apk_package "$APPS/carlauncher.apk") vc$("$AAPT2" dump badging "$APPS/carlauncher.apk" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p")"
-  echo "suite=$SUITE_N"; echo "system=${SYSTEM:-$BASE/system.img}"; echo "boot=${BOOT:-$BASE/boot.img}"
+  echo "suite=$SUITE_N"; echo "tools=$TOOLS_N"; echo "system=${SYSTEM:-$BASE/system.img}"; echo "boot=${BOOT:-$BASE/boot.img}"
   echo "removed=$(awk -F'\t' 'NF{print $1}' <<<"$REMOVE" | paste -sd,)"
 } > "$OUT/MANIFEST"
 (cd "$OUT" && sha256sum ./*.img > SHA256SUMS)

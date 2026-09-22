@@ -304,14 +304,17 @@ private fun ThemeCard(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(10.dp))
+        // Every row carries the same four actions: the theme's name goes in each label, or a
+        // screen reader reads "Duplicate" three times with nothing to tell them apart
+        // (accessibility audit, 2026-09-22).
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            IconTile(icon = Icons.Filled.ContentCopy, label = "Duplicate", onClick = onDuplicate)
+            IconTile(icon = Icons.Filled.ContentCopy, label = "Duplicate ${theme.name}", onClick = onDuplicate)
             // v2.7: built-ins export too — the fastest way to hand-author a theme is to pull a
             // preset, edit the hex values on a real keyboard, and push it back.
-            IconTile(icon = Icons.Filled.FileUpload, label = "Export", onClick = onExport)
+            IconTile(icon = Icons.Filled.FileUpload, label = "Export ${theme.name}", onClick = onExport)
             if (!theme.isBuiltIn) {
-                IconTile(icon = Icons.Filled.Edit, label = "Edit", onClick = onEdit)
-                IconTile(icon = Icons.Filled.Delete, label = "Delete", onClick = onDelete)
+                IconTile(icon = Icons.Filled.Edit, label = "Edit ${theme.name}", onClick = onEdit)
+                IconTile(icon = Icons.Filled.Delete, label = "Delete ${theme.name}", onClick = onDelete)
             }
         }
     }

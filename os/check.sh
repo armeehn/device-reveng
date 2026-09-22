@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Static verification of a built Riposte OS output, without a car.
 #
-# Usage: check.sh --base DIR --out DIR [--profile tier1|tier2|gsi] [--system IMG] [--suite N]
+# Usage: check.sh --base DIR --out DIR [--profile tier1|tier2|gsi] [--system IMG] [--suite N] [--tools]
 # Exit 0 when every assertion holds; each failure is printed, nothing is hidden.
 # Runs as root on x (loop mounts).
 
@@ -24,13 +24,14 @@ readonly BT_CARKIT_OFF="bluetooth.profile.a2dp.source.enabled bluetooth.profile.
   bluetooth.profile.avrcp.target.enabled"
 readonly BT_CARKIT_COD=38,4,8
 
-BASE="" OUT="" PROFILE=tier1 SUITE="" SYSTEM="" BOOT=""
+BASE="" OUT="" PROFILE=tier1 SUITE="" SYSTEM="" BOOT="" TOOLS=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --base) BASE=$2; shift 2 ;;
     --out) OUT=$2; shift 2 ;;
     --profile) PROFILE=$2; shift 2 ;;
     --suite) SUITE=$2; shift 2 ;;
+    --tools) TOOLS=1; shift ;;
     --system) SYSTEM=$2; shift 2 ;;
     --boot) BOOT=$2; shift 2 ;;
     *) die "unknown arg $1" ;;
@@ -122,7 +123,16 @@ if [ "$PROFILE" = gsi ]; then
     check "[ \"\$(last_prop $p $S/build.prop)\" = false ]" "$p=false"
   done
   check "[ \"\$(last_prop bluetooth.device.class_of_device $S/build.prop)\" = $BT_CARKIT_COD ]" "class of device $BT_CARKIT_COD (car audio)"
+
+  # Our rw-system.sh replaces TrebleDroid's; init execs it by label, so the label is the test.
+  check "cmp -s $HERE/overlay/system/bin/rw-system.sh $S/bin/rw-system.sh" "rw-system.sh is ours"
+  check "[ \"\$(getfattr --absolute-names -n security.selinux --only-values $S/bin/rw-system.sh 2>/dev/null | tr -d '\\0')\" = $SELINUX_PHHSU_EXEC ]" "rw-system.sh labelled phhsu_exec"
+  check "[ -x $S/riposte/zlink/bin/z-link ] && [ -f $S/riposte/zlink/lib/libzjL10001.so ]" "OEM projection daemon lifted under riposte/zlink"
+  check "grep -q '^service riposte_zlink ' $S/etc/init/riposte.rc" "riposte_zlink init service"
+  check "[ -x $S/bin/z-mdnsd ]" "z-mdnsd at the daemon's fixed path"
+  check "grep -q '^service riposte_hotspot ' $S/etc/init/riposte.rc" "riposte_hotspot init service"
 else
+  check "[ ! -f $S/bin/rw-system.sh ]" "no rw-system.sh on a stock base"
   check "grep -q '^ro.riposte.os.bt_carkit=0$' $S/build.prop" "ro.riposte.os.bt_carkit=0"
   check "! grep -q '^@carkit ' $S/build.prop" "no @carkit tag leaked into build.prop"
   check "cmp -s <(grep '^bluetooth\.' $SB/build.prop) <(grep '^bluetooth\.' $S/build.prop)" "bluetooth.* props identical to the base"
@@ -176,6 +186,23 @@ done
 echo "suite"
 N=$(find "$PR/app" -name '*.apk' -exec "$AAPT2" dump packagename {} \; 2>/dev/null | grep -c '^com.ripostelabs\.' || true)
 if [ -n "$SUITE" ]; then check "[ $N -eq $SUITE ]" "$N suite apps (expected $SUITE)"; else ok "$N suite apps"; fi
+
+# The debug toolbelt (build.sh step 3c): every non-data entry of tools.lock in the image, on
+# PATH through /system/bin, Termux with its native libraries pre-extracted.
+if [ "$TOOLS" = 1 ]; then
+  echo "debug toolbelt"
+  while read -r name kind sha url; do
+    case "$name" in ''|'#'*) continue ;; esac
+    case "$kind" in
+      # Links carry absolute /system targets, so -x on them resolves against the host: test -L.
+      bin) check "[ -x $S/riposte/bin/$name ] && { [ -L $S/bin/$name ] || [ -x $S/bin/$name ]; }" "$name under riposte/bin and on PATH via bin" ;;
+      tar) check "[ -x $S/riposte/nmap/nmap ] && [ -d $S/riposte/nmap/data ] && [ -x $S/bin/nmap ] && [ -L $S/bin/ncat ]" "nmap tree + wrapper, ncat linked" ;;
+      apk) check "[ -f $PR/app/$name/$name.apk ] && ls $PR/app/$name/lib/arm64/*.so >/dev/null 2>&1" "$name installed with lib/arm64 extracted" ;;
+    esac
+  done < "$HERE/tools/tools.lock"
+  check "[ $(ls $S/riposte/bin/bb | wc -l) -eq $(grep -cv '^#' $HERE/tools/busybox.applets) ]" "one applet link per line of busybox.applets"
+  check "[ \"\$(readlink $S/riposte/bin/bb/nslookup)\" = /system/riposte/bin/busybox ]" "applet links point at riposte/bin/busybox"
+fi
 
 echo "filesystem features the unit's kernel accepts"
 # The vendor's images carry exactly this set; anything beyond it (metadata_csum, 64bit …) is a

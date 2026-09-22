@@ -25,8 +25,8 @@ provides.
 | Base | stock Android 13 system, re-mastered | TrebleDroid AOSP 14 GSI (`ci-20240226`, the last one that boots on kernel 4.14) |
 | OEM apps | phone-home and adware removed, car apps kept | none |
 | Car link | vendor gateway | `McuOwner`, our process on the serial link |
-| Proven on the unit | boots, touch, launcher | boot, touch, gesture navigation, Wi-Fi, radio tune and seek, volume from the MCU, Bluetooth car-kit profiles, 28 suite apps launch clean, Setup Doctor green |
-| Waiting for the car | reverse camera, wheel keys, headlamps, a paired phone | the same |
+| Proven on the unit | boots, touch, launcher | boot, touch, gesture navigation, Wi-Fi, radio tune and seek, volume from the MCU, Bluetooth car-kit profiles, 28 suite apps launch clean, Setup Doctor green, wireless CarPlay on the panel (the OEM daemon with the projection suite as its app, `ZLINK_REWRITE.md` §9) |
+| Waiting for the car | reverse camera, wheel keys, headlamps, a paired phone | reverse camera, wheel keys, headlamps, CarPlay audio through the amp, wired CarPlay |
 
 Switching between 0.1 and 0.2 on one unit needs a `/data` wipe: Android 13 refuses a
 `/data` that Android 14 has touched.
@@ -60,6 +60,7 @@ API, which is what 0.2 replaces.
 | `edl-write-set.sh` | laptop at the bench | Writes super + boot/dtbo/vbmeta over EDL from 9008; `WIPE=1` erases userdata; then resets. |
 | `fastboot-flash-set.sh` | laptop at the bench | Flashes an image set in place from fastbootd, shrinking the logical partitions first; `wipe` erases userdata. `BENCH.md` has the wiring, the doors and the rules. |
 | `bench-verify.sh` | laptop at the bench | Hashes every logical partition on the unit against the set's `SHA256SUMS` over adb root, before the first boot is trusted. fastboot has no payload checksum and a marginal link once flipped bits in a dozen files without an error. |
+| `bench-blockfix.sh` | laptop at the bench | Repairs a flash the pigtail corrupted without another fastboot pass: diffs each logical partition against its image over USB adb and rewrites only the differing 4 KiB blocks, each hash-checked on the unit before it is written, then re-hashes the partition. |
 | `bench-cycle.sh` | build host, root | One 0.2 bench iteration: a release launcher (checksum verified), `build.sh --profile gsi --bench`, rsync to the laptop, `fastboot-flash-set.sh`, then `bench-verify.sh`. Fails loudly on a failed flash or a partition that differs. |
 | `bench-ui.sh` | any host with adb | Reads the panel without a camera: `texts`, `tap <label>`, `find <label>`, `doctor` (opens Setup Doctor, prints its rows), `sweep` (launches every suite app, reports the ones that crash or stay behind a dialog). Compose exposes its texts to uiautomator. |
 
@@ -69,12 +70,19 @@ os/check.sh --base BASE --out OUT --profile tier2 --suite 28
 ```
 ```
 os/build.sh --base BASE --system system-td-arm64-ab-vanilla-ci20240226.img.xz \
-            --apps APPS --out OUT --profile gsi [--bench]
+            --apps APPS --out OUT --profile gsi [--bench] [--tools CACHE]
 ```
 
 `APPS/carlauncher.apk` is a release-signed launcher; `APPS/suite/*.apk` the suite;
 `APPS/bootanimation.zip` optional. The version is `0.1+<date>.vc<launcher versionCode>`
 (stock base) or `0.2+…` (GSI base), written to `ro.riposte.os.version`.
+
+`--tools CACHE` adds the debug toolbelt (`tools/README.md`): static nmap, ncat, nping,
+tcpdump, socat, strace, gdb, gdbserver and busybox under `/system/riposte/bin`,
+each on PATH through `/system/bin`, plus Termux as a product app. `tools/fetch.sh CACHE`
+fills the cache from `tools/tools.lock` (sha256-pinned); `bench-cycle.sh` passes it by
+default and pushes the data-side tools (frida-server) to `/data/local/riposte/bin` after
+the flash.
 
 Profile `gsi` takes an AOSP GSI as `--system` (`.img` or `.img.xz`), removes every OEM
 package (`overlay/remove.gsi`, prefix matches) and implies `--car-owner`. TrebleDroid

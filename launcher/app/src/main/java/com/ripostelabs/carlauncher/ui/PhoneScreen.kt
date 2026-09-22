@@ -36,9 +36,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -101,6 +105,10 @@ fun PhoneScreen(
         spec.broadcast(context)
     }
 
+    // A btsuite page that is not installed resolves to nothing. The launch then did nothing at
+    // all and said nothing either, so the button read as broken rather than as absent.
+    var missingPage by remember { mutableStateOf<VendorBt.Page?>(null) }
+
     fun open(page: VendorBt.Page) {
         feedback?.tap()
         if (carKit != null) {
@@ -110,7 +118,7 @@ fun PhoneScreen(
             )
             return
         }
-        VendorBt.openPage(page).start(context)
+        missingPage = if (VendorBt.openPage(page).start(context)) null else page
     }
 
     // The three call actions, on whichever stack carries the phone this slot.
@@ -184,7 +192,7 @@ fun PhoneScreen(
                         modifier = Modifier.weight(1f),
                     )
                 }
-                VendorPages(onOpen = ::open)
+                VendorPages(onOpen = ::open, missing = missingPage)
             }
         }
     }
@@ -220,14 +228,17 @@ private fun PhoneHeader(onBack: () -> Unit) {
 /** Device, HFP state, and while a call is up the other party and the timer. */
 @Composable
 private fun CallStatus(vendor: VendorBtState) {
-    val device = vendor.deviceName?.takeIf { it.isNotBlank() } ?: "No phone"
+    val device = vendor.deviceName?.takeIf { it.isNotBlank() }
+    val state = PhoneLogic.stateLabel(vendor.hfp)
+    // With no phone linked the state already says "No phone": one label, not "No phone · No phone".
+    val status = if (device == null) state else "$device · $state"
     val timer = vendor.speakingSec?.let(PhoneLogic::timer)
     val party = PhoneLogic.party(vendor)
 
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = "$device · ${PhoneLogic.stateLabel(vendor.hfp)}",
+                text = status,
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.weight(1f),
@@ -241,14 +252,19 @@ private fun CallStatus(vendor: VendorBtState) {
             }
         }
         // The party line keeps its height while idle so the buttons below do not jump when
-        // a call arrives.
-        Text(
-            text = party ?: " ",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onBackground,
-            maxLines = 1,
-        )
+        // a call arrives. Idle is a spacer, not a blank label a screen reader would announce.
+        if (party == null) {
+            val lineHeight = with(LocalDensity.current) { MaterialTheme.typography.headlineSmall.lineHeight.toDp() }
+            Spacer(Modifier.height(lineHeight))
+        } else {
+            Text(
+                text = party,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onBackground,
+                maxLines = 1,
+            )
+        }
     }
 }
 
@@ -512,21 +528,31 @@ private fun CallRow(entry: VendorCallLog.Entry, canDial: Boolean, onDial: (Strin
 
 /** The btsuite pages this screen does not replace. Never gated: they are the escape hatch. */
 @Composable
-private fun VendorPages(onOpen: (VendorBt.Page) -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(VENDOR_BUTTON_HEIGHT_DP.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        for ((label, page) in VENDOR_PAGES) {
-            BigButton(
-                label = label,
-                enabled = true,
-                color = MaterialTheme.colorScheme.secondary,
-                onClick = { onOpen(page) },
-                modifier = Modifier.weight(1f),
+private fun VendorPages(onOpen: (VendorBt.Page) -> Unit, missing: VendorBt.Page?) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (missing != null) {
+            Text(
+                text = "That page is not installed on this unit.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(VENDOR_BUTTON_HEIGHT_DP.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            for ((label, page) in VENDOR_PAGES) {
+                BigButton(
+                    label = label,
+                    enabled = true,
+                    color = MaterialTheme.colorScheme.secondary,
+                    onClick = { onOpen(page) },
+                    modifier = Modifier.weight(1f),
+                )
+            }
         }
     }
 }
@@ -540,11 +566,16 @@ private fun BigButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val fill = if (enabled) color else color.copy(alpha = DISABLED_ALPHA)
+    // Disabled dims the whole button, fill and label together (dimming only the fill left the
+    // label at full strength on a washed-out blue), and says so in semantics: a screen reader
+    // announces it, and the contrast checks know not to judge a control nobody can press
+    // (accessibility audit, 2026-09-22).
     Row(
         modifier = modifier
+            .alpha(if (enabled) 1f else DISABLED_ALPHA)
+            .then(if (enabled) Modifier else Modifier.semantics { disabled() })
             .clip(carShape(14.dp))
-            .background(fill)
+            .background(color)
             .then(if (enabled) Modifier.clickable(onClick = withTapFeedback(onClick)) else Modifier)
             .padding(horizontal = 16.dp),
         horizontalArrangement = Arrangement.Center,

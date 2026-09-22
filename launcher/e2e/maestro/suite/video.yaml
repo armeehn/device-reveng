@@ -1,0 +1,14 @@
+appId: com.ripostelabs.video
+name: Suite Video opens and comes back
+---
+- launchApp:
+    appId: com.ripostelabs.video
+    stopApp: true
+- extendedWaitUntil:
+    visible: "Video"
+    timeout: 20000
+- takeScreenshot: suite-video
+- pressKey: Home
+- extendedWaitUntil:
+    visible: "Search apps"
+    timeout: 20000

@@ -1,0 +1,18 @@
+appId: com.ripostelabs.music
+name: Suite Music lists tracks, plays one, and the launcher card follows
+---
+- launchApp:
+    appId: com.ripostelabs.music
+    stopApp: true
+- extendedWaitUntil:
+    visible: "Music"
+    timeout: 20000
+- takeScreenshot: suite-music
+- tapOn:
+    text: "track"
+    optional: true
+- assertNotVisible: "Nothing playing"
+- takeScreenshot: suite-music-playing
+- pressKey: Home
+- assertVisible: "track"
+- takeScreenshot: suite-music-card

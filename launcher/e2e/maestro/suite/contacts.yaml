@@ -1,0 +1,14 @@
+appId: com.ripostelabs.contacts
+name: Suite Contacts opens and comes back
+---
+- launchApp:
+    appId: com.ripostelabs.contacts
+    stopApp: true
+- extendedWaitUntil:
+    visible: "Contacts"
+    timeout: 20000
+- takeScreenshot: suite-contacts
+- pressKey: Home
+- extendedWaitUntil:
+    visible: "Search apps"
+    timeout: 20000

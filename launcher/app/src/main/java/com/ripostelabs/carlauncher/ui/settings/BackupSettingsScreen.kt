@@ -51,6 +51,9 @@ fun BackupSettingsScreen(
     val scope = rememberCoroutineScope()
     var backups by remember { mutableStateOf<List<File>>(emptyList()) }
     var busy by remember { mutableStateOf(false) }
+    // Both writers return a failure the screen used to drop on the floor: a full or read-only
+    // /sdcard made "Create backup" and "Restore & restart" look like dead buttons.
+    var failure by remember { mutableStateOf<String?>(null) }
     var restoreTarget by remember { mutableStateOf<File?>(null) }
     var deleteTarget by remember { mutableStateOf<File?>(null) }
 
@@ -71,12 +74,23 @@ fun BackupSettingsScreen(
                 onClick = {
                     scope.launch {
                         busy = true
-                        withContext(Dispatchers.IO) { LauncherBackup.create(context, System.currentTimeMillis()) }
+                        val made = withContext(Dispatchers.IO) {
+                            LauncherBackup.create(context, System.currentTimeMillis())
+                        }
+                        failure = if (made == null) WRITE_FAILED else null
                         busy = false
                         reload()
                     }
                 },
             )
+            val message = failure
+            if (message != null) {
+                Text(
+                    text = message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
             Text(
                 text = "Pull/push over adb:\n" +
                     "adb pull /sdcard/Android/data/$pkg/files/backups/",
@@ -116,6 +130,7 @@ fun BackupSettingsScreen(
                 restoreTarget = null
                 scope.launch {
                     val ok = withContext(Dispatchers.IO) { LauncherBackup.restore(context, target) }
+                    failure = if (ok) null else READ_FAILED
                     if (ok) LauncherBackup.restartApp(context)
                 }
             },
@@ -179,10 +194,19 @@ private fun BackupRow(
             contentDescription = "Delete backup",
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier
-                .size(40.dp)
+                .size(DELETE_TARGET_DP.dp)
                 .clip(carShape(10.dp))
                 .clickable(onClick = onDelete)
-                .padding(8.dp),
+                .padding(12.dp),
         )
     }
 }
+
+/** Destructive tap on a list row; kept on the 48 dp floor rather than the 40 dp glyph box. */
+private const val DELETE_TARGET_DP = 48
+
+/** A backup write that did not happen. The usual cause on a head unit is a full /sdcard. */
+private const val WRITE_FAILED = "Could not write the backup. Storage may be full or read-only."
+
+/** A backup that cannot be read back — truncated by a power cut mid-write, typically. */
+private const val READ_FAILED = "Could not read that backup. The file may be truncated."

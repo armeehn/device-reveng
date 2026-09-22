@@ -169,6 +169,8 @@ fun MediaCard(
 
                 // ---- seek bar (only when the session reports a real duration) ----
                 if (now != null && now.durationMs > 0) {
+                    // Off the chip: the slider's thumb stands 44dp tall and rode into it.
+                    Spacer(Modifier.height(SEEK_BAR_GAP))
                     SeekBar(now = now, onSeek = onSeek)
                 }
 
@@ -256,13 +258,15 @@ private fun SeekBar(now: NowPlaying, onSeek: (Long) -> Unit) {
 
     val displayMs = if (scrubbing) scrubValue.toLong() else livePos
     Column(modifier = Modifier.fillMaxWidth()) {
-        if (locked) {
+        // A phone over CarPlay or Bluetooth reports no seek (AVRCP has none): the plain bar,
+        // as while moving, instead of a slider that takes no drag.
+        if (locked || !now.canSeek) {
             LinearProgressIndicator(
                 progress = { displayMs.coerceIn(0L, duration).toFloat() / duration.toFloat() },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(10.dp)
-                    .clip(carShape(5.dp)),
+                    .height(PLAIN_BAR_HEIGHT)
+                    .clip(carShape(PLAIN_BAR_HEIGHT / 2)),
             )
         } else {
             Slider(
@@ -276,7 +280,7 @@ private fun SeekBar(now: NowPlaying, onSeek: (Long) -> Unit) {
                 },
                 valueRange = 0f..duration.toFloat(),
                 enabled = now.canSeek,
-                modifier = Modifier.fillMaxWidth().height(24.dp),
+                modifier = Modifier.fillMaxWidth().height(SLIDER_HEIGHT),
             )
         }
         Row(
@@ -336,6 +340,10 @@ private fun formatTime(ms: Long): String {
 }
 
 /** §2.2 MediaCard spec: 28 sp title, 88 dp transport targets (icons drawn at 40 dp). */
+/** Room between the source chip and the bar; the slider's thumb is 44dp tall. */
+private val SEEK_BAR_GAP = 10.dp
+private val PLAIN_BAR_HEIGHT = 12.dp
+private val SLIDER_HEIGHT = 32.dp
 private const val TITLE_SP = 28
 private const val TRANSPORT_TARGET_DP = 88
 private const val TRANSPORT_ICON_DP = 40

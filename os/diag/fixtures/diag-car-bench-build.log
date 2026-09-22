@@ -1,0 +1,36 @@
+ts=1758470000 up=60 probe=launcher pid=3091 version=versionCode=561 boot_completed=1 os=0.2+20260920.vc528 bench=1
+ts=1758470000 up=60 probe=mcu tty=1 bridge=running listen=1 established=0 zxwio=running link=tcp:127.0.0.1:5588 owner_log=
+ts=1758470000 up=60 probe=usb mode=peripheral state=adb config=adb devices= tty=
+ts=1758470000 up=60 probe=audio players=0 mMode=MODE_NORMAL zlink=3028 ap_up=1 projection_log=
+ts=1758470000 up=60 probe=car service_log= tuner_log= camera_log= video= sysvar_log=
+ts=1758470000 up=60 probe=bt enabled=1 carkit_log= daemon_log=
+ts=1758470030 up=90 probe=launcher pid=3091 version=versionCode=561 boot_completed=1 os=0.2+20260920.vc528 bench=1
+ts=1758470030 up=90 probe=mcu tty=1 bridge=running listen=1 established=0 zxwio=running link=tcp:127.0.0.1:5588 owner_log=
+ts=1758470030 up=90 probe=usb mode=peripheral state=adb config=adb devices= tty=
+ts=1758470030 up=90 probe=audio players=0 mMode=MODE_NORMAL zlink=3028 ap_up=1 projection_log=
+ts=1758470030 up=90 probe=car service_log= tuner_log= camera_log= video= sysvar_log=
+ts=1758470030 up=90 probe=bt enabled=1 carkit_log= daemon_log=
+ts=1758470060 up=120 probe=launcher pid=3091 version=versionCode=561 boot_completed=1 os=0.2+20260920.vc528 bench=1
+ts=1758470060 up=120 probe=mcu tty=1 bridge=running listen=1 established=0 zxwio=running link=tcp:127.0.0.1:5588 owner_log=
+ts=1758470060 up=120 probe=usb mode=peripheral state=adb config=adb devices= tty=
+ts=1758470060 up=120 probe=audio players=0 mMode=MODE_NORMAL zlink=3028 ap_up=1 projection_log=
+ts=1758470060 up=120 probe=car service_log= tuner_log= camera_log= video= sysvar_log=
+ts=1758470060 up=120 probe=bt enabled=1 carkit_log= daemon_log=
+ts=1758470090 up=150 probe=launcher pid=3091 version=versionCode=561 boot_completed=1 os=0.2+20260920.vc528 bench=1
+ts=1758470090 up=150 probe=mcu tty=1 bridge=running listen=1 established=0 zxwio=running link=tcp:127.0.0.1:5588 owner_log=
+ts=1758470090 up=150 probe=usb mode=peripheral state=adb config=adb devices= tty=
+ts=1758470090 up=150 probe=audio players=0 mMode=MODE_NORMAL zlink=3028 ap_up=1 projection_log=
+ts=1758470090 up=150 probe=car service_log= tuner_log= camera_log= video= sysvar_log=
+ts=1758470090 up=150 probe=bt enabled=1 carkit_log= daemon_log=
+ts=1758470120 up=180 probe=launcher pid=3091 version=versionCode=561 boot_completed=1 os=0.2+20260920.vc528 bench=1
+ts=1758470120 up=180 probe=mcu tty=1 bridge=running listen=1 established=0 zxwio=running link=tcp:127.0.0.1:5588 owner_log=
+ts=1758470120 up=180 probe=usb mode=peripheral state=adb config=adb devices= tty=
+ts=1758470120 up=180 probe=audio players=0 mMode=MODE_NORMAL zlink=3028 ap_up=1 projection_log=
+ts=1758470120 up=180 probe=car service_log= tuner_log= camera_log= video= sysvar_log=
+ts=1758470120 up=180 probe=bt enabled=1 carkit_log= daemon_log=
+ts=1758470150 up=210 probe=launcher pid=3091 version=versionCode=561 boot_completed=1 os=0.2+20260920.vc528 bench=1
+ts=1758470150 up=210 probe=mcu tty=1 bridge=running listen=1 established=0 zxwio=running link=tcp:127.0.0.1:5588 owner_log=
+ts=1758470150 up=210 probe=usb mode=peripheral state=adb config=adb devices= tty=
+ts=1758470150 up=210 probe=audio players=0 mMode=MODE_NORMAL zlink=3028 ap_up=1 projection_log=
+ts=1758470150 up=210 probe=car service_log= tuner_log= camera_log= video= sysvar_log=
+ts=1758470150 up=210 probe=bt enabled=1 carkit_log= daemon_log=

@@ -19,6 +19,7 @@ ANDROID_JAR=$(ls "$SDK"/platforms/android-*/android.jar | sort -V | tail -1)
 WEBROOT=${WEBROOT:-/z1-pool/subvol-104-disk-1/var/www/launcher}
 LAUNCHER_APK=${LAUNCHER_APK:-$(ls "$WEBROOT"/carlauncher-*-vc*.apk | sort -t c -k3 -V | tail -1)}
 
+TOOLS_CACHE=${TOOLS_CACHE:-/z1-pool/share/carlauncher/os/tools/unit}
 W=$(mktemp -d "${TMPDIR:-/var/tmp}/riposte-fx.XXXXXX")
 trap 'rm -rf "$W"' EXIT
 mkdir -p "$W/base" "$W/apps/suite" "$W/out" "$W/sys" "$W/prod"
@@ -33,6 +34,8 @@ mint_apk() { # pkg out
 # ---- system: ext4, every file labelled like a real build ----------------------
 mkdir -p "$W/sys/framework" "$W/sys/priv-app/SysVarProvider" "$W/sys/etc/permissions" "$W/sys/bin"
 head -c 1048576 /dev/urandom > "$W/sys/framework/framework.jar"
+# A userdebug GSI ships its own tcpdump; the toolbelt must leave it in place (build.sh 3c).
+printf '#!/system/bin/sh\n' > "$W/sys/bin/tcpdump"; chmod 0755 "$W/sys/bin/tcpdump"
 mint_apk com.szchoiceway.providers.settings "$W/sys/priv-app/SysVarProvider/SysVarProvider.apk"
 # Phone-side Bluetooth roles as a stock or GSI build.prop carries them: tier2 must keep them
 # byte for byte, gsi must override them (init keeps the last value of a duplicated key).
@@ -79,10 +82,22 @@ ln -s /system/etc "$W/sar/etc"
 ln -s /system/bin "$W/sar/bin"
 repack_image ext4 "$W/sar" "$W/sar.img" system
 xz -c "$W/sar.img" > "$W/gsi.img.xz"
-"$HERE/build.sh" --base "$W/base" --system "$W/gsi.img.xz" --apps "$W/apps" --out "$W/out-gsi" --profile gsi
+# The toolbelt rides along when the share cache is filled (tools/fetch.sh); the fixture never
+# downloads 70 MB itself.
+TOOLS_ARG="" TOOLS_CHECK=""
+if [ -f "$TOOLS_CACHE/busybox" ]; then TOOLS_ARG="--tools $TOOLS_CACHE"; TOOLS_CHECK=--tools; fi
+# shellcheck disable=SC2086
+"$HERE/build.sh" --base "$W/base" --system "$W/gsi.img.xz" --apps "$W/apps" --out "$W/out-gsi" --profile gsi $TOOLS_ARG
 grep -q '^car_owner=1$' "$W/out-gsi/MANIFEST" || die "gsi profile did not imply --car-owner"
 grep -q '^bt_carkit=1$' "$W/out-gsi/MANIFEST" || die "gsi profile did not turn the car-kit roles on"
-"$HERE/check.sh" --base "$W/base" --system "$W/gsi.img.xz" --out "$W/out-gsi" --profile gsi --suite "$N"
+if [ -n "$TOOLS_ARG" ]; then
+  OUTSYS=$(mktemp -d "$W/outsys.XXXXXX"); unsparse "$W/out-gsi/system.img" "$W/out-gsi-system.raw"
+  mount -o ro,loop "$W/out-gsi-system.raw" "$OUTSYS"
+  [ -f "$OUTSYS/system/bin/tcpdump" ] && [ ! -L "$OUTSYS/system/bin/tcpdump" ] || { umount "$OUTSYS"; die "toolbelt replaced the base's own tcpdump"; }
+  umount "$OUTSYS"
+fi
+# shellcheck disable=SC2086
+"$HERE/check.sh" --base "$W/base" --system "$W/gsi.img.xz" --out "$W/out-gsi" --profile gsi --suite "$N" $TOOLS_CHECK
 
 echo "== negative control: --car-owner with eventcenter in the base must refuse"
 if "$HERE/build.sh" --base "$W/base" --apps "$W/apps" --out "$W/out-owner" --car-owner >/dev/null 2>&1; then

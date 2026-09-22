@@ -65,6 +65,7 @@ import com.ripostelabs.carlauncher.media.JellyfinApp // v2.7
 import com.ripostelabs.carlauncher.media.MiniScreenController // v4.1
 import com.ripostelabs.carlauncher.media.MiniScreenState // v4.1
 import com.ripostelabs.carlauncher.media.NowPlayingRepository
+import com.ripostelabs.carlauncher.data.RiposteSuite
 import com.ripostelabs.carlauncher.media.SourceLabels // RAV4-52
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -120,7 +121,11 @@ fun HomeScreen(
     val carPlay by carEvents.carplayState.collectAsStateSafe(initial = CarPlayState()) // RAV4-52
     // No session visible while a phone is projected: the card shows the CarPlay row instead of
     // "No source connected" (the gateway carries no CarPlay track metadata, see carPlayNowPlaying).
-    val cardMedia = media ?: carPlayNowPlaying(
+    // The suite Radio app's own session, for the Radio tile when the MCU tuner is silent.
+    val radioSession = media?.takeIf { it.sourcePackage == RiposteSuite.RADIO_PACKAGE }?.let {
+        RadioSession(title = it.title, subtitle = it.artist, playing = it.isPlaying)
+    }
+    val cardMedia = media?.let { SourceLabels.viaCarPlay(it, carPlay.connected) } ?: carPlayNowPlaying(
         carPlay, carPlayChipText(carPlay), stringResource(R.string.media_carplay_idle),
     )
     // v0.6: observe launcher settings (null store -> defaults, keeps previews working).
@@ -317,8 +322,8 @@ fun HomeScreen(
                                     onSeek = nowPlaying::seekTo,
                                     onCycleSource = nowPlaying::cycleSession,
                                     // RAV4-52: the CarPlay chip deep-links into the receiver.
-                                    onOpenSource = if (SourceLabels.isCarPlay(cardMedia?.sourcePackage)) {
-                                        { Zlink.open().start(appContext) }
+                                    onOpenSource = if (SourceLabels.isCarPlay(cardMedia?.sourcePackage, carPlay.connected)) {
+                                        { Zlink.openAny(appContext) }
                                     } else {
                                         null
                                     },
@@ -420,6 +425,7 @@ fun HomeScreen(
                             RadioCard(
                                 carService = carService,
                                 presetsStore = radioPresetsStore,
+                                session = radioSession,
                                 modifier = Modifier.fillMaxSize(),
                             )
                         }

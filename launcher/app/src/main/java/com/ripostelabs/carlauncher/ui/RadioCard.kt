@@ -77,6 +77,10 @@ fun RadioCard(
     carService: CarService,
     modifier: Modifier = Modifier,
     presetsStore: RadioPresetsStore? = null, // v0.9; null keeps @Preview / no-store paths working
+    // What the suite Radio app publishes as its media session, when it holds one. The MCU
+    // tuner is silent until the Radio screen asks it, and it knows nothing about a NET
+    // stream, so without this Home read "Radio idle" beside a media card playing the radio.
+    session: RadioSession? = null,
 ) {
     // Bump this to force an immediate re-poll after a tune/seek action.
     var refresh by remember { mutableIntStateOf(0) }
@@ -118,7 +122,11 @@ fun RadioCard(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
     ) {
         if (!info.available) {
-            RadioUnavailable(idle = carService.ownerAttached)
+            if (session != null) {
+                RadioFromSession(session)
+            } else {
+                RadioUnavailable(idle = carService.ownerAttached)
+            }
         } else {
             // The card lives in a fixed 180dp slot (HomeScreen right column). The v0.9 layout
             // over-filled it — header row + 40sp freq + presets + a row of borderless
@@ -308,6 +316,30 @@ private fun StationStrip(
                 )
             }
         }
+    }
+}
+
+/** What the suite Radio app says it is playing: its session's title and subtitle. */
+data class RadioSession(val title: String, val subtitle: String, val playing: Boolean)
+
+@Composable
+private fun RadioFromSession(session: RadioSession) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(20.dp),
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text(
+            text = session.title,
+            style = MaterialTheme.typography.headlineMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+        )
+        Text(
+            text = if (session.subtitle.isBlank() && !session.playing) "Paused" else session.subtitle,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+        )
     }
 }
 

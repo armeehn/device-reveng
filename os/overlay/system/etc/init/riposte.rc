@@ -35,6 +35,27 @@ service riposte_mcubridge /system/bin/sh /system/bin/riposte-mcubridge.sh
 on boot && property:ro.riposte.os.car_owner=1
     start riposte_mcubridge
 
+# Car-owner builds: the OEM projection daemon for CarPlay (see riposte-zlink.sh). It redials
+# the projection app every ten seconds, so the order of the two does not matter.
+service riposte_zlink /system/bin/sh /system/bin/riposte-zlink.sh
+    class main
+    user root
+    group root
+    seclabel u:r:su:s0
+    disabled
+
+on property:sys.boot_completed=1 && property:ro.riposte.os.car_owner=1
+    start riposte_zlink
+    start riposte_hotspot
+
+# Car-owner builds: the 5 GHz access point wireless CarPlay needs (see riposte-hotspot.sh).
+service riposte_hotspot /system/bin/sh /system/bin/riposte-hotspot.sh
+    class main
+    user root
+    group root
+    seclabel u:r:su:s0
+    disabled
+
 # Car-owner builds: keep /dev/zxw_io open the way eventcenter's GetTouchEvt thread does on
 # stock (EventService.java startGetTouchEvtThread). The vendor's zxw_io driver may gate the
 # touch path on an open reader; 0.2 without it never sees a touch interrupt (RAV4-84).
@@ -56,9 +77,19 @@ service riposte_touchswap /system/bin/riposte-touchswap
     seclabel u:r:su:s0
     disabled
 
+# Car-owner builds: the always-on diagnostics recorder (riposte-diag.sh), read back with
+# `rav4 car diag pull` and os/diag/check.py.
+service riposte_diag /system/bin/sh /system/bin/riposte-diag.sh
+    class main
+    user root
+    group root
+    seclabel u:r:su:s0
+    disabled
+
 on property:sys.boot_completed=1 && property:ro.riposte.os.car_owner=1
     start riposte_touchswap
     start riposte_zxwio
+    start riposte_diag
 
 # ro.riposte.os.bench=1 only: take the port back after the vendor's boot_completed host write.
 on property:sys.boot_completed=1 && property:ro.riposte.os.bench=1

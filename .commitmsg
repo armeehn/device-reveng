@@ -1,0 +1,38 @@
+Tell the truth in five degraded states
+
+The launcher is HOME on a unit whose vendor service, MCU, car kit and
+storage can all be missing, blind or full. Five screens answered such a
+state with a definite claim instead of an honest absence. Provoked one
+at a time on emulator instance 2.
+
+BLUETOOTH_CONNECT revoked at runtime: the profile probe and the
+connection-state broadcasts both go silent, so the chip read "Bluetooth
+on, nothing connected" - a phone mid-call would have shown as idle.
+The count is now nullable and unreadable says so.
+
+Ignition tile and the Power & sleep readout: CarEvents.accOn fails open
+to true so a silent unit stays usable, and the tile printed that default
+as "ACC on, vendor ACC broadcast" on a bench unit that has never heard
+the car. A latched accSeen, the same shape as illuminationSeen, lets the
+tile read as an em dash like every neighbour.
+
+Notification access withdrawn while the shelf is open: the listener
+detaches and the list empties, and the screen then said "0 showing,
+Nothing new" - a claim about the phone. The access query is now keyed on
+the binding, so it re-runs on the disconnect and the screen shows the
+"access is off" copy it already had.
+
+A btsuite page that is not installed, and a full or read-only /sdcard
+under the backup and SysVar-export writers: all three calls already
+return their failure, and all three screens dropped it, leaving a button
+that silently does nothing. Each now says what did not happen.
+
+Guards: DegradedReadingTest pins both absent-reading mappings, and a
+fourth UiSourceAuditTest rule fails any ui/ file that drops one of those
+fallible answers again.
+
+Left: at font_scale 1.3 with density 280 the Vehicle dashboard clips its
+tile captions and the bottom row falls off the panel. The fix is a
+rework of the weighted grid, not a degraded-state change.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>

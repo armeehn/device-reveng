@@ -1,0 +1,17 @@
+appId: com.ripostelabs.carlauncher
+name: Back on Home keeps Home, even with another app behind it
+# The launcher is the car's floor: Back on Home must not hand the panel to the last app.
+# System Settings is opened first so a task sits behind Home to be revealed. The launcher is
+# brought back by launchApp, not the Home key: other flows clear its data, which can drop the
+# farm's default-Home choice and turn the Home key into a chooser.
+---
+- launchApp:
+    appId: com.android.settings
+- launchApp:
+    stopApp: false
+- extendedWaitUntil:
+    visible: "Search apps"
+    timeout: 20000
+- back
+- assertVisible: "Search apps"
+- assertNotVisible: "Network & internet"

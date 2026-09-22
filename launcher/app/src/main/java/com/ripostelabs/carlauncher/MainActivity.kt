@@ -5,9 +5,11 @@ import android.content.Intent
 import android.content.pm.PackageManager // v2.5
 import android.util.Log
 import android.os.Bundle
+import android.os.SystemClock
 import android.view.KeyEvent
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts // v2.5
@@ -62,6 +64,7 @@ import com.ripostelabs.carlauncher.data.SysVarMirrorProvider // RAV4-98
 import com.ripostelabs.carlauncher.data.CarSettingsController // v1.1 settings suite
 import com.ripostelabs.carlauncher.data.parseVendorHidden // v0.4.9
 import com.ripostelabs.carlauncher.data.CrashLog // v0.4.3.7
+import com.ripostelabs.carlauncher.data.FirstRunGate // v2.9
 import com.ripostelabs.carlauncher.data.AppDirectoryStore // v0.4.2
 import com.ripostelabs.carlauncher.data.AppOrderStore // v3.0
 import com.ripostelabs.carlauncher.data.DriverProfilesStore // v3.0
@@ -115,6 +118,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay // v2.6
 import kotlinx.coroutines.flow.combine // v0.4.7.1 muted-aware TTS
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first // v2.9
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -246,6 +250,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        val startedAt = SystemClock.uptimeMillis() // for the Startup log below
         // v0.4.3.7: arm the crash log before anything else runs, so a failure during the rest of
         // this method is recorded too. Cheap and synchronous — it only reads the current default
         // handler and installs a wrapper around it.
@@ -282,6 +287,18 @@ class MainActivity : ComponentActivity() {
             }
             lifecycleScope.launch {
                 carEvents.motion.collect { sysVarMirror.refresh() }
+            }
+            // A phone session coming up brings its screen forward, as the vendor gateway did
+            // for the OEM app (ZlinkManage.startZlinkActivity); on 0.2 that screen is ours.
+            lifecycleScope.launch {
+                carEvents.zlinkConnected.collect { up ->
+                    if (up) {
+                        Zlink.openAny(applicationContext)
+                        // The track for the media card rides the stack's AVRCP session, which
+                        // needs the phone as its A2DP device (BtCarKit.connectSink).
+                        btCarKit?.connectSink()
+                    }
+                }
             }
             // The MCU gets the clock once this boot has one (McuClock.pushIfTrustworthy); the
             // vendor only did that at power-off, which a bench unit never reaches.
@@ -398,12 +415,25 @@ class MainActivity : ComponentActivity() {
             beepEnabled = { carSettingsController.getBoolean(SettingKeys.TOUCH_BEEP, false) },
         )
 
-        // v2.5: ask once for the location permission behind the parked-only gate.
-        requestLocationPermissionIfNeeded()
+        // v2.9: neither ask runs on a first run. Fired straight from onCreate they appeared on top
+        // of the welcome screen, so the first thing a driver ever saw was "Allow Car Launcher to
+        // access this device's location?" over text they had not read — and on a 720 px panel
+        // the dialog's "Don't allow" is clipped to a sliver (farm, 2026-09-22). Onboarding's own
+        // permissions step is the ask then, with a reason beside it. A driver who skipped it is
+        // asked on the next start; asking the moment Finish is pressed nags whoever just said no.
+        lifecycleScope.launch {
+            val firstRun = settingsStore.firstRun.first { it != null }
+            if (!FirstRunGate.mayPrompt(firstRun)) {
+                return@launch
+            }
 
-        // Riposte OS 0.2: the reverse camera is ours only when the MCU owner is; ask only then.
-        if (mcuOwner != null) {
-            requestCameraPermissionIfNeeded()
+            // v2.5: ask once for the location permission behind the parked-only gate.
+            requestLocationPermissionIfNeeded()
+
+            // Riposte OS 0.2: the reverse camera is ours only when the MCU owner is; ask only then.
+            if (mcuOwner != null) {
+                requestCameraPermissionIfNeeded()
+            }
         }
 
         keyPump = KeyPump(lifecycleScope, ::onNavEvent) // v2.8
@@ -553,6 +583,10 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        // The main thread's share of the launch, readable off the car with `logcat -s Startup`
+        // and printed by the cold-start CI job beside TotalTime. Two clock reads and a log.
+        Log.i(STARTUP_TAG, "onCreate ${SystemClock.uptimeMillis() - startedAt} ms")
+
         setContent {
             // Day/night from the vendor illumination broadcast (CAR_API §1.3).
             val dayNight by carEvents.dayNight.collectAsStateWithLifecycle()
@@ -624,6 +658,20 @@ class MainActivity : ComponentActivity() {
             // what releases the route; nothing is written during composition any more.
             val shownScreen =
                 if (firstRun == true && screen == Screen.Home) Screen.Onboarding else screen
+
+            // The system Back button and the gesture: every screen above Home returns Home, as
+            // the wheel's BACK already did (NavKey.BACK). Without this only Settings caught
+            // Back; from Notifications, Themes, Vehicle or Media it left the launcher
+            // altogether and showed whatever app sat behind it (farm, 2026-09-22). Settings
+            // owns its own stack in SettingsHost and is left to it; Onboarding must not be
+            // escapable by Back at all. Home swallows Back: the launcher is the floor, and
+            // letting it through moved the task back and showed the last app (farm, 2026-09-22).
+            BackHandler(enabled = shownScreen !is Screen.Settings) {
+                if (shownScreen != Screen.Home && shownScreen != Screen.Onboarding) {
+                    screen = Screen.Home
+                    launcherFocus.reset()
+                }
+            }
 
             // v2.5: the parked-only verdict. Gated features block on MOVING only — UNKNOWN
             // fails open, see CarEvents.motion.
@@ -797,7 +845,7 @@ class MainActivity : ComponentActivity() {
                                     onOpenCarPlay = if (SourceLabels.isCarPlay(now?.sourcePackage) ||
                                         SourceLabels.isProjection(vendorSource)
                                     ) {
-                                        { Zlink.open().start(applicationContext) }
+                                        { Zlink.openAny(applicationContext) }
                                     } else {
                                         null
                                     },
@@ -920,7 +968,16 @@ class MainActivity : ComponentActivity() {
                                 // main thread the first time the shelf opened. null = not
                                 // resolved yet, read as enabled so the "access is off" warning
                                 // never flashes before the answer arrives.
-                                val listenerEnabled by produceState<Boolean?>(initialValue = null) {
+                                //
+                                // Keyed on the listener binding, so access withdrawn while the
+                                // shelf is open re-runs the query instead of leaving the screen
+                                // claiming there is simply nothing to show.
+                                val listenerBound by NotificationRepository.connected
+                                    .collectAsStateWithLifecycle()
+                                val listenerEnabled by produceState<Boolean?>(
+                                    initialValue = null,
+                                    listenerBound,
+                                ) {
                                     value = withContext(Dispatchers.IO) {
                                         NotificationRepository.isListenerEnabled(applicationContext)
                                     }
@@ -1273,6 +1330,9 @@ class MainActivity : ComponentActivity() {
     }
 
 }
+
+/** The one startup measurement the launcher keeps: `adb logcat -s Startup`. */
+private const val STARTUP_TAG = "Startup"
 
 /** v2.6 — the vendor source changes only when the driver changes it; polling it is a courtesy. */
 private const val VENDOR_SOURCE_POLL_MS = 5_000L

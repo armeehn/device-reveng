@@ -1,0 +1,34 @@
+appId: com.ripostelabs.carlauncher
+name: Settings hub scrolls to its end and every row has a label
+# Scrolls to named rows, not by a count of swipes: a blind scroll lands at a different offset
+# every run, and the screenshots then drift 27% against their baseline with nothing wrong
+# (screenshot differ, 2026-09-22).
+---
+- launchApp
+- extendedWaitUntil:
+    visible: "Search apps"
+    timeout: 20000
+- tapOn: { point: "96%,7%" }        # Settings
+- extendedWaitUntil:
+    visible: "Launcher"
+    timeout: 20000
+- takeScreenshot: settings-top
+# No screenshot mid-scroll: the offset a scroll lands on varies by a few pixels every run and
+# the shot drifts ~10% against its baseline with nothing wrong. The top and the bottom of the
+# list are both hard stops, so those two are stable.
+- scrollUntilVisible:
+    element:
+      text: "Power & sleep"
+    direction: DOWN
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      text: "SysVar export"
+    direction: DOWN
+    timeout: 30000
+    centerElement: true
+- takeScreenshot: settings-end
+- back
+- extendedWaitUntil:
+    visible: "Search apps"
+    timeout: 20000

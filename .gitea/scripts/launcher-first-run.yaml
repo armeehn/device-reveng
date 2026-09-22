@@ -1,0 +1,18 @@
+appId: com.ripostelabs.carlauncher
+name: Clear first run so the journey flows start on Home
+# A fresh /data shows onboarding over Home, and every journey flow waits for "Search apps".
+# Onboarding's Skip is what calls SettingsStore.setFirstRunComplete(), the same flag
+# AccessibilityAuditTest writes before it launches the activity. Tapping it by label is
+# deterministic: it is a Compose text node, present on every onboarding step.
+#
+# This flow lives outside launcher/e2e/maestro on purpose — run.sh runs that whole
+# directory, and a preparation step is not a journey.
+---
+- launchApp
+- extendedWaitUntil:
+    visible: "Skip"
+    timeout: 60000
+- tapOn: "Skip"
+- extendedWaitUntil:
+    visible: "Search apps"
+    timeout: 60000

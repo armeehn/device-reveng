@@ -1,0 +1,34 @@
+appId: com.ripostelabs.carlauncher
+name: A theme can be picked and the launcher keeps running
+# The Themes screen writes the live palette; picking one and coming Home is the path that
+# repaints every surface. A crash or a blank Home here is the worst kind of UI bug.
+---
+- launchApp
+- extendedWaitUntil:
+    visible: "Search apps"
+    timeout: 20000
+- tapOn: { point: "71%,7%" }        # Themes
+- extendedWaitUntil:
+    visible: "Themes"
+    timeout: 20000
+- takeScreenshot: themes-list
+- tapOn:
+    text: "Daylight"
+    optional: true
+- takeScreenshot: themes-picked
+- back
+- extendedWaitUntil:
+    visible: "Search apps"
+    timeout: 20000
+- takeScreenshot: themes-home-after
+- tapOn: { point: "71%,7%" }
+- extendedWaitUntil:
+    visible: "Themes"
+    timeout: 20000
+- tapOn:
+    text: "Midnight"
+    optional: true
+- back
+- extendedWaitUntil:
+    visible: "Search apps"
+    timeout: 20000

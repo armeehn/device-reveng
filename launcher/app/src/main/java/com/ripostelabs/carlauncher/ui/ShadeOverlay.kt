@@ -32,6 +32,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.ripostelabs.carlauncher.carlib.CarService
 import com.ripostelabs.carlauncher.data.SettingsStore
@@ -102,10 +105,17 @@ fun ShadeOverlay(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(Color.Black.copy(alpha = 0.5f))
+                    // Named rather than hidden. Hiding it (Modifier.clearAndSetSemantics) would
+                    // leave a screen-reader user with no way out of an open shade: the panel has
+                    // no close button and the only other close affordance is a drag-up gesture.
+                    // So the scrim announces itself as the button it already is.
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
-                    ) { open = false },
+                        onClickLabel = SCRIM_DISMISS_LABEL,
+                        role = Role.Button,
+                    ) { open = false }
+                    .semantics { contentDescription = SCRIM_DISMISS_LABEL },
             )
         }
 
@@ -178,3 +188,6 @@ private const val CLOSE_THRESHOLD_PX = 40f
  * ate taps on every status-bar control.
  */
 private const val GRAB_STRIP_HEIGHT_DP = 12
+
+/** What the scrim is for, said the same way in its name and in its click action. */
+private const val SCRIM_DISMISS_LABEL = "Close quick controls"

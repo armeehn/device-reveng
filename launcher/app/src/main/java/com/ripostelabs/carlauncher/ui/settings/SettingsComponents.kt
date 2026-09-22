@@ -39,6 +39,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.ripostelabs.carlauncher.input.focusRing // v2.8
@@ -216,12 +218,13 @@ private val NO_ACTION: () -> Unit = {}
 @Composable
 fun SettingRow(
     label: String,
+    modifier: Modifier = Modifier,
     description: String? = null,
     enabled: Boolean = true,
     onClick: (() -> Unit)? = null,
     trailing: @Composable () -> Unit,
 ) {
-    val base = Modifier
+    val base = modifier
         .fillMaxWidth()
         .heightIn(min = 56.dp)
     // v2.8: the roving ring needs somewhere to land on every settings screen; adding it to the
@@ -272,7 +275,14 @@ fun ToggleSetting(
     val flip: () -> Unit = { if (enabled) onChange(!checked) }
     val flipConfirmed = withTapFeedback(flip) // v2.5
 
+    // The row's name is a child Text, and a row the scroll has cut at the screen edge keeps
+    // only the pixels it shows: with the label below the fold the row reads as an unlabelled
+    // button (a11y audit, Climate → "Heated seats"). Naming the row itself says the same words
+    // the child says, from a place the fold cannot take away.
+    val spoken = if (description == null) label else "$label, $description"
+
     SettingRow(
+        modifier = Modifier.semantics { contentDescription = spoken },
         label = label,
         description = description,
         enabled = enabled,
@@ -524,7 +534,7 @@ private fun StepButton(glyph: String, enabled: Boolean, onClick: () -> Unit) {
     val press = withTapFeedback(onClick) // v2.5
     Box(
         modifier = Modifier
-            .size(44.dp)
+            .size(STEP_TARGET_DP.dp)
             .clip(carShape(12.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant)
             .clickable(enabled = enabled, onClick = press),
@@ -641,3 +651,6 @@ internal fun rememberSliderEcho(value: Float): SliderEcho {
     LaunchedEffect(value) { echo.sync(value) }
     return echo
 }
+
+/** The slider's − / + buttons are the eyes-free way to nudge a value: 48 dp floor, not 44. */
+private const val STEP_TARGET_DP = 48

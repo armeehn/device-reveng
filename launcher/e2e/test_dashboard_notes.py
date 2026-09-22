@@ -27,7 +27,11 @@ MIN_NOTE_PX = 20
 DASHBOARD_ICON = "Vehicle dashboard"
 VEHICLE_TITLE = "Vehicle"
 # The notes as DashboardScreen.kt writes them for a desk instance with no car attached.
-NOTES = ("no reading yet", "vendor ACC broadcast", "no frame yet")
+# "vendor ACC broadcast" is not among them any more: the Ignition tile printed it on a unit
+# that had never heard the car, because CarEvents.accOn fails open to true and a readout cannot
+# tell that default from a real ACC event. The tile waits for CarEvents.accSeen now (#255), so
+# a bench instance reads "no reading yet".
+NOTES = ("no reading yet", "no frame yet")
 
 pytestmark = pytest.mark.carsim
 

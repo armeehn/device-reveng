@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -49,6 +51,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -58,6 +61,7 @@ import com.ripostelabs.carlauncher.AppInfo
 import com.ripostelabs.carlauncher.AppRepository
 import com.ripostelabs.carlauncher.HomeRole
 import com.ripostelabs.carlauncher.data.FavoritesStore
+import com.ripostelabs.carlauncher.data.FirstRunGate
 import com.ripostelabs.carlauncher.data.ThemeStore
 import com.ripostelabs.carlauncher.ui.theme.CarTheme
 import kotlinx.coroutines.Dispatchers
@@ -248,6 +252,11 @@ private fun ThemeStep(
                                 style = MaterialTheme.typography.titleMedium,
                                 color = MaterialTheme.colorScheme.onSurface,
                                 fontWeight = FontWeight.SemiBold,
+                                // An imported theme names itself; three to a row, a long one
+                                // wrapped and pushed the active tick out of the cell.
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false),
                             )
                             if (active) {
                                 Spacer(Modifier.width(8.dp))
@@ -370,28 +379,29 @@ private fun PermissionsStep() {
             "So the launcher's features work. All optional — you can do this any time in " +
                 "Settings ▸ Setup doctor.",
         )
-        Spacer(Modifier.height(16.dp))
-        checks.forEach { check ->
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    imageVector = if (check.ok) Icons.Filled.CheckCircle else Icons.Filled.RadioButtonUnchecked,
-                    contentDescription = if (check.ok) "Granted" else "Not granted",
-                    tint = if (check.ok) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(22.dp),
-                )
-                Spacer(Modifier.width(12.dp))
-                Text(
-                    text = check.title,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onBackground,
-                )
+        Spacer(Modifier.height(12.dp))
+
+        // The list scrolls; the buttons under it do not. Six rows plus a heading are taller than
+        // the 720 px panel, and with the buttons in the same column they were laid out past its
+        // bottom edge — so the one screen that asks for permissions could not grant a single one
+        // (farm, 2026-09-22). A driver reaches the actions without scrolling anything.
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .verticalScroll(rememberScrollState()),
+        ) {
+            // Two to a row, so all six grants fit the panel at once; the scroll is only the
+            // safety net for a larger font scale.
+            FirstRunGate.grants(checks).chunked(GRANTS_PER_ROW).forEach { pair ->
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    pair.forEach { check -> GrantRow(check, Modifier.weight(1f)) }
+                    repeat(GRANTS_PER_ROW - pair.size) { Spacer(Modifier.weight(1f)) }
+                }
             }
         }
-        Spacer(Modifier.height(20.dp))
+
+        Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             PillButton(
                 label = "Grant location & Bluetooth",
@@ -413,6 +423,43 @@ private fun PermissionsStep() {
                         )
                     }
                 },
+            )
+        }
+    }
+}
+
+private const val GRANTS_PER_ROW = 2
+
+/** One grant: its live state, its name, and one line on why the launcher wants it. */
+@Composable
+private fun GrantRow(check: com.ripostelabs.carlauncher.data.DoctorCheck, modifier: Modifier) {
+    Row(
+        modifier = modifier.padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = if (check.ok) Icons.Filled.CheckCircle else Icons.Filled.RadioButtonUnchecked,
+            contentDescription = if (check.ok) "Granted" else "Not granted",
+            tint = if (check.ok) MaterialTheme.colorScheme.primary
+            else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(22.dp),
+        )
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.padding(end = 16.dp)) {
+            Text(
+                text = check.title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onBackground,
+            )
+            // Why the launcher wants it. SetupDoctor already writes one line per check
+            // ("Needed for the motion gate — …"); without it the step asked a driver for six
+            // grants and explained none of them.
+            Text(
+                text = check.detail,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }
