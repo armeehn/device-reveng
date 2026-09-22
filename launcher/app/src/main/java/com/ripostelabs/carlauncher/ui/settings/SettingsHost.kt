@@ -69,10 +69,11 @@ fun SettingsHost(
     // Riposte OS 0.2: the car-kit Bluetooth reader for the Doctor; null = btsuite's slot.
     carKit: BtCarKit? = null,
 ) {
+    // A deep link (the top bar's power chip) opens its page alone: the driver came from Home
+    // and one Back goes back there. The hub under it left them a second Back away (Maestro
+    // top-bar flow, 2026-09-22).
     val backStack = remember {
-        mutableStateListOf<SettingsRoute>(SettingsRoute.Hub).also { stack ->
-            initialRoute?.let { stack.add(it) }
-        }
+        mutableStateListOf<SettingsRoute>(initialRoute ?: SettingsRoute.Hub)
     }
 
     fun push(route: SettingsRoute) { backStack.add(route) }

@@ -1,0 +1,16 @@
+appId: com.ripostelabs.radio
+name: Suite Radio opens with a band switch and says when the tuner is absent
+---
+- launchApp:
+    appId: com.ripostelabs.radio
+    stopApp: true
+- extendedWaitUntil:
+    visible: "FM"
+    timeout: 8000
+- assertVisible: "AM"
+- takeScreenshot: suite-radio
+- tapOn: "AM"
+- takeScreenshot: suite-radio-am
+- tapOn: "FM"
+- pressKey: Home
+- assertVisible: "Search apps"

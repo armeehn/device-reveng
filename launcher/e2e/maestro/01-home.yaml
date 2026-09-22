@@ -1,0 +1,8 @@
+appId: com.ripostelabs.carlauncher
+name: Home comes up with its three columns
+---
+- launchApp
+- assertVisible: "Search apps"
+- assertVisible: "Quick launch"
+- assertVisible: "Navigation"
+- takeScreenshot: home

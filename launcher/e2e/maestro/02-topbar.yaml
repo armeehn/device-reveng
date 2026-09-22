@@ -1,0 +1,51 @@
+appId: com.ripostelabs.carlauncher
+name: Every top-bar screen opens by name and one Back returns Home
+# Icons are tapped by panel position (1920x720): a text match on "Phone" also hits the
+# Phone app in the grid. Bounds from `maestro hierarchy` on Home.
+---
+- launchApp
+- tapOn: { point: "55%,7%" }        # Power & sleep
+- assertVisible: "Power & sleep"
+- takeScreenshot: topbar-power
+- back
+- assertVisible: "Search apps"
+- tapOn: { point: "61%,7%" }        # Notifications
+- assertVisible: "Notifications"
+- takeScreenshot: topbar-notifications
+- back
+- assertVisible: "Search apps"
+- tapOn: { point: "66%,7%" }        # Continue watching
+- assertVisible: "Continue watching"
+- takeScreenshot: topbar-continue
+- back
+- assertVisible: "Search apps"
+- tapOn: { point: "71%,7%" }        # Themes
+- assertVisible: "Themes"
+- takeScreenshot: topbar-themes
+- back
+- assertVisible: "Search apps"
+- tapOn: { point: "76%,7%" }        # Quick controls
+- assertVisible: "Quick controls"
+- takeScreenshot: topbar-quick
+- back
+- assertVisible: "Search apps"
+- tapOn: { point: "80%,7%" }        # Vehicle dashboard
+- assertVisible: "Vehicle"
+- takeScreenshot: topbar-vehicle
+- back
+- assertVisible: "Search apps"
+- tapOn: { point: "86%,7%" }        # Driver profiles
+- assertVisible: "Driver profiles"
+- takeScreenshot: topbar-profiles
+- back
+- assertVisible: "Search apps"
+- tapOn: { point: "91%,7%" }        # Phone
+- assertVisible: "Enter number"
+- takeScreenshot: topbar-phone
+- back
+- assertVisible: "Search apps"
+- tapOn: { point: "96%,7%" }        # Settings
+- assertVisible: "Launcher"
+- takeScreenshot: topbar-settings
+- back
+- assertVisible: "Search apps"

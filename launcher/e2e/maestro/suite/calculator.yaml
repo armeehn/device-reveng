@@ -1,0 +1,17 @@
+appId: com.ripostelabs.calculator
+name: Suite Calculator adds two numbers
+---
+- launchApp:
+    appId: com.ripostelabs.calculator
+    stopApp: true
+- extendedWaitUntil:
+    visible: "7"
+    timeout: 8000
+- tapOn: "7"
+- tapOn: "+"
+- tapOn: "8"
+- tapOn: "="
+- assertVisible: "15"
+- takeScreenshot: suite-calculator
+- pressKey: Home
+- assertVisible: "Search apps"

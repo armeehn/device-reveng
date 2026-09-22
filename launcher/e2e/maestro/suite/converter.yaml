@@ -1,0 +1,12 @@
+appId: com.ripostelabs.converter
+name: Suite Converter opens and comes back
+---
+- launchApp:
+    appId: com.ripostelabs.converter
+    stopApp: true
+- extendedWaitUntil:
+    visible: "CATEGORY"       # FINDING: the only suite app without its name on screen
+    timeout: 8000
+- takeScreenshot: suite-converter
+- pressKey: Home
+- assertVisible: "Search apps"

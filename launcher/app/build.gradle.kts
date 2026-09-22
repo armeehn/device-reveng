@@ -244,6 +244,10 @@ dependencies {
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test:runner:1.6.2")
     androidTestImplementation("androidx.test:core:1.6.1")
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
+    // The Accessibility Test Framework: the a11y audit over every top-bar screen.
+    androidTestImplementation("com.google.android.apps.common.testing.accessibility.framework:accessibility-test-framework:4.1.1")
+    androidTestImplementation("com.google.guava:guava:33.3.1-android")   // ATF's ImmutableSet on its API
 
     // createComposeRule() hosts the composable in a stub activity that only exists in this
     // manifest; without it the test APK has no activity to launch and every test errors out.
