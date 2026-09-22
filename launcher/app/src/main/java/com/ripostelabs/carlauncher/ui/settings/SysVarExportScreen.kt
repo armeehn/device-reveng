@@ -50,6 +50,9 @@ fun SysVarExportScreen(
     val snapshot by controller.snapshot.collectAsStateSafe(initial = emptyMap())
     var exports by remember { mutableStateOf<List<File>>(emptyList()) }
     var busy by remember { mutableStateOf(false) }
+    // export() returns null on a failed write; dropping it made a full or read-only /sdcard
+    // look like a dead button.
+    var failure by remember { mutableStateOf<String?>(null) }
     var deleteTarget by remember { mutableStateOf<File?>(null) }
 
     fun reload() {
@@ -74,14 +77,23 @@ fun SysVarExportScreen(
                 onClick = {
                     scope.launch {
                         busy = true
-                        withContext(Dispatchers.IO) {
+                        val written = withContext(Dispatchers.IO) {
                             SysVarExport.export(context, snapshot, System.currentTimeMillis())
                         }
+                        failure = if (written == null) EXPORT_FAILED else null
                         busy = false
                         reload()
                     }
                 },
             )
+            val message = failure
+            if (message != null) {
+                Text(
+                    text = message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
             Text(
                 text = "Pull over adb:\nadb pull /sdcard/Android/data/" + pkg + "/files/sysvar-dumps/",
                 style = MaterialTheme.typography.bodySmall.copy(fontFamily = JetBrainsMono),
@@ -166,3 +178,6 @@ private fun ExportRow(file: File, onDelete: () -> Unit) {
 
 /** Destructive tap on a list row; kept on the 48 dp floor rather than the 40 dp glyph box. */
 private const val DELETE_TARGET_DP = 48
+
+/** An export write that did not happen. Same cause as the backup writer's: no room, or no write. */
+private const val EXPORT_FAILED = "Could not write the export. Storage may be full or read-only."

@@ -150,6 +150,50 @@ class UiSourceAuditTest {
         )
     }
 
+    // ---- rule 4: fallible actions ---------------------------------------------------------
+
+    /**
+     * Calls whose answer is "it did not happen", and which a screen used to drop on the floor:
+     * `IntentSpec.start` returns false when nothing resolved, the two writers return null or
+     * false when the write failed. Dropped, the button reads as broken instead of as blocked —
+     * the exact shape of a btsuite page that is not installed, or of a full /sdcard.
+     */
+    private val fallibleCalls =
+        Regex("""\)\.start\(context\)|\bLauncherBackup\.(create|restore)\(|\bSysVarExport\.export\(""")
+
+    @Test
+    fun aFallibleActionNeverDropsItsAnswer() {
+        val found = mutableListOf<String>()
+
+        for (file in uiSources()) {
+            val lines = file.readTextLines()
+            lines.forEachIndexed { index, line ->
+                if (!fallibleCalls.containsMatchIn(line)) {
+                    return@forEachIndexed
+                }
+
+                // The answer counts as used when the line binds it or branches on it. A call
+                // wrapped in `val x = withContext(IO) { ... }` binds it one line up, so the
+                // opener directly above counts too.
+                val opener = lines.getOrNull(index - 1).orEmpty()
+                val bound = ANSWER_USED.containsMatchIn(line) ||
+                    (opener.trimEnd().endsWith("{") && ANSWER_USED.containsMatchIn(opener))
+                if (bound) {
+                    return@forEachIndexed
+                }
+
+                found += "${file.name}:${index + 1}: ${line.trim()}"
+            }
+        }
+
+        assertTrue(
+            "a fallible call's result is discarded. Bind it and tell the driver what did not " +
+                "happen, rather than leaving a button that silently does nothing:\n" +
+                found.joinToString("\n"),
+            found.isEmpty(),
+        )
+    }
+
     // ---- plumbing -------------------------------------------------------------------------
 
     /** Every Kotlin file under `ui/`, minus the theme package, which owns the literal colours. */
@@ -183,5 +227,6 @@ class UiSourceAuditTest {
         val DP_CONSTANT = Regex("""const val ([A-Za-z0-9_]+)\s*=\s*(\d+)""")
         val LITERAL_COLOR = Regex("""\bColor\(0x[0-9A-Fa-f]""")
         val NULL_DESCRIPTION = Regex("""contentDescription\s*=\s*null""")
+        val ANSWER_USED = Regex("""\b(val|var|return)\b|=\s*$|if\s*\(|\?:""")
     }
 }

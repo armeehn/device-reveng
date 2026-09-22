@@ -1,5 +1,6 @@
 package com.ripostelabs.carlauncher.ui
 
+import android.Manifest
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
@@ -8,6 +9,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.database.ContentObserver
 import android.net.ConnectivityManager
 import android.net.Network
@@ -380,33 +382,39 @@ private fun wifiBars(wm: WifiManager?, rssi: Int?): Int {
 internal data class BtStatus(
     val present: Boolean,
     val on: Boolean,
-    val connectedCount: Int,
+    /** null when the count is unreadable — see [btLabel]. Never coerced to 0. */
+    val connectedCount: Int?,
 )
+
+/**
+ * What the chip says. Split out of the composable so the mapping is provable in a JVM test.
+ *
+ * A null count means BLUETOOTH_CONNECT is not granted, so the profile probe and the
+ * connection-state broadcasts are both silent. That is "we cannot see", not "nothing is
+ * connected" — a phone on a call would have read as idle.
+ */
+internal fun btLabel(bt: BtStatus): String = when {
+    !bt.on -> "Bluetooth off"
+    bt.connectedCount == null -> "Bluetooth on, connections unreadable"
+    bt.connectedCount > 0 -> "Bluetooth: ${bt.connectedCount} connected"
+    else -> "Bluetooth on, nothing connected"
+}
 
 @Composable
 private fun BluetoothChip(bt: BtStatus) {
-    val (icon, description, tint) = when {
-        !bt.on -> Triple(
-            Icons.Filled.BluetoothDisabled,
-            "Bluetooth off",
-            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = DISABLED_ALPHA),
-        )
-        bt.connectedCount > 0 -> Triple(
-            Icons.Filled.BluetoothConnected,
-            "Bluetooth: ${bt.connectedCount} connected",
-            MaterialTheme.colorScheme.primary,
-        )
-        else -> Triple(
-            Icons.Filled.Bluetooth,
-            "Bluetooth on, nothing connected",
-            MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+    val count = bt.connectedCount
+    val (icon, tint) = when {
+        !bt.on -> Icons.Filled.BluetoothDisabled to
+            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = DISABLED_ALPHA)
+        count != null && count > 0 -> Icons.Filled.BluetoothConnected to
+            MaterialTheme.colorScheme.primary
+        else -> Icons.Filled.Bluetooth to MaterialTheme.colorScheme.onSurfaceVariant
     }
     StatusChip(
         icon = icon,
-        description = description,
+        description = btLabel(bt),
         tint = tint,
-        text = if (bt.connectedCount > 1) "${bt.connectedCount}" else null,
+        text = if (count != null && count > 1) "$count" else null,
         tag = StatusIndicatorTags.BLUETOOTH,
     )
 }
@@ -433,7 +441,7 @@ internal fun applyVendorBt(android: BtStatus, vendor: VendorBtState): BtStatus {
     if (vendor.powered == true && !merged.on) {
         merged = merged.copy(present = true, on = true)
     }
-    if (vendor.connected == true && merged.connectedCount == 0) {
+    if (vendor.connected == true && (merged.connectedCount ?: 0) == 0) {
         merged = merged.copy(present = true, on = true, connectedCount = 1)
     }
     return merged
@@ -449,6 +457,14 @@ private fun rememberBluetoothStatus(context: Context, carEvents: CarEvents? = nu
     // On the rooted unit: pm grant com.ripostelabs.carlauncher android.permission.BLUETOOTH_CONNECT
     var on by remember { mutableStateOf(runCatching { adapter?.isEnabled == true }.getOrDefault(false)) }
     var connected by remember { mutableStateOf(setOf<String>()) }
+
+    // Whether that count means anything. Deliberately NOT remembered: a revoke kills the
+    // process, but `pm grant` from root does not, and a chip remembering the old answer would
+    // keep saying "unreadable" for the rest of a session that can outlive the car. The check is
+    // served from the client-side permission cache on API 33, so a read per recomposition is
+    // cheap.
+    val countReadable = context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) ==
+        PackageManager.PERMISSION_GRANTED
 
     DisposableEffect(Unit) {
         if (adapter == null) {
@@ -524,7 +540,11 @@ private fun rememberBluetoothStatus(context: Context, carEvents: CarEvents? = nu
         vendorFresh = false
     }
 
-    val android = BtStatus(present = adapter != null, on = on, connectedCount = connected.size)
+    val android = BtStatus(
+        present = adapter != null,
+        on = on,
+        connectedCount = if (countReadable) connected.size else null,
+    )
     return if (vendorFresh) applyVendorBt(android, vendor) else android
 }
 
