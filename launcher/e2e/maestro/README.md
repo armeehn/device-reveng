@@ -70,8 +70,9 @@ boot, and it runs `run.sh` verbatim. The APK it installs is the `farm` variant: 
 name the release application id, which the debug build is not.
 `.gitea/scripts/launcher-e2e.sh` is the whole procedure.
 
-11 of the 12 run there. `05-apps` searches the grid for Calculator, which the farm has
-and a bare `aosp_atd` image does not.
+10 of the 12 run there. `05-apps` searches the grid for Calculator and `12-home-back`
+opens system Settings. The farm has both, a bare `aosp_atd` image has neither.
+`HomeBackTest` covers the Back rule in CI instead.
 
 The screenshots stay the farm's job. CI's emulator renders host-side and reads every frame
 back black, so a baseline of them would be green whatever the launcher drew. The job probes

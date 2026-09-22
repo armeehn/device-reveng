@@ -44,7 +44,9 @@ BASELINE="$FLOW_SRC/baseline-ci"
 # 05-apps searches the grid for "Calculator". The farm instance carries the 28 suite APKs;
 # a bare aosp_atd image has no calculator at all and the grid answers "No matching apps"
 # (run 5191 hierarchy dump). The journey is sound, the app simply is not here.
-CI_SKIP_FLOW="05-apps.yaml"
+# 12-home-back opens system Settings to sit behind Home; the image has no Settings either
+# (run 5280). HomeBackTest in the instrumentation job guards the same Back rule here.
+CI_SKIP_FLOWS="05-apps.yaml 12-home-back.yaml"
 # The launcher writes its first-run flag on its own coroutine scope; give it a moment to
 # reach disk before the next launch reads it back (AccessibilityAuditTest waits 1 s too).
 FLAG_SETTLE_S=3
@@ -125,7 +127,9 @@ flows="$(dirname "$OUT_DIR")/flows"
 rm -rf "$flows"
 mkdir -p "$flows"
 cp "$FLOW_SRC"/*.yaml "$flows/"
-rm -f "$flows/$CI_SKIP_FLOW"
+for skip in $CI_SKIP_FLOWS; do
+  rm -f "$flows/$skip"
+done
 echo "running $(ls "$flows" | wc -l) journey flows"
 
 status=0
