@@ -301,7 +301,18 @@ jobs:
           # laid out off-screen and fail for a reason that is not a regression.
           script: |
             .gitea/scripts/assert-geometry.sh
+            # The accessibility audit walks 35 screens and writes its report to logcat
+            # only; the default ring buffer drops the first screens before the run ends,
+            # and the emulator is gone by the time a later step could read it. So: widen
+            # the buffer, keep the Gradle verdict, and print the report from inside the
+            # emulator's own lifetime.
+            adb logcat -G 16M
+            set +e
             cd launcher && ./gradlew --no-daemon connectedDebugAndroidTest
+            rc=$?
+            echo "--- A11yAudit report ---"
+            adb logcat -d -s A11yAudit:I
+            exit $rc
 
       # Always upload: a red emulator run is exactly when the HTML report matters.
       - name: Upload instrumentation reports
