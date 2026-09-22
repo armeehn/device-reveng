@@ -149,7 +149,7 @@ data class CarTheme(
  *                  text runs 9-18:1, so the text pixels (most of the screen's light) drop
  *                  hard while staying over the WCAG 4.5:1 body-text bar.
  *   muted text     4.9:1 on the recessed panel it is drawn on (onSurfaceVariant's pair).
- *   accents        4.6:1 on the night card, never brighter than by day, floor 3.2:1.
+ *   accents        4.5:1 on every night surface and under their label, never louder than by day.
  *   error          4.6:1 and NOT capped: a fault must read the same at 02:00 as at noon.
  *
  * NightModeContrastTest holds every one of those numbers, so a new preset that pastes in a
@@ -166,7 +166,7 @@ object BuiltInThemes {
             background = 0xFF0B0E11,
             surface = 0xFF161B22,
             surfaceVariant = 0xFF1F2630,
-            primary = 0xFF2F81F7,
+            primary = 0xFF3F8BF8, // 2F81F7 read 4.07:1 on surfaceVariant (suite a11y audit)
             onBackground = 0xFFE6EDF3,
             onSurface = 0xFFE6EDF3,
             onSurfaceMuted = 0xFF8B98A5,
@@ -176,7 +176,7 @@ object BuiltInThemes {
             background = 0xFF030506,
             surface = 0xFF080A0F,
             surfaceVariant = 0xFF0C0F15,
-            primary = 0xFF4477D5,
+            primary = 0xFF4D7DD7,
             onBackground = 0xFF84898C,
             onSurface = 0xFF84898C,
             onSurfaceMuted = 0xFF77828E,
@@ -204,7 +204,7 @@ object BuiltInThemes {
             background = 0xFF0A0A0A,
             surface = 0xFF141414,
             surfaceVariant = 0xFF1B1B1D,
-            primary = 0xFF1564BD, // the day blue, a shade down: any dimmer loses the 3:1 bar
+            primary = 0xFF2B84E7, // the day blue, lifted to 4.5:1 on the night panels
             onBackground = 0xFF8C8E8F,
             onSurface = 0xFF8C8E8F,
             onSurfaceMuted = 0xFF87898A,
@@ -231,7 +231,7 @@ object BuiltInThemes {
             background = 0xFF070603,
             surface = 0xFF110C06,
             surfaceVariant = 0xFF181108,
-            primary = 0xFF9D7338,
+            primary = 0xFFA2773A,
             onBackground = 0xFF8F897E,
             onSurface = 0xFF8F897E,
             onSurfaceMuted = 0xFF957F58,
@@ -252,7 +252,7 @@ object BuiltInThemes {
             background = 0xFF1E1E2E,
             surface = 0xFF313244,
             surfaceVariant = 0xFF45475A,
-            primary = 0xFFCBA6F7,
+            primary = 0xFFCBA7F7,
             onBackground = 0xFFCDD6F4,
             onSurface = 0xFFCDD6F4,
             onSurfaceMuted = 0xFFB8BDD2,
@@ -262,7 +262,7 @@ object BuiltInThemes {
             background = 0xFF0A0A12,
             surface = 0xFF13141D,
             surfaceVariant = 0xFF1A1B25,
-            primary = 0xFF8C77A7,
+            primary = 0xFF8F7BA9,
             onBackground = 0xFF878DA2,
             onSurface = 0xFF878DA2,
             onSurfaceMuted = 0xFF858998,
@@ -289,7 +289,7 @@ object BuiltInThemes {
             background = 0xFF0A0A0A,
             surface = 0xFF151414,
             surfaceVariant = 0xFF1F1B1A,
-            primary = 0xFF9B7A40,
+            primary = 0xFFA07E42,
             onBackground = 0xFF988D72,
             onSurface = 0xFF988D72,
             onSurfaceMuted = 0xFF8F8980,
@@ -306,7 +306,7 @@ object BuiltInThemes {
             background = 0xFF2E3440,
             surface = 0xFF3B4252,
             surfaceVariant = 0xFF434C5E,
-            primary = 0xFF88C0D0,
+            primary = 0xFF8FC4D3,
             onBackground = 0xFFECEFF4,
             onSurface = 0xFFECEFF4,
             onSurfaceMuted = 0xFFBDC4CF,
@@ -316,7 +316,7 @@ object BuiltInThemes {
             background = 0xFF08090E,
             surface = 0xFF11141B,
             surfaceVariant = 0xFF171C24,
-            primary = 0xFF65848D,
+            primary = 0xFF698992,
             onBackground = 0xFF8C8E91,
             onSurface = 0xFF8C8E91,
             onSurfaceMuted = 0xFF848991,
@@ -333,7 +333,7 @@ object BuiltInThemes {
             background = 0xFF1A1B26,
             surface = 0xFF24283B,
             surfaceVariant = 0xFF373D59,
-            primary = 0xFF7AA2F7,
+            primary = 0xFF82A8F8,
             onBackground = 0xFFC0CAF5,
             onSurface = 0xFFC0CAF5,
             onSurfaceMuted = 0xFFACAFC3,
@@ -343,7 +343,7 @@ object BuiltInThemes {
             background = 0xFF090A10,
             surface = 0xFF111420,
             surfaceVariant = 0xFF181B2A,
-            primary = 0xFF667FB7,
+            primary = 0xFF6A83B9,
             onBackground = 0xFF858DAB,
             onSurface = 0xFF858DAB,
             onSurfaceMuted = 0xFF868898,
@@ -360,7 +360,7 @@ object BuiltInThemes {
             background = 0xFF282A36,
             surface = 0xFF343746,
             surfaceVariant = 0xFF44475A,
-            primary = 0xFFBD93F9,
+            primary = 0xFFC9A7FA,
             onBackground = 0xFFF8F8F2,
             onSurface = 0xFFF8F8F2,
             onSurfaceMuted = 0xFFB9BDD0,
@@ -370,7 +370,7 @@ object BuiltInThemes {
             background = 0xFF09090F,
             surface = 0xFF13141C,
             surfaceVariant = 0xFF1A1C25,
-            primary = 0xFF8E73B5,
+            primary = 0xFF9278B7,
             onBackground = 0xFF8F8F8B,
             onSurface = 0xFF8F8F8B,
             onSurfaceMuted = 0xFF868998,
@@ -397,7 +397,7 @@ object BuiltInThemes {
             background = 0xFF0A0810,
             surface = 0xFF14131F,
             surfaceVariant = 0xFF1B182B,
-            primary = 0xFF937A78,
+            primary = 0xFF957D7B,
             onBackground = 0xFF8E8C9B,
             onSurface = 0xFF8E8C9B,
             onSurfaceMuted = 0xFF8985A2,
@@ -424,7 +424,7 @@ object BuiltInThemes {
             background = 0xFF010301,
             surface = 0xFF030703,
             surfaceVariant = 0xFF040B04,
-            primary = 0xFF3C8848,
+            primary = 0xFF3F8F4B,
             onBackground = 0xFF589458,
             onSurface = 0xFF589458,
             onSurfaceMuted = 0xFF368F36,
@@ -451,7 +451,7 @@ object BuiltInThemes {
             background = 0xFFF6F1E7, // Bone
             surface = 0xFFF6F1E7, // cards are bone too — the 2dp ink border separates
             surfaceVariant = 0xFFEAE4D6, // Bone Dim (recessed panels)
-            primary = 0xFFD81150, // Pink Deep (AA 4.53:1 on bone)
+            primary = 0xFFC9104B, // Pink Deep, a shade down: AA 4.5:1 on Bone Dim too
             onBackground = 0xFF1D1A17, // Ink
             onSurface = 0xFF1D1A17,
             onSurfaceMuted = 0xFF5C554C, // Ink Line
@@ -463,7 +463,7 @@ object BuiltInThemes {
             background = 0xFF0A0A09, // ink field, dimmed for night
             surface = 0xFF151513, // Ink, dimmed
             surfaceVariant = 0xFF1D1B19, // Ink Raised, dimmed
-            primary = 0xFFA96E39, // dimmed marigold — low-blue night accent
+            primary = 0xFFB3753C, // dimmed marigold — low-blue night accent
             onBackground = 0xFF928E88, // dimmed bone
             onSurface = 0xFF928E88, // dimmed bone
             onSurfaceMuted = 0xFF8B8883, // dimmed bone, muted
