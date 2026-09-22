@@ -5,6 +5,7 @@ import android.content.Intent
 import android.content.pm.PackageManager // v2.5
 import android.util.Log
 import android.os.Bundle
+import android.os.SystemClock
 import android.view.KeyEvent
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
@@ -246,6 +247,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        val startedAt = SystemClock.uptimeMillis() // for the Startup log below
         // v0.4.3.7: arm the crash log before anything else runs, so a failure during the rest of
         // this method is recorded too. Cheap and synchronous — it only reads the current default
         // handler and installs a wrapper around it.
@@ -576,6 +578,10 @@ class MainActivity : ComponentActivity() {
                 else launcherFocus.restoreAfterInterruption()
             }
         }
+
+        // The main thread's share of the launch, readable off the car with `logcat -s Startup`
+        // and printed by the cold-start CI job beside TotalTime. Two clock reads and a log.
+        Log.i(STARTUP_TAG, "onCreate ${SystemClock.uptimeMillis() - startedAt} ms")
 
         setContent {
             // Day/night from the vendor illumination broadcast (CAR_API §1.3).
@@ -1305,6 +1311,9 @@ class MainActivity : ComponentActivity() {
     }
 
 }
+
+/** The one startup measurement the launcher keeps: `adb logcat -s Startup`. */
+private const val STARTUP_TAG = "Startup"
 
 /** v2.6 — the vendor source changes only when the driver changes it; polling it is a courtesy. */
 private const val VENDOR_SOURCE_POLL_MS = 5_000L
