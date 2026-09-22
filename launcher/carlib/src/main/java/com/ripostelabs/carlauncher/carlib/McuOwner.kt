@@ -431,7 +431,9 @@ class McuOwner(
             }
 
             is McuFrame.Decoded.Malformed -> {
-                Log.w(LOG_TAG, "CAN relay frame malformed: ${inner.reason}")
+                // The bytes are what a parser fix needs: every relayed wheel key goes this way.
+                Log.w(LOG_TAG, "CAN relay frame malformed: ${inner.reason}: " +
+                    command.payload.joinToString(" ") { "%02X".format(it) })
                 return
             }
 

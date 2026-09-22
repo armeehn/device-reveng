@@ -378,4 +378,21 @@ class McuOwnerProtocolTest {
         assertNull(McuOwnerProtocol.rtcTime(McuSerial.Command(McuOpcode.SYS_RTC_TIME.code, bytes(26, 13, 1, 0, 0, 0))))
         assertNull(McuOwnerProtocol.rtcTime(McuSerial.Command(McuOpcode.MUTE.code, bytes(26, 9, 19, 14, 5, 7))))
     }
+
+    // 0.2 in the car: nothing restored the amp at boot, so the MCU never sent a 79 and the
+    // Quick controls slider stayed "unavailable" (2026-09-22). The vendor restores it at boot.
+    @Test
+    fun startupRestoresTheMainVolumeWhenOneIsKnown() {
+        val frames = McuOwnerProtocol.startup(McuOwnerProtocol.StartupConfig(mainVolume = 12))
+
+        assertArrayEquals(McuOwnerProtocol.mainVolume(12), frames.last())
+    }
+
+    @Test
+    fun startupLeavesTheVolumeAloneWhenNoneIsKnown() {
+        val config = McuOwnerProtocol.StartupConfig()
+        val frames = McuOwnerProtocol.startup(config)
+
+        assertArrayEquals(McuOwnerProtocol.backlight(config.backlightDay, config.backlightNight), frames.last())
+    }
 }

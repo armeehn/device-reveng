@@ -34,6 +34,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.ripostelabs.carlauncher.carlib.BtCarKit
 import com.ripostelabs.carlauncher.carlib.CarEvents
+import com.ripostelabs.carlauncher.carlib.VolumeMemory
 import com.ripostelabs.carlauncher.data.McuClock
 import com.ripostelabs.carlauncher.data.AccessoryRuntime
 import com.ripostelabs.carlauncher.carlib.RootShell
@@ -46,6 +47,7 @@ import com.ripostelabs.carlauncher.tuner.CarTunerPort
 import com.ripostelabs.carlauncher.tuner.TunerHub
 import com.ripostelabs.carlauncher.carlib.CarCommandPort
 import com.ripostelabs.carlauncher.carlib.McuOwner
+import com.ripostelabs.carlauncher.carlib.McuOwnerProtocol
 import com.ripostelabs.carlauncher.carlib.McuStateExport
 import com.ripostelabs.carlauncher.carlib.SlcanLinkSource
 import com.ripostelabs.carlauncher.carlib.SysVarMirror
@@ -306,6 +308,7 @@ class MainActivity : ComponentActivity() {
                     delay(RTC_PUSH_POLL_MS)
                 }
             }
+            val volumeMemory = VolumeMemory(applicationContext)
             val ownerListener = McuOwner.FanOut(
                 carEvents.ownerListener(CanCaptureService.vehicle(), carService.radioState),
                 VendorBroadcastReemitter(applicationContext),
@@ -313,11 +316,13 @@ class MainActivity : ComponentActivity() {
                 mcuClock,
                 carService.volumeState,
                 McuStateExport().also { mcuStateExport = it; it.start() },
+                volumeMemory,
             )
             mcuOwner = McuOwner(
                 ownerGate,
                 ownerListener,
                 openLink = { ownerGate.mcuLink().open() },
+                config = McuOwnerProtocol.StartupConfig(mainVolume = volumeMemory.level()),
             ).also {
                 carService.attachOwner(it)
                 it.start()
