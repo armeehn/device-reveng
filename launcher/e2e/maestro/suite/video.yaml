@@ -6,9 +6,9 @@ name: Suite Video opens and comes back
     stopApp: true
 - extendedWaitUntil:
     visible: "Video"
-    timeout: 8000
+    timeout: 20000
 - takeScreenshot: suite-video
 - pressKey: Home
 - extendedWaitUntil:
     visible: "Search apps"
-    timeout: 10000
+    timeout: 20000

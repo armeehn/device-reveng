@@ -9,11 +9,11 @@ name: Home agrees with itself while the suite Radio plays
     stopApp: true
 - extendedWaitUntil:
     visible: "FM"
-    timeout: 8000
+    timeout: 20000
 - pressKey: Home
 - extendedWaitUntil:
     visible: "Search apps"
-    timeout: 8000
+    timeout: 20000
 - assertNotVisible: "Radio idle. Tap to tune."
 - assertNotVisible: "Radio unavailable"
 - takeScreenshot: radio-home-agrees

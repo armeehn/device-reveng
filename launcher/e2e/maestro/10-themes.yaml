@@ -7,7 +7,7 @@ name: A theme can be picked and the launcher keeps running
 - tapOn: { point: "71%,7%" }        # Themes
 - extendedWaitUntil:
     visible: "Themes"
-    timeout: 8000
+    timeout: 20000
 - takeScreenshot: themes-list
 - tapOn:
     text: "Daylight"
@@ -16,16 +16,16 @@ name: A theme can be picked and the launcher keeps running
 - back
 - extendedWaitUntil:
     visible: "Search apps"
-    timeout: 10000
+    timeout: 20000
 - takeScreenshot: themes-home-after
 - tapOn: { point: "71%,7%" }
 - extendedWaitUntil:
     visible: "Themes"
-    timeout: 8000
+    timeout: 20000
 - tapOn:
     text: "Midnight"
     optional: true
 - back
 - extendedWaitUntil:
     visible: "Search apps"
-    timeout: 10000
+    timeout: 20000

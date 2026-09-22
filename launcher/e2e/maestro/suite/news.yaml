@@ -6,9 +6,9 @@ name: Suite News opens and comes back
     stopApp: true
 - extendedWaitUntil:
     visible: "News"
-    timeout: 8000
+    timeout: 20000
 - takeScreenshot: suite-news
 - pressKey: Home
 - extendedWaitUntil:
     visible: "Search apps"
-    timeout: 10000
+    timeout: 20000

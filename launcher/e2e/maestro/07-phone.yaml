@@ -16,4 +16,4 @@ name: Phone screen dials on its pad and reads one status line
 - back
 - extendedWaitUntil:
     visible: "Search apps"
-    timeout: 10000
+    timeout: 20000

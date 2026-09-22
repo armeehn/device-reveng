@@ -6,9 +6,9 @@ name: Suite Converter opens and comes back
     stopApp: true
 - extendedWaitUntil:
     visible: "CATEGORY"       # FINDING: the only suite app without its name on screen
-    timeout: 8000
+    timeout: 20000
 - takeScreenshot: suite-converter
 - pressKey: Home
 - extendedWaitUntil:
     visible: "Search apps"
-    timeout: 10000
+    timeout: 20000

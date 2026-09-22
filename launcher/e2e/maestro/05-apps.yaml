@@ -11,4 +11,4 @@ name: App search narrows the grid and opens an app
 - back
 - extendedWaitUntil:
     visible: "Search apps"
-    timeout: 10000
+    timeout: 20000

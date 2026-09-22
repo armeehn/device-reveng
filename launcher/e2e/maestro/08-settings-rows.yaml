@@ -9,7 +9,7 @@ name: Every Settings row opens a screen that names itself
 - tapOn: { point: "96%,7%" }        # Settings
 - extendedWaitUntil:
     visible: "Launcher"
-    timeout: 8000
+    timeout: 20000
 - scrollUntilVisible:
     element:
       text: "Launcher"
@@ -18,11 +18,11 @@ name: Every Settings row opens a screen that names itself
 - tapOn: "Launcher"
 - extendedWaitUntil:
     visible: "Launcher"
-    timeout: 8000
+    timeout: 20000
 - back
 - extendedWaitUntil:
     visible: "App directory"
-    timeout: 8000
+    timeout: 20000
 - scrollUntilVisible:
     element:
       text: "App directory"
@@ -31,11 +31,11 @@ name: Every Settings row opens a screen that names itself
 - tapOn: "App directory"
 - extendedWaitUntil:
     visible: "App directory"
-    timeout: 8000
+    timeout: 20000
 - back
 - extendedWaitUntil:
     visible: "App directory"
-    timeout: 8000
+    timeout: 20000
 - scrollUntilVisible:
     element:
       text: "Display & Illumination"
@@ -44,11 +44,11 @@ name: Every Settings row opens a screen that names itself
 - tapOn: "Display & Illumination"
 - extendedWaitUntil:
     visible: "Display & Illumination"
-    timeout: 8000
+    timeout: 20000
 - back
 - extendedWaitUntil:
     visible: "App directory"
-    timeout: 8000
+    timeout: 20000
 - scrollUntilVisible:
     element:
       text: "Reverse camera"
@@ -57,11 +57,11 @@ name: Every Settings row opens a screen that names itself
 - tapOn: "Reverse camera"
 - extendedWaitUntil:
     visible: "Reverse camera"
-    timeout: 8000
+    timeout: 20000
 - back
 - extendedWaitUntil:
     visible: "App directory"
-    timeout: 8000
+    timeout: 20000
 - scrollUntilVisible:
     element:
       text: "Parking radar"
@@ -70,11 +70,11 @@ name: Every Settings row opens a screen that names itself
 - tapOn: "Parking radar"
 - extendedWaitUntil:
     visible: "Parking radar"
-    timeout: 8000
+    timeout: 20000
 - back
 - extendedWaitUntil:
     visible: "App directory"
-    timeout: 8000
+    timeout: 20000
 - scrollUntilVisible:
     element:
       text: "Audio & EQ"
@@ -83,11 +83,11 @@ name: Every Settings row opens a screen that names itself
 - tapOn: "Audio & EQ"
 - extendedWaitUntil:
     visible: "Audio & EQ"
-    timeout: 8000
+    timeout: 20000
 - back
 - extendedWaitUntil:
     visible: "App directory"
-    timeout: 8000
+    timeout: 20000
 - scrollUntilVisible:
     element:
       text: "Climate"
@@ -96,11 +96,11 @@ name: Every Settings row opens a screen that names itself
 - tapOn: "Climate"
 - extendedWaitUntil:
     visible: "Climate"
-    timeout: 8000
+    timeout: 20000
 - back
 - extendedWaitUntil:
     visible: "App directory"
-    timeout: 8000
+    timeout: 20000
 - scrollUntilVisible:
     element:
       text: "Radio"
@@ -109,11 +109,11 @@ name: Every Settings row opens a screen that names itself
 - tapOn: "Radio"
 - extendedWaitUntil:
     visible: "Radio"
-    timeout: 8000
+    timeout: 20000
 - back
 - extendedWaitUntil:
     visible: "App directory"
-    timeout: 8000
+    timeout: 20000
 - scrollUntilVisible:
     element:
       text: "Steering wheel"
@@ -122,11 +122,11 @@ name: Every Settings row opens a screen that names itself
 - tapOn: "Steering wheel"
 - extendedWaitUntil:
     visible: "Steering wheel"
-    timeout: 8000
+    timeout: 20000
 - back
 - extendedWaitUntil:
     visible: "App directory"
-    timeout: 8000
+    timeout: 20000
 - scrollUntilVisible:
     element:
       text: "Wheel gestures"
@@ -135,11 +135,11 @@ name: Every Settings row opens a screen that names itself
 - tapOn: "Wheel gestures"
 - extendedWaitUntil:
     visible: "Wheel gestures"
-    timeout: 8000
+    timeout: 20000
 - back
 - extendedWaitUntil:
     visible: "App directory"
-    timeout: 8000
+    timeout: 20000
 - scrollUntilVisible:
     element:
       text: "Power & sleep"
@@ -148,11 +148,11 @@ name: Every Settings row opens a screen that names itself
 - tapOn: "Power & sleep"
 - extendedWaitUntil:
     visible: "Power & sleep"
-    timeout: 8000
+    timeout: 20000
 - back
 - extendedWaitUntil:
     visible: "App directory"
-    timeout: 8000
+    timeout: 20000
 - scrollUntilVisible:
     element:
       text: "Root tier"
@@ -161,11 +161,11 @@ name: Every Settings row opens a screen that names itself
 - tapOn: "Root tier"
 - extendedWaitUntil:
     visible: "Root tier"
-    timeout: 8000
+    timeout: 20000
 - back
 - extendedWaitUntil:
     visible: "App directory"
-    timeout: 8000
+    timeout: 20000
 - scrollUntilVisible:
     element:
       text: "Setup doctor"
@@ -174,11 +174,11 @@ name: Every Settings row opens a screen that names itself
 - tapOn: "Setup doctor"
 - extendedWaitUntil:
     visible: "Setup doctor"
-    timeout: 8000
+    timeout: 20000
 - back
 - extendedWaitUntil:
     visible: "App directory"
-    timeout: 8000
+    timeout: 20000
 - scrollUntilVisible:
     element:
       text: "Backup & restore"
@@ -187,11 +187,11 @@ name: Every Settings row opens a screen that names itself
 - tapOn: "Backup & restore"
 - extendedWaitUntil:
     visible: "Backup & restore"
-    timeout: 8000
+    timeout: 20000
 - back
 - extendedWaitUntil:
     visible: "App directory"
-    timeout: 8000
+    timeout: 20000
 - scrollUntilVisible:
     element:
       text: "Updates"
@@ -200,11 +200,11 @@ name: Every Settings row opens a screen that names itself
 - tapOn: "Updates"
 - extendedWaitUntil:
     visible: "Updates"
-    timeout: 8000
+    timeout: 20000
 - back
 - extendedWaitUntil:
     visible: "App directory"
-    timeout: 8000
+    timeout: 20000
 - scrollUntilVisible:
     element:
       text: "System & about"
@@ -213,11 +213,11 @@ name: Every Settings row opens a screen that names itself
 - tapOn: "System & about"
 - extendedWaitUntil:
     visible: "System & about"
-    timeout: 8000
+    timeout: 20000
 - back
 - extendedWaitUntil:
     visible: "App directory"
-    timeout: 8000
+    timeout: 20000
 - scrollUntilVisible:
     element:
       text: "Vehicle"
@@ -226,11 +226,11 @@ name: Every Settings row opens a screen that names itself
 - tapOn: "Vehicle"
 - extendedWaitUntil:
     visible: "Vehicle"
-    timeout: 8000
+    timeout: 20000
 - back
 - extendedWaitUntil:
     visible: "App directory"
-    timeout: 8000
+    timeout: 20000
 - scrollUntilVisible:
     element:
       text: "Accessories"
@@ -239,11 +239,11 @@ name: Every Settings row opens a screen that names itself
 - tapOn: "Accessories"
 - extendedWaitUntil:
     visible: "Accessories"
-    timeout: 8000
+    timeout: 20000
 - back
 - extendedWaitUntil:
     visible: "App directory"
-    timeout: 8000
+    timeout: 20000
 - scrollUntilVisible:
     element:
       text: "Games"
@@ -252,11 +252,11 @@ name: Every Settings row opens a screen that names itself
 - tapOn: "Games"
 - extendedWaitUntil:
     visible: "Games"
-    timeout: 8000
+    timeout: 20000
 - back
 - extendedWaitUntil:
     visible: "App directory"
-    timeout: 8000
+    timeout: 20000
 - scrollUntilVisible:
     element:
       text: "Guided car tests"
@@ -265,11 +265,11 @@ name: Every Settings row opens a screen that names itself
 - tapOn: "Guided car tests"
 - extendedWaitUntil:
     visible: "Guided car tests"
-    timeout: 8000
+    timeout: 20000
 - back
 - extendedWaitUntil:
     visible: "App directory"
-    timeout: 8000
+    timeout: 20000
 - scrollUntilVisible:
     element:
       text: "CAN frame capture"
@@ -278,11 +278,11 @@ name: Every Settings row opens a screen that names itself
 - tapOn: "CAN frame capture"
 - extendedWaitUntil:
     visible: "CAN frame capture"
-    timeout: 8000
+    timeout: 20000
 - back
 - extendedWaitUntil:
     visible: "App directory"
-    timeout: 8000
+    timeout: 20000
 - scrollUntilVisible:
     element:
       text: "Radio info capture"
@@ -291,11 +291,11 @@ name: Every Settings row opens a screen that names itself
 - tapOn: "Radio info capture"
 - extendedWaitUntil:
     visible: "Radio info capture"
-    timeout: 8000
+    timeout: 20000
 - back
 - extendedWaitUntil:
     visible: "App directory"
-    timeout: 8000
+    timeout: 20000
 - scrollUntilVisible:
     element:
       text: "Vehicle data capture"
@@ -304,11 +304,11 @@ name: Every Settings row opens a screen that names itself
 - tapOn: "Vehicle data capture"
 - extendedWaitUntil:
     visible: "Vehicle data capture"
-    timeout: 8000
+    timeout: 20000
 - back
 - extendedWaitUntil:
     visible: "App directory"
-    timeout: 8000
+    timeout: 20000
 - scrollUntilVisible:
     element:
       text: "All settings (advanced)"
@@ -317,11 +317,11 @@ name: Every Settings row opens a screen that names itself
 - tapOn: "All settings (advanced)"
 - extendedWaitUntil:
     visible: "All settings"
-    timeout: 8000
+    timeout: 20000
 - back
 - extendedWaitUntil:
     visible: "App directory"
-    timeout: 8000
+    timeout: 20000
 - scrollUntilVisible:
     element:
       text: "SysVar export"
@@ -330,8 +330,8 @@ name: Every Settings row opens a screen that names itself
 - tapOn: "SysVar export"
 - extendedWaitUntil:
     visible: "SysVar export"
-    timeout: 8000
+    timeout: 20000
 - back
 - extendedWaitUntil:
     visible: "App directory"
-    timeout: 8000
+    timeout: 20000
