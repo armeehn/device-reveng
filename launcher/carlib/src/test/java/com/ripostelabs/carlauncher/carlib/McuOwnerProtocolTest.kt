@@ -517,6 +517,24 @@ class McuOwnerProtocolTest {
         assertNull(McuOwnerProtocol.wheelState(command(McuOpcode.WHEEL_STATE.code, 0x01)))
         assertNull(McuOwnerProtocol.wheelState(command(McuOpcode.KEY_EVENT.code, 0x01, 0x05)))
     }
+
+    /**
+     * onCmdModeAck (EventService.java:2192-2197): when the acked mode is SRC_MCU_VERSION (80),
+     * the rest of the body, CK cut off, is the MCU's version string (`new String(bArr, 2, len - 3)`).
+     */
+    @Test
+    fun mcuVersionIsTheRestOfTheVersionAck() {
+        val ack = command(McuOpcode.MODE_ACK.code, 0x50, 'R'.code, 'L'.code, '7'.code, '8'.code, '-'.code, '1'.code)
+
+        assertEquals("RL78-1", McuOwnerProtocol.mcuVersion(ack))
+    }
+
+    @Test
+    fun mcuVersionIgnoresOtherAcksAndOpcodes() {
+        assertNull(McuOwnerProtocol.mcuVersion(command(McuOpcode.MODE_ACK.code, 0x63)))
+        assertNull(McuOwnerProtocol.mcuVersion(command(McuOpcode.MODE_ACK.code)))
+        assertNull(McuOwnerProtocol.mcuVersion(command(McuOpcode.SYS_EVENT.code, 0x50, 'R'.code)))
+    }
 }
 
 /** The two BT-call frames eventcenter relays for btsuite; vectors summed by hand like the rest. */

@@ -93,6 +93,9 @@ class McuOwnerTest {
         val other = CopyOnWriteArrayList<McuSerial.Command>()
         val wakes = CopyOnWriteArrayList<Long>()
         val rtc = CopyOnWriteArrayList<LocalDateTime>()
+        val versions = CopyOnWriteArrayList<String>()
+        val relays = CopyOnWriteArrayList<Pair<ByteArray, List<McuFrame.Decoded>>>()
+        val cars = CopyOnWriteArrayList<CarProfile>()
 
         override fun onSysEvent(event: McuOwnerProtocol.SysEvent) { sys.add(event) }
         override fun onMainVolume(volume: McuOwnerProtocol.MainVolume) { this.volume.add(volume) }
@@ -104,6 +107,9 @@ class McuOwnerTest {
         override fun onOther(command: McuSerial.Command) { other.add(command) }
         override fun onWake() { wakes.add(System.currentTimeMillis()) }
         override fun onRtc(time: LocalDateTime) { rtc.add(time) }
+        override fun onMcuVersion(version: String) { versions.add(version) }
+        override fun onCanRelay(body: ByteArray, cut: List<McuFrame.Decoded>) { relays.add(body.copyOf() to cut) }
+        override fun onCanBoxCar(car: CarProfile) { cars.add(car) }
     }
 
     // The write watchdog is off the clock here (a CI stall once declared a fake link dead
@@ -670,5 +676,50 @@ class McuOwnerTest {
         assertCanBoxRound(link, other)
         owner.stop()
         assertEquals(0, count(link, McuOwnerProtocol.canBoxCarType(CarProfiles.DEFAULT)))
+    }
+
+    /** The Diagnostics page needs the version ack and every relay body, not only what decodes. */
+    @Test(timeout = TEST_TIMEOUT_MS)
+    fun versionAckAndRelayBodiesReachTheListener() {
+        val link = FakeLink(ackNull = true)
+        val recorder = Recorder()
+        val owner = owner(link, recorder = recorder)
+        owner.start()
+        waitFor("running") { owner.status.value as? McuOwner.Status.Running }
+
+        link.feed(McuSerial.encode(McuOpcode.MODE_ACK.code, bytes(0x50, 'R'.code, 'L'.code, '7'.code, '8'.code)))
+        val boxFrame = McuFrame.encode(0x11, bytes(0x01, 0x00))
+        link.feed(McuSerial.encode(McuSerial.OP_CAN, boxFrame))
+
+        waitFor("version") { recorder.versions.firstOrNull() }
+        val relay = waitFor("relay") { recorder.relays.firstOrNull() }
+        owner.stop()
+
+        assertEquals("RL78", recorder.versions[0])
+        assertArrayEquals(boxFrame, relay.first)
+        assertEquals(listOf<McuFrame.Decoded>(McuFrame.Decoded.Frame(0x11, bytes(0x01, 0x00))), relay.second)
+        assertTrue(recorder.other.none { it.opcode == McuOpcode.MODE_ACK.code })
+    }
+
+    /** Each box send names the car it carried, so the page shows the type in use and when. */
+    @Test(timeout = TEST_TIMEOUT_MS)
+    fun canBoxSendsNameTheCar() {
+        val link = FakeLink(ackNull = true)
+        val recorder = Recorder()
+        val owner = McuOwner(
+            Gate(eventcenter = false, enabled = true),
+            recorder,
+            openLink = { link },
+            ackTimeoutMs = ACK_MS,
+            writeTimeoutMs = WATCHDOG_OFF_MS,
+            canBoxTiming = CAN_BOX_QUICK,
+            canBoxScheduler = ScheduledThreadPoolExecutor(1),
+        )
+
+        owner.start()
+        assertCanBoxRound(link)
+        owner.stop()
+
+        assertEquals(CarProfiles.DEFAULT, recorder.cars.first())
     }
 }

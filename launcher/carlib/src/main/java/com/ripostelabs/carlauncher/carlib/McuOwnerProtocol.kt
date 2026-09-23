@@ -480,6 +480,18 @@ object McuOwnerProtocol {
             command.payload.isNotEmpty() &&
             (command.payload[0].toInt() and BYTE) == mode.code
 
+    /**
+     * The MCU's version string: the SRC_MCU_VERSION ack carries it after the mode byte, CK cut
+     * off (onCmdModeAck, EventService.java:2192-2197: `new String(bArr, 2, bArr.length - 3)`).
+     */
+    fun mcuVersion(command: McuSerial.Command): String? {
+        if (!isModeAck(command, Mode.MCU_VERSION) || command.payload.size < 2) {
+            return null
+        }
+
+        return String(command.payload, 1, command.payload.size - 1, Charsets.US_ASCII)
+    }
+
     fun sysEvent(command: McuSerial.Command): SysEvent? {
         if (command.opcode != McuOpcode.SYS_EVENT.code || command.payload.size < 2) {
             return null
