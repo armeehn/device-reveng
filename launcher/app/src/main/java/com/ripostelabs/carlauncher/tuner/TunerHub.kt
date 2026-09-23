@@ -69,6 +69,8 @@ object TunerHub {
         }
 
         override fun unregisterCallback(cb: ITunerCallback?) { callbacks.remove(cb) }
+        override fun selectPreset(slot: Int) { port?.selectPreset(slot) }
+        override fun storePreset(slot: Int) { port?.storePreset(slot) }
     }
 
     private fun push(call: (ITunerCallback) -> Unit) {

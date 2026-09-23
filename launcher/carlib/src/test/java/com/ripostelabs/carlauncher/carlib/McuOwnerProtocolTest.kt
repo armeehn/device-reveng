@@ -425,4 +425,23 @@ class McuOwnerProtocolTest {
 
         assertArrayEquals(wire, McuOwnerProtocol.canBoxInit(CarProfiles.DEFAULT).first())
     }
+
+    /** `02 64 slot` is the vendor radio's cmd 100, "play by index" (MainActivity.java:614-619, :170-175). */
+    @Test
+    fun presetSelectIsRadioCmdHundred() {
+        assertArrayEquals(McuSerial.encode(0x02, bytes(0x64, 0x03)), McuOwnerProtocol.radioPresetSelect(3))
+    }
+
+    /** `02 65 slot` is cmd 101, a long press on a list entry storing the current station (FreqView.java:160-167). */
+    @Test
+    fun presetStoreIsRadioCmdHundredAndOne() {
+        assertArrayEquals(McuSerial.encode(0x02, bytes(0x65, 0x14)), McuOwnerProtocol.radioPresetStore(20))
+    }
+
+    /** `42 v` is CMD_SEND_VOICE_STATE (EventUtils.java:1147), the radio's `sendVoiceState` (MainActivity.java:825). */
+    @Test
+    fun voiceStateFrame() {
+        assertArrayEquals(McuSerial.encode(0x42, bytes(0x01)), McuOwnerProtocol.voiceState(true))
+        assertArrayEquals(McuSerial.encode(0x42, bytes(0x00)), McuOwnerProtocol.voiceState(false))
+    }
 }

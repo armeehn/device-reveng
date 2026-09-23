@@ -30,12 +30,16 @@ class TunerHubTest {
         override val sourceLost = MutableStateFlow(0L)
         val keys = mutableListOf<Int>()
         val tunes = mutableListOf<Pair<Int, Boolean>>()
+        val selected = mutableListOf<Int>()
+        val stored = mutableListOf<Int>()
         var held = false
         override fun claim(): Boolean { held = true; return true }
         override fun release() { held = false }
         override fun isClaimed() = held
         override fun sendKey(key: Int) { keys += key }
         override fun tune(freq: Int, fm: Boolean) { tunes += freq to fm }
+        override fun selectPreset(slot: Int) { selected += slot }
+        override fun storePreset(slot: Int) { stored += slot }
     }
 
     private class Callback : ITunerCallback {
@@ -104,5 +108,17 @@ class TunerHubTest {
         assertFalse(TunerHub.binder.isClaimed)
         assertEquals(TunerState.NO_PRESET, TunerHub.binder.state.preset)
         TunerHub.binder.sendKey(CarService.RADIO_KEY_SEEK_UP)
+    }
+
+    /** Codes 9 and 10: the MCU's own preset banks, slot 0..41 as the vendor's `+ 18` maths lays them out. */
+    @Test
+    fun presetVerbsReachThePort() = runTest(UnconfinedTestDispatcher()) {
+        TunerHub.attach(port, backgroundScope)
+
+        TunerHub.binder.selectPreset(20)
+        TunerHub.binder.storePreset(3)
+
+        assertEquals(listOf(20), port.selected)
+        assertEquals(listOf(3), port.stored)
     }
 }

@@ -326,6 +326,16 @@ class CarService(private val appContext: Context) {
         call { sendUserFreq(freq, fm) }
     }
 
+    /** Recall slot 0..41 of the MCU's own station list (`02 64 slot`); owner path only, the gateway has no verb for it. */
+    fun radioSelectPreset(slot: Int) {
+        owner?.send(McuOwnerProtocol.radioPresetSelect(slot))
+    }
+
+    /** Store the current station into slot 0..41 (`02 65 slot`); owner path only. */
+    fun radioStorePreset(slot: Int) {
+        owner?.send(McuOwnerProtocol.radioPresetStore(slot))
+    }
+
     fun radioSelectFm() = sendRadioKey(RADIO_KEY_BAND_FM)
     fun radioSelectAm() = sendRadioKey(RADIO_KEY_BAND_AM)
     fun radioSeekDown() = sendRadioKey(RADIO_KEY_SEEK_DOWN)
@@ -394,7 +404,10 @@ class CarService(private val appContext: Context) {
     }
 
     /** The tuner source on the owner path; idle while the binder owns the link. */
-    private val radioSource = RadioSource { mode -> owner?.setMode(mode) ?: false }
+    private val radioSource = RadioSource(
+        select = { mode -> owner?.setMode(mode) ?: false },
+        voice = { on -> owner?.send(McuOwnerProtocol.voiceState(on)) },
+    )
 
     /** `mValidMode == SRC_RADIO`: ours on the owner path, the gateway's answer otherwise. */
     fun isRadioClaimed(): Boolean {
@@ -437,9 +450,15 @@ class CarService(private val appContext: Context) {
     private var radioFocus: AudioFocusRequest? = null
 
     private val radioFocusListener = AudioManager.OnAudioFocusChangeListener { change ->
-        if (change == AudioManager.AUDIOFOCUS_LOSS) {
-            Log.i(TAG, "radio: audio focus lost, releasing the source")
-            releaseRadio()
+        when (change) {
+            AudioManager.AUDIOFOCUS_LOSS -> {
+                Log.i(TAG, "radio: audio focus lost, releasing the source")
+                releaseRadio()
+            }
+            // The vendor radio's AudioManagerUtils (AudioManagerUtils.java:61-88): a transient
+            // loss ducks the tuner with `42 01`, a gain re-sends the mode and clears it.
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> radioSource.duck(true)
+            AudioManager.AUDIOFOCUS_GAIN -> if (radioSource.held) radioSource.claim()
         }
     }
 

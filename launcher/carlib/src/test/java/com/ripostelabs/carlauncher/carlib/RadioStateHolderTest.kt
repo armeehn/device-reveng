@@ -84,4 +84,38 @@ class RadioStateHolderTest {
         assertTrue(holder.state.value.stMono)
         assertTrue(holder.state.value.dxLoc)
     }
+
+    /** Bits 6 and 7 of the flag byte are the AMS and APS runs the vendor shows as "searching"/"scanning". */
+    @Test
+    fun stateCarriesScanRuns() {
+        holder.onRadio(
+            McuOwnerProtocol.RadioEvent.State(
+                stereoIcon = false, tpIcon = false, traffic = true, noPty = false,
+                rds = false, pty = true, af = false, ta = false, stMono = false, loc = false, ams = true, aps = false,
+            ),
+        )
+
+        val s = holder.state.value
+        assertTrue(s.autoStoring)
+        assertFalse(s.scanning)
+        assertTrue(s.ptyEnabled)
+        assertTrue(s.traffic)
+    }
+
+    /** A seed fills the cache before the MCU speaks, as `initRadioZone` fills `mRadioFreqList`. */
+    @Test
+    fun seedAppliesOnlyWhileNothingHeard() {
+        val seed = RadioState(band = 1, freq = 9630, zone = 1, stationList = RadioZone.of(1).defaultStations)
+
+        holder.seed(seed)
+        assertEquals(seed, holder.state.value)
+        assertEquals(0, ticks)
+
+        now = 5
+        holder.onRadio(McuOwnerProtocol.RadioEvent.Frequency(1010))
+        holder.seed(RadioState(freq = 8750))
+
+        assertEquals(1010, holder.state.value.freq)
+        assertEquals(1, holder.state.value.zone)
+    }
 }
