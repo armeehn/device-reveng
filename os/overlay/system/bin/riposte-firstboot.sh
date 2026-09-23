@@ -16,6 +16,10 @@ settings put secure lockscreen.disabled 1
 # What Setup Doctor would otherwise ask the owner to grant over adb: the runtime permissions
 # and notification listeners a reinstall drops. Root here, so the first boot reads 7 of 7.
 pm grant "$LAUNCHER" android.permission.ACCESS_FINE_LOCATION
+# Location itself: a GSI boots with the master switch off, and every provider (the GPS clock
+# source, the suite's GPS and Weather apps) reads nothing until it is on. The vendor image
+# shipped it on.
+cmd location set-location-enabled true
 pm grant "$LAUNCHER" android.permission.BLUETOOTH_CONNECT
 appops set "$LAUNCHER" WRITE_SETTINGS allow
 for listener in media.MediaListenerService nav.NavListenerService notif.ShelfListenerService; do

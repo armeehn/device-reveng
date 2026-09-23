@@ -118,7 +118,9 @@ Each of these cost a bench session; each is one small service or prop in the ove
   gestural overlay. `build.sh` also writes a `default-permissions` XML so the suite never
   opens on a permission dialog.
 - **Clock and zone.** No cell network, so the image sets `America/Vancouver`; the MCU's
-  battery-backed RTC (`0x83` frames) sets the clock while offline.
+  battery-backed RTC (`0x83` frames) sets the clock while offline, and the first GPS fix of
+  each wake corrects both (`GpsClock`, then `0x13` to the MCU). The first boot turns the
+  location master switch on, which a GSI leaves off.
 
 ## Bluetooth on 0.2: car-kit roles
 

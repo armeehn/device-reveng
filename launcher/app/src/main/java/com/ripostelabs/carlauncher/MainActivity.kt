@@ -36,6 +36,7 @@ import com.ripostelabs.carlauncher.carlib.BtCarKit
 import com.ripostelabs.carlauncher.carlib.CarEvents
 import com.ripostelabs.carlauncher.carlib.VolumeMemory
 import com.ripostelabs.carlauncher.carlib.AmpVolumeKeys
+import com.ripostelabs.carlauncher.data.GpsClock
 import com.ripostelabs.carlauncher.data.McuClock
 import com.ripostelabs.carlauncher.data.AccessoryRuntime
 import com.ripostelabs.carlauncher.carlib.RootShell
@@ -152,6 +153,7 @@ class MainActivity : ComponentActivity() {
 
     /** Riposte OS 0.2 only: the decoded MCU events on 127.0.0.1:5589 for Helm, the car computer. */
     private var mcuStateExport: McuStateExport? = null
+    private var gpsClock: GpsClock? = null
 
     /** Riposte OS 0.2 only: Helm's allow-listed writes (volume, mute, source) on 127.0.0.1:5590. */
     private var carCommandPort: CarCommandPort? = null
@@ -312,6 +314,9 @@ class MainActivity : ComponentActivity() {
                     delay(RTC_PUSH_POLL_MS)
                 }
             }
+            // Offline the MCU RTC drifts (a day behind, 2026-09-22); the first GPS fix of each
+            // wake corrects the clock and hands it on to the MCU, as the vendor gateway did.
+            gpsClock = GpsClock(applicationContext, onClockSet = mcuClock::onGpsClock).also { it.start() }
             val volumeMemory = VolumeMemory(applicationContext)
             val volumeKeys = AmpVolumeKeys(carService::setVolume, volumeMemory.level())
             val ownerListener = McuOwner.FanOut(
@@ -319,6 +324,7 @@ class MainActivity : ComponentActivity() {
                 VendorBroadcastReemitter(applicationContext),
                 sysVarMirror,
                 mcuClock,
+                gpsClock!!,
                 carService.volumeState,
                 McuStateExport().also { mcuStateExport = it; it.start() },
                 volumeMemory,
@@ -1272,6 +1278,7 @@ class MainActivity : ComponentActivity() {
         // found the old one still open would report "Device or resource busy" as a silent MCU.
         busSource?.stop()
         mcuOwner?.stop()
+        gpsClock?.stop()
         mcuStateExport?.stop()
         carCommandPort?.stop()
         ampVolumeKeys?.stop(applicationContext)
