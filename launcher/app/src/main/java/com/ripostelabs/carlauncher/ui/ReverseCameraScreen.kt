@@ -44,7 +44,7 @@ import com.ripostelabs.carlauncher.ui.theme.carShape
  *
  * ── Where this sits ─────────────────────────────────────────────────────────────────────────────
  *
- *     MCU SYS_EVENT 71 ─▶ McuOwner ─▶ CarEvents.reverse ─▶ ReverseCameraGate ─▶ this (top overlay)
+ *     MCU SYS_EVENT 71 ─▶ McuOwner ─▶ CarEvents.reverse ─▶ ReverseCameraGate ─▶ this (ReverseCameraWindow)
  *                                                                                    ▲
  *     AIS camera HAL (/vendor/etc/camera) ─▶ camera2 id "1" ─▶ TextureView ──────────┘
  *

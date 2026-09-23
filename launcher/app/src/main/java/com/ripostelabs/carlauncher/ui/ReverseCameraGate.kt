@@ -6,7 +6,7 @@ package com.ripostelabs.carlauncher.ui
  * ── Where this sits ─────────────────────────────────────────────────────────────────────────────
  *
  *     CarEvents.reverse ──┐
- *     mcuOwner != null ───┼─▶ decide() ──▶ Verdict ──▶ ReverseCameraScreen (MainActivity overlay)
+ *     mcuOwner != null ───┼─▶ decide() ──▶ Verdict ──▶ ReverseCameraScreen (ReverseCameraWindow)
  *     CAMERA granted ─────┘
  *
  * On a stock or 0.1 slot the vendor's AUXCamera composites its own reverse window over us, so
