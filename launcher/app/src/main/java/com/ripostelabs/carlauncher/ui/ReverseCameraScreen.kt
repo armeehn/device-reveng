@@ -261,7 +261,7 @@ private class ReverseCameraSession(
         val granted = context.checkSelfPermission(Manifest.permission.CAMERA) ==
             PackageManager.PERMISSION_GRANTED
         if (!granted) {
-            onFailure(NO_PERMISSION_MESSAGE)
+            report(NO_PERMISSION_MESSAGE)
             return
         }
 
@@ -269,14 +269,16 @@ private class ReverseCameraSession(
         try {
             val ids = manager.cameraIdList
             if (REVERSE_CAMERA_ID !in ids) {
-                onFailure("Camera $REVERSE_CAMERA_ID absent (present: ${ids.joinToString().ifEmpty { "none" }})")
+                report("Camera $REVERSE_CAMERA_ID absent (present: ${ids.joinToString().ifEmpty { "none" }})")
                 return
             }
 
             // The HAL streams at its own sizes; ask for the largest it lists for a texture so the
             // buffer is never a size it refuses. No list at all → keep the view's default.
-            previewSize(manager)?.let { texture.setDefaultBufferSize(it.width, it.height) }
+            val size = previewSize(manager)
+            size?.let { texture.setDefaultBufferSize(it.width, it.height) }
             surface = Surface(texture)
+            Log.i(TAG, "opening camera $REVERSE_CAMERA_ID (present: ${ids.joinToString()}) preview ${size ?: "default"}")
             manager.openCamera(REVERSE_CAMERA_ID, deviceCallback, handler)
         } catch (e: CameraAccessException) {
             fail(describe(e), e)
@@ -308,19 +310,20 @@ private class ReverseCameraSession(
             }
 
             device = camera
+            Log.i(TAG, "camera $REVERSE_CAMERA_ID opened")
             startPreview(camera)
         }
 
         override fun onDisconnected(camera: CameraDevice) {
             camera.close()
             device = null
-            onFailure("Camera disconnected")
+            report("Camera disconnected")
         }
 
         override fun onError(camera: CameraDevice, error: Int) {
             camera.close()
             device = null
-            onFailure("Camera error $error")
+            report("Camera error $error")
         }
     }
 
@@ -345,13 +348,14 @@ private class ReverseCameraSession(
                         session = configured
                         try {
                             configured.setRepeatingRequest(request, null, handler)
+                            Log.i(TAG, "preview running")
                         } catch (e: CameraAccessException) {
                             fail(describe(e), e)
                         }
                     }
 
                     override fun onConfigureFailed(configured: CameraCaptureSession) {
-                        onFailure("Preview configuration failed")
+                        report("Preview configuration failed")
                     }
                 },
                 handler,
@@ -370,6 +374,12 @@ private class ReverseCameraSession(
 
     private fun fail(message: String, cause: Exception) {
         Log.w(TAG, message, cause)
+        onFailure(message)
+    }
+
+    /** What the driver reads on the black bed is also in the log ring pulled later. */
+    private fun report(message: String) {
+        Log.w(TAG, message)
         onFailure(message)
     }
 

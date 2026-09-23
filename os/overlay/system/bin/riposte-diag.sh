@@ -2,7 +2,7 @@
 # Always-on diagnostics recorder for car-owner builds: every INTERVAL_S one line per probe,
 # appended to a per-boot file under DIR, rotated by count. Lines are `ts=<epoch> probe=<name>
 # k=v k=v ...` with spaces in values replaced by `_`, so awk/grep and os/diag/check.py both
-# read them. logcat itself is persisted by logd (persist.logd.logpersistd=logcatd).
+# read them. logcat itself is persisted by riposte-logring.sh under /data/riposte/log.
 #
 #   riposte-diag.sh ──30 s──▶ /data/misc/riposte/diag/diag-<boot>.log   ◀── rav4 car diag pull
 #                                                                          ◀── os/diag/check.py

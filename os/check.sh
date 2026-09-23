@@ -23,6 +23,9 @@ readonly BT_CARKIT_ON="bluetooth.profile.a2dp.sink.enabled bluetooth.profile.hfp
 readonly BT_CARKIT_OFF="bluetooth.profile.a2dp.source.enabled bluetooth.profile.hfp.ag.enabled
   bluetooth.profile.avrcp.target.enabled"
 readonly BT_CARKIT_COD=38,4,8
+# The logcat ring (overlay/system/bin/riposte-logring.sh): 8 MiB x (1 live + 12 rotated) files.
+readonly LOGRING_ROTATE_KB=8192
+readonly LOGRING_ROTATE_COUNT=12
 # Secure settings the first-boot hook must turn off: the GSI's doze dream and screen savers.
 readonly DOZE_OFF_KEYS="doze_enabled doze_always_on doze_pulse_on_pick_up doze_pulse_on_double_tap
   screensaver_enabled screensaver_activate_on_dock screensaver_activate_on_sleep"
@@ -149,6 +152,16 @@ if [ "$PROFILE" = gsi ]; then
   for key in $DOZE_OFF_KEYS; do
     check "grep -q '^settings put secure $key 0' $S/bin/riposte-firstboot.sh" "first boot turns $key off"
   done
+  # The logcat ring on flash: started as soon as /data is there, restarted by init, sized as
+  # riposte-logring.sh documents (8 MiB x 13 files), marked once per boot.
+  check "grep -q '^service riposte_logring ' $S/etc/init/riposte.rc" "riposte_logring init service"
+  check "grep -q '^on post-fs-data && property:ro.riposte.os.car_owner=1' $S/etc/init/riposte.rc" "riposte_logring starts at post-fs-data"
+  check "! sed -n '/^service riposte_logring /,/^$/p' $S/etc/init/riposte.rc | grep -q oneshot" "riposte_logring is not oneshot (init restarts it)"
+  check "[ \"\$(stat -c %a $S/bin/riposte-logring.sh)\" = 755 ]" "riposte-logring.sh executable"
+  check "grep -q '^ROTATE_KB=$LOGRING_ROTATE_KB$' $S/bin/riposte-logring.sh && grep -q '^ROTATE_COUNT=$LOGRING_ROTATE_COUNT$' $S/bin/riposte-logring.sh" "ring is $LOGRING_ROTATE_KB KiB x (1 + $LOGRING_ROTATE_COUNT) files"
+  check "grep -q '^exec logcat -b all -v threadtime -f \"\$FILE\" -r \"\$ROTATE_KB\" -n \"\$ROTATE_COUNT\"$' $S/bin/riposte-logring.sh" "logcat -b all -v threadtime, rotating"
+  check "grep -q '^service riposte_logring_mark ' $S/etc/init/riposte.rc && grep -q '^    start riposte_logring_mark$' $S/etc/init/riposte.rc" "riposte_logring_mark init service, started"
+  check "[ \"\$(stat -c %a $S/bin/riposte-logring-mark.sh)\" = 755 ]" "riposte-logring-mark.sh executable"
   # One property drives the reverse-camera decoder.
   check "grep -q '^on property:persist.riposte.camera.mode=\*' $S/etc/init/riposte.rc" "persist.riposte.camera.mode init trigger"
   check "[ \"\$(stat -c %a $S/bin/riposte-camera-mode.sh)\" = 755 ]" "riposte-camera-mode.sh executable"
