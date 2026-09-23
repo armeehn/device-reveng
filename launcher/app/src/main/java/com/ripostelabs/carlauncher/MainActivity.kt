@@ -761,14 +761,17 @@ class MainActivity : ComponentActivity() {
         val reverseTrigger = ReverseTrigger()
         lifecycleScope.launch {
             val picture = combine(carEvents.reverse, carEvents.speedKmh) { bit, speed ->
-                reverseTrigger.onLine(
-                    reverseBit = bit,
-                    awake = mcuOwner != null,
-                    speedKmh = speed,
-                    thresholdKmh = ReverseTrigger.thresholdKmh(
-                        carSettingsController.getInt(SettingKeys.BACKCAR_SPEED_THRESHOLD, 0),
-                    ),
+                val awake = mcuOwner != null
+                val threshold = ReverseTrigger.thresholdKmh(
+                    carSettingsController.getInt(SettingKeys.BACKCAR_SPEED_THRESHOLD, 0),
                 )
+                val up = reverseTrigger.onLine(reverseBit = bit, awake = awake, speedKmh = speed, thresholdKmh = threshold)
+                // Evidence for the log ring pulled at the next plug-in: the edge and every input
+                // of the decision, once per edge, nothing per speed tick.
+                if (reverseTrigger.lastEdge != ReverseTrigger.Edge.NONE) {
+                    Log.i(REVERSE_TAG, "line ${reverseTrigger.lastEdge}: bit=$bit awake=$awake speed=$speed threshold=$threshold -> picture=$up")
+                }
+                up
             }
             combine(picture, carEvents.radar) { up, radar -> up to radar }.collect { (up, radar) ->
                 val verdict = ReverseCameraGate.decide(
@@ -1542,6 +1545,9 @@ class MainActivity : ComponentActivity() {
 
 /** The one startup measurement the launcher keeps: `adb logcat -s Startup`. */
 private const val STARTUP_TAG = "Startup"
+
+/** The reverse path logs under the camera screen's tag: `logcat -s ReverseCamera` is the whole story. */
+private const val REVERSE_TAG = "ReverseCamera"
 
 /** v2.6 — the vendor source changes only when the driver changes it; polling it is a courtesy. */
 private const val VENDOR_SOURCE_POLL_MS = 5_000L

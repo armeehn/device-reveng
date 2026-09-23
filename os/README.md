@@ -152,6 +152,14 @@ both in the overlay, both checked by `check.sh`:
   grant by asking the daemon as the launcher's uid, and logs `riposte-root: launcher
   granted (uid N)` or `riposte-root: NOT granted: <reason>`. `adb logcat -s riposte-root`
   is the bench check. The launcher's `RootShell` is the client.
+- **The log ring.** logd's buffers roll over in minutes and the car is driven by someone
+  without a laptop. `riposte_logring` (`riposte-logring.sh`, root, `u:r:su:s0`, from
+  `post-fs-data`) runs `logcat -b all -v threadtime -f /data/riposte/log/logcat.txt -r 8192
+  -n 12`: 8 MiB x 13 files, 104 MiB at most, restarted by init when logcat exits.
+  `riposte-logring-mark.sh` appends one `ts= boot= os= build= launcher= camera_mode=` line
+  per boot to `boots.txt` there and to logcat. The directory is `root:shell` 2770, labelled
+  `shell_data_file`, so `adb pull /data/riposte/log` works without su; `rav4-usb-update`
+  on zero pulls it into `diag-<stamp>-ring/` on every plug-in.
 - **The camera decoder.** The reverse-camera signal format is a root-only sysfs write.
   The launcher sets one property, `persist.riposte.camera.mode=<0..8>` (through its root
   shell: a priv-app cannot set an unlabelled `persist.` prop on this GSI, there is no

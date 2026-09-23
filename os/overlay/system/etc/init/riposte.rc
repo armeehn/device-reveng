@@ -77,6 +77,29 @@ service riposte_touchswap /system/bin/riposte-touchswap
     seclabel u:r:su:s0
     disabled
 
+# Car-owner builds: the logcat ring on flash (riposte-logring.sh: /data/riposte/log,
+# 8 MiB x 13 files, pulled by rav4-usb-update). From post-fs-data, the first moment /data is
+# there, so a boot that never completes still leaves its log; not oneshot, so init restarts
+# it when logcat exits.
+service riposte_logring /system/bin/sh /system/bin/riposte-logring.sh
+    class core
+    user root
+    group root
+    seclabel u:r:su:s0
+    disabled
+
+on post-fs-data && property:ro.riposte.os.car_owner=1
+    start riposte_logring
+
+# One boot marker line per boot into the ring (riposte-logring-mark.sh), once pm answers.
+service riposte_logring_mark /system/bin/sh /system/bin/riposte-logring-mark.sh
+    class main
+    user root
+    group root
+    seclabel u:r:su:s0
+    oneshot
+    disabled
+
 # Car-owner builds: the always-on diagnostics recorder (riposte-diag.sh), read back with
 # `rav4 car diag pull` and os/diag/check.py.
 service riposte_diag /system/bin/sh /system/bin/riposte-diag.sh
@@ -90,6 +113,7 @@ on property:sys.boot_completed=1 && property:ro.riposte.os.car_owner=1
     start riposte_touchswap
     start riposte_zxwio
     start riposte_diag
+    start riposte_logring_mark
 
 # Car-owner builds: one property picks the USB controller's role (riposte-usb-role.sh, the
 # #279 camera-mode pattern): persist.riposte.usb.role=host|peripheral, set by the launcher's

@@ -1090,6 +1090,7 @@ class CarEvents(private val appContext: Context) {
      */
     fun ownerListener(vehicle: VehicleState?, radio: RadioStateHolder? = null): McuOwner.Listener = object : McuOwner.Listener {
         override fun onSysEvent(event: McuOwnerProtocol.SysEvent) {
+            Log.i(TAG, "SYS_EVENT reverse=${event.reverse} acc=${event.accLine} illumination=${event.illumination} brake=${event.brake}")
             updateReverse(event.reverse)
             _accSeen.value = true
             if (_accOn.value != event.accLine) {

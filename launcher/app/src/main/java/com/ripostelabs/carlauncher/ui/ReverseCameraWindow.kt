@@ -92,6 +92,7 @@ class ReverseCameraWindow(private val context: Context) {
         host.pause()
         runCatching { windowManager.removeViewImmediate(v) }
         view = null
+        Log.i(TAG, "reverse window removed")
     }
 
     private fun show() {
@@ -124,6 +125,7 @@ class ReverseCameraWindow(private val context: Context) {
         }
         host.resume()
         view = v
+        Log.i(TAG, "reverse window added: $verdict radar=${options.showRadar} mirrored=${options.mirrored}")
     }
 
     @androidx.compose.runtime.Composable
