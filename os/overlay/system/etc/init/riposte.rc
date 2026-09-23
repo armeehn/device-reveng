@@ -91,9 +91,25 @@ on property:sys.boot_completed=1 && property:ro.riposte.os.car_owner=1
     start riposte_zxwio
     start riposte_diag
 
-# ro.riposte.os.bench=1 only: take the port back after the vendor's boot_completed host write.
-on property:sys.boot_completed=1 && property:ro.riposte.os.bench=1
-    start riposte_usbadb
+# Car-owner builds: one property picks the USB controller's role (riposte-usb-role.sh, the
+# #279 camera-mode pattern): persist.riposte.usb.role=host|peripheral, set by the launcher's
+# root shell; unset means the image default, peripheral on ro.riposte.os.bench=1 and host
+# otherwise. The boot run (`boot`) waits out the vendor's boot_completed host write, which is
+# what the bench-only trigger this replaces used riposte-usbadb.sh to undo. A persisted prop
+# replays at boot, so the choice survives a reboot.
+service riposte_usbrole /system/bin/sh /system/bin/riposte-usb-role.sh boot
+    class main
+    user root
+    group root
+    seclabel u:r:su:s0
+    oneshot
+    disabled
+
+on property:sys.boot_completed=1 && property:ro.riposte.os.car_owner=1
+    start riposte_usbrole
+
+on property:persist.riposte.usb.role=* && property:ro.riposte.os.car_owner=1
+    exec_background u:r:su:s0 root -- /system/bin/sh /system/bin/riposte-usb-role.sh
 
 # Car-owner builds: the launcher's root grant, every boot (riposte-root.sh). sudaemon is
 # class main, so it is up by boot_completed; the script seeds its allow row when missing and

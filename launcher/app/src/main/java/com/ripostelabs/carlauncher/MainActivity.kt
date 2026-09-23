@@ -65,6 +65,7 @@ import com.ripostelabs.carlauncher.carlib.McuOwnerProtocol
 import com.ripostelabs.carlauncher.carlib.McuStateExport
 import com.ripostelabs.carlauncher.carlib.SlcanLinkSource
 import com.ripostelabs.carlauncher.carlib.SysVarMirror
+import com.ripostelabs.carlauncher.carlib.UsbRole
 import com.ripostelabs.carlauncher.carlib.VendorBroadcastReemitter
 import com.ripostelabs.carlauncher.carlib.McuSleepWake
 import com.ripostelabs.carlauncher.carlib.PlaybackWatch
@@ -140,6 +141,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay // v2.6
 import kotlinx.coroutines.flow.combine // v0.4.7.1 muted-aware TTS
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first // v2.9
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -439,6 +441,17 @@ class MainActivity : ComponentActivity() {
             // The car has none: its bus arrives over USB through CanCaptureService.
             busSource = ownerGate.canbusLink()?.let { spec ->
                 SlcanLinkSource({ spec.open() }, CanCaptureService.vehicle()).also { it.start() }
+            }
+            // The one USB controller faces the car (CANable, media, wired CarPlay) or the
+            // pigtail (adb): the stored choice, else the image default (UsbRole.resolve). Applied
+            // once the choice is read from disk and on every change; a matching node is left
+            // alone. A CANable that appears in host mode starts the capture through
+            // UsbAttachActivity, the same door a plugged-in adapter takes.
+            lifecycleScope.launch(Dispatchers.IO) {
+                val bench = ownerGate.benchProp()
+                settingsStore.usbRole.filterNotNull().distinctUntilChanged().collect { stored ->
+                    UsbRole.apply(UsbRole.resolve(stored, bench))
+                }
             }
             // No btsuite on this slot: the HF client / A2DP sink / AVRCP controller proxies
             // feed the same vendorBt flow the Phone screen and the chips already read.

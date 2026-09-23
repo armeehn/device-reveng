@@ -138,6 +138,9 @@ if [ "$PROFILE" = gsi ]; then
   # One property drives the reverse-camera decoder.
   check "grep -q '^on property:persist.riposte.camera.mode=\*' $S/etc/init/riposte.rc" "persist.riposte.camera.mode init trigger"
   check "[ \"\$(stat -c %a $S/bin/riposte-camera-mode.sh)\" = 755 ]" "riposte-camera-mode.sh executable"
+  # One property drives the USB controller's role.
+  check "grep -q '^on property:persist.riposte.usb.role=\*' $S/etc/init/riposte.rc" "persist.riposte.usb.role init trigger"
+  check "[ \"\$(stat -c %a $S/bin/riposte-usb-role.sh)\" = 755 ]" "riposte-usb-role.sh executable"
 else
   check "[ ! -f $S/bin/rw-system.sh ]" "no rw-system.sh on a stock base"
   check "grep -q '^ro.riposte.os.bt_carkit=0$' $S/build.prop" "ro.riposte.os.bt_carkit=0"

@@ -28,6 +28,9 @@ class AndroidOwnerGate(private val context: Context) : McuOwner.Gate {
     /** The MCU carrier; the vendor tty unless `riposte.mcu.link` says otherwise. */
     fun mcuLink(): McuLinkSpec = McuLinkSpec.parse(readProp(McuLinkSpec.PROP_MCU_LINK))
 
+    /** `ro.riposte.os.bench` as written: "1" on a bench image, "" on a car image ([UsbRole.default]). */
+    fun benchProp(): String = readProp(UsbRole.BENCH_PROP)
+
     /** The raw-bus carrier, or null when `riposte.canbus.link` is unset (the car: USB CANable). */
     fun canbusLink(): McuLinkSpec? = McuLinkSpec.parseOptional(readProp(McuLinkSpec.PROP_CANBUS_LINK))
 

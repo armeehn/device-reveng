@@ -147,6 +147,14 @@ both in the overlay, both checked by `check.sh`:
   5 720p60, 6 1080p30, 7 720p30, 8 PAL60. The launcher's direct root write
   (`ReverseCameraDecoder`) stays as the fallback. `test-root-camera.sh` exercises both
   scripts against stubs.
+- **The USB port.** The GT6 has one USB controller (`4e00000.ssusb`); its `mode` node
+  faces it to the car's sockets (`host`: CANable, USB media, wired CarPlay) or to the 4PIN
+  pigtail (`peripheral`: adb), never both. Stock wrote those two words from eventcenter
+  (`AccEvent/Utils.java:192-197`). The launcher's Settings > USB port writes the node
+  through its root shell and sets `persist.riposte.usb.role`, which init replays at boot
+  through `riposte-usb-role.sh` (the camera-mode pattern). Unset, the image decides:
+  peripheral on a bench image (`ro.riposte.os.bench=1`, updated over the pigtail from
+  zero), host in the car. `test-usb-role.sh` exercises the script against stubs.
 
 ## Bluetooth on 0.2: car-kit roles
 

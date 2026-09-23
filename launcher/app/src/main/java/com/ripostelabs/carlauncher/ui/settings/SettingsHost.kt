@@ -189,6 +189,11 @@ fun SettingsHost(
                 onBack = ::pop,
             )
 
+            SettingsRoute.UsbPort -> UsbPortScreen(
+                settingsStore = settingsStore,
+                onBack = ::pop,
+            )
+
             SettingsRoute.Diagnostics -> DiagnosticsScreen(
                 diagnostics = mcuDiagnostics,
                 mcuStatus = mcuStatus,
@@ -357,6 +362,7 @@ sealed interface SettingsRoute {
     data object Games : SettingsRoute
     data object Accessories : SettingsRoute
     data object CanBox : SettingsRoute
+    data object UsbPort : SettingsRoute // Riposte OS 0.2
     data object Diagnostics : SettingsRoute
     data object CanCapture : SettingsRoute // v0.4.3
     data object GuidedTests : SettingsRoute

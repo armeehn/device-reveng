@@ -44,7 +44,8 @@ persist.sys.timezone=America/Vancouver
 # persisted under /data/misc/logd across reboots, next to the diagnostics recorder's files.
 @gsi persist.adb.tcp.port=5555
 @gsi persist.logd.logpersistd=logcatd
-# Bench only (build.sh --bench): the 4PIN port kept in peripheral mode after boot
-# (riposte-usbadb.sh). In the car that port is the host for the CANable, so never on a car
+# Bench only (build.sh --bench): the 4PIN port kept in peripheral mode after boot, the image
+# default riposte-usb-role.sh applies when persist.riposte.usb.role is unset (Settings > USB
+# port overrides it). In the car that port is the host for the CANable, so never on a car
 # build (the 2026-09-21 car install ran a bench build: no CANable, no wheel keys).
 @bench ro.riposte.os.bench=1

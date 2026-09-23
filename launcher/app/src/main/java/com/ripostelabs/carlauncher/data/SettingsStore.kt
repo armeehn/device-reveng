@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.ripostelabs.carlauncher.carlib.CarProfiles
+import com.ripostelabs.carlauncher.carlib.UsbRole
 import com.ripostelabs.carlauncher.carlib.WheelKey
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -177,6 +178,22 @@ class SettingsStore(context: Context) {
         ds.data
             .map { prefs -> prefs[FIRST_RUN_KEY] ?: true }
             .stateIn(scope, SharingStarted.Eagerly, null)
+
+    /**
+     * The USB port choice ([UsbRole]), [UsbRole.UNKNOWN] when none was made (the image decides,
+     * see [UsbRole.resolve]). `null` until disk is read, for the same reason as [firstRun]: the
+     * owner path must not apply the image default and then the stored choice a moment later,
+     * which would drop adb on a bench.
+     */
+    val usbRole: StateFlow<UsbRole?> =
+        ds.data
+            .map { prefs -> UsbRole.choice(prefs[USB_ROLE_KEY]) ?: UsbRole.UNKNOWN }
+            .stateIn(scope, SharingStarted.Eagerly, null)
+
+    /** Face the one USB controller to the car (host) or to the pigtail (peripheral). */
+    fun setUsbRole(role: UsbRole) = scope.launch {
+        ds.edit { it[USB_ROLE_KEY] = role.name }
+    }
 
     /** Mark onboarding as done so it never shows again (called on Finish or Skip). */
     fun setFirstRunComplete() = scope.launch { ds.edit { it[FIRST_RUN_KEY] = false } }
@@ -379,5 +396,6 @@ class SettingsStore(context: Context) {
         val HIDE_OEM_SETTINGS_KEY = booleanPreferencesKey("hide_oem_settings") // OemApps shadow
         val HIDE_VENDOR_CALL_POPUP_KEY = booleanPreferencesKey("hide_vendor_call_popup") // CallPopupGuard
         val CAN_BOX_CAR_KEY = stringPreferencesKey("can_box_car") // CarProfile.id
+        val USB_ROLE_KEY = stringPreferencesKey("usb_role") // UsbRole.name, Riposte OS 0.2
     }
 }
