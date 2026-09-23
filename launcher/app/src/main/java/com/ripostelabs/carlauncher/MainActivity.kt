@@ -35,6 +35,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.ripostelabs.carlauncher.carlib.BtCarKit
 import com.ripostelabs.carlauncher.carlib.CarEvents
 import com.ripostelabs.carlauncher.carlib.VolumeMemory
+import com.ripostelabs.carlauncher.carlib.AmpVolumeKeys
 import com.ripostelabs.carlauncher.data.McuClock
 import com.ripostelabs.carlauncher.data.AccessoryRuntime
 import com.ripostelabs.carlauncher.carlib.RootShell
@@ -154,6 +155,9 @@ class MainActivity : ComponentActivity() {
 
     /** Riposte OS 0.2 only: Helm's allow-listed writes (volume, mute, source) on 127.0.0.1:5590. */
     private var carCommandPort: CarCommandPort? = null
+
+    /** Riposte OS 0.2 only: Android's volume keys and dialog, turned into amp steps. */
+    private var ampVolumeKeys: AmpVolumeKeys? = null
 
     /** Riposte OS 0.2 only: the phone through the stock stack's car-kit profiles. */
     private var btCarKit: BtCarKit? = null
@@ -309,6 +313,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
             val volumeMemory = VolumeMemory(applicationContext)
+            val volumeKeys = AmpVolumeKeys(carService::setVolume, volumeMemory.level())
             val ownerListener = McuOwner.FanOut(
                 carEvents.ownerListener(CanCaptureService.vehicle(), carService.radioState),
                 VendorBroadcastReemitter(applicationContext),
@@ -317,6 +322,7 @@ class MainActivity : ComponentActivity() {
                 carService.volumeState,
                 McuStateExport().also { mcuStateExport = it; it.start() },
                 volumeMemory,
+                volumeKeys,
             )
             mcuOwner = McuOwner(
                 ownerGate,
@@ -328,6 +334,7 @@ class MainActivity : ComponentActivity() {
                 it.start()
                 carCommandPort = CarCommandPort(carService.asCommandTarget()).also { port -> port.start() }
                 mcuSleepWake = McuSleepWake.forOwner(it, AndroidAccSource()).also { sw -> sw.start() }
+                ampVolumeKeys = volumeKeys.also { keys -> keys.start(applicationContext) }
             }
             // The raw body bus on a second carrier (`riposte.canbus.link`), when the rig has one.
             // The car has none: its bus arrives over USB through CanCaptureService.
@@ -1267,6 +1274,7 @@ class MainActivity : ComponentActivity() {
         mcuOwner?.stop()
         mcuStateExport?.stop()
         carCommandPort?.stop()
+        ampVolumeKeys?.stop(applicationContext)
         btCarKit?.stop()
         gatewayHandshake.unregister() // v3.0
         carEvents.unregister()
