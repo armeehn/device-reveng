@@ -50,6 +50,7 @@ import com.ripostelabs.carlauncher.carlib.CarService
 import com.ripostelabs.carlauncher.tuner.CarTunerPort
 import com.ripostelabs.carlauncher.tuner.TunerHub
 import com.ripostelabs.carlauncher.carlib.CarCommandPort
+import com.ripostelabs.carlauncher.carlib.ArmAudioRoute
 import com.ripostelabs.carlauncher.carlib.CarProfiles
 import com.ripostelabs.carlauncher.carlib.McuOwner
 import com.ripostelabs.carlauncher.carlib.McuOwnerProtocol
@@ -58,6 +59,7 @@ import com.ripostelabs.carlauncher.carlib.SlcanLinkSource
 import com.ripostelabs.carlauncher.carlib.SysVarMirror
 import com.ripostelabs.carlauncher.carlib.VendorBroadcastReemitter
 import com.ripostelabs.carlauncher.carlib.McuSleepWake
+import com.ripostelabs.carlauncher.carlib.PlaybackWatch
 import com.ripostelabs.carlauncher.carlib.GatewayHandshake // v3.0
 import com.ripostelabs.carlauncher.carlib.SysVar // v0.4.9 vendor hidden-apps list
 import com.ripostelabs.carlauncher.carlib.VendorBtService
@@ -171,6 +173,12 @@ class MainActivity : ComponentActivity() {
     private var busSource: SlcanLinkSource? = null
     /** Riposte OS 0.2 only: ACC sleep and wake for [mcuOwner], polled like the vendor's AccObserver. */
     private var mcuSleepWake: McuSleepWake? = null
+
+    /** Riposte OS 0.2 only: Android playback for [ArmAudioRoute]. */
+    private var playbackWatch: PlaybackWatch? = null
+
+    /** Riposte OS 0.2 only: the source switching the vendor media apps and btsuite did. */
+    private var armAudioRoute: ArmAudioRoute? = null
 
     /** Riposte OS 0.2 only: whether CAMERA is granted, so the reverse screen can say why not. */
     private var cameraGranted by mutableStateOf(false)
@@ -359,6 +367,14 @@ class MainActivity : ComponentActivity() {
                 carCommandPort = CarCommandPort(carService.asCommandTarget()).also { port -> port.start() }
                 mcuSleepWake = McuSleepWake.forOwner(it, AndroidAccSource()).also { sw -> sw.start() }
                 ampVolumeKeys = volumeKeys.also { keys -> keys.start(applicationContext) }
+
+                // Android sound, media players, BT audio and CarPlay reach the amp only once the
+                // MCU is told, as eventcenter and the vendor media apps did (ArmAudioRoute).
+                val audioRoute = ArmAudioRoute.forOwner(it).also { r -> armAudioRoute = r }
+                playbackWatch = PlaybackWatch(applicationContext, audioRoute::onPlayback).also { w -> w.start() }
+                lifecycleScope.launch(Dispatchers.IO) {
+                    carEvents.carplayState.map { s -> s.connected }.distinctUntilChanged().collect(audioRoute::onProjection)
+                }
             }
             // The raw body bus on a second carrier (`riposte.canbus.link`), when the rig has one.
             // The car has none: its bus arrives over USB through CanCaptureService.
@@ -370,6 +386,10 @@ class MainActivity : ComponentActivity() {
             btCarKit = BtCarKit(applicationContext).also { kit ->
                 kit.start()
                 lifecycleScope.launch { kit.vendorView.collect(carEvents::feedVendorBt) }
+                // The A2DP stream is SRC_BTMUSIC, as btsuite selected it.
+                armAudioRoute?.let { r ->
+                    lifecycleScope.launch { kit.snapshot.map { s -> s.audioPlaying }.distinctUntilChanged().collect(r::onBtAudio) }
+                }
             }
         }
         carService.bind()
@@ -377,6 +397,10 @@ class MainActivity : ComponentActivity() {
         TunerHub.attach(CarTunerPort(carService), lifecycleScope)
         appRepository = AppRepository(this, ownerActive = mcuOwner != null)
         nowPlaying = NowPlayingRepository(applicationContext).also { it.start(lifecycleScope) }
+        // No media session left is the vendor players' activity destroy: exitCurMode.
+        armAudioRoute?.let { r ->
+            lifecycleScope.launch { nowPlaying.sources.map { s -> s.isNotEmpty() }.distinctUntilChanged().collect(r::onMediaSessions) }
+        }
         themeStore = ThemeStore(applicationContext)
 
         // v2.7: the notification shelf's mute filter. Constructed before the speech controller
@@ -1330,6 +1354,7 @@ class MainActivity : ComponentActivity() {
         gatewayHandshake.unregister() // v3.0
         carEvents.unregister()
         mcuSleepWake?.stop()
+        playbackWatch?.stop()
         carService.unbind()
         vendorBtService.unbind()
         nowPlaying.stop()

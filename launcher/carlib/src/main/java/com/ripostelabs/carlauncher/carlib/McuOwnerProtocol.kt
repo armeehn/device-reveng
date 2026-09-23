@@ -39,8 +39,11 @@ object McuOwnerProtocol {
     private const val OP_BT_STATE = 0x0B      // sendBTState, :4336-4342
     private const val OP_USER_FREQ = 0x0C     // sendUserFreq, :4300
     private const val OP_RTC = 0x13           // sendRTCTimer, :9469
+    private const val OP_PLAY_STATE = 0x19    // sendPlayState, :4327-4328: 1 = paused
     private const val OP_VOICE_STATE = 0x42   // CMD_SEND_VOICE_STATE, EventUtils.java:1147; sendVoiceState, :11769
     private const val OP_BACKLIGHT = 0x2E     // sendBacklight, :9639-9659
+    private const val OP_SOUND_STATE = 0x3F   // sendNavStateToMcu, :8076-8083: nav byte, system byte
+    private const val OP_TIMED_MUTE = 0x4C    // onSendMuteToMcu, MusicPlayerService.java:1120: units
     private const val OP_CONFIG = 0x4F        // sendFactoryMcuSet and the other 4F sub-id blocks
     private const val OP_SYS_CONFIG = 0x49    // sendSleepTime :9361, sendVolumeGain :9662: `49 sub-id ...`
     private const val CFG_SLEEP_TIME = 0x05   // sendSleepTime's sub-id (:9370)
@@ -83,6 +86,9 @@ object McuOwnerProtocol {
     /** Box commands, inside the `5A A5` frame (HiworldCanParseToyota.java:1768, :1774). */
     private const val BOX_CAR_TYPE = 0x24
     private const val BOX_QUERY = 0x6A
+
+    /** The units every vendor media app passes to onSendMuteToMcu (MusicPlayerService.java:474-478, :1120). */
+    const val TIMED_MUTE_UNITS = 20
 
     /** `sendBTState((byte) 0)` on ACC off (EventService.java:3559); higher values are call states. */
     const val BT_DISCONNECTED = 0
@@ -132,6 +138,7 @@ object McuOwnerProtocol {
         RADIO(1),
         BT(6),
         BT_MUSIC(7),
+        MOVIE(10),
         MUSIC(11),
         ANDROID(14),
         CARPLAY(32),
@@ -263,6 +270,19 @@ object McuOwnerProtocol {
     fun mainVolume(level: Int): ByteArray = setup(SETUP_MAIN_VOLUME, level)
 
     fun mute(on: Boolean): ByteArray = McuSerial.encode(OP_MUTE, bytes(if (on) 1 else 0))
+
+    /** musicplayer's `onSendMuteToMcu(20)` around play and pause: `4C 14` (MusicPlayerService.java:1120). */
+    fun timedMute(units: Int = TIMED_MUTE_UNITS): ByteArray = McuSerial.encode(OP_TIMED_MUTE, bytes(units))
+
+    /** `19 paused`: the byte is 1 when NOT playing (sendPlayState, EventService.java:4328). */
+    fun playState(playing: Boolean): ByteArray = McuSerial.encode(OP_PLAY_STATE, bytes(if (playing) 0 else 1))
+
+    /**
+     * `3F nav system`: navigation prompt playing, any Android sound playing. The vendor log calls
+     * the system byte "ARM mute" (notifyARMMuteState, EventService.java:13606-13609).
+     */
+    fun soundState(nav: Boolean, system: Boolean): ByteArray =
+        McuSerial.encode(OP_SOUND_STATE, bytes(if (nav) 1 else 0, if (system) 1 else 0))
 
     fun radioKey(key: Int): ByteArray = McuSerial.encode(OP_RADIO_KEY, bytes(key))
 

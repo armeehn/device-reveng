@@ -10,10 +10,10 @@ class RadioSourceTest {
 
     private val sent = mutableListOf<McuOwnerProtocol.Mode>()
 
-    private fun source(ack: Boolean = true) = RadioSource { mode ->
+    private fun source(ack: Boolean = true) = RadioSource(select = { mode ->
         sent += mode
         ack
-    }
+    })
 
     @Test
     fun claimSelectsRadioAndReleaseSendsNull() {
@@ -78,5 +78,23 @@ class RadioSourceTest {
         source.release()
 
         assertEquals(listOf("mode:RADIO", "voice:false", "voice:false", "mode:NULL"), log)
+    }
+}
+
+/** exitCurMode: SRC_NULL only while the valid mode is still the tuner (EventService.java:8925). */
+class RadioSourceTakeoverTest {
+
+    @Test
+    fun releaseAfterAnotherSourceTookOverSendsNothing() {
+        val sent = mutableListOf<McuOwnerProtocol.Mode>()
+        var current: McuOwnerProtocol.Mode? = null
+        val source = RadioSource(select = { mode -> sent += mode; current = mode; true }, current = { current })
+
+        source.claim()
+        current = McuOwnerProtocol.Mode.MUSIC
+        assertFalse(source.release())
+        assertFalse(source.held)
+
+        assertEquals(listOf(McuOwnerProtocol.Mode.RADIO), sent)
     }
 }
