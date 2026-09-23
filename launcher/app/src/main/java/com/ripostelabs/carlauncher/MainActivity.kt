@@ -36,6 +36,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.ripostelabs.carlauncher.carlib.BtCallMcu
 import com.ripostelabs.carlauncher.carlib.BtCarKit
 import com.ripostelabs.carlauncher.carlib.CarEvents
+import com.ripostelabs.carlauncher.carlib.DozeGuard
 import com.ripostelabs.carlauncher.carlib.McuSetupProtocol
 import com.ripostelabs.carlauncher.carlib.McuSetupStore
 import com.ripostelabs.carlauncher.carlib.RadioMemory
@@ -200,6 +201,7 @@ class MainActivity : ComponentActivity() {
     private var busSource: SlcanLinkSource? = null
     /** Riposte OS 0.2 only: ACC sleep and wake for [mcuOwner], polled like the vendor's AccObserver. */
     private var mcuSleepWake: McuSleepWake? = null
+    private var dozeGuard: DozeGuard? = null
 
     /** Riposte OS 0.2 only: Android playback for [ArmAudioRoute]. */
     private var playbackWatch: PlaybackWatch? = null
@@ -427,6 +429,9 @@ class MainActivity : ComponentActivity() {
                 }
                 carCommandPort = CarCommandPort(carService.asCommandTarget()).also { port -> port.start() }
                 mcuSleepWake = McuSleepWake.forOwner(it, AndroidAccSource(), startupConfig).also { sw -> sw.start() }
+                // The GSI dozes the panel on its own (README "Doze and dreams"); wake it unless
+                // the machine above, or ACC, asked for the dark.
+                dozeGuard = DozeGuard({ mcuSleepWake }, AndroidAccSource()).also { g -> g.start(applicationContext) }
                 ampVolumeKeys = volumeKeys.also { keys -> keys.start(applicationContext) }
 
                 // Android sound, media players, BT audio and CarPlay reach the amp only once the
@@ -1486,6 +1491,7 @@ class MainActivity : ComponentActivity() {
         gatewayHandshake.unregister() // v3.0
         carEvents.unregister()
         mcuSleepWake?.stop()
+        dozeGuard?.stop(applicationContext)
         playbackWatch?.stop()
         carService.unbind()
         vendorBtService.unbind()

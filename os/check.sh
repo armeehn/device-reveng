@@ -23,6 +23,9 @@ readonly BT_CARKIT_ON="bluetooth.profile.a2dp.sink.enabled bluetooth.profile.hfp
 readonly BT_CARKIT_OFF="bluetooth.profile.a2dp.source.enabled bluetooth.profile.hfp.ag.enabled
   bluetooth.profile.avrcp.target.enabled"
 readonly BT_CARKIT_COD=38,4,8
+# Secure settings the first-boot hook must turn off: the GSI's doze dream and screen savers.
+readonly DOZE_OFF_KEYS="doze_enabled doze_always_on doze_pulse_on_pick_up doze_pulse_on_double_tap
+  screensaver_enabled screensaver_activate_on_dock screensaver_activate_on_sleep"
 
 BASE="" OUT="" PROFILE=tier1 SUITE="" SYSTEM="" BOOT="" TOOLS=0
 while [ $# -gt 0 ]; do
@@ -135,6 +138,10 @@ if [ "$PROFILE" = gsi ]; then
   check "grep -q '^service riposte_root ' $S/etc/init/riposte.rc" "riposte_root init service (launcher root grant, every boot)"
   check "[ \"\$(stat -c %a $S/bin/riposte-root.sh)\" = 755 ]" "riposte-root.sh executable"
   check "! grep -q 'uid_policy' $S/bin/riposte-firstboot.sh" "the grant has one owner: not in the first-boot hook"
+  # The GSI dozes and dreams by default; stock did neither (car, 2026-09-23: black panel after boot).
+  for key in $DOZE_OFF_KEYS; do
+    check "grep -q '^settings put secure $key 0' $S/bin/riposte-firstboot.sh" "first boot turns $key off"
+  done
   # One property drives the reverse-camera decoder.
   check "grep -q '^on property:persist.riposte.camera.mode=\*' $S/etc/init/riposte.rc" "persist.riposte.camera.mode init trigger"
   check "[ \"\$(stat -c %a $S/bin/riposte-camera-mode.sh)\" = 755 ]" "riposte-camera-mode.sh executable"
