@@ -32,6 +32,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import com.ripostelabs.carlauncher.carlib.BtCallMcu
 import com.ripostelabs.carlauncher.carlib.BtCarKit
 import com.ripostelabs.carlauncher.carlib.CarEvents
 import com.ripostelabs.carlauncher.carlib.McuSetupProtocol
@@ -400,7 +401,12 @@ class MainActivity : ComponentActivity() {
             }
             // No btsuite on this slot: the HF client / A2DP sink / AVRCP controller proxies
             // feed the same vendorBt flow the Phone screen and the chips already read.
-            btCarKit = BtCarKit(applicationContext).also { kit ->
+            // The MCU hears the call as eventcenter relayed it (BtCallMcu); CarPlay gates it.
+            btCarKit = BtCarKit(
+                applicationContext,
+                callMcu = mcuOwner?.let(BtCallMcu::forOwner),
+                carPlay = { carEvents.carplayState.value },
+            ).also { kit ->
                 kit.start()
                 lifecycleScope.launch { kit.vendorView.collect(carEvents::feedVendorBt) }
                 // The A2DP stream is SRC_BTMUSIC, as btsuite selected it.

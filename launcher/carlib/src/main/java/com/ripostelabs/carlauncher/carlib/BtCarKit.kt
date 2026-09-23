@@ -8,6 +8,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.SharedPreferences
 import android.util.Log
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
@@ -47,8 +48,17 @@ import kotlinx.coroutines.flow.asStateFlow
  * an `AudioTrack`; `AvrcpControllerService` publishes a `MediaSessionCompat` the now-playing
  * card already picks up. Whether the vendor audio HAL routes that track to the amp is a car
  * test, as is every line below: the emulator farm has no radio.
+ *
+ * Around a call the MCU hears what eventcenter relayed for btsuite ([callMcu], `0B` / `4C`),
+ * and at start the unit goes to the phone as btsuite's module did ([BtAutoConnect]): the last
+ * phone the HF client had, else the first bonded device, on the HF client and the A2DP sink;
+ * AVRCP and PBAP follow those links inside the stack. [carPlay] gates both as the vendor does.
  */
-class BtCarKit(context: Context) {
+class BtCarKit(
+    context: Context,
+    private val callMcu: BtCallMcu? = null,
+    private val carPlay: () -> CarPlayState = { CarPlayState() },
+) {
 
     private val appContext = context.applicationContext
     private val adapter: BluetoothAdapter? =
@@ -58,6 +68,13 @@ class BtCarKit(context: Context) {
 
     /** The HF client's call objects, kept for [hangUp]; parallel to the snapshot's calls. */
     private var callHandles: List<Any> = emptyList()
+
+    /** The HF link's last CONNECTION_STATE_CHANGED extra, folded into the snapshot on refresh. */
+    @Volatile
+    private var hfLink = HfLink.DISCONNECTED
+
+    private val autoConnect = BtAutoConnect()
+    private val prefs: SharedPreferences = appContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
     private val worker: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor { r ->
         Thread(r, TAG).apply { isDaemon = true }
@@ -88,6 +105,9 @@ class BtCarKit(context: Context) {
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action == HF_CONNECTION_STATE) {
+                hfLink = intent.getIntExtra(BluetoothProfile.EXTRA_STATE, HfLink.DISCONNECTED)
+            }
             worker.execute { refresh() }
         }
     }
@@ -113,6 +133,7 @@ class BtCarKit(context: Context) {
             }
         }
         worker.schedule({ settle() }, BIND_SETTLE_MS, TimeUnit.MILLISECONDS)
+        worker.schedule({ armAutoConnect() }, BtAutoConnect.START_DELAY_MS, TimeUnit.MILLISECONDS)
         worker.execute { refresh() }
     }
 
@@ -154,14 +175,43 @@ class BtCarKit(context: Context) {
         }
     }
 
-    /** Accept the ringing call (`acceptCall(device, CALL_ACCEPT_NONE)`). */
+    /**
+     * The vendor's start-up campaign ([BtAutoConnect]): go to the last phone unless one is on
+     * or CarPlay holds it. Retries ride [refresh] as the HF link reports back.
+     */
+    private fun armAutoConnect() {
+        if (!autoConnect.arm(BtCarKitMap.hfp(_snapshot.value), carPlay().connected)) {
+            return
+        }
+        connectLastPhone()
+    }
+
+    /** `connectDev()` with no address: the module's last device (EventManagerImplFEasycom.java:6). */
+    private fun connectLastPhone() {
+        val bonded = runCatching { adapter?.bondedDevices?.toList() }.getOrNull().orEmpty()
+        val last = prefs.getString(KEY_LAST_PHONE, null)
+        val phone = bonded.firstOrNull { it.address == last } ?: bonded.firstOrNull() ?: run {
+            Log.i(TAG, "auto-connect: no bonded phone")
+            return
+        }
+        for (id in listOf(PROFILE_HEADSET_CLIENT, PROFILE_A2DP_SINK)) {
+            val proxy = proxies[id] ?: continue
+            runCatching { proxy.method("connect", BluetoothDevice::class.java).invoke(proxy, phone) }
+                .onSuccess { Log.i(TAG, "auto-connect $id ${phone.address}: $it") }
+                .onFailure { Log.w(TAG, "auto-connect $id ${phone.address} failed", it) }
+        }
+    }
+
+    /** Accept the ringing call (`acceptCall(device, CALL_ACCEPT_NONE)`), the amp muted first. */
     fun answer() = hfCall { hf, device ->
+        callMcu?.beforeAnswer()
         hf.method("acceptCall", BluetoothDevice::class.java, Int::class.javaPrimitiveType!!)
             .invoke(hf, device, CALL_ACCEPT_NONE)
     }
 
     /** Reject a ringing call, else terminate the lead call (all calls when none is known). */
     fun hangUp() = hfCall { hf, device ->
+        callMcu?.beforeHangUp()
         val calls = _snapshot.value.calls
         val lead = BtCarKitMap.leadCall(calls)
         if (lead != null && (lead.state == HfCallState.INCOMING || lead.state == HfCallState.WAITING)) {
@@ -209,6 +259,7 @@ class BtCarKit(context: Context) {
             bound = proxies.keys.toSet(),
             phoneName = (hfDevice ?: sinkDevice)?.let(::deviceName),
             hfConnected = hfDevice != null,
+            hfLink = hfLink,
             sinkConnected = sinkDevice != null,
             avrcpConnected = avrcp?.let(::connectedDevice) != null,
             calls = calls,
@@ -217,6 +268,15 @@ class BtCarKit(context: Context) {
         )
         _snapshot.value = next
         _vendorView.value = BtCarKitMap.vendorView(next, now)
+
+        // The phone that got on is the one to go back to next boot.
+        hfDevice?.let { prefs.edit().putString(KEY_LAST_PHONE, it.address).apply() }
+
+        val hfp = BtCarKitMap.hfp(next)
+        callMcu?.onHfp(hfp, carPlay().inCall)
+        if (autoConnect.onState(hfp)) {
+            connectLastPhone()
+        }
     }
 
     private fun connectedDevice(proxy: BluetoothProfile): BluetoothDevice? =
@@ -249,7 +309,9 @@ class BtCarKit(context: Context) {
         const val PROFILE_A2DP_SINK = 11
         const val PROFILE_AVRCP_CONTROLLER = 12
         const val PROFILE_HEADSET_CLIENT = 16
-        val PROFILES = setOf(PROFILE_HEADSET_CLIENT, PROFILE_A2DP_SINK, PROFILE_AVRCP_CONTROLLER)
+        /** `BluetoothProfile.PBAP_CLIENT` (`:187`): bound for the Doctor row; the stack connects it with HFP. */
+        const val PROFILE_PBAP_CLIENT = 17
+        val PROFILES = setOf(PROFILE_HEADSET_CLIENT, PROFILE_A2DP_SINK, PROFILE_AVRCP_CONTROLLER, PROFILE_PBAP_CLIENT)
 
         /** `BluetoothHeadsetClient.CALL_ACCEPT_NONE` (`:719`). */
         private const val CALL_ACCEPT_NONE = 0
@@ -260,13 +322,18 @@ class BtCarKit(context: Context) {
 
         /** `BluetoothHeadsetClient.ACTION_*`, `BluetoothA2dpSink` / `BluetoothAvrcpController`. */
         private const val HF_PREFIX = "android.bluetooth.headsetclient.profile.action."
+        private const val HF_CONNECTION_STATE = HF_PREFIX + "CONNECTION_STATE_CHANGED"
         val ACTIONS = listOf(
-            HF_PREFIX + "CONNECTION_STATE_CHANGED",
+            HF_CONNECTION_STATE,
             HF_PREFIX + "AG_CALL_CHANGED",
             HF_PREFIX + "AUDIO_STATE_CHANGED",
             "android.bluetooth.a2dp-sink.profile.action.CONNECTION_STATE_CHANGED",
             "android.bluetooth.avrcp-controller.profile.action.CONNECTION_STATE_CHANGED",
             BluetoothAdapter.ACTION_STATE_CHANGED,
+            "android.bluetooth.pbapclient.profile.action.CONNECTION_STATE_CHANGED",
         )
+
+        private const val PREFS = "bt_carkit"
+        private const val KEY_LAST_PHONE = "last_phone"
     }
 }
