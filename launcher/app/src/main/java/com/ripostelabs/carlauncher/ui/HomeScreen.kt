@@ -191,6 +191,8 @@ fun HomeScreen(
             is QuickSlot.Action -> slot.action.intent().broadcast(appContext)
         }
     }
+    // Climate controls dialog, opened from the card or CENTER on it.
+    val climateOpen = remember { mutableStateOf(false) }
     SideEffect {
         // Keep the focus model's view of the layout in sync so navigation skips hidden regions.
         focus.showMedia = settings.showMedia
@@ -207,7 +209,8 @@ fun HomeScreen(
                 is FocusTarget.Radio -> onOpenRadio()
                 is FocusTarget.Grid -> focus.grid.launch(target.index)
                 is FocusTarget.Quick -> quick.slots.getOrNull(target.index)?.let(runQuick)
-                else -> {} // Climate / Nav are glanceable, no primary action
+                is FocusTarget.Climate -> climateOpen.value = true
+                else -> {} // Nav is glanceable, no primary action
             }
         }
         // v2.8: long CENTER. Each case mirrors the touch long-press that already exists, so the
@@ -343,8 +346,15 @@ fun HomeScreen(
                             ClimateReadout(
                                 carEvents = carEvents,
                                 modifier = Modifier.fillMaxSize(),
+                                onClick = { climateOpen.value = true },
                             )
                         }
+                        ClimateControlsDialogHost(
+                            open = climateOpen.value,
+                            onDismiss = { climateOpen.value = false },
+                            carService = carService,
+                            carEvents = carEvents,
+                        )
                     }
                 }
             }

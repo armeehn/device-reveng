@@ -43,6 +43,7 @@ object HiworldCanDecoder {
     private const val OP_SYS_EVENT = 0x71     // gateway system event; carries the reverse flag
     private const val OP_SIDE_CAMERA = 0x18   // OEM calls it LightInfo; on this car it drives the side cameras
     private const val OP_CLIMATE = 0x31       // full climate state (this car uses 0x31, not the generic one)
+    private const val OP_CLIMATE_REAR = 0x37  // right vent + rear-right zone (OnHandleCanAirCmdVertical2)
     private const val OP_RADAR = 0x41          // PDC ultrasonic front/rear
     private const val OP_TPMS = 0x48           // tyre pressures
     private const val OP_VERSION = 0xF0        // CANBOX firmware version ASCII
@@ -101,6 +102,8 @@ object HiworldCanDecoder {
 
     /** OEM: setpoint byte * 0.5 = degrees C. */
     private const val TEMP_SCALE_C = 0.5
+    private const val OUTSIDE_OFFSET_C = 40.0
+    private const val OUTSIDE_NONE = 0xFF
 
     /** OEM sentinel: 0xFF in the coolant byte means "unsupported / no reading". */
     private const val COOLANT_SENTINEL = 0xFF
@@ -155,6 +158,7 @@ object HiworldCanDecoder {
         OP_SYS_EVENT -> decodeSysEvent(payload)
         OP_SIDE_CAMERA -> decodeSideCamera(payload)
         OP_CLIMATE -> decodeClimate(payload)
+        OP_CLIMATE_REAR -> decodeClimateRear(payload)
         OP_RADAR -> decodeRadar(payload)
         OP_TRIP_INFO -> decodeTripInfo(payload)
         OP_SPEED -> decodeSpeed(payload)
@@ -382,15 +386,24 @@ object HiworldCanDecoder {
         return CanSignal.Climate(
             on = (b0 and 0x40) != 0,
             acMax = (b0 and 0x20) != 0,
+            rearAirOn = (b0 and 0x10) != 0,
             auto = (b0 and 0x08) != 0,
-            // The OEM tests this bit for ZERO, not one. Inverted on purpose, not a typo.
-            dual = (b0 and 0x04) == 0,
+            // The OEM writes bDualOn twice: bArr[2] bit 2 tested for zero (:220), then bArr[3]
+            // bit 2 tested for one (:232). The second assignment is the one its screen shows.
+            dual = (b1 and 0x04) != 0,
+            centralAirSupply = (b0 and 0x02) != 0,
             tempUnitCelsius = (b0 and 0x01) == 0,
+            rearLock = (b1 and 0x80) != 0,
             acOn = (b1 and 0x40) != 0,
+            airQuality = (b1 and 0x20) != 0,
             recirculate = (b1 and 0x10) != 0,
+            aqsRecirculate = (b1 and 0x08) != 0,
             eco = (b1 and 0x02) != 0,
             airPurifier = (b1 and 0x01) != 0,
-            rearDefog = (b2 and 0x40) != 0,
+            rearAuto = (b2 and 0x80) != 0,
+            autoDefog = (b2 and 0x40) != 0,
+            // bRearOn (:238) is the rear window defrost; bit 6 above is the automatic defogger.
+            rearDefog = (b2 and 0x20) != 0,
             maxFront = (b2 and 0x10) != 0,
             seatHeatRight = (b2 shr 2) and 0x03,
             seatHeatLeft = b2 and 0x03,
@@ -402,7 +415,32 @@ object HiworldCanDecoder {
             rightTempC = tempC(u(p, 7)),
             leftTempLimit = tempLimit(u(p, 6)),
             rightTempLimit = tempLimit(u(p, 7)),
+            rearVentDirectionRaw = u(p, 8),
             rearFanStep = u(p, 9) and 0x0F,
+            rearLeftTempC = tempC(u(p, 10)),
+            rearLeftTempLimit = tempLimit(u(p, 10)),
+            outsideTempC = outsideC(u(p, 11)),
+        )
+    }
+
+    /** Outside air, bArr[13]: `(raw * 0.5f) - 40.0f`, "--" at 0xFF (:309-323). */
+    private fun outsideC(raw: Int): Double? =
+        if (raw == OUTSIDE_NONE) null else raw * TEMP_SCALE_C - OUTSIDE_OFFSET_C
+
+    /**
+     * 0x37 right vent + rear-right zone, `OnHandleCanAirCmdVertical2` (:177-211). Same
+     * unverified status as [decodeClimate]. Indices are OEM bArr minus 2.
+     */
+    private fun decodeClimateRear(p: ByteArray): CanSignal.ClimateRear {
+        val seats = u(p, 2)
+        return CanSignal.ClimateRear(
+            rightVentDirectionRaw = u(p, 0),
+            rearRightTempC = tempC(u(p, 1)),
+            rearRightTempLimit = tempLimit(u(p, 1)),
+            rearSeatCoolRight = (seats shr 6) and 0x03,
+            rearSeatCoolLeft = (seats shr 4) and 0x03,
+            rearSeatHeatRight = (seats shr 2) and 0x03,
+            rearSeatHeatLeft = seats and 0x03,
         )
     }
 
@@ -782,10 +820,40 @@ sealed interface CanSignal {
         /** Which end stop a null temperature is, so a card can say "LO"/"HI" as the vendor does. */
         val leftTempLimit: TempLimit? = null,
         val rightTempLimit: TempLimit? = null,
+        /** `bRearAirOn`, `bCentralizedAirSupply`: p[0] bits 4 and 1. */
+        val rearAirOn: Boolean = false,
+        val centralAirSupply: Boolean = false,
+        /** `bRearLock`, `bAirQuality`, `bAQSInCircle`: p[1] bits 7, 5, 3. */
+        val rearLock: Boolean = false,
+        val airQuality: Boolean = false,
+        val aqsRecirculate: Boolean = false,
+        /** `bRearAutoOn`, `bAutomaticDefogging`: p[2] bits 7 and 6. [rearDefog] is bit 5. */
+        val rearAuto: Boolean = false,
+        val autoDefog: Boolean = false,
+        /** Rear zone: vent enum (1 foot, 2 level, 3 both), setpoint, and the outside air. */
+        val rearVentDirectionRaw: Int = 0,
+        val rearLeftTempC: Double? = null,
+        val rearLeftTempLimit: TempLimit? = null,
+        /** Outside air in degrees C; null when the car reports none (0xFF). */
+        val outsideTempC: Double? = null,
     ) : CanSignal {
         /** The two setpoint sentinels (0xFE, 0xFF): end stops of the dial, not temperatures. */
         enum class TempLimit { LO, HI }
     }
+
+    /**
+     * 0x37 - the right-hand vent and the rear-right zone, sent beside 0x31 on cars that have
+     * them (`OnHandleCanAirCmdVertical2`). Seat levels are 0-3 like [Climate]'s.
+     */
+    data class ClimateRear(
+        val rightVentDirectionRaw: Int,
+        val rearRightTempC: Double?,
+        val rearRightTempLimit: Climate.TempLimit?,
+        val rearSeatHeatLeft: Int,
+        val rearSeatHeatRight: Int,
+        val rearSeatCoolLeft: Int,
+        val rearSeatCoolRight: Int,
+    ) : CanSignal
 
     /** 0x48 — tyre pressures in kPa; null = no reading (0xFE sentinel). */
     data class Tpms(
