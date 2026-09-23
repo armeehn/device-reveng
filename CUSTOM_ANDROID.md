@@ -128,7 +128,9 @@ system *advisable*; it makes the argument against it much weaker than it reads.
 **The reverse camera is not vendor-composited `[confirmed]`.** `AUXCamera.apk` reaches it through
 `CameraManager.openCamera()` → `Camera.open(1)` — the *standard Android Camera API* — over the AIS
 automotive-camera HAL in `/vendor/etc/camera/`, which a GSI keeps. Signal format is a system
-property (`persist.camera.sensorcfg.signal`), settable by root. It is an app calling a public API
+property on the XS9922B path only (`persist.camera.sensorcfg.resolution`); this unit's PR2000
+decoder takes a root-only sysfs write, which 0.2 wraps in `persist.riposte.camera.mode`
+(`os/CARHAL.md` row 3). It is an app calling a public API
 against a HAL you retain, not vendor magic. Reimplementable.
 
 **The radio is not a separate subsystem `[confirmed]`.** `com.szchoiceway.radio` declares the same

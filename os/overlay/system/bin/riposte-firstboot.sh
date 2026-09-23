@@ -28,13 +28,6 @@ done
 # Gesture navigation: swipe up is HOME, an edge swipe is BACK, only a pill on screen. The
 # fascia keys cannot leave a foreign app on the owner path, so this is the way out of Settings.
 cmd overlay enable-exclusive --category com.android.internal.systemui.navbar.gestural
-# Root for the launcher without Magisk (owner approved 2026-09-19): the GSI's own phh-su, the
-# Koush Superuser daemon, allows root, system, radio and shell outright and looks every other
-# uid up in the Superuser app's database. That app is not installed, so an 'allow' row written
-# here is the whole grant. Night mode, the status bar toggle, updates and key injection all
-# shell out through it.
-SU_DB_DIR=/data/data/me.phh.superuser/databases
-LAUNCHER_UID=$(pm list packages -U "$LAUNCHER" | sed -n 's/.*uid://p')
-mkdir -p "$SU_DB_DIR"
-sqlite3 "$SU_DB_DIR/su.sqlite" "create table if not exists uid_policy (logging integer, desired_name text, username text, policy text, until integer, command text, uid integer, desired_uid integer, package_name text, name text, notification integer); delete from uid_policy where uid=$LAUNCHER_UID; insert into uid_policy (logging, desired_name, username, policy, until, command, uid, desired_uid, package_name, name, notification) values (0, 'root', 'launcher', 'allow', 0, '', $LAUNCHER_UID, 0, '$LAUNCHER', 'CarLauncher', 0);"
+# Root for the launcher is not a first-boot item: riposte-root.sh (every boot, from init)
+# seeds the sudaemon grant when it is missing, so a /data wipe cannot lose it.
 touch "$MARK"

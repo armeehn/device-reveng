@@ -122,6 +122,32 @@ Each of these cost a bench session; each is one small service or prop in the ove
   each wake corrects both (`GpsClock`, then `0x13` to the MCU). The first boot turns the
   location master switch on, which a GSI leaves off.
 
+## Root for the launcher (0.2)
+
+Decided 2026-09-23: the launcher drives hardware (decoder nodes, key injection, night
+mode, updates), so its root is a feature of Riposte OS, not a workaround. Two mechanisms,
+both in the overlay, both checked by `check.sh`:
+
+- **The grant.** The GSI's `sudaemon` (`/system/bin/phh-su --daemon`, Koush Superuser)
+  allows root, system, radio and shell outright and looks every other uid up in
+  `/data/data/me.phh.superuser/databases/su.sqlite`, table `uid_policy`, policy `allow`.
+  The Superuser app is not installed, so that row is the whole grant. `riposte-root.sh`
+  runs from init on every boot (root, `u:r:su:s0`, after `sys.boot_completed`). It seeds
+  the row when it is missing (first boot, or after a `/data` wipe). It then proves the
+  grant by asking the daemon as the launcher's uid, and logs `riposte-root: launcher
+  granted (uid N)` or `riposte-root: NOT granted: <reason>`. `adb logcat -s riposte-root`
+  is the bench check. The launcher's `RootShell` is the client.
+- **The camera decoder.** The reverse-camera signal format is a root-only sysfs write.
+  The launcher sets one property, `persist.riposte.camera.mode=<0..8>` (through its root
+  shell: a priv-app cannot set an unlabelled `persist.` prop on this GSI, there is no
+  `priv_app` rule for `default_prop`), and init's `on property:` trigger runs
+  `riposte-camera-mode.sh`, which does what stock does (`sys.pr2000.writable=1`, then
+  `v<n>` to the PR2000 nodes). Persisted props replay at boot, so the mode survives a
+  reboot. Values are the vendor picker's rows: 0 auto, 1 NTSC, 2 PAL, 3 720p25, 4 1080p25,
+  5 720p60, 6 1080p30, 7 720p30, 8 PAL60. The launcher's direct root write
+  (`ReverseCameraDecoder`) stays as the fallback. `test-root-camera.sh` exercises both
+  scripts against stubs.
+
 ## Bluetooth on 0.2: car-kit roles
 
 A GSI is a phone build: its Bluetooth stack runs the phone-side profiles (A2DP source, HFP

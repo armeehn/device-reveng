@@ -37,6 +37,11 @@ head -c 1048576 /dev/urandom > "$W/sys/framework/framework.jar"
 # A userdebug GSI ships its own tcpdump; the toolbelt must leave it in place (build.sh 3c).
 printf '#!/system/bin/sh\n' > "$W/sys/bin/tcpdump"; chmod 0755 "$W/sys/bin/tcpdump"
 mint_apk com.szchoiceway.providers.settings "$W/sys/priv-app/SysVarProvider/SysVarProvider.apk"
+# The OEM projection daemon build.sh lifts on the gsi profile (step 3b): its loader, the two
+# helpers and one library under the stock paths. Empty stand-ins; only the lift is checked.
+mkdir -p "$W/sys/priv-app/zlink5/lib/arm"
+: > "$W/sys/priv-app/zlink5/lib/arm/libzjL10001.so"
+for b in z-link z-mdnsd z-usbmuxd; do printf '#!/system/bin/sh\n' > "$W/sys/bin/$b"; chmod 0755 "$W/sys/bin/$b"; done
 # Phone-side Bluetooth roles as a stock or GSI build.prop carries them: tier2 must keep them
 # byte for byte, gsi must override them (init keeps the last value of a duplicated key).
 printf 'ro.build.version.release=13\nro.build.type=userdebug\nbluetooth.profile.a2dp.source.enabled=true\nbluetooth.profile.hfp.ag.enabled=true\n' > "$W/sys/build.prop"
