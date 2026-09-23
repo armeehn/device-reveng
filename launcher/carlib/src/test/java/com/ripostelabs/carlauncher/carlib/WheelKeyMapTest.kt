@@ -79,4 +79,36 @@ class WheelKeyMapTest {
             assertEquals(id, WheelFunction.byIconId(id)?.iconId)
         }
     }
+
+    // ---- Riposte OS 0.2 keeps the map itself, in the vendor's shape ----------------------
+
+    @Test
+    fun jsonRoundTripsInTheVendorShape() {
+        val map = WheelKeyMap.EMPTY.with(1, WheelFunction.NEXT).with(0, WheelFunction.HOME)
+        assertEquals("""{"svg_wheel_mode_home":"0","svg_wheel_next_c":"1"}""", map.toJson())
+        assertEquals(map, WheelKeyMap.parse(map.toJson()))
+        assertEquals("{}", WheelKeyMap.EMPTY.toJson())
+    }
+
+    /** A slot holds one function and a function one slot: `with` replaces both ways. */
+    @Test
+    fun withReplacesTheSlotAndTheFunction() {
+        val map = WheelKeyMap.EMPTY.with(0, WheelFunction.NEXT).with(1, WheelFunction.PREV)
+        val next = map.with(1, WheelFunction.NEXT)
+        assertEquals(listOf(1 to WheelFunction.NEXT), next.entries)
+    }
+
+    @Test
+    fun retainKeepsOnlyTheMaskedSlots() {
+        val map = WheelKeyMap.EMPTY.with(0, WheelFunction.NEXT).with(3, WheelFunction.PREV).with(5, WheelFunction.MODE)
+        assertEquals(listOf(0 to WheelFunction.NEXT, 5 to WheelFunction.MODE), map.retain(0b100001).entries)
+        assertTrue(map.retain(0).isEmpty)
+    }
+
+    @Test
+    fun lowestFreeSlotSkipsTheTakenOnes() {
+        assertEquals(0, WheelKeyMap.EMPTY.lowestFreeSlot())
+        val map = WheelKeyMap.EMPTY.with(0, WheelFunction.NEXT).with(1, WheelFunction.PREV).with(3, WheelFunction.MODE)
+        assertEquals(2, map.lowestFreeSlot())
+    }
 }

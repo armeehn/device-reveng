@@ -107,6 +107,11 @@ data class LauncherSettings(
     /** Hold / double-press actions for the wheel keys; on by default, see [WheelGestureBindings]. */
     val wheelGestures: WheelGestureBindings = WheelGestureBindings(),
     /**
+     * Riposte OS 0.2: the resistive wheel's slot → function map, in the vendor's JSON shape
+     * (`WheelKeyMap`). Written by the Settings learn page; empty until a key is learned.
+     */
+    val wheelKeyMapJson: String = "",
+    /**
      * The accessory board, sequences and triggers, as one JSON blob (see `AccessoryConfig`).
      * Kept raw here and parsed where it is used, so a bad paste degrades in one place with a
      * list of what was dropped rather than failing the whole settings read.
@@ -216,6 +221,7 @@ class SettingsStore(context: Context) {
                         ),
                         double = WheelGestureBindings.decode(prefs[WHEEL_DOUBLE_KEY], emptyMap()),
                     ),
+                    wheelKeyMapJson = prefs[WHEEL_KEY_MAP_KEY] ?: "",
                     accessoryConfigJson = prefs[ACCESSORY_CONFIG_KEY] ?: "",
                     hideReplacedOemApps = prefs[HIDE_REPLACED_OEM_KEY] ?: true,
                     hideOemSettings = prefs[HIDE_OEM_SETTINGS_KEY] ?: false,
@@ -314,6 +320,11 @@ class SettingsStore(context: Context) {
         ds.edit { it[WHEEL_LONG_KEY] = WheelGestureBindings.encode(next) }
     }
 
+    /** Riposte OS 0.2: the learn page's slot → function map, as `WheelKeyMap.toJson()`. */
+    fun setWheelKeyMap(json: String) = scope.launch {
+        ds.edit { it[WHEEL_KEY_MAP_KEY] = json }
+    }
+
     fun setWheelDouble(key: WheelKey, action: WheelGestureAction) = scope.launch {
         val next = settings.value.wheelGestures.double + (key to action)
         ds.edit { it[WHEEL_DOUBLE_KEY] = WheelGestureBindings.encode(next) }
@@ -362,6 +373,7 @@ class SettingsStore(context: Context) {
         val WHEEL_GESTURES_KEY = booleanPreferencesKey("wheel_gestures_enabled")
         val WHEEL_LONG_KEY = stringPreferencesKey("wheel_gestures_long")
         val WHEEL_DOUBLE_KEY = stringPreferencesKey("wheel_gestures_double")
+        val WHEEL_KEY_MAP_KEY = stringPreferencesKey("wheel_key_map") // Riposte OS 0.2 learn page
         val ACCESSORY_CONFIG_KEY = stringPreferencesKey("accessory_config") // AccessoryConfig blob
         val HIDE_REPLACED_OEM_KEY = booleanPreferencesKey("hide_replaced_oem_apps") // OemApps shadow
         val HIDE_OEM_SETTINGS_KEY = booleanPreferencesKey("hide_oem_settings") // OemApps shadow

@@ -34,6 +34,7 @@ object McuOwnerProtocol {
     private const val OP_MODE = 0x01          // sendMode, EventService.java:3933
     private const val OP_RADIO_KEY = 0x02     // sendRadioKey, :3958
     private const val OP_SETUP = 0x05         // sendSetup, :6389; index 05 = main volume, :4384
+    private const val OP_WHEEL = 0x07         // sendWheelKey, :6369-6375: the learn-mode verb
     private const val OP_SYSTEM_KEY = 0x08    // sendSystemKey, :4263-4268: the VOL/MUTE key echo
     private const val OP_MUTE = 0x0A          // sendMuteState, :4319
     private const val OP_BT_STATE = 0x0B      // sendBTState, :4336-4342
@@ -672,6 +673,7 @@ object McuOwnerProtocol {
     private const val WHEEL_SLOT_MAX = 9
     private const val WHEEL_MIN_PAYLOAD = 2
     private const val WHEEL_VOLTAGE_INDEX = 3
+    private const val WHEEL_STATE_PAYLOAD = 2
 
     /**
      * Keys eventcenter still acts on while the reverse camera is up; every other `72` is dropped
@@ -712,6 +714,17 @@ object McuOwnerProtocol {
     }
 
     fun systemKey(key: SystemKey): ByteArray = McuSerial.encode(OP_SYSTEM_KEY, bytes(key.code))
+
+    /** `07 n`: a learn-mode verb or a slot to teach (`sendWheelKey`, :6369-6375; codes in [WheelKeyMap]). */
+    fun wheelLearn(code: Int): ByteArray = McuSerial.encode(OP_WHEEL, bytes(code))
+
+    /** `88 hi lo`: the 16-bit mask of learned slots (OnCmdWheelState, :3060-3068), or null. */
+    fun wheelState(command: McuSerial.Command): Int? {
+        if (command.opcode != McuOpcode.WHEEL_STATE.code || command.payload.size < WHEEL_STATE_PAYLOAD) {
+            return null
+        }
+        return ((command.payload[0].toInt() and BYTE) shl Byte.SIZE_BITS) or (command.payload[1].toInt() and BYTE)
+    }
 
     /** The `08` echo eventcenter sends for a volume or mute panel key (onCmdKeyEvent cases 17-19, :2547-2555). */
     fun panelSystemKey(code: Int): SystemKey? = when (code) {

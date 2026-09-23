@@ -41,6 +41,28 @@ class WheelKeyMap private constructor(private val bySlot: Map<Int, WheelFunction
     fun slotOf(function: WheelFunction): Int? =
         bySlot.entries.firstOrNull { it.value == function }?.key
 
+    /** [function] on [slot], displacing whatever held the slot and wherever the function sat. */
+    fun with(slot: Int, function: WheelFunction): WheelKeyMap {
+        val next = LinkedHashMap(bySlot.filterValues { it != function })
+        next[slot] = function
+        return WheelKeyMap(next)
+    }
+
+    /** Only the slots whose bit is set in [mask]: the MCU's `88` view applied to ours. */
+    fun retain(mask: Int): WheelKeyMap {
+        val next = bySlot.filterKeys { (mask shr it) and 1 == 1 }
+        return if (next.isEmpty()) EMPTY else WheelKeyMap(next)
+    }
+
+    /** The slot the learn app would teach next (`CarWheelView.java:81-93`); null when all are taken. */
+    fun lowestFreeSlot(): Int? = (SLOT_MIN..SLOT_MAX).firstOrNull { it !in bySlot }
+
+    /** The vendor's shape, slots ascending: `{"svg_wheel_mode_home":"0","svg_wheel_next_c":"1"}`. */
+    fun toJson(): String = entries.joinToString(prefix = "{", postfix = "}", separator = ",") { (slot, function) ->
+        // Written by hand: JSONObject keeps no order, and a stable slot order keeps the store diffable.
+        JSONObject.quote(function.iconId) + ":" + JSONObject.quote(slot.toString())
+    }
+
     override fun equals(other: Any?): Boolean = other is WheelKeyMap && other.bySlot == bySlot
     override fun hashCode(): Int = bySlot.hashCode()
     override fun toString(): String = "WheelKeyMap$bySlot"

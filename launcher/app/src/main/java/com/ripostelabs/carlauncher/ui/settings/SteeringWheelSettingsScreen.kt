@@ -16,6 +16,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
@@ -24,8 +26,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.ripostelabs.carlauncher.carlib.CarEvents
+import com.ripostelabs.carlauncher.carlib.KeyActions
 import com.ripostelabs.carlauncher.carlib.WheelFunction
 import com.ripostelabs.carlauncher.carlib.WheelKeyMap
+import com.ripostelabs.carlauncher.carlib.WheelLearn
 import com.ripostelabs.carlauncher.data.CarSettingsController
 import com.ripostelabs.carlauncher.data.SettingKeys
 
@@ -51,18 +55,26 @@ import com.ripostelabs.carlauncher.data.SettingKeys
  * is now known (`{"<icon id>":"<slot>"}`, [WheelKeyMap]) and parsed READ-ONLY here; learning
  * itself is an MCU handshake (`sendWheelKey` 112/slot/114/113, KDoc on [WheelKeyMap]) still
  * left to the vendor settings app. Nothing on this screen writes.
+ *
+ * Riposte OS 0.2 ([wheelLearn] non-null): the vendor app is gone, so the handshake is ours.
+ * [LearnKeySection] drives [WheelLearn] with the stock frames and the map is the launcher's
+ * own store, not a SysVar.
  */
 @Composable
 fun SteeringWheelSettingsScreen(
     controller: CarSettingsController,
     carEvents: CarEvents,
     onBack: () -> Unit,
+    wheelLearn: WheelLearn? = null,
 ) {
     val log = remember { mutableStateListOf<CarEvents.SwcKey>() }
     val sysVars by controller.snapshot.collectAsStateWithLifecycle()
-    val wheel = remember(sysVars[SettingKeys.WHEEL_KEY_LEARN_CUSTOM]) {
+    val vendorMap = remember(sysVars[SettingKeys.WHEEL_KEY_LEARN_CUSTOM]) {
         WheelKeyMap.parse(sysVars[SettingKeys.WHEEL_KEY_LEARN_CUSTOM])
     }
+    // On 0.2 the learn engine holds the map; the SysVar is the vendor build's.
+    val learnState = wheelLearn?.state?.collectAsStateWithLifecycle()
+    val wheel = learnState?.value?.map ?: vendorMap
 
     LaunchedEffect(Unit) {
         carEvents.swcKeys.collect { key ->
@@ -120,7 +132,9 @@ fun SteeringWheelSettingsScreen(
             }
         }
 
-        SettingsSection(title = "Learn a key") {
+        if (wheelLearn != null && learnState != null) {
+            LearnKeySection(wheelLearn, learnState.value)
+        } else SettingsSection(title = "Learn a key") {
             Text(
                 text = "Steering-wheel key learning is an MCU handshake handled by the factory " +
                     "settings app, which stores the learned mapping in the vendor gateway's own " +
@@ -143,6 +157,74 @@ fun SteeringWheelSettingsScreen(
             MappingRow("Right tune ◀ / ▶", "Navigate up / down")
         }
     }
+}
+
+/**
+ * The stock learn page, reskinned: enter, pick a function, press the wheel key, save, exit.
+ * Every row is one `07 n` frame ([WheelLearn]); the status line is the MCU's `74` echo.
+ */
+@Composable
+private fun LearnKeySection(learn: WheelLearn, state: WheelLearn.State) {
+    var picked by remember { mutableStateOf(WheelFunction.NEXT) }
+    val armed = state.phase != WheelLearn.Phase.IDLE
+
+    SettingsSection(title = "Learn a key") {
+        Text(
+            text = learnStatus(state),
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        if (armed) {
+            ActionRow(label = "Exit learn mode", description = "Saves the table to the MCU first", onClick = learn::exit)
+        } else {
+            ActionRow(label = "Enter learn mode", onClick = learn::enter)
+        }
+        PickerSetting(
+            label = "Function",
+            current = picked,
+            options = LEARNABLE.map { it to functionLabel(it) },
+            onSelect = { picked = it },
+            enabled = armed,
+        )
+        ActionRow(
+            label = "Learn selected",
+            description = "Then press the wheel key once",
+            onClick = { learn.learn(picked) },
+            enabled = armed && state.phase != WheelLearn.Phase.WAITING && state.map.slotOf(picked) == null,
+        )
+        ActionRow(label = "Save to MCU", onClick = learn::save, enabled = armed)
+        ActionRow(label = "Clear all learned keys", onClick = learn::clear, destructive = true, enabled = armed)
+        PickerSetting(
+            label = "Wheel impedance",
+            description = "High-Z for most cars; low-Z when nothing captures",
+            current = null as WheelLearn.Impedance?,
+            options = listOf(WheelLearn.Impedance.HIGH to "High-Z", WheelLearn.Impedance.LOW to "Low-Z"),
+            onSelect = { it?.let(learn::setImpedance) },
+        )
+        InfoRow("MCU learned slots", learnedSlots(state.learnedMask))
+    }
+}
+
+/** The functions the launcher acts on, in the vendor page's order. */
+private val LEARNABLE: List<WheelFunction> = WheelFunction.values().filter { KeyActions.forFunction(it) != null }
+
+private fun learnStatus(state: WheelLearn.State): String {
+    val pending = state.pending
+    if (state.phase == WheelLearn.Phase.WAITING && pending != null) {
+        return "Press the wheel key for ${functionLabel(pending.second)} (slot ${pending.first})…"
+    }
+    return when (val r = state.lastResult) {
+        is WheelLearn.Result.Learned ->
+            "Learned ${functionLabel(r.function)} on slot ${r.slot} · %.2f V".format(WheelLearn.volts(r.voltage))
+        is WheelLearn.Result.Failed -> "No key captured for ${functionLabel(r.function)}. Try again."
+        null -> if (state.phase == WheelLearn.Phase.IDLE) "Not in learn mode" else "Learn mode on. Pick a function, then learn it."
+    }
+}
+
+/** "0, 1, 4" from the `88` mask; "none" until the MCU has reported. */
+private fun learnedSlots(mask: Int): String {
+    val slots = (WheelKeyMap.SLOT_MIN..WheelKeyMap.SLOT_MAX).filter { (mask shr it) and 1 == 1 }
+    return if (slots.isEmpty()) "none" else slots.joinToString(", ")
 }
 
 /**

@@ -30,6 +30,7 @@ import com.ripostelabs.carlauncher.carlib.CarService
 import com.ripostelabs.carlauncher.carlib.BtCarKit
 import com.ripostelabs.carlauncher.carlib.McuOwner
 import com.ripostelabs.carlauncher.carlib.McuSetupStore
+import com.ripostelabs.carlauncher.carlib.WheelLearn
 import com.ripostelabs.carlauncher.data.AppDirectoryStore
 import com.ripostelabs.carlauncher.data.CarSettingsController
 import com.ripostelabs.carlauncher.data.RadioPresetsStore
@@ -71,6 +72,8 @@ fun SettingsHost(
     carKit: BtCarKit? = null,
     // Riposte OS 0.2: the MCU setup table the owner re-sends; null = vendor gateway audio.
     mcuSetup: McuSetupStore? = null,
+    // Riposte OS 0.2: the resistive-wheel learn engine on the owner path; null = vendor app.
+    wheelLearn: WheelLearn? = null,
 ) {
     // A deep link (the top bar's power chip) opens its page alone: the driver came from Home
     // and one Back goes back there. The hub under it left them a second Back away (Maestro
@@ -244,6 +247,7 @@ fun SettingsHost(
                 controller = controller,
                 carEvents = carEvents,
                 onBack = ::pop,
+                wheelLearn = wheelLearn,
             )
 
             SettingsRoute.WheelGestures -> WheelGesturesSettingsScreen(

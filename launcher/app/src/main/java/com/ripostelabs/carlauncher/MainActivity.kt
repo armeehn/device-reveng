@@ -2,6 +2,7 @@ package com.ripostelabs.carlauncher
 
 import android.Manifest // v2.5
 import android.content.Intent
+import android.media.AudioManager
 import android.content.pm.PackageManager // v2.5
 import android.util.Log
 import android.os.Bundle
@@ -57,6 +58,8 @@ import com.ripostelabs.carlauncher.carlib.CarCommandPort
 import com.ripostelabs.carlauncher.carlib.ArmAudioRoute
 import com.ripostelabs.carlauncher.carlib.CarProfiles
 import com.ripostelabs.carlauncher.carlib.McuOwner
+import com.ripostelabs.carlauncher.carlib.KeyAction
+import com.ripostelabs.carlauncher.carlib.KeyRouter
 import com.ripostelabs.carlauncher.carlib.McuOwnerProtocol
 import com.ripostelabs.carlauncher.carlib.McuStateExport
 import com.ripostelabs.carlauncher.carlib.SlcanLinkSource
@@ -68,9 +71,11 @@ import com.ripostelabs.carlauncher.carlib.GatewayHandshake // v3.0
 import com.ripostelabs.carlauncher.carlib.SysVar // v0.4.9 vendor hidden-apps list
 import com.ripostelabs.carlauncher.carlib.VendorBtService
 import com.ripostelabs.carlauncher.carlib.VendorBtState
+import com.ripostelabs.carlauncher.carlib.WheelGesture
 import com.ripostelabs.carlauncher.carlib.WheelKey
 import com.ripostelabs.carlauncher.carlib.WheelKeyMap
 import com.ripostelabs.carlauncher.carlib.WheelKeySwallow
+import com.ripostelabs.carlauncher.carlib.WheelLearn
 import com.ripostelabs.carlauncher.carlib.Zlink // RAV4-52 CarPlay deep link
 import com.ripostelabs.carlauncher.data.CallPopupGuard
 import com.ripostelabs.carlauncher.data.SysVarMirrorProvider // RAV4-98
@@ -95,6 +100,7 @@ import com.ripostelabs.carlauncher.data.SystemChrome // v2.5
 import com.ripostelabs.carlauncher.data.ThemeSnapshotStore
 import com.ripostelabs.carlauncher.data.ThemeStore
 import com.ripostelabs.carlauncher.data.UpdateController // v0.7 auto-updater
+import com.ripostelabs.carlauncher.input.KeyActionDispatcher
 import com.ripostelabs.carlauncher.input.KeyBridge // v2.8
 import com.ripostelabs.carlauncher.input.KeyPump // v2.8
 import com.ripostelabs.carlauncher.data.WatchHistoryStore // v2.7
@@ -173,6 +179,13 @@ class MainActivity : ComponentActivity() {
 
     /** Riposte OS 0.2 only: the phone through the stock stack's car-kit profiles. */
     private var btCarKit: BtCarKit? = null
+
+    /** Riposte OS 0.2 only: the resistive-wheel learn handshake, driven from Settings. */
+    private var wheelLearn: WheelLearn? = null
+
+    /** Riposte OS 0.2 only: panel, learned and CAN keys → [KeyAction], run by [keyActions]. */
+    private var keyRouter: KeyRouter? = null
+    private lateinit var keyActions: KeyActionDispatcher
 
     /** Riposte OS 0.2 on a rig with a raw-bus carrier (`riposte.canbus.link`); null otherwise. */
     private var busSource: SlcanLinkSource? = null
@@ -340,6 +353,21 @@ class MainActivity : ComponentActivity() {
             val setupStore = McuSetupStore(applicationContext) { frame -> mcuOwner?.send(frame) }
             mcuSetupStore = setupStore
             val volumeKeys = AmpVolumeKeys(carService::setVolume, volumeMemory.level())
+            // The wheel keys: learn engine (74/88, sends 07) and the key → action router. The
+            // learned map lives in SettingsStore; the engine follows it and writes it back.
+            val learn = WheelLearn(
+                send = { frame -> mcuOwner?.send(frame) },
+                onMap = { settingsStore.setWheelKeyMap(it.toJson()) },
+                initial = WheelKeyMap.EMPTY,
+            ).also { wheelLearn = it }
+            lifecycleScope.launch {
+                settingsStore.settings.map { it.wheelKeyMapJson }.distinctUntilChanged()
+                    .collect { learn.load(WheelKeyMap.parse(it)) }
+            }
+            val router = KeyRouter(
+                map = { learn.state.value.map },
+                emit = { action -> runOnUiThread { dispatchKey(action) } },
+            ).also { keyRouter = it }
             val ownerListener = McuOwner.FanOut(
                 carEvents.ownerListener(CanCaptureService.vehicle(), carService.radioState),
                 VendorBroadcastReemitter(applicationContext),
@@ -356,6 +384,8 @@ class MainActivity : ComponentActivity() {
                 // Backlight: the headlamp bit picks the side a level lands on; the DIM key steps it.
                 carService.backlight,
                 DimKey(carService.backlight, carService::sendBacklight),
+                learn,
+                router,
             )
             // The boot and wake `2E` replay the targets the user last set, as the vendor's rows did.
             val startupConfig = carService.backlight.config(
@@ -539,6 +569,9 @@ class MainActivity : ComponentActivity() {
         val forwarded = HashSet<NavKey>()
         lifecycleScope.launch {
             carEvents.swcKeys.collect { key ->
+                // Riposte OS 0.2: a learned slot is the router's (KeyRouter resolves it against
+                // the learn page's map); the panel fallbacks still take this route.
+                if (keyRouter != null && key.space == CarEvents.KeySpace.LEARNED_SLOT) return@collect
                 val nav = SwcNavigator.resolve(key, wheelMap) ?: return@collect
 
                 if (!key.down && forwarded.remove(nav)) {
@@ -635,8 +668,23 @@ class MainActivity : ComponentActivity() {
             openRadio = { screenState.value = Screen.Radio },
             openHome = { screenState.value = Screen.Home; launcherFocus.reset() },
         )
+        keyActions = KeyActionDispatcher(
+            audio = getSystemService(AudioManager::class.java),
+            gestures = wheelGestures,
+            carKit = { btCarKit },
+            zlinkConnected = { carEvents.zlinkConnected.value },
+            sourceMode = { routeNav(NavKey.OPEN_MEDIA) },
+            back = { if (!routeNav(NavKey.BACK)) onBackPressedDispatcher.onBackPressed() },
+            openPhone = { screenState.value = Screen.Phone },
+            openSettings = { screenState.value = Screen.Settings() },
+        )
         lifecycleScope.launch {
             carEvents.wheelGestures.collect { gesture ->
+                // Riposte OS 0.2: no vendor acts on the plain press, so the router does.
+                if (gesture is WheelGesture.Press) {
+                    keyRouter?.onCanPress(gesture.key)
+                    return@collect
+                }
                 val bindings = settingsStore.settings.value.wheelGestures
                 if (!bindings.enabled) return@collect
                 if (wheelGestures.run(bindings.actionFor(gesture))) carFeedback.tap()
@@ -1020,6 +1068,7 @@ class MainActivity : ComponentActivity() {
                                 mcuStatus = mcuOwner?.status,
                                 carKit = btCarKit,
                                 mcuSetup = mcuSetupStore,
+                                wheelLearn = wheelLearn,
                             )
 
                             Screen.Themes -> ThemesScreen(
@@ -1287,6 +1336,16 @@ class MainActivity : ComponentActivity() {
         }
         NavKey.CENTER -> screenState.value == Screen.Home && launcherFocus.onLongPress()
         else -> false
+    }
+
+    /** Riposte OS 0.2: one key from [keyRouter], on the main thread. */
+    private fun dispatchKey(action: KeyAction) {
+        if (!::keyActions.isInitialized) {
+            return
+        }
+        if (keyActions.run(action)) {
+            carFeedback.tap()
+        }
     }
 
     private fun routeNav(nav: NavKey): Boolean = when (nav) {
