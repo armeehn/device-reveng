@@ -140,6 +140,9 @@ if [ "$PROFILE" = gsi ]; then
   check "[ -x $S/riposte/ais/bin/ais_server ] && [ -f $S/riposte/ais/lib/libais_pr2000.so ]" "AIS camera server lifted under riposte/ais"
   check "[ -f $S/riposte/ais/lib/libmmosal.so ]" "libmmosal.so beside it (vendor lib, off a /system daemon's search path)"
   check "grep -q '^service riposte_ais ' $S/etc/init/riposte.rc" "riposte_ais init service"
+  # The launcher's dlopen of the AIS client (AisCameraNative): on the public list, deps beside it.
+  check "grep -qx libais_camera.so $S/etc/public.libraries.txt" "libais_camera.so on the public list"
+  check "[ -f $S/lib64/libais_camera.so ] && [ -f $S/lib64/libais_fibo_carcam.so ] && [ -f $S/lib64/libmmosal.so ]" "AIS client libs in /system/lib64"
   check "grep -q '^service riposte_hotspot ' $S/etc/init/riposte.rc" "riposte_hotspot init service"
   # Root for the launcher is by construction: seeded every boot, checked every boot.
   check "grep -q '^service riposte_root ' $S/etc/init/riposte.rc" "riposte_root init service (launcher root grant, every boot)"

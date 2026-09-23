@@ -48,6 +48,10 @@ mkdir -p "$W/sys/lib64" "$W/vend/lib64"
 printf '#!/system/bin/sh\n' > "$W/sys/bin/ais_server"; chmod 0755 "$W/sys/bin/ais_server"
 : > "$W/sys/lib64/libais_pr2000.so"
 : > "$W/vend/lib64/libmmosal.so"
+# The client side the launcher dlopens (build.sh 3d): the lib, its deps, and the public list
+# every GSI ships that it is appended to.
+for l in libais_camera.so libais_fibo_carcam.so libais_core.so libais_client.so libais_base.so libais_log.so; do : > "$W/sys/lib64/$l"; done
+printf 'libandroid.so\nlibc.so\n' > "$W/sys/etc/public.libraries.txt"
 # Phone-side Bluetooth roles as a stock or GSI build.prop carries them: tier2 must keep them
 # byte for byte, gsi must override them (init keeps the last value of a duplicated key).
 printf 'ro.build.version.release=13\nro.build.type=userdebug\nbluetooth.profile.a2dp.source.enabled=true\nbluetooth.profile.hfp.ag.enabled=true\n' > "$W/sys/build.prop"

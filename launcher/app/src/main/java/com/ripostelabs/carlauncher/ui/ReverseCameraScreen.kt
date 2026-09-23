@@ -36,7 +36,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.ripostelabs.carlauncher.carlib.AndroidOwnerGate
 import com.ripostelabs.carlauncher.carlib.RadarState
+import com.ripostelabs.carlauncher.data.AisCamera
+import com.ripostelabs.carlauncher.data.AisCameraNative
+import com.ripostelabs.carlauncher.data.ReverseFeedPath
 import com.ripostelabs.carlauncher.ui.theme.carShape
 
 /**
@@ -46,11 +50,13 @@ import com.ripostelabs.carlauncher.ui.theme.carShape
  *
  *     MCU SYS_EVENT 71 ─▶ McuOwner ─▶ CarEvents.reverse ─▶ ReverseCameraGate ─▶ this (ReverseCameraWindow)
  *                                                                                    ▲
- *     AIS camera HAL (/vendor/etc/camera) ─▶ camera2 id "1" ─▶ TextureView ──────────┘
+ *     ais_server ◀─ libais_camera.so ◀─ AisCamera (car_owner=1) ─┐
+ *     camera2 id "1" (any other slot, or no client lib) ─────────┴─▶ TextureView ──┘
  *
- * The vendor's AUXCamera reaches the reverse camera with `Camera.open(1)` against the AIS
- * automotive-camera HAL (CUSTOM_ANDROID.md §2d): a public API on a HAL the OS keeps. On a 0.2
- * slot that app is gone, so we open the same id through camera2. A [TextureView], not a
+ * On 0.2 the feed takes eventcenter's own path, Qualcomm AIS through [AisCamera]: the PR2000
+ * sits on no camera2 provider (`legacy/0` is declared, never served), so `Camera.open(1)` and
+ * camera2 id "1" only answer on a HAL that lists it. That path stays as the fallback
+ * ([ReverseFeedPath]) for a stock slot, the farm and the desk. A [TextureView], not a
  * SurfaceView: it composes like any view, so the label draws over it with no hole-punching, and
  * on 0.2 there is no vendor window above us to yield to (contrast [ReverseOverlay]).
  *
@@ -107,7 +113,15 @@ fun ReverseCameraScreen(
 private fun CameraPreview(mirrored: Boolean, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     var failure by remember { mutableStateOf<String?>(null) }
-    val session = remember { ReverseCameraSession(context) { failure = it } }
+    val session = remember {
+        // The OS says whether it owns the car; the client lib says whether AIS can be driven.
+        val path = ReverseFeedPath.choose(AndroidOwnerGate(context).ownerEnabled(), AisCameraNative::load)
+        Log.i(TAG, "reverse feed path: $path")
+        when (path) {
+            ReverseFeedPath.AIS -> AisReverseSession { failure = it }
+            ReverseFeedPath.CAMERA2 -> ReverseCameraSession(context) { failure = it }
+        }
+    }
 
     // Reverse disengaged → this leaves the composition → the camera is handed back.
     DisposableEffect(session) {
@@ -172,6 +186,53 @@ private fun ReverseLabel(modifier: Modifier = Modifier) {
     }
 }
 
+/** What the preview drives: the camera2 session or the AIS one, chosen by [ReverseFeedPath]. */
+private interface ReverseSession {
+    fun open(texture: SurfaceTexture)
+
+    fun close()
+}
+
+/**
+ * The AIS session: one [AisCamera] over the unit's client library, the texture wrapped as the
+ * Surface the client draws into. Failures show as their reason, like the camera2 session.
+ *
+ *     open(texture) ─▶ Surface(texture) ─▶ AisCamera.open ─▶ [1 s later] frame count logged
+ *     close()       ─▶ AisCamera.close ─▶ surface.release
+ */
+private class AisReverseSession(private val onFailure: (String) -> Unit) : ReverseSession {
+    private val handler = Handler(Looper.getMainLooper())
+    private val camera = AisCamera(AisCameraNative)
+    private var surface: Surface? = null
+
+    override fun open(texture: SurfaceTexture) {
+        val target = Surface(texture)
+        surface = target
+
+        val state = camera.open(target)
+        if (state is AisCamera.State.Failed) {
+            Log.w(TAG, state.reason)
+            onFailure(state.reason)
+            return
+        }
+
+        // The only sign of a picture from here: the client's frame counter, the number stock
+        // polls for signal detection (CamerasSignalDetection.java:523).
+        handler.postDelayed(
+            { Log.i(TAG, "AIS frames after $FIRST_FRAME_CHECK_MS ms: ${camera.frames()}") },
+            FIRST_FRAME_CHECK_MS,
+        )
+    }
+
+    override fun close() {
+        handler.removeCallbacksAndMessages(null)
+        camera.close()
+
+        surface?.release()
+        surface = null
+    }
+}
+
 /**
  * One camera2 session: open → preview session → repeating request, and [close] tears it all
  * down in reverse order. Callbacks run on the main looper; the preview is the only work.
@@ -183,7 +244,7 @@ private fun ReverseLabel(modifier: Modifier = Modifier) {
 private class ReverseCameraSession(
     private val context: Context,
     private val onFailure: (String) -> Unit,
-) {
+) : ReverseSession {
     private val handler = Handler(Looper.getMainLooper())
     private var device: CameraDevice? = null
     private var session: CameraCaptureSession? = null
@@ -194,7 +255,7 @@ private class ReverseCameraSession(
 
     // Lint cannot follow the checkSelfPermission below through a field-held context.
     @SuppressLint("MissingPermission")
-    fun open(texture: SurfaceTexture) {
+    override fun open(texture: SurfaceTexture) {
         closed = false
 
         val granted = context.checkSelfPermission(Manifest.permission.CAMERA) ==
@@ -228,7 +289,7 @@ private class ReverseCameraSession(
         }
     }
 
-    fun close() {
+    override fun close() {
         closed = true
 
         session?.close()
@@ -342,6 +403,9 @@ private const val TAG = "ReverseCamera"
 private const val REVERSE_CAMERA_ID = "1"
 
 private const val NO_PERMISSION_MESSAGE = "Camera permission not granted"
+
+/** How long after the AIS open the frame counter is read and logged. */
+private const val FIRST_FRAME_CHECK_MS = 1000L
 
 /** Chip inset from the screen corner, and its translucency over the feed. */
 private const val LABEL_INSET_DP = 16
