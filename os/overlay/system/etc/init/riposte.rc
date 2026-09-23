@@ -131,3 +131,22 @@ on property:sys.boot_completed=1 && property:ro.riposte.os.car_owner=1
 # persist.sys.phh.* handlers take (vndk.rc).
 on property:persist.riposte.camera.mode=* && property:ro.riposte.os.car_owner=1
     exec_background u:r:su:s0 root -- /system/bin/sh /system/bin/riposte-camera-mode.sh
+
+# Car-owner builds: the Qualcomm AIS camera server the reverse picture rides on, lifted by
+# build.sh step 3d from the stock system image. Stock runs it as /system/bin/ais_server, class
+# core, root, from boot_completed (init.target.rc:520-532); the GSI has no such binary, so the
+# vendor's own `start ais_server` fails silently there. setenv: its libais_* and libmmosal.so
+# sit beside it, and a /system daemon's linker namespace never searches /vendor/lib64. su
+# rather than stock's u:r:ais_server:s0 (init.target.rc:524): the vendor policy carries no
+# media-node or client-socket rules for that domain (vendor_sepolicy.cil:2789-2792), su is
+# the permissive domain every other riposte service runs in.
+service riposte_ais /system/riposte/ais/bin/ais_server
+    class main
+    user root
+    group root camera
+    setenv LD_LIBRARY_PATH /system/riposte/ais/lib
+    seclabel u:r:su:s0
+    disabled
+
+on property:sys.boot_completed=1 && property:ro.riposte.os.car_owner=1
+    start riposte_ais

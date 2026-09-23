@@ -133,6 +133,10 @@ if [ "$PROFILE" = gsi ]; then
   check "[ -x $S/riposte/zlink/bin/z-link ] && [ -f $S/riposte/zlink/lib/libzjL10001.so ]" "OEM projection daemon lifted under riposte/zlink"
   check "grep -q '^service riposte_zlink ' $S/etc/init/riposte.rc" "riposte_zlink init service"
   check "[ -x $S/bin/z-mdnsd ]" "z-mdnsd at the daemon's fixed path"
+  # The AIS camera server the reverse picture rides on (build.sh step 3d, riposte.rc).
+  check "[ -x $S/riposte/ais/bin/ais_server ] && [ -f $S/riposte/ais/lib/libais_pr2000.so ]" "AIS camera server lifted under riposte/ais"
+  check "[ -f $S/riposte/ais/lib/libmmosal.so ]" "libmmosal.so beside it (vendor lib, off a /system daemon's search path)"
+  check "grep -q '^service riposte_ais ' $S/etc/init/riposte.rc" "riposte_ais init service"
   check "grep -q '^service riposte_hotspot ' $S/etc/init/riposte.rc" "riposte_hotspot init service"
   # Root for the launcher is by construction: seeded every boot, checked every boot.
   check "grep -q '^service riposte_root ' $S/etc/init/riposte.rc" "riposte_root init service (launcher root grant, every boot)"

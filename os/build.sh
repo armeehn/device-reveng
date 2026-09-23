@@ -28,6 +28,9 @@ readonly LAUNCHER_DIR=priv-app                 # under the system root, see syst
 readonly ZLINK_DIR=riposte/zlink               # the OEM projection daemon on gsi, see step 3b
 readonly ZLINK_APP_LIBS=priv-app/zlink5/lib/arm   # where the stock image keeps its libraries
 readonly ZLINK_BINS="z-link z-mdnsd z-usbmuxd"    # the loader and the two helpers it spawns
+readonly AIS_DIR=riposte/ais                   # the AIS camera server on gsi, see step 3d
+readonly AIS_BIN=ais_server
+readonly AIS_VENDOR_LIBS="libmmosal.so"        # what it links from /vendor/lib64, off a /system daemon's path
 readonly LAUNCHER_NAME=CarLauncher
 readonly SUITE_DIR=product/app
 readonly TOOLS_BIN=riposte/bin                 # the debug toolbelt, see step 3c
@@ -177,6 +180,35 @@ if [ "$PROFILE" = gsi ]; then
   label_system_file "$SYS/${ZLINK_DIR%%/*}" "$SYS/$ZLINK_DIR" "$SYS/$ZLINK_DIR/bin" "$SYS/$ZLINK_DIR/lib" "$SYS/$ZLINK_DIR"/bin/* "$SYS/$ZLINK_DIR"/lib/* "$SYS/bin/z-mdnsd"
   chmod 0755 "$SYS/$ZLINK_DIR"/bin/* "$SYS/bin/z-mdnsd"
   log "lifted the OEM projection daemon: $(ls "$SYS/$ZLINK_DIR/lib" | wc -l) libs + $ZLINK_BINS"
+fi
+
+# ---- 3d. the AIS camera server (gsi only) --------------------------------------
+# The reverse picture never comes through the Android camera HAL. The vendor manifest declares
+# ICameraProvider legacy/0 (vendor/etc/vintf/manifest.xml:53-56) but no service serves it (the
+# only rc is external/0, camera.provider@2.4-external-service.rc:1-2), so cameraserver's lazy
+# start fails on stock too. Stock draws the PR2000 through Qualcomm AIS: eventcenter's
+# CameraUtils.openCamera(1) (BackcarEvent.java:1309) -> libcamera_utils -> libais_camera ->
+# qcarcam -> ais_server, started from /system/bin at boot_completed (init.target.rc:520-532).
+# The daemon and its libais_* sit on the stock SYSTEM image the GSI replaces, so they are lifted
+# here and overlay/system/etc/init/riposte.rc starts them. libmmosal.so comes from the vendor
+# image: a /system daemon's linker namespace never searches /vendor/lib64.
+if [ "$PROFILE" = gsi ]; then
+  AMNT=$WORK/base-system VMNT=$WORK/base-vendor
+  mkdir -p "$AMNT" "$VMNT" "$SYS/$AIS_DIR/bin" "$SYS/$AIS_DIR/lib"
+  mount -o ro,loop "$WORK/base-system.raw" "$AMNT" || die "cannot mount $BASE/system.img"
+  ASRC=$(system_root "$AMNT")
+  [ -x "$ASRC/bin/$AIS_BIN" ] && [ -f "$ASRC/lib64/libais_pr2000.so" ] || die "$BASE/system.img carries no AIS camera server"
+  cp "$ASRC/bin/$AIS_BIN" "$SYS/$AIS_DIR/bin/"
+  cp "$ASRC/lib64"/libais*.so "$SYS/$AIS_DIR/lib/"
+  umount "$AMNT"
+  [ -f "$BASE/vendor.img" ] || die "$BASE/vendor.img missing: the AIS server links $AIS_VENDOR_LIBS from it"
+  unsparse "$BASE/vendor.img" "$WORK/base-vendor.raw"
+  mount -o ro,loop "$WORK/base-vendor.raw" "$VMNT" || die "cannot mount $BASE/vendor.img"
+  for l in $AIS_VENDOR_LIBS; do cp "$VMNT/lib64/$l" "$SYS/$AIS_DIR/lib/"; done
+  umount "$VMNT"
+  label_system_file "$SYS/$AIS_DIR" "$SYS/$AIS_DIR/bin" "$SYS/$AIS_DIR/lib" "$SYS/$AIS_DIR"/bin/* "$SYS/$AIS_DIR"/lib/*
+  chmod 0755 "$SYS/$AIS_DIR"/bin/*
+  log "lifted the AIS camera server: $(ls "$SYS/$AIS_DIR/lib" | wc -l) libs + $AIS_BIN"
 fi
 
 # Default grants for the launcher and the suite: a head unit has no one to tap a permission
