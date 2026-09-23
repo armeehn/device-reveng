@@ -16,7 +16,26 @@ readonly BLOCK=4096
 readonly SELINUX_SYSTEM_FILE="u:object_r:system_file:s0"
 readonly SELINUX_PHHSU_EXEC="u:object_r:phhsu_exec:s0"   # init `exec` transitions it into su
 
+# What build.sh appends to /system/etc/public.libraries.txt and check.sh proves. An entry is
+# "libname.so [32|64]": libnativeloader's ReadConfig() (art/libnativeloader/public_libraries.cpp)
+# keeps a line for the zygote of that word size only, and a bare name goes to BOTH zygotes, each
+# preloading it from its own lib dir. A name the 32-bit zygote cannot find aborts it in
+# LibraryNamespaces::Initialize and the framework never boots (car, 0.2 vc688). The launcher is
+# arm64 only, so the AIS client is declared for 64 alone; the stock 32-bit copy is another build
+# (it links lib_xs9922b.so) that nothing of ours loads.
+readonly AIS_PUBLIC_ENTRY="libais_camera.so 64"
+
 log() { printf '[os] %s\n' "$*" >&2; }
+
+# The lib paths (relative to the system root) a public.libraries.txt entry commits to.
+public_lib_paths() { # name [32|64]
+  case "${2:-}" in
+    64) echo "lib64/$1" ;;
+    32) echo "lib/$1" ;;
+    "") echo "lib/$1 lib64/$1" ;;
+    *) return 1 ;;
+  esac
+}
 die() { log "ERROR: $*"; exit 1; }
 
 hex_at() { # file offset length -> lowercase hex bytes as stored

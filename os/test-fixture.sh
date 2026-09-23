@@ -107,6 +107,15 @@ if [ -f "$TOOLS_CACHE/busybox" ]; then TOOLS_ARG="--tools $TOOLS_CACHE"; TOOLS_C
 "$HERE/build.sh" --base "$W/base" --system "$W/gsi.img.xz" --apps "$W/apps" --out "$W/out-gsi" --profile gsi $TOOLS_ARG
 grep -q '^car_owner=1$' "$W/out-gsi/MANIFEST" || die "gsi profile did not imply --car-owner"
 grep -q '^bt_carkit=1$' "$W/out-gsi/MANIFEST" || die "gsi profile did not turn the car-kit roles on"
+# The AIS client goes on the public list for the 64-bit zygote only: the fixture has no
+# /system/lib copy, exactly like the GSI, and a bare entry would abort the 32-bit zygote.
+[ "$(public_lib_paths libais_camera.so)" = "lib/libais_camera.so lib64/libais_camera.so" ] || die "a bare public entry must commit to both bitnesses"
+PUBSYS=$(mktemp -d "$W/pubsys.XXXXXX"); unsparse "$W/out-gsi/system.img" "$W/out-gsi-pub.raw"
+mount -o ro,loop "$W/out-gsi-pub.raw" "$PUBSYS"
+PUBLIST=$PUBSYS/system/etc/public.libraries.txt
+{ grep -qx 'libais_camera.so 64' "$PUBLIST" && ! grep -qx 'libais_camera.so' "$PUBLIST" && [ ! -f "$PUBSYS/system/lib/libais_camera.so" ]; } \
+  || { umount "$PUBSYS"; die "public.libraries.txt must carry 'libais_camera.so 64' and nothing bare"; }
+umount "$PUBSYS"
 if [ -n "$TOOLS_ARG" ]; then
   OUTSYS=$(mktemp -d "$W/outsys.XXXXXX"); unsparse "$W/out-gsi/system.img" "$W/out-gsi-system.raw"
   mount -o ro,loop "$W/out-gsi-system.raw" "$OUTSYS"
