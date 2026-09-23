@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.SaveAlt
 import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.material.icons.filled.Sensors
+import androidx.compose.material.icons.filled.Cable
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.unit.dp
@@ -152,6 +153,12 @@ fun SettingsHub(
                 title = "Vehicle",
                 subtitle = "Engine, hybrid, doors, tyres — what the car is reporting",
                 onClick = { onOpen(SettingsRoute.Vehicle) },
+            )
+            SettingsCategoryCard(
+                icon = Icons.Filled.Cable,
+                title = "CAN box",
+                subtitle = "Which car the CAN box is told it is in",
+                onClick = { onOpen(SettingsRoute.CanBox) },
             )
             SettingsCategoryCard(
                 icon = Icons.Filled.Lightbulb,

@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.ripostelabs.carlauncher.carlib.CarProfiles
 import com.ripostelabs.carlauncher.carlib.WheelKey
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -127,6 +128,8 @@ data class LauncherSettings(
      * ([CallPopupGuard]). On by default: the status chip and the Phone screen carry the call.
      */
     val hideVendorCallPopup: Boolean = true,
+    /** The car the CAN box is told it is in, by [com.ripostelabs.carlauncher.carlib.CarProfile.id]. */
+    val canBoxCar: String = CarProfiles.DEFAULT.id,
 ) {
     companion object {
         /** 0 = adaptive/auto sizing; otherwise a fixed column count. */
@@ -217,6 +220,7 @@ class SettingsStore(context: Context) {
                     hideReplacedOemApps = prefs[HIDE_REPLACED_OEM_KEY] ?: true,
                     hideOemSettings = prefs[HIDE_OEM_SETTINGS_KEY] ?: false,
                     hideVendorCallPopup = prefs[HIDE_VENDOR_CALL_POPUP_KEY] ?: true,
+                    canBoxCar = prefs[CAN_BOX_CAR_KEY] ?: CarProfiles.DEFAULT.id,
                 )
             }
             .stateIn(scope, SharingStarted.Eagerly, LauncherSettings())
@@ -330,6 +334,11 @@ class SettingsStore(context: Context) {
         ds.edit { it[HIDE_VENDOR_CALL_POPUP_KEY] = enabled }
     }
 
+    /** Pick the car the CAN box is told it is in; McuOwner re-sends the box startup on a change. */
+    fun setCanBoxCar(id: String) = scope.launch {
+        ds.edit { it[CAN_BOX_CAR_KEY] = id }
+    }
+
     private companion object {
         val GRID_COLUMNS_KEY = intPreferencesKey("grid_columns")
         val SHOW_MEDIA_KEY = booleanPreferencesKey("show_media")
@@ -357,5 +366,6 @@ class SettingsStore(context: Context) {
         val HIDE_REPLACED_OEM_KEY = booleanPreferencesKey("hide_replaced_oem_apps") // OemApps shadow
         val HIDE_OEM_SETTINGS_KEY = booleanPreferencesKey("hide_oem_settings") // OemApps shadow
         val HIDE_VENDOR_CALL_POPUP_KEY = booleanPreferencesKey("hide_vendor_call_popup") // CallPopupGuard
+        val CAN_BOX_CAR_KEY = stringPreferencesKey("can_box_car") // CarProfile.id
     }
 }

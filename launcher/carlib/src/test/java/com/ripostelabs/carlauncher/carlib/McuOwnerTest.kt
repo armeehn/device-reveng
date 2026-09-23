@@ -588,12 +588,12 @@ class McuOwnerTest {
     private fun count(link: FakeLink, frame: ByteArray) = link.written.count { it.contentEquals(frame) }
 
     /** Waits until the car type went out once plus its repeats; the queries once each, before it. */
-    private fun assertCanBoxRound(link: FakeLink) {
-        val carType = McuOwnerProtocol.canBoxCarType()
+    private fun assertCanBoxRound(link: FakeLink, car: CarProfile = CarProfiles.DEFAULT) {
+        val carType = McuOwnerProtocol.canBoxCarType(car)
         val total = 1 + McuOwnerProtocol.CAN_BOX_CAR_TYPE_REPEATS
         waitFor("car type x$total") { link.written.takeIf { count(link, carType) == total } }
 
-        val queries = McuOwnerProtocol.canBoxInit().dropLast(1)
+        val queries = McuOwnerProtocol.canBoxInit(car).dropLast(1)
         val firstCarType = link.written.indexOfFirst { it.contentEquals(carType) }
         queries.forEach { query ->
             assertEquals(1, count(link, query))
@@ -613,7 +613,7 @@ class McuOwnerTest {
 
         val nullFrame = McuOwnerProtocol.mode(McuOwnerProtocol.Mode.NULL)
         val nullAt = link.written.indexOfFirst { it.contentEquals(nullFrame) }
-        val firstQuery = link.written.indexOfFirst { it.contentEquals(McuOwnerProtocol.canBoxInit().first()) }
+        val firstQuery = link.written.indexOfFirst { it.contentEquals(McuOwnerProtocol.canBoxInit(CarProfiles.DEFAULT).first()) }
         assertTrue("query at $firstQuery, SRC_NULL at $nullAt", firstQuery > nullAt)
     }
 
@@ -644,5 +644,21 @@ class McuOwnerTest {
 
         assertEquals(0, scheduler.queue.size)
         scheduler.shutdownNow()
+    }
+
+    /** Choosing another car in Settings re-sends the startup at once, with that car's type. */
+    @Test(timeout = TEST_TIMEOUT_MS)
+    fun selectCarResendsTheInitAtOnce() {
+        val link = FakeLink(ackNull = true)
+        val owner = canBoxOwner(link, CAN_BOX_QUICK.copy(afterHandshakeMs = 60_000, afterWakeMs = 60_000))
+        owner.start()
+        waitFor("running") { owner.status.value as? McuOwner.Status.Running }
+        val other = CarProfiles.ALL.first { it.carType != CarProfiles.DEFAULT.carType }
+
+        owner.selectCar(other)
+
+        assertCanBoxRound(link, other)
+        owner.stop()
+        assertEquals(0, count(link, McuOwnerProtocol.canBoxCarType(CarProfiles.DEFAULT)))
     }
 }

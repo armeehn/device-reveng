@@ -411,11 +411,11 @@ class McuOwnerProtocolTest {
         )
         val expected = inner.map { McuSerial.encode(0x0D, bytes(0x08) + it) }
 
-        val actual = McuOwnerProtocol.canBoxInit()
+        val actual = McuOwnerProtocol.canBoxInit(CarProfiles.DEFAULT)
 
         assertEquals(expected.size, actual.size)
         expected.forEachIndexed { i, frame -> assertArrayEquals("frame $i", frame, actual[i]) }
-        assertArrayEquals(expected.last(), McuOwnerProtocol.canBoxCarType())
+        assertArrayEquals(expected.last(), McuOwnerProtocol.canBoxCarType(CarProfiles.DEFAULT))
     }
 
     /** One whole wire frame by hand: LEN 0B, outer CK ~(0B+0D+08+5A+A5+03+6A+05+01+11+83) = ~0x26 = D9. */
@@ -423,6 +423,6 @@ class McuOwnerProtocolTest {
     fun canBoxQueryWireFrame() {
         val wire = bytes(0x0D, 0x0A, 0x0B, 0x0D, 0x08, 0x5A, 0xA5, 0x03, 0x6A, 0x05, 0x01, 0x11, 0x83, 0xD9, 0x00)
 
-        assertArrayEquals(wire, McuOwnerProtocol.canBoxInit().first())
+        assertArrayEquals(wire, McuOwnerProtocol.canBoxInit(CarProfiles.DEFAULT).first())
     }
 }

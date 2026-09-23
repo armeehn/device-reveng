@@ -236,6 +236,19 @@ name: Every Settings row opens a screen that names itself
     timeout: 20000
 - scrollUntilVisible:
     element:
+      text: "CAN box"
+    direction: DOWN
+    timeout: 30000
+- tapOn: "CAN box"
+- extendedWaitUntil:
+    visible: "CAN box"
+    timeout: 20000
+- back
+- extendedWaitUntil:
+    visible: "App directory"
+    timeout: 20000
+- scrollUntilVisible:
+    element:
       text: "Accessories"
     direction: DOWN
     timeout: 30000

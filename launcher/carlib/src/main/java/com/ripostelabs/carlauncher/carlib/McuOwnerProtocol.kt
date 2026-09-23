@@ -70,16 +70,6 @@ object McuOwnerProtocol {
     private const val BOX_CAR_TYPE = 0x24
     private const val BOX_QUERY = 0x6A
 
-    /** Blocks stock queries at startup (:1326-1328). What they hold is undocumented. */
-    private val CAN_BOX_QUERIES = intArrayOf(0x11, 0x82, 0xF0)
-
-    /**
-     * RAV4 2016-2021 to the box. canbus2 maps Sys_CarType 2 with Sys_CarInfor_ID 9 to `0x21`
-     * (HiworldCanParseToyota.java:1412-1418); both values from this unit's sysvar backup,
-     * share rav4/reconnect/baselines/hvac-backup-0014/sysvar-keys.txt.
-     */
-    private const val BOX_CAR_RAV4 = 0x21
-
     /** `sendBTState((byte) 0)` on ACC off (EventService.java:3559); higher values are call states. */
     const val BT_DISCONNECTED = 0
 
@@ -333,10 +323,10 @@ object McuOwnerProtocol {
      * Why: on 0.2 the wheel keys produce no box frames at all, and this is the traffic stock sends
      * that we did not. That the box waits for it is INFERRED, unproven in the car.
      */
-    fun canBoxInit(): List<ByteArray> = CAN_BOX_QUERIES.map { canBoxQuery(it) } + canBoxCarType()
+    fun canBoxInit(car: CarProfile): List<ByteArray> = car.queries.map { canBoxQuery(it) } + canBoxCarType(car)
 
     /** `24 code 01`: which car the box is in (sendCarTypeToCan, HiworldCanParseToyota.java:1768). */
-    fun canBoxCarType(): ByteArray = canBox(intArrayOf(0x02, BOX_CAR_TYPE, BOX_CAR_RAV4, 0x01))
+    fun canBoxCarType(car: CarProfile): ByteArray = canBox(intArrayOf(0x02, BOX_CAR_TYPE, car.carType, 0x01))
 
     /** `6A 05 01 id`: ask the box for data block [id] (sendQToCan, HiworldCanParseToyota.java:1774). */
     private fun canBoxQuery(id: Int): ByteArray = canBox(intArrayOf(0x03, BOX_QUERY, 0x05, 0x01, id))

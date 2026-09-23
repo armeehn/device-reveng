@@ -65,6 +65,8 @@ class McuOwner(
     /** Test seam: a Thread whose start() dawdles is how the start race below is reproduced. */
     private val newThread: (Runnable, String) -> Thread = { body, name -> Thread(body, name) },
     private val canBoxTiming: CanBoxTiming = CanBoxTiming(),
+    /** The car the CAN box is told it is in until [selectCar] says otherwise. */
+    initialCar: CarProfile = CarProfiles.DEFAULT,
     /** Runs the CAN box round off the owner and pump threads; tests inspect its queue. */
     private val canBoxScheduler: ScheduledExecutorService =
         Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "mcu-owner-canbox").apply { isDaemon = true } },
@@ -190,6 +192,10 @@ class McuOwner(
     @Volatile
     private var reversing = false
 
+    /** Whose frames [McuOwnerProtocol.canBoxInit] builds; the driver's choice in Settings. */
+    @Volatile
+    private var car: CarProfile = initialCar
+
     /** The pending CAN box sends; a new round or [stop] cancels them. */
     private var canBoxRound: List<ScheduledFuture<*>> = emptyList()
     /** The last [setMode] argument, so a wake can resume it ([McuOwnerProtocol.reload]). */
@@ -227,6 +233,22 @@ class McuOwner(
         session?.close()
         session = null
         _status.value = Status.Idle
+    }
+
+    /**
+     * Tell the CAN box it is in [profile]. A change re-sends the startup at once, so the box
+     * does not keep the old car until the next wake; with no port open it waits for the handshake.
+     */
+    fun selectCar(profile: CarProfile) {
+        if (profile == car) {
+            return
+        }
+
+        car = profile
+        Log.i(LOG_TAG, "CAN box car: ${profile.label}")
+        if (session != null) {
+            scheduleCanBox(0)
+        }
     }
 
     /** Raw send for callers that build their own frames with [McuOwnerProtocol]. */
@@ -321,10 +343,10 @@ class McuOwner(
     private fun scheduleCanBox(delayMs: Long) {
         cancelCanBox()
 
-        val init = canBoxScheduler.schedule({ sendCanBox(McuOwnerProtocol.canBoxInit()) }, delayMs, TimeUnit.MILLISECONDS)
+        val init = canBoxScheduler.schedule({ sendCanBox(McuOwnerProtocol.canBoxInit(car)) }, delayMs, TimeUnit.MILLISECONDS)
         val repeats = (1..McuOwnerProtocol.CAN_BOX_CAR_TYPE_REPEATS).map { n ->
             val at = delayMs + n * canBoxTiming.repeatGapMs
-            canBoxScheduler.schedule({ sendCanBox(listOf(McuOwnerProtocol.canBoxCarType())) }, at, TimeUnit.MILLISECONDS)
+            canBoxScheduler.schedule({ sendCanBox(listOf(McuOwnerProtocol.canBoxCarType(car))) }, at, TimeUnit.MILLISECONDS)
         }
         canBoxRound = listOf(init) + repeats
     }
