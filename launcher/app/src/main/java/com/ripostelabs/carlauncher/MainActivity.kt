@@ -79,6 +79,8 @@ import com.ripostelabs.carlauncher.carlib.WheelKeySwallow
 import com.ripostelabs.carlauncher.carlib.WheelLearn
 import com.ripostelabs.carlauncher.carlib.Zlink // RAV4-52 CarPlay deep link
 import com.ripostelabs.carlauncher.data.CallPopupGuard
+import com.ripostelabs.carlauncher.data.ReverseCameraDecoder
+import com.ripostelabs.carlauncher.data.SysVarLocalStore
 import com.ripostelabs.carlauncher.data.SysVarMirrorProvider // RAV4-98
 import com.ripostelabs.carlauncher.data.CarSettingsController // v1.1 settings suite
 import com.ripostelabs.carlauncher.data.parseVendorHidden // v0.4.9
@@ -491,7 +493,16 @@ class MainActivity : ComponentActivity() {
         }
         radioPresetsStore = RadioPresetsStore(applicationContext, lifecycleScope) // v0.9
         // Both write SysVar through the bound gateway (changeSetup) and fall back to the provider.
-        carSettingsController = CarSettingsController(applicationContext, lifecycleScope, carService) // v1.1
+        // Riposte OS 0.2: no gateway and no vendor provider, so the launcher keeps the rows itself,
+        // serves them to the suite through the mirror and applies the camera decoder row.
+        val localRows = mcuOwner?.let {
+            SysVarLocalStore(SysVarLocalStore.prefs(applicationContext)) { key, value ->
+                SysVarMirrorProvider.publish(applicationContext, key, value)
+                ReverseCameraDecoder.apply(key, value)
+            }
+        }
+        localRows?.let { rows -> lifecycleScope.launch(Dispatchers.IO) { rows.republish() } }
+        carSettingsController = CarSettingsController(applicationContext, lifecycleScope, carService, localStore = localRows) // v1.1
         rootTierController = RootTierController(applicationContext, lifecycleScope, carService) // v2.9
 
         // v0.7: auto-updater. The launch check self-gates (toggle, token, once a day), so on

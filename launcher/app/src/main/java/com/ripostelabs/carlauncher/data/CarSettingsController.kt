@@ -6,6 +6,7 @@ import android.util.Log
 import com.ripostelabs.carlauncher.carlib.CarService
 import com.ripostelabs.carlauncher.carlib.RootShell
 import com.ripostelabs.carlauncher.carlib.SysVar
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -33,6 +34,8 @@ import kotlinx.coroutines.withContext
  *    root, so [SysVar.putString] uses a root `content` shell (CAR_API §2.2). See [persistSysVar].
  *    If the persist fails the optimistic value is rolled back and a message is emitted on
  *    [writeEvents].
+ *  * **Owner path** (Riposte OS 0.2): neither gateway nor provider exists, so [localStore] takes
+ *    every write first and seeds the snapshot on start (see [SysVarLocalStore]).
  *  * **Root availability** is probed once and surfaced as [rootAvailable] so screens can warn that
  *    changes won't stick without root / a privileged install.
  *
@@ -43,12 +46,20 @@ class CarSettingsController(
     context: Context,
     private val scope: CoroutineScope,
     private val carService: CarService? = null,
+    /** The launcher's own rows on the owner path; null on the vendor slot. */
+    private val localStore: SysVarLocalStore? = null,
+    private val io: CoroutineDispatcher = Dispatchers.IO,
+    private val rootProbe: () -> Boolean = { RootShell.isRootAvailable() },
 ) {
     private val appContext = context.applicationContext
-    private val sysVar = SysVar(appContext)
+    /** The vendor store; absent on the owner path, where nothing answers that authority. */
+    private val sysVar: SysVar? = if (localStore == null) SysVar(appContext) else null
 
     /** The vendor write path; null when this controller was built without a service handle. */
     private val gateway: SysVarSink? = carService?.let { svc -> { k, v -> svc.changeSetup(k, v) } }
+
+    /** The owner-path write; null off it. */
+    private val local: SysVarSink? = localStore?.let { store -> { k, v -> store.put(k, v) } }
 
     private val _snapshot = MutableStateFlow<Map<String, String>>(emptyMap())
     /** The whole SysVar table, latest known values. Empty until the first refresh completes. */
@@ -76,11 +87,11 @@ class CarSettingsController(
     init {
         refresh()
         scope.launch {
-            _rootAvailable.value = withContext(Dispatchers.IO) {
-                runCatching { RootShell.isRootAvailable() }.getOrDefault(false)
+            _rootAvailable.value = withContext(io) {
+                runCatching { rootProbe() }.getOrDefault(false)
             }
         }
-        observer = sysVar.observe {
+        observer = sysVar?.observe {
             // A change we didn't make (vendor UI, CAN event) — reconcile our snapshot.
             refresh()
         }
@@ -89,8 +100,10 @@ class CarSettingsController(
     /** Re-read the whole SysVar table off the main thread. */
     fun refresh() {
         scope.launch {
-            val map = withContext(Dispatchers.IO) {
-                runCatching { sysVar.readAll() }.getOrDefault(emptyMap())
+            val map = withContext(io) {
+                val vendor = runCatching { sysVar?.readAll() }.getOrNull().orEmpty()
+                // Owner path: the launcher's rows are the truth there.
+                vendor + localStore?.readAll().orEmpty()
             }
             // Preserve any optimistic-but-not-yet-persisted local edits: the fresh read wins
             // everywhere EXCEPT keys with a still-pending write, whose intended value we keep
@@ -100,7 +113,7 @@ class CarSettingsController(
     }
 
     fun release() {
-        observer?.let { sysVar.unobserve(it) }
+        observer?.let { sysVar?.unobserve(it) }
         observer = null
     }
 
@@ -136,10 +149,11 @@ class CarSettingsController(
         // Optimistic: reflect immediately.
         _snapshot.value = _snapshot.value.toMutableMap().apply { put(key, value) }
         scope.launch {
-            val route = withContext(Dispatchers.IO) {
-                persistSysVar(key, value, gateway) { k, v ->
-                    runCatching { sysVar.putString(k, v) }.getOrDefault(false)
+            val route = withContext(io) {
+                val provider: SysVarSink = { k, v ->
+                    runCatching { sysVar?.putString(k, v) }.getOrNull() ?: false
                 }
+                persistSysVar(key, value, gateway, provider, local)
             }
             val ok = route != WriteRoute.FAILED
             // Clear the pending marker only if it's still ours; a newer write may have superseded it.
@@ -191,7 +205,7 @@ class CarSettingsController(
         setInt(SettingKeys.SET_DAY_LIGHT, clampedDay)
         setInt(SettingKeys.SET_NIGHT_LIGHT, clampedNight)
         scope.launch {
-            withContext(Dispatchers.IO) { carService?.sendBacklight(clampedDay, clampedNight) }
+            withContext(io) { carService?.sendBacklight(clampedDay, clampedNight) }
         }
     }
 

@@ -44,4 +44,21 @@ class SysVarWriteTest {
     fun bothRefusedIsAFailure() {
         assertEquals(WriteRoute.FAILED, persistSysVar("K", "1", sink("gw", false), sink("prov", false)))
     }
+
+    @Test
+    fun localStoreWinsAndTheVendorSlotsAreNotTouched() {
+        // Riposte OS 0.2: the launcher's own rows are the truth; no gateway or provider exists.
+        val route = persistSysVar("K", "1", sink("gw", true), sink("prov", true), local = sink("local", true))
+
+        assertEquals(WriteRoute.LOCAL, route)
+        assertEquals(listOf("local:K=1"), calls)
+    }
+
+    @Test
+    fun refusedLocalStoreFallsThroughToTheVendorOrder() {
+        val route = persistSysVar("K", "1", sink("gw", true), sink("prov", true), local = sink("local", false))
+
+        assertEquals(WriteRoute.GATEWAY, route)
+        assertEquals(listOf("local:K=1", "gw:K=1"), calls)
+    }
 }

@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ripostelabs.carlauncher.data.CarSettingsController
+import com.ripostelabs.carlauncher.data.ReverseCameraDecoder
 import com.ripostelabs.carlauncher.data.SettingKeys
 
 /**
@@ -11,8 +12,9 @@ import com.ripostelabs.carlauncher.data.SettingKeys
  * Backed by SysVar (CAR_API §2.3). The reverse *view* itself is handled by the launcher's
  * ReverseOverlay + the gateway; this page only tunes the vendor's reverse behaviour.
  *
- * ⚠ Enum option values (video-input type, window type, track-line type) are inferred from key
- * naming; the speed threshold 0/1/2 → 0/30/50 km/h is confirmed (EventService.java:9003-9010).
+ * ⚠ Enum option values (window type, track-line type) are inferred from key naming; the video
+ * input rows are the vendor picker's (BackcarSignalTypeSet.java:61-93, [ReverseCameraDecoder])
+ * and the speed threshold 0/1/2 → 0/30/50 km/h is confirmed (EventService.java:9003-9010).
  */
 @Composable
 fun ReverseCameraSettingsScreen(
@@ -27,22 +29,14 @@ fun ReverseCameraSettingsScreen(
             PickerSetting(
                 label = "Video input type",
                 current = controller.getInt(SettingKeys.BACKCAR_VIDEO_TYPE, 0),
-                options = listOf(
-                    0 to "CVBS (analog)",
-                    1 to "AHD 720p",
-                    2 to "AHD 1080p",
-                ),
+                options = ReverseCameraDecoder.VIDEO_TYPES,
                 onSelect = { controller.setInt(SettingKeys.BACKCAR_VIDEO_TYPE, it) },
             )
             PickerSetting(
                 label = "TW6752 decoder input",
                 description = "Only used on units with the TW6752 video decoder",
                 current = controller.getInt(SettingKeys.BACKCAR_6752_VIDEO_TYPE, 0),
-                options = listOf(
-                    0 to "CVBS",
-                    1 to "AHD 720p",
-                    2 to "AHD 1080p",
-                ),
+                options = ReverseCameraDecoder.VIDEO_TYPES,
                 onSelect = { controller.setInt(SettingKeys.BACKCAR_6752_VIDEO_TYPE, it) },
             )
             ToggleSetting(
