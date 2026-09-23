@@ -64,6 +64,8 @@ class McuOwner(
     private val retryDelayMs: Long = RETRY_DELAY_MS,
     /** Test seam: a Thread whose start() dawdles is how the start race below is reproduced. */
     private val newThread: (Runnable, String) -> Thread = { body, name -> Thread(body, name) },
+    /** Test seam: the POWER key pauses go through here, so a test records them instead of waiting. */
+    private val sleep: (Long) -> Unit = { ms -> Thread.sleep(ms) },
     private val canBoxTiming: CanBoxTiming = CanBoxTiming(),
     /** The car the CAN box is told it is in until [selectCar] says otherwise. */
     initialCar: CarProfile = CarProfiles.DEFAULT,
@@ -268,10 +270,10 @@ class McuOwner(
         val s = session ?: return
         val frames = McuOwnerProtocol.powerOff(clock())
         write(s, frames.first())
-        Thread.sleep(McuOwnerProtocol.POWER_OFF_SYNC_DELAY_MS)
+        sleep(McuOwnerProtocol.POWER_OFF_SYNC_DELAY_MS)
         for (frame in frames.drop(1)) {
             write(s, frame)
-            Thread.sleep(McuOwnerProtocol.POWER_OFF_GAP_MS)
+            sleep(McuOwnerProtocol.POWER_OFF_GAP_MS)
         }
     }
 

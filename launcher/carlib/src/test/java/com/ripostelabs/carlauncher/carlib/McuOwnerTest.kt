@@ -47,7 +47,6 @@ class McuOwnerTest {
     /** A pipe whose reads block on a queue and whose writes are recorded; [ackNull] answers SRC_NULL. */
     private class FakeLink(private val ackNull: Boolean) : McuLink {
         val written = CopyOnWriteArrayList<ByteArray>()
-        val writtenAtMs = CopyOnWriteArrayList<Long>()
         private val inbound = LinkedBlockingQueue<ByteArray>()
 
         @Volatile
@@ -67,7 +66,6 @@ class McuOwnerTest {
         }
 
         override fun write(bytes: ByteArray) {
-            writtenAtMs.add(System.currentTimeMillis())
             written.add(bytes.copyOf())
             if (ackNull && bytes.contentEquals(McuOwnerProtocol.mode(McuOwnerProtocol.Mode.NULL))) {
                 feed(McuSerial.encode(McuOpcode.MODE_ACK.code, byteArrayOf(McuOwnerProtocol.Mode.NULL.code.toByte())))
@@ -110,8 +108,12 @@ class McuOwnerTest {
 
     // The write watchdog is off the clock here (a CI stall once declared a fake link dead
     // mid-test); the two RAV4-96 cases below shorten it against a write that never returns.
-    private fun owner(link: FakeLink, gate: Gate = Gate(eventcenter = false, enabled = true), recorder: Recorder = Recorder()) =
-        McuOwner(gate, recorder, openLink = { link }, ackTimeoutMs = ACK_MS, writeTimeoutMs = WATCHDOG_OFF_MS, canBoxTiming = CAN_BOX_OFF)
+    private fun owner(
+        link: FakeLink,
+        gate: Gate = Gate(eventcenter = false, enabled = true),
+        recorder: Recorder = Recorder(),
+        sleep: (Long) -> Unit = {},
+    ) = McuOwner(gate, recorder, openLink = { link }, ackTimeoutMs = ACK_MS, writeTimeoutMs = WATCHDOG_OFF_MS, canBoxTiming = CAN_BOX_OFF, sleep = sleep)
 
     // Generous: the CI runner is shared and has run McuOwnerTest at a load average past 250,
     // where a 2 s bound expired on cases that assert by count, not by clock.
@@ -272,8 +274,8 @@ class McuOwnerTest {
     }
 
     /** A started owner with the handshake's own writes already counted. */
-    private fun runningOwner(link: FakeLink, recorder: Recorder): Pair<McuOwner, Int> {
-        val owner = owner(link, recorder = recorder)
+    private fun runningOwner(link: FakeLink, recorder: Recorder, sleep: (Long) -> Unit = {}): Pair<McuOwner, Int> {
+        val owner = owner(link, recorder = recorder, sleep = sleep)
         owner.start()
         waitFor("running") { owner.status.value as? McuOwner.Status.Running }
         return owner to link.written.size
@@ -301,18 +303,21 @@ class McuOwnerTest {
     fun powerKeyRunsPowerOffAfterNotify() {
         val link = FakeLink(ackNull = true)
         val recorder = Recorder()
-        val (owner, handshake) = runningOwner(link, recorder)
+        // The pauses are recorded, not slept: the test never waits on the wall clock.
+        val pauses = CopyOnWriteArrayList<Long>()
+        val (owner, handshake) = runningOwner(link, recorder, sleep = { pauses.add(it) })
 
         link.feed(McuSerial.encode(McuOpcode.KEY_EVENT.code, bytes(McuOwnerProtocol.Key.POWER, 0x00)))
         val expected = 1 + McuOwnerProtocol.POWER_OFF_REPEATS
         waitFor("power-off frames written") { link.written.takeIf { it.size >= handshake + expected } }
+        waitFor("last gap slept") { pauses.takeIf { it.size >= expected } }
         owner.stop()
 
         assertEquals(handshake + expected, link.written.size)
         assertEquals(0x13, link.written[handshake][3].toInt())
-        // `sync` then 500 ms between the clock stamp and the first SRC_POWEROFF (:2711-2713).
-        val stampToBurst = link.writtenAtMs[handshake + 1] - link.writtenAtMs[handshake]
-        assertTrue("stamp to burst $stampToBurst ms", stampToBurst >= McuOwnerProtocol.POWER_OFF_SYNC_DELAY_MS)
+        // `sync` then 500 ms after the clock stamp, then 50 ms after each SRC_POWEROFF (:2711-2725).
+        val gaps = List(McuOwnerProtocol.POWER_OFF_REPEATS) { McuOwnerProtocol.POWER_OFF_GAP_MS }
+        assertEquals(listOf(McuOwnerProtocol.POWER_OFF_SYNC_DELAY_MS) + gaps, pauses.toList())
         for (i in 1..McuOwnerProtocol.POWER_OFF_REPEATS) {
             assertArrayEquals(McuOwnerProtocol.mode(McuOwnerProtocol.Mode.POWER_OFF), link.written[handshake + i])
         }
