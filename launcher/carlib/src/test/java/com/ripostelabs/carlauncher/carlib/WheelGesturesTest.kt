@@ -15,9 +15,9 @@ class WheelGesturesTest {
     private val g = WheelGestures(out::add)
 
     private val FRAME = WheelGestures.FRAME_PERIOD_MS
-    private val NEXT_ID = 9
-    private val PREV_ID = 8
-    private val PREV_ALIAS_ID = 13
+    private val NEXT_ID = 8
+    private val PREV_ID = 9
+    private val PREV_ALIAS_ID = 14
     private val VOL_UP_ID = 1
     private val NONE_ID = 0
 
@@ -150,7 +150,7 @@ class WheelGesturesTest {
             listOf(WheelGesture.Press(WheelKey.PREV), WheelGesture.DoublePress(WheelKey.PREV)),
             out,
         )
-        assertEquals(WheelKey.NEXT, WheelKey.fromCanId(14))
+        assertEquals(WheelKey.NEXT, WheelKey.fromCanId(13))
         assertNull(WheelKey.fromCanId(VOL_UP_ID))
         assertNull(WheelKey.fromCanId(7))
     }
