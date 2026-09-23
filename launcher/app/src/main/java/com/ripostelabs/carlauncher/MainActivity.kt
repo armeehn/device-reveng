@@ -50,6 +50,7 @@ import com.ripostelabs.carlauncher.carlib.CarService
 import com.ripostelabs.carlauncher.tuner.CarTunerPort
 import com.ripostelabs.carlauncher.tuner.TunerHub
 import com.ripostelabs.carlauncher.carlib.CarCommandPort
+import com.ripostelabs.carlauncher.carlib.ArmAudioRoute
 import com.ripostelabs.carlauncher.carlib.CarProfiles
 import com.ripostelabs.carlauncher.carlib.McuOwner
 import com.ripostelabs.carlauncher.carlib.McuOwnerProtocol
@@ -58,6 +59,7 @@ import com.ripostelabs.carlauncher.carlib.SlcanLinkSource
 import com.ripostelabs.carlauncher.carlib.SysVarMirror
 import com.ripostelabs.carlauncher.carlib.VendorBroadcastReemitter
 import com.ripostelabs.carlauncher.carlib.McuSleepWake
+import com.ripostelabs.carlauncher.carlib.PlaybackWatch
 import com.ripostelabs.carlauncher.carlib.GatewayHandshake // v3.0
 import com.ripostelabs.carlauncher.carlib.SysVar // v0.4.9 vendor hidden-apps list
 import com.ripostelabs.carlauncher.carlib.VendorBtService
@@ -171,6 +173,9 @@ class MainActivity : ComponentActivity() {
     private var busSource: SlcanLinkSource? = null
     /** Riposte OS 0.2 only: ACC sleep and wake for [mcuOwner], polled like the vendor's AccObserver. */
     private var mcuSleepWake: McuSleepWake? = null
+
+    /** Riposte OS 0.2 only: Android playback for [ArmAudioRoute]. */
+    private var playbackWatch: PlaybackWatch? = null
 
     /** Riposte OS 0.2 only: whether CAMERA is granted, so the reverse screen can say why not. */
     private var cameraGranted by mutableStateOf(false)
@@ -359,6 +364,14 @@ class MainActivity : ComponentActivity() {
                 carCommandPort = CarCommandPort(carService.asCommandTarget()).also { port -> port.start() }
                 mcuSleepWake = McuSleepWake.forOwner(it, AndroidAccSource()).also { sw -> sw.start() }
                 ampVolumeKeys = volumeKeys.also { keys -> keys.start(applicationContext) }
+
+                // Android sound and CarPlay reach the amp only once the MCU is told, as
+                // eventcenter did (ArmAudioRoute). The mode send waits for an ACK: off main.
+                val audioRoute = ArmAudioRoute.forOwner(it)
+                playbackWatch = PlaybackWatch(applicationContext, audioRoute::onAndroidSound).also { w -> w.start() }
+                lifecycleScope.launch(Dispatchers.IO) {
+                    carEvents.carplayState.map { s -> s.connected }.distinctUntilChanged().collect(audioRoute::onProjection)
+                }
             }
             // The raw body bus on a second carrier (`riposte.canbus.link`), when the rig has one.
             // The car has none: its bus arrives over USB through CanCaptureService.
@@ -1330,6 +1343,7 @@ class MainActivity : ComponentActivity() {
         gatewayHandshake.unregister() // v3.0
         carEvents.unregister()
         mcuSleepWake?.stop()
+        playbackWatch?.stop()
         carService.unbind()
         vendorBtService.unbind()
         nowPlaying.stop()

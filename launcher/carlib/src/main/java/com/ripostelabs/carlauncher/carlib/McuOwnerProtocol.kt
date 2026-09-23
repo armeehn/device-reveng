@@ -41,6 +41,7 @@ object McuOwnerProtocol {
     private const val OP_RTC = 0x13           // sendRTCTimer, :9469
     private const val OP_VOICE_STATE = 0x42   // CMD_SEND_VOICE_STATE, EventUtils.java:1147; sendVoiceState, :11769
     private const val OP_BACKLIGHT = 0x2E     // sendBacklight, :9639-9659
+    private const val OP_SOUND_STATE = 0x3F   // sendNavStateToMcu, :8076-8083: nav byte, system byte
     private const val OP_CONFIG = 0x4F        // sendFactoryMcuSet and the other 4F sub-id blocks
     private const val OP_SYS_CONFIG = 0x49    // sendSleepTime :9361, sendVolumeGain :9662: `49 sub-id ...`
     private const val CFG_SLEEP_TIME = 0x05   // sendSleepTime's sub-id (:9370)
@@ -263,6 +264,13 @@ object McuOwnerProtocol {
     fun mainVolume(level: Int): ByteArray = setup(SETUP_MAIN_VOLUME, level)
 
     fun mute(on: Boolean): ByteArray = McuSerial.encode(OP_MUTE, bytes(if (on) 1 else 0))
+
+    /**
+     * `3F nav system`: navigation prompt playing, any Android sound playing. The vendor log calls
+     * the system byte "ARM mute" (notifyARMMuteState, EventService.java:13606-13609).
+     */
+    fun soundState(nav: Boolean, system: Boolean): ByteArray =
+        McuSerial.encode(OP_SOUND_STATE, bytes(if (nav) 1 else 0, if (system) 1 else 0))
 
     fun radioKey(key: Int): ByteArray = McuSerial.encode(OP_RADIO_KEY, bytes(key))
 
