@@ -210,7 +210,14 @@ if [ "$PROFILE" = gsi ]; then
   # libnativeloader takes only lib*.riposte.so names from a company file.
   [ -f "$SYS/$PUBLIC_LIBS" ] || die "the GSI carries no $PUBLIC_LIBS"
   for l in $AIS_CLIENT_LIB $AIS_CLIENT_DEPS; do cp "$ASRC/lib64/$l" "$SYS/lib64/"; done
-  grep -qx "$AIS_CLIENT_LIB" "$SYS/$PUBLIC_LIBS" || echo "$AIS_CLIENT_LIB" >> "$SYS/$PUBLIC_LIBS"
+  # 64-bit only (AIS_PUBLIC_ENTRY, lib.sh): any older line for the lib goes, then the guard: every
+  # bitness the entry declares must have its file, or a zygote aborts preloading it.
+  { grep -v "^$AIS_CLIENT_LIB\( \|\$\)" "$SYS/$PUBLIC_LIBS" || true; echo "$AIS_PUBLIC_ENTRY"; } > "$SYS/$PUBLIC_LIBS.new"
+  mv "$SYS/$PUBLIC_LIBS.new" "$SYS/$PUBLIC_LIBS"
+  # shellcheck disable=SC2086
+  for p in $(public_lib_paths $AIS_PUBLIC_ENTRY); do
+    [ -f "$SYS/$p" ] || die "$PUBLIC_LIBS declares '$AIS_PUBLIC_ENTRY' but $p is missing: a zygote would abort on it"
+  done
   umount "$AMNT"
   [ -f "$BASE/vendor.img" ] || die "$BASE/vendor.img missing: the AIS server links $AIS_VENDOR_LIBS from it"
   unsparse "$BASE/vendor.img" "$WORK/base-vendor.raw"
@@ -220,7 +227,7 @@ if [ "$PROFILE" = gsi ]; then
   label_system_file "$SYS/$AIS_DIR" "$SYS/$AIS_DIR/bin" "$SYS/$AIS_DIR/lib" "$SYS/$AIS_DIR"/bin/* "$SYS/$AIS_DIR"/lib/*
   # shellcheck disable=SC2086
   label_system_file $(for l in $AIS_CLIENT_LIB $AIS_CLIENT_DEPS $AIS_VENDOR_LIBS; do printf '%s ' "$SYS/lib64/$l"; done) "$SYS/$PUBLIC_LIBS"
-  log "AIS client on the public list: $AIS_CLIENT_LIB + $(echo $AIS_CLIENT_DEPS $AIS_VENDOR_LIBS | wc -w) deps in /system/lib64"
+  log "AIS client on the public list as '$AIS_PUBLIC_ENTRY' + $(echo $AIS_CLIENT_DEPS $AIS_VENDOR_LIBS | wc -w) deps in /system/lib64"
   chmod 0755 "$SYS/$AIS_DIR"/bin/*
   log "lifted the AIS camera server: $(ls "$SYS/$AIS_DIR/lib" | wc -l) libs + $AIS_BIN"
 fi

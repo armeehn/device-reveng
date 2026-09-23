@@ -141,7 +141,14 @@ if [ "$PROFILE" = gsi ]; then
   check "[ -f $S/riposte/ais/lib/libmmosal.so ]" "libmmosal.so beside it (vendor lib, off a /system daemon's search path)"
   check "grep -q '^service riposte_ais ' $S/etc/init/riposte.rc" "riposte_ais init service"
   # The launcher's dlopen of the AIS client (AisCameraNative): on the public list, deps beside it.
-  check "grep -qx libais_camera.so $S/etc/public.libraries.txt" "libais_camera.so on the public list"
+  # Exactly the 64-bit entry: a bare name is preloaded by both zygotes and the 32-bit one has no
+  # such file, which is the boot loop of 0.2 vc688. Then every path the entry commits to exists.
+  check "grep -qx '$AIS_PUBLIC_ENTRY' $S/etc/public.libraries.txt" "'$AIS_PUBLIC_ENTRY' on the public list"
+  check "! grep -qx '${AIS_PUBLIC_ENTRY%% *}' $S/etc/public.libraries.txt" "no bare (both-zygote) entry for it"
+  # shellcheck disable=SC2086
+  for p in $(public_lib_paths $AIS_PUBLIC_ENTRY); do
+    check "[ -f $S/$p ]" "'$AIS_PUBLIC_ENTRY' has its $p"
+  done
   check "[ -f $S/lib64/libais_camera.so ] && [ -f $S/lib64/libais_fibo_carcam.so ] && [ -f $S/lib64/libmmosal.so ]" "AIS client libs in /system/lib64"
   check "grep -q '^service riposte_hotspot ' $S/etc/init/riposte.rc" "riposte_hotspot init service"
   # Root for the launcher is by construction: seeded every boot, checked every boot.
