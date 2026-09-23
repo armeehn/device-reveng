@@ -21,6 +21,15 @@ class BtCarKitMapTest {
         assertEquals(11, BtCarKit.PROFILE_A2DP_SINK)
         assertEquals(12, BtCarKit.PROFILE_AVRCP_CONTROLLER)
         assertEquals(16, BtCarKit.PROFILE_HEADSET_CLIENT)
+        assertEquals(17, BtCarKit.PROFILE_PBAP_CLIENT)
+    }
+
+    /** The HF link's STATE_CONNECTING broadcast reads as CONNECTING until a device is on it. */
+    @Test
+    fun hfLinkConnectingReadsAsConnecting() {
+        assertEquals(HfpState.CONNECTING, BtCarKitMap.hfp(allBound.copy(hfLink = HfLink.CONNECTING)))
+        assertEquals(HfpState.READY, BtCarKitMap.hfp(allBound.copy(hfLink = HfLink.DISCONNECTED)))
+        assertEquals(HfpState.CONNECTED, BtCarKitMap.hfp(phone.copy(hfLink = HfLink.CONNECTED)))
     }
 
     @Test
@@ -109,10 +118,10 @@ class BtCarKitMapTest {
         val on = BtCarKitMap.reading(phone)
         assertTrue(on.ok)
         assertEquals(BtCarKitMap.TITLE, on.title)
-        assertEquals("HFP client on, A2DP sink on, AVRCP controller on. Phone: Pixel 9 connected.", on.detail)
+        assertEquals("HFP client on, A2DP sink on, AVRCP controller on, PBAP client on. Phone: Pixel 9 connected.", on.detail)
 
         val off = BtCarKitMap.reading(allBound.copy(bound = setOf(BtCarKit.PROFILE_A2DP_SINK)))
         assertFalse(off.ok)
-        assertEquals("HFP client OFF, A2DP sink on, AVRCP controller OFF. Phone: no phone connected.", off.detail)
+        assertEquals("HFP client OFF, A2DP sink on, AVRCP controller OFF, PBAP client OFF. Phone: no phone connected.", off.detail)
     }
 }

@@ -473,3 +473,21 @@ class McuOwnerProtocolTest {
         assertArrayEquals(McuSerial.encode(0x42, bytes(0x00)), McuOwnerProtocol.voiceState(false))
     }
 }
+
+/** The two BT-call frames eventcenter relays for btsuite; vectors summed by hand like the rest. */
+class McuOwnerProtocolBtTest {
+
+    private fun bytes(vararg v: Int) = ByteArray(v.size) { v[it].toByte() }
+
+    /** `sendBTState(5)`: 03 + 0B + 05 = 0x13, ~0x13 = 0xEC (EventService.java:4341). */
+    @Test
+    fun btStateIncomingCall() {
+        assertArrayEquals(bytes(0x0D, 0x0A, 0x03, 0x0B, 0x05, 0xEC, 0x00), McuOwnerProtocol.btState(5))
+    }
+
+    /** `sendMuteToMcu(20)`: `{76, 20}` = 4C 14; 03 + 4C + 14 = 0x63, ~0x63 = 0x9C (EventService.java:14691-14693). */
+    @Test
+    fun btMuteHangUp() {
+        assertArrayEquals(bytes(0x0D, 0x0A, 0x03, 0x4C, 0x14, 0x9C, 0x00), McuOwnerProtocol.btMute(McuOwnerProtocol.BT_MUTE_HANG_UP))
+    }
+}

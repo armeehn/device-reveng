@@ -37,6 +37,7 @@ object McuOwnerProtocol {
     private const val OP_SYSTEM_KEY = 0x08    // sendSystemKey, :4263-4268: the VOL/MUTE key echo
     private const val OP_MUTE = 0x0A          // sendMuteState, :4319
     private const val OP_BT_STATE = 0x0B      // sendBTState, :4336-4342
+    private const val OP_BT_MUTE = 0x4C       // sendMuteToMcu, :14691-14693: `{76, n}`
     private const val OP_USER_FREQ = 0x0C     // sendUserFreq, :4300
     private const val OP_RTC = 0x13           // sendRTCTimer, :9469
     private const val OP_PLAY_STATE = 0x19    // sendPlayState, :4327-4328: 1 = paused
@@ -57,6 +58,11 @@ object McuOwnerProtocol {
      */
     private const val RADIO_CMD_PRESET_SELECT = 0x64
     private const val RADIO_CMD_PRESET_STORE = 0x65
+
+    /** `onSendMuteToMcu(n)` before a call action (btsuite EventHandle.java:45-53): answer, hang up, audio switch. */
+    const val BT_MUTE_ANSWER = 10
+    const val BT_MUTE_HANG_UP = 20
+    const val BT_MUTE_AUDIO_SWITCH = 30
 
     private const val SETUP_RDS = 0x00
     private const val SETUP_ZONE = 0x01
@@ -374,6 +380,9 @@ object McuOwnerProtocol {
 
     /** `0B state` (sendBTState, EventService.java:4336-4342). */
     fun btState(state: Int): ByteArray = McuSerial.encode(OP_BT_STATE, bytes(state))
+
+    /** `4C n`: a short amp mute around a call action (sendMuteToMcu, EventService.java:14691-14693). */
+    fun btMute(units: Int): ByteArray = McuSerial.encode(OP_BT_MUTE, bytes(units))
 
     /**
      * What ACC_CHANGE_EVENT sends 3 s after wake (EventService.java:465-471): `reloadParam`

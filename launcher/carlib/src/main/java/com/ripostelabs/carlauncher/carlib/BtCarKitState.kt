@@ -25,6 +25,8 @@ data class BtCarKitSnapshot(
     /** Name of the phone on the HF client, else on the sink; null = none connected. */
     val phoneName: String? = null,
     val hfConnected: Boolean = false,
+    /** The HF link's last `CONNECTION_STATE_CHANGED` extra ([HfLink]); CONNECTING before a device is on it. */
+    val hfLink: Int = HfLink.DISCONNECTED,
     val sinkConnected: Boolean = false,
     val avrcpConnected: Boolean = false,
     /** Calls the HF client lists (`getCurrentCalls`), terminated ones included. */
@@ -55,6 +57,14 @@ object HfCallState {
     const val TERMINATED = 7
 }
 
+/** `BluetoothProfile.STATE_*` (android-14.0.0_r1 `BluetoothProfile.java:270-285`). */
+object HfLink {
+    const val DISCONNECTED = 0
+    const val CONNECTING = 1
+    const val CONNECTED = 2
+    const val DISCONNECTING = 3
+}
+
 /** One Doctor row: profiles on/off and whether a phone is on them. */
 data class BtCarKitReading(
     val ok: Boolean,
@@ -76,6 +86,7 @@ object BtCarKitMap {
         BtCarKit.PROFILE_HEADSET_CLIENT to "HFP client",
         BtCarKit.PROFILE_A2DP_SINK to "A2DP sink",
         BtCarKit.PROFILE_AVRCP_CONTROLLER to "AVRCP controller",
+        BtCarKit.PROFILE_PBAP_CLIENT to "PBAP client",
     )
 
     /**
@@ -102,8 +113,11 @@ object BtCarKitMap {
 
     /** btsuite's HFP number for the snapshot ([HfpState]); READY = adapter off or no phone. */
     fun hfp(s: BtCarKitSnapshot): HfpState {
-        if (!s.adapterOn || !s.hfConnected) {
+        if (!s.adapterOn) {
             return HfpState.READY
+        }
+        if (!s.hfConnected) {
+            return if (s.hfLink == HfLink.CONNECTING) HfpState.CONNECTING else HfpState.READY
         }
         val lead = leadCall(s.calls) ?: return HfpState.CONNECTED
 
