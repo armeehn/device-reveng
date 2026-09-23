@@ -395,4 +395,34 @@ class McuOwnerProtocolTest {
 
         assertArrayEquals(McuOwnerProtocol.backlight(config.backlightDay, config.backlightNight), frames.last())
     }
+
+    /**
+     * canbus2's box startup (HiworldCanParseToyota.java:1325-1333), inner frames `5A A5 payload CK`
+     * with CK = payload sum less one (SendUtil.java:60-85), each sent as outer `0D` behind `08`.
+     * Hand sums: 03+6A+05+01+11 = 0x84, less one 0x83; +82 → 0xF4; +F0 → 0x62; 02+24+21+01 → 0x47.
+     */
+    @Test
+    fun canBoxInitIsStockQueriesThenCarType() {
+        val inner = listOf(
+            bytes(0x5A, 0xA5, 0x03, 0x6A, 0x05, 0x01, 0x11, 0x83),
+            bytes(0x5A, 0xA5, 0x03, 0x6A, 0x05, 0x01, 0x82, 0xF4),
+            bytes(0x5A, 0xA5, 0x03, 0x6A, 0x05, 0x01, 0xF0, 0x62),
+            bytes(0x5A, 0xA5, 0x02, 0x24, 0x21, 0x01, 0x47),
+        )
+        val expected = inner.map { McuSerial.encode(0x0D, bytes(0x08) + it) }
+
+        val actual = McuOwnerProtocol.canBoxInit()
+
+        assertEquals(expected.size, actual.size)
+        expected.forEachIndexed { i, frame -> assertArrayEquals("frame $i", frame, actual[i]) }
+        assertArrayEquals(expected.last(), McuOwnerProtocol.canBoxCarType())
+    }
+
+    /** One whole wire frame by hand: LEN 0B, outer CK ~(0B+0D+08+5A+A5+03+6A+05+01+11+83) = ~0x26 = D9. */
+    @Test
+    fun canBoxQueryWireFrame() {
+        val wire = bytes(0x0D, 0x0A, 0x0B, 0x0D, 0x08, 0x5A, 0xA5, 0x03, 0x6A, 0x05, 0x01, 0x11, 0x83, 0xD9, 0x00)
+
+        assertArrayEquals(wire, McuOwnerProtocol.canBoxInit().first())
+    }
 }

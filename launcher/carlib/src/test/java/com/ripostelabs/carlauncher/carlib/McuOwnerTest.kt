@@ -2,6 +2,7 @@ package com.ripostelabs.carlauncher.carlib
 
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.ScheduledThreadPoolExecutor
 import java.util.concurrent.TimeUnit
 import java.time.LocalDateTime
 import org.junit.Assert.assertArrayEquals
@@ -35,6 +36,10 @@ class McuOwnerTest {
         const val SPLIT_CMD = 0x7E
 
         const val SLOW_START_MS = 100L
+
+        /** The box startup off the clock for cases that count exact writes; its own cases shorten it. */
+        val CAN_BOX_OFF = McuOwner.CanBoxTiming(afterHandshakeMs = 60_000, afterWakeMs = 60_000, repeatGapMs = 60_000)
+        val CAN_BOX_QUICK = McuOwner.CanBoxTiming(afterHandshakeMs = 50, afterWakeMs = 50, repeatGapMs = 20)
     }
 
     private fun bytes(vararg v: Int) = ByteArray(v.size) { v[it].toByte() }
@@ -104,7 +109,7 @@ class McuOwnerTest {
     // The write watchdog is off the clock here (a CI stall once declared a fake link dead
     // mid-test); the two RAV4-96 cases below shorten it against a write that never returns.
     private fun owner(link: FakeLink, gate: Gate = Gate(eventcenter = false, enabled = true), recorder: Recorder = Recorder()) =
-        McuOwner(gate, recorder, openLink = { link }, ackTimeoutMs = ACK_MS, writeTimeoutMs = WATCHDOG_OFF_MS)
+        McuOwner(gate, recorder, openLink = { link }, ackTimeoutMs = ACK_MS, writeTimeoutMs = WATCHDOG_OFF_MS, canBoxTiming = CAN_BOX_OFF)
 
     // Generous: the CI runner is shared and has run McuOwnerTest at a load average past 250,
     // where a 2 s bound expired on cases that assert by count, not by clock.
@@ -567,5 +572,77 @@ class McuOwnerTest {
 
         assertTrue(running.acked)
         assertTrue("opens=${opens.get()}", opens.get() >= 2)
+    }
+
+    private fun canBoxOwner(link: FakeLink, timing: McuOwner.CanBoxTiming, scheduler: ScheduledThreadPoolExecutor? = null) =
+        McuOwner(
+            Gate(eventcenter = false, enabled = true),
+            Recorder(),
+            openLink = { link },
+            ackTimeoutMs = ACK_MS,
+            writeTimeoutMs = WATCHDOG_OFF_MS,
+            canBoxTiming = timing,
+            canBoxScheduler = scheduler ?: ScheduledThreadPoolExecutor(1),
+        )
+
+    private fun count(link: FakeLink, frame: ByteArray) = link.written.count { it.contentEquals(frame) }
+
+    /** Waits until the car type went out once plus its repeats; the queries once each, before it. */
+    private fun assertCanBoxRound(link: FakeLink) {
+        val carType = McuOwnerProtocol.canBoxCarType()
+        val total = 1 + McuOwnerProtocol.CAN_BOX_CAR_TYPE_REPEATS
+        waitFor("car type x$total") { link.written.takeIf { count(link, carType) == total } }
+
+        val queries = McuOwnerProtocol.canBoxInit().dropLast(1)
+        val firstCarType = link.written.indexOfFirst { it.contentEquals(carType) }
+        queries.forEach { query ->
+            assertEquals(1, count(link, query))
+            assertTrue(link.written.indexOfFirst { it.contentEquals(query) } < firstCarType)
+        }
+    }
+
+    /** canbus2 starts the box 2 s after its service comes up; here, after the handshake's SRC_NULL. */
+    @Test(timeout = TEST_TIMEOUT_MS)
+    fun canBoxInitFollowsTheHandshake() {
+        val link = FakeLink(ackNull = true)
+        val owner = canBoxOwner(link, CAN_BOX_QUICK)
+
+        owner.start()
+        assertCanBoxRound(link)
+        owner.stop()
+
+        val nullFrame = McuOwnerProtocol.mode(McuOwnerProtocol.Mode.NULL)
+        val nullAt = link.written.indexOfFirst { it.contentEquals(nullFrame) }
+        val firstQuery = link.written.indexOfFirst { it.contentEquals(McuOwnerProtocol.canBoxInit().first()) }
+        assertTrue("query at $firstQuery, SRC_NULL at $nullAt", firstQuery > nullAt)
+    }
+
+    /** canbus2 starts the box again 3 s after a wake; `96 01` is the owner's wake. */
+    @Test(timeout = TEST_TIMEOUT_MS)
+    fun canBoxInitFollowsAWake() {
+        val link = FakeLink(ackNull = true)
+        val owner = canBoxOwner(link, CAN_BOX_QUICK.copy(afterHandshakeMs = 60_000))
+        owner.start()
+        waitFor("running") { owner.status.value as? McuOwner.Status.Running }
+
+        link.feed(McuSerial.encode(McuOpcode.SLEEP_STATE.code, bytes(0x01)))
+
+        assertCanBoxRound(link)
+        owner.stop()
+    }
+
+    /** stop() leaves no box send queued behind it. */
+    @Test(timeout = TEST_TIMEOUT_MS)
+    fun stopCancelsTheCanBoxRound() {
+        val link = FakeLink(ackNull = true)
+        val scheduler = ScheduledThreadPoolExecutor(1).apply { removeOnCancelPolicy = true }
+        val owner = canBoxOwner(link, CAN_BOX_OFF, scheduler)
+        owner.start()
+        waitFor("round scheduled") { scheduler.queue.takeIf { it.isNotEmpty() } }
+
+        owner.stop()
+
+        assertEquals(0, scheduler.queue.size)
+        scheduler.shutdownNow()
     }
 }
