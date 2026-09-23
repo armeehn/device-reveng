@@ -57,6 +57,7 @@ import com.ripostelabs.carlauncher.tuner.TunerHub
 import com.ripostelabs.carlauncher.carlib.CarCommandPort
 import com.ripostelabs.carlauncher.carlib.ArmAudioRoute
 import com.ripostelabs.carlauncher.carlib.CarProfiles
+import com.ripostelabs.carlauncher.carlib.McuDiagnostics
 import com.ripostelabs.carlauncher.carlib.McuOwner
 import com.ripostelabs.carlauncher.carlib.KeyAction
 import com.ripostelabs.carlauncher.carlib.KeyRouter
@@ -186,6 +187,9 @@ class MainActivity : ComponentActivity() {
     /** Riposte OS 0.2 only: panel, learned and CAN keys → [KeyAction], run by [keyActions]. */
     private var keyRouter: KeyRouter? = null
     private lateinit var keyActions: KeyActionDispatcher
+
+    /** Riposte OS 0.2 only: the owner's relay and signal log behind Settings > Diagnostics. */
+    private var mcuDiagnostics: McuDiagnostics? = null
 
     /** Riposte OS 0.2 on a rig with a raw-bus carrier (`riposte.canbus.link`); null otherwise. */
     private var busSource: SlcanLinkSource? = null
@@ -386,6 +390,7 @@ class MainActivity : ComponentActivity() {
                 DimKey(carService.backlight, carService::sendBacklight),
                 learn,
                 router,
+                McuDiagnostics().also { mcuDiagnostics = it },
             )
             // The boot and wake `2E` replay the targets the user last set, as the vendor's rows did.
             val startupConfig = carService.backlight.config(
@@ -1069,6 +1074,7 @@ class MainActivity : ComponentActivity() {
                                 carKit = btCarKit,
                                 mcuSetup = mcuSetupStore,
                                 wheelLearn = wheelLearn,
+                                mcuDiagnostics = mcuDiagnostics,
                             )
 
                             Screen.Themes -> ThemesScreen(

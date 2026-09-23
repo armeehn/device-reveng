@@ -28,6 +28,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import com.ripostelabs.carlauncher.carlib.CarService
 import com.ripostelabs.carlauncher.carlib.BtCarKit
+import com.ripostelabs.carlauncher.carlib.McuDiagnostics
 import com.ripostelabs.carlauncher.carlib.McuOwner
 import com.ripostelabs.carlauncher.carlib.McuSetupStore
 import com.ripostelabs.carlauncher.carlib.WheelLearn
@@ -74,6 +75,8 @@ fun SettingsHost(
     mcuSetup: McuSetupStore? = null,
     // Riposte OS 0.2: the resistive-wheel learn engine on the owner path; null = vendor app.
     wheelLearn: WheelLearn? = null,
+    // Riposte OS 0.2: the owner's relay and signal log for Diagnostics; null = vendor binder.
+    mcuDiagnostics: McuDiagnostics? = null,
 ) {
     // A deep link (the top bar's power chip) opens its page alone: the driver came from Home
     // and one Back goes back there. The hub under it left them a second Back away (Maestro
@@ -183,6 +186,12 @@ fun SettingsHost(
 
             SettingsRoute.CanBox -> CanBoxScreen(
                 settingsStore = settingsStore,
+                onBack = ::pop,
+            )
+
+            SettingsRoute.Diagnostics -> DiagnosticsScreen(
+                diagnostics = mcuDiagnostics,
+                mcuStatus = mcuStatus,
                 onBack = ::pop,
             )
 
@@ -348,6 +357,7 @@ sealed interface SettingsRoute {
     data object Games : SettingsRoute
     data object Accessories : SettingsRoute
     data object CanBox : SettingsRoute
+    data object Diagnostics : SettingsRoute
     data object CanCapture : SettingsRoute // v0.4.3
     data object GuidedTests : SettingsRoute
     data object RadioInfoCapture : SettingsRoute // v0.4.3

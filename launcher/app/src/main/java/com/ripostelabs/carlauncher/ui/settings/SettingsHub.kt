@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.SaveAlt
 import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.Cable
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.unit.dp
@@ -159,6 +160,12 @@ fun SettingsHub(
                 title = "CAN box",
                 subtitle = "Which car the CAN box is told it is in",
                 onClick = { onOpen(SettingsRoute.CanBox) },
+            )
+            SettingsCategoryCard(
+                icon = Icons.Filled.BugReport,
+                title = "Diagnostics",
+                subtitle = "MCU link, raw CAN relay and decoded signals, live",
+                onClick = { onOpen(SettingsRoute.Diagnostics) },
             )
             SettingsCategoryCard(
                 icon = Icons.Filled.Lightbulb,

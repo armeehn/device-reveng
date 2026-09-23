@@ -118,6 +118,15 @@ class McuOwner(
 
         /** RX `83`: the MCU's battery-backed clock, decoded (onCmdSysRTCTimeEvt, :3041-3058). */
         fun onRtc(time: LocalDateTime) {}
+
+        /** The SRC_MCU_VERSION ack's string, e.g. "RL78…" ([McuOwnerProtocol.mcuVersion]). */
+        fun onMcuVersion(version: String) {}
+
+        /** One 0xA5 body as relayed, and what [McuCanRelay] cut from it; for Diagnostics. */
+        fun onCanRelay(body: ByteArray, cut: List<McuFrame.Decoded>) {}
+
+        /** The car a CAN box send just carried ([McuOwnerProtocol.canBoxCarType]). */
+        fun onCanBoxCar(car: CarProfile) {}
     }
 
     /** One port, several consumers: every callback goes to each of [targets], in order. */
@@ -147,6 +156,12 @@ class McuOwner(
         override fun onWake() = targets.forEach { it.onWake() }
 
         override fun onRtc(time: LocalDateTime) = targets.forEach { it.onRtc(time) }
+
+        override fun onMcuVersion(version: String) = targets.forEach { it.onMcuVersion(version) }
+
+        override fun onCanRelay(body: ByteArray, cut: List<McuFrame.Decoded>) = targets.forEach { it.onCanRelay(body, cut) }
+
+        override fun onCanBoxCar(car: CarProfile) = targets.forEach { it.onCanBoxCar(car) }
     }
 
     sealed class Status {
@@ -374,6 +389,7 @@ class McuOwner(
             write(s, frame)
             Log.i(LOG_TAG, "CAN box tx: ${frame.joinToString(" ") { "%02X".format(it) }}")
         }
+        listener.onCanBoxCar(car)
     }
 
     /**
@@ -506,6 +522,7 @@ class McuOwner(
         McuOwnerProtocol.wheelState(command)?.let { listener.onWheelState(it); return }
         McuOwnerProtocol.radioEvent(command)?.let { listener.onRadio(it); return }
         McuOwnerProtocol.rtcTime(command)?.let { listener.onRtc(it); return }
+        McuOwnerProtocol.mcuVersion(command)?.let { listener.onMcuVersion(it); return }
         if (McuOwnerProtocol.isWake(command)) {
             scheduleCanBox(canBoxTiming.afterWakeMs)
             listener.onWake()
@@ -514,7 +531,9 @@ class McuOwner(
 
         // 0xA5 relays a slice of the CAN box's stream, not always one whole frame; see McuCanRelay.
         if (command.opcode == McuSerial.OP_CAN) {
-            canRelay.feed(command.payload).forEach(::onRelayed)
+            val cut = canRelay.feed(command.payload)
+            listener.onCanRelay(command.payload, cut)
+            cut.forEach(::onRelayed)
             return
         }
 
