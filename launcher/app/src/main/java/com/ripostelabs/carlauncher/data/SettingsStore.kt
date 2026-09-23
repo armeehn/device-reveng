@@ -41,6 +41,9 @@ import kotlinx.coroutines.launch
  */
 enum class DayNightMode { AUTO, FORCE_DAY, FORCE_NIGHT, CLOCK }
 
+/** The launcher's own Back/Home/Apps bar over other apps (only with [LauncherSettings.replaceSystemBars]). */
+enum class NavBarMode { AUTO_HIDE, ALWAYS_SHOWN, OFF }
+
 /** Immutable snapshot of all launcher settings. */
 data class LauncherSettings(
     val gridColumns: Int = DEFAULT_GRID_COLUMNS,
@@ -64,6 +67,7 @@ data class LauncherSettings(
     val motionGateEnabled: Boolean = true,
     val shadeEnabled: Boolean = true, // v2.5 swipe-from-top Quick Controls shade
     val replaceSystemBars: Boolean = false, // v2.5 suppress vendor status bar + shade (root)
+    val navBarMode: NavBarMode = NavBarMode.AUTO_HIDE, // the bar folds to an edge handle after 3 s
     /**
      * v2.8 — reachability mirror (LAUNCHER_DESIGN §2.5). AUTO defers to [Reachability], which has
      * cannot resolve RHD on this platform and therefore always answers LHD; LHD/RHD pin it.
@@ -218,6 +222,9 @@ class SettingsStore(context: Context) {
                     motionGateEnabled = prefs[MOTION_GATE_KEY] ?: true, // v2.5
                     shadeEnabled = prefs[SHADE_ENABLED_KEY] ?: true,
                     replaceSystemBars = prefs[REPLACE_SYSTEM_BARS_KEY] ?: false,
+                    navBarMode = runCatching {
+                        NavBarMode.valueOf(prefs[NAV_BAR_MODE_KEY] ?: NavBarMode.AUTO_HIDE.name)
+                    }.getOrDefault(NavBarMode.AUTO_HIDE),
                     driverSideMode = runCatching { // v2.8
                         DriverSideMode.valueOf(prefs[DRIVER_SIDE_KEY] ?: DriverSideMode.AUTO.name)
                     }.getOrDefault(DriverSideMode.AUTO),
@@ -279,6 +286,10 @@ class SettingsStore(context: Context) {
 
     fun setReplaceSystemBars(enabled: Boolean) = scope.launch {
         ds.edit { it[REPLACE_SYSTEM_BARS_KEY] = enabled }
+    }
+
+    fun setNavBarMode(mode: NavBarMode) = scope.launch {
+        ds.edit { it[NAV_BAR_MODE_KEY] = mode.name }
     }
 
     /** v2.8 — pin the driver's side, or hand it back to [Reachability]. */
@@ -379,6 +390,7 @@ class SettingsStore(context: Context) {
         val MOTION_GATE_KEY = booleanPreferencesKey("motion_gate") // v2.5 parked-only gate
         val SHADE_ENABLED_KEY = booleanPreferencesKey("shade_enabled") // v2.5
         val REPLACE_SYSTEM_BARS_KEY = booleanPreferencesKey("replace_system_bars") // v2.5
+        val NAV_BAR_MODE_KEY = stringPreferencesKey("nav_bar_mode") // NavBarMode.name
         val DRIVER_SIDE_KEY = stringPreferencesKey("driver_side") // v2.8 reachability mirror
         val RADAR_CONFIRMED_KEY = booleanPreferencesKey("radar_layout_confirmed") // v2.8
         val CLOCK_FALLBACK_KEY = booleanPreferencesKey("clock_fallback") // v2.7

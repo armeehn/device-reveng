@@ -842,8 +842,8 @@ class MainActivity : ComponentActivity() {
 
             // The nav bar overlay follows the theme and only exists while the system bars are
             // suppressed (that switch takes SystemUI's gesture pill with it on the 0.2 base).
-            LaunchedEffect(activeTheme, night, settings.replaceSystemBars) {
-                navBar.update(if (night) activeTheme.night else activeTheme.day, settings.replaceSystemBars)
+            LaunchedEffect(activeTheme, night, settings.replaceSystemBars, settings.navBarMode) {
+                navBar.update(if (night) activeTheme.night else activeTheme.day, settings.replaceSystemBars, settings.navBarMode)
                 reverseWindow.update(activeTheme, night)
             }
 

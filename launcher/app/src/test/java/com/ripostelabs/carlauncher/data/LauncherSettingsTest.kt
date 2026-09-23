@@ -37,6 +37,7 @@ class LauncherSettingsTest {
         assertFalse(defaults.readNotifications)
         assertEquals(DayNightMode.AUTO, defaults.dayNightMode)
         assertEquals(DriverSideMode.AUTO, defaults.driverSideMode)
+        assertEquals("the bar over other apps gets out of the way by default", NavBarMode.AUTO_HIDE, defaults.navBarMode)
     }
 
     @Test
