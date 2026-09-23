@@ -38,6 +38,7 @@ import com.ripostelabs.carlauncher.carlib.VolumeMemory
 import com.ripostelabs.carlauncher.carlib.AmpVolumeKeys
 import com.ripostelabs.carlauncher.data.McuClock
 import com.ripostelabs.carlauncher.data.AccessoryRuntime
+import com.ripostelabs.carlauncher.carlib.ReverseTrigger
 import com.ripostelabs.carlauncher.carlib.RootShell
 import com.ripostelabs.carlauncher.input.WheelGamepad
 import com.ripostelabs.carlauncher.service.CanCaptureService
@@ -723,11 +724,32 @@ class MainActivity : ComponentActivity() {
             // Riposte OS 0.2: the vendor camera app is gone, so the launcher shows the feed itself.
             // On a stock or 0.1 slot the owner is null and the gate stays HIDDEN whatever reverse
             // says — the vendor window still composites over us there.
+            // The picture follows eventcenter's own rule, not the raw line: the speed gate on the
+            // rising edge and "awake" (ReverseTrigger). Awake on 0.2 is the owner being up; it
+            // stops on the sleep path, and no SYS_EVENT arrives while it is down.
+            val reverseTrigger = remember { ReverseTrigger() }
+            val reversePicture = remember(reverse, speedKmh, mcuOwner) {
+                reverseTrigger.onLine(
+                    reverseBit = reverse,
+                    awake = mcuOwner != null,
+                    speedKmh = speedKmh,
+                    thresholdKmh = ReverseTrigger.thresholdKmh(
+                        carSettingsController.getInt(SettingKeys.BACKCAR_SPEED_THRESHOLD, 0),
+                    ),
+                )
+            }
             val reverseCamera = ReverseCameraGate.decide(
-                reverse = reverse,
+                reverse = reversePicture,
                 ownerActive = mcuOwner != null,
                 permissionGranted = cameraGranted,
             )
+            // Read once per picture, as the vendor reads its provider at startBackcar.
+            val reverseShowRadar = remember(reversePicture) {
+                carSettingsController.getBoolean(SettingKeys.BACKCAR_DISPLAY_RADAR, true)
+            }
+            val reverseMirrored = remember(reversePicture) {
+                carSettingsController.getBoolean(SettingKeys.BACKCAR_CAMERA_MIRRORING, false)
+            }
 
             // v0.5: republish the palette for the com.ripostelabs.* suite whenever it changes.
             // Keyed on both inputs because a night crossing changes the colours without changing
@@ -1048,7 +1070,12 @@ class MainActivity : ComponentActivity() {
                     }
 
                     // Riposte OS 0.2: the reverse feed sits above everything, strips included.
-                    ReverseCameraScreen(verdict = reverseCamera)
+                    ReverseCameraScreen(
+                        verdict = reverseCamera,
+                        radar = radar,
+                        showRadar = reverseShowRadar,
+                        mirrored = reverseMirrored,
+                    )
                   }
                 }
                }

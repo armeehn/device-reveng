@@ -116,5 +116,17 @@ data class RadarState(
             val valid = front.isNotEmpty() || rear.isNotEmpty()
             return RadarState(valid = valid, front = front, rear = rear)
         }
+
+        /**
+         * Riposte OS 0.2: the same bands from the relayed `0x41` frame. The decoder already
+         * stores `level × 30` cm, the code canbus2 would have put in its broadcast
+         * (`HiworldCanParseToyota.java:903-921`), so one [band] call per sensor lines the two
+         * paths up; a null sensor is the parser's 0xA0 "clear".
+         */
+        fun fromParkingRadar(signal: CanSignal.ParkingRadar): RadarState = RadarState(
+            valid = true,
+            front = signal.frontCm.map { band(it ?: CODE_CLEAR) },
+            rear = signal.rearCm.map { band(it ?: CODE_CLEAR) },
+        )
     }
 }
