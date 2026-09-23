@@ -19,6 +19,7 @@ import android.view.TextureView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -35,6 +36,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.ripostelabs.carlauncher.carlib.RadarState
 import com.ripostelabs.carlauncher.ui.theme.carShape
 
 /**
@@ -52,31 +54,57 @@ import com.ripostelabs.carlauncher.ui.theme.carShape
  * SurfaceView: it composes like any view, so the label draws over it with no hole-punching, and
  * on 0.2 there is no vendor window above us to yield to (contrast [ReverseOverlay]).
  *
- * Deliberately dumb: no guide lines, no radar, no controls. One label so the driver can tell the
- * launcher is showing the picture, and a one-line reason whenever there is none — permission
- * missing, camera absent, or the [CameraAccessException] reason. The camera is released on
- * dispose, i.e. the moment reverse disengages.
+ * Deliberately plain: no guide lines, no controls. One label so the driver can tell the launcher
+ * is showing the picture, a one-line reason whenever there is none — permission missing, camera
+ * absent, or the [CameraAccessException] reason — and the vendor's two decorations of the feed:
+ *
+ *   • [radar], the parking-sensor bands the vendor draws as RadarViewUp/RadarViewDown over its
+ *     backcar window (BackcarEvent.java:505-506, :960-978), shown while [showRadar] — the
+ *     `Sys_BackCar_Display_Radar_Key` toggle, default on (:2189);
+ *   • [mirrored], `Sys_Backcar_Camera_Mirroring` → `CameraManager.mirrorLeftRight(true)`
+ *     (:1300-1302), done here as a horizontal flip of the texture.
+ *
+ * The camera is released on dispose, i.e. the moment reverse disengages.
  */
 @Composable
-fun ReverseCameraScreen(verdict: ReverseCameraGate.Verdict, modifier: Modifier = Modifier) {
+fun ReverseCameraScreen(
+    verdict: ReverseCameraGate.Verdict,
+    radar: RadarState? = null,
+    showRadar: Boolean = true,
+    mirrored: Boolean = false,
+    modifier: Modifier = Modifier,
+) {
     if (verdict == ReverseCameraGate.Verdict.HIDDEN) {
         return
     }
 
     Box(modifier = modifier.fillMaxSize().background(Color.Black)) {
         when (verdict) {
-            ReverseCameraGate.Verdict.PREVIEW -> CameraPreview(modifier = Modifier.fillMaxSize())
+            ReverseCameraGate.Verdict.PREVIEW -> CameraPreview(mirrored = mirrored, modifier = Modifier.fillMaxSize())
             ReverseCameraGate.Verdict.NO_PERMISSION -> Notice(NO_PERMISSION_MESSAGE)
             ReverseCameraGate.Verdict.HIDDEN -> Unit
         }
 
         ReverseLabel(modifier = Modifier.align(Alignment.TopStart).padding(LABEL_INSET_DP.dp))
+
+        // Bottom edge, over the feed: nothing draws until a frame has arrived (showPlaceholder
+        // off), and the vendor's toggle hides it outright.
+        if (showRadar) {
+            RadarView(
+                state = radar,
+                showPlaceholder = false,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth(RADAR_WIDTH_FRACTION)
+                    .padding(bottom = LABEL_INSET_DP.dp),
+            )
+        }
     }
 }
 
 /** The camera2 preview. Failures replace the picture with their reason; nothing throws out. */
 @Composable
-private fun CameraPreview(modifier: Modifier = Modifier) {
+private fun CameraPreview(mirrored: Boolean, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     var failure by remember { mutableStateOf<String?>(null) }
     val session = remember { ReverseCameraSession(context) { failure = it } }
@@ -89,6 +117,8 @@ private fun CameraPreview(modifier: Modifier = Modifier) {
     AndroidView(
         factory = { ctx ->
             TextureView(ctx).apply {
+                // A mirror-image feed for a camera mounted the other way round (:1300-1302).
+                scaleX = if (mirrored) MIRROR_SCALE else 1f
                 surfaceTextureListener = object : TextureView.SurfaceTextureListener {
                     override fun onSurfaceTextureAvailable(texture: SurfaceTexture, width: Int, height: Int) {
                         session.open(texture)
@@ -306,3 +336,9 @@ private const val NO_PERMISSION_MESSAGE = "Camera permission not granted"
 /** Chip inset from the screen corner, and its translucency over the feed. */
 private const val LABEL_INSET_DP = 16
 private const val LABEL_ALPHA = 0.6f
+
+/** Share of the screen width the radar bands take at the bottom of the feed. */
+private const val RADAR_WIDTH_FRACTION = 0.5f
+
+/** Horizontal flip of the texture, the mirroring the vendor asks its camera HAL for. */
+private const val MIRROR_SCALE = -1f

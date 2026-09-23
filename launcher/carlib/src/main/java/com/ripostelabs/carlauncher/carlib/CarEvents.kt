@@ -1128,6 +1128,9 @@ class CarEvents(private val appContext: Context) {
             vehicle?.onSignal(signal, atMs)
             when (signal) {
                 is CanSignal.Climate -> _climate.value = ClimateState.from(signal)
+                // 0.2 has no canbus2 to broadcast MCU_CAR_CAN_RADAR_INFO; the relayed 0x41
+                // frame is the only source for the reverse screen's radar overlay.
+                is CanSignal.ParkingRadar -> _radar.value = RadarState.fromParkingRadar(signal)
                 is CanSignal.BasicStatus -> {
                     _doors.value = DoorState.from(signal, atMs)
                     // RAV4-53: the same frame carries the wheel key byte pair; on 0.2 this is the
