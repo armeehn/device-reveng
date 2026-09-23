@@ -47,6 +47,7 @@ import com.ripostelabs.carlauncher.carlib.CarService
 import com.ripostelabs.carlauncher.tuner.CarTunerPort
 import com.ripostelabs.carlauncher.tuner.TunerHub
 import com.ripostelabs.carlauncher.carlib.CarCommandPort
+import com.ripostelabs.carlauncher.carlib.CarProfiles
 import com.ripostelabs.carlauncher.carlib.McuOwner
 import com.ripostelabs.carlauncher.carlib.McuOwnerProtocol
 import com.ripostelabs.carlauncher.carlib.McuStateExport
@@ -329,9 +330,17 @@ class MainActivity : ComponentActivity() {
                 ownerListener,
                 openLink = { ownerGate.mcuLink().open() },
                 config = McuOwnerProtocol.StartupConfig(mainVolume = volumeMemory.level()),
+                initialCar = CarProfiles.byId(settingsStore.settings.value.canBoxCar),
             ).also {
                 carService.attachOwner(it)
                 it.start()
+                // The Settings choice reaches the box at once; McuOwner ignores an unchanged car.
+                val owner = it
+                lifecycleScope.launch {
+                    settingsStore.settings.map { s -> s.canBoxCar }.distinctUntilChanged().collect { id ->
+                        owner.selectCar(CarProfiles.byId(id))
+                    }
+                }
                 carCommandPort = CarCommandPort(carService.asCommandTarget()).also { port -> port.start() }
                 mcuSleepWake = McuSleepWake.forOwner(it, AndroidAccSource()).also { sw -> sw.start() }
                 ampVolumeKeys = volumeKeys.also { keys -> keys.start(applicationContext) }

@@ -8,6 +8,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.Future
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -63,7 +64,20 @@ class McuOwner(
     private val retryDelayMs: Long = RETRY_DELAY_MS,
     /** Test seam: a Thread whose start() dawdles is how the start race below is reproduced. */
     private val newThread: (Runnable, String) -> Thread = { body, name -> Thread(body, name) },
+    private val canBoxTiming: CanBoxTiming = CanBoxTiming(),
+    /** The car the CAN box is told it is in until [selectCar] says otherwise. */
+    initialCar: CarProfile = CarProfiles.DEFAULT,
+    /** Runs the CAN box round off the owner and pump threads; tests inspect its queue. */
+    private val canBoxScheduler: ScheduledExecutorService =
+        Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "mcu-owner-canbox").apply { isDaemon = true } },
 ) {
+
+    /** When the CAN box round runs ([McuOwnerProtocol.canBoxInit]); tests shorten it. */
+    data class CanBoxTiming(
+        val afterHandshakeMs: Long = McuOwnerProtocol.CAN_BOX_START_DELAY_MS,
+        val afterWakeMs: Long = McuOwnerProtocol.CAN_BOX_WAKE_DELAY_MS,
+        val repeatGapMs: Long = McuOwnerProtocol.CAN_BOX_REPEAT_GAP_MS,
+    )
 
     /** What must be true before the port is touched. The app answers from PackageManager and getprop. */
     interface Gate {
@@ -177,6 +191,13 @@ class McuOwner(
     /** Mirrors `mBackcarConnected`: while set, most panel keys are dropped as the vendor drops them. */
     @Volatile
     private var reversing = false
+
+    /** Whose frames [McuOwnerProtocol.canBoxInit] builds; the driver's choice in Settings. */
+    @Volatile
+    private var car: CarProfile = initialCar
+
+    /** The pending CAN box sends; a new round or [stop] cancels them. */
+    private var canBoxRound: List<ScheduledFuture<*>> = emptyList()
     /** The last [setMode] argument, so a wake can resume it ([McuOwnerProtocol.reload]). */
     @Volatile
     var lastMode: McuOwnerProtocol.Mode? = null
@@ -208,9 +229,26 @@ class McuOwner(
         val w = worker
         worker = null
         w?.interrupt()
+        cancelCanBox()
         session?.close()
         session = null
         _status.value = Status.Idle
+    }
+
+    /**
+     * Tell the CAN box it is in [profile]. A change re-sends the startup at once, so the box
+     * does not keep the old car until the next wake; with no port open it waits for the handshake.
+     */
+    fun selectCar(profile: CarProfile) {
+        if (profile == car) {
+            return
+        }
+
+        car = profile
+        Log.i(LOG_TAG, "CAN box car: ${profile.label}")
+        if (session != null) {
+            scheduleCanBox(0)
+        }
     }
 
     /** Raw send for callers that build their own frames with [McuOwnerProtocol]. */
@@ -290,6 +328,41 @@ class McuOwner(
             if (session === s) {
                 _status.value = Status.Running(acked = acked, frames = 0, badChecksum = 0, skipped = 0)
             }
+        }
+        if (session === s) {
+            scheduleCanBox(canBoxTiming.afterHandshakeMs)
+        }
+    }
+
+    /**
+     * canbus2's box startup: [McuOwnerProtocol.canBoxInit] after [delayMs], then the car type
+     * [McuOwnerProtocol.CAN_BOX_CAR_TYPE_REPEATS] more times. A newer round replaces a pending
+     * one, as the vendor's removeMessages does. Scheduling only: the pump never waits on it.
+     */
+    @Synchronized
+    private fun scheduleCanBox(delayMs: Long) {
+        cancelCanBox()
+
+        val init = canBoxScheduler.schedule({ sendCanBox(McuOwnerProtocol.canBoxInit(car)) }, delayMs, TimeUnit.MILLISECONDS)
+        val repeats = (1..McuOwnerProtocol.CAN_BOX_CAR_TYPE_REPEATS).map { n ->
+            val at = delayMs + n * canBoxTiming.repeatGapMs
+            canBoxScheduler.schedule({ sendCanBox(listOf(McuOwnerProtocol.canBoxCarType(car))) }, at, TimeUnit.MILLISECONDS)
+        }
+        canBoxRound = listOf(init) + repeats
+    }
+
+    @Synchronized
+    private fun cancelCanBox() {
+        canBoxRound.forEach { it.cancel(false) }
+        canBoxRound = emptyList()
+    }
+
+    /** Logged per frame so the first car session shows the box startup went out. */
+    private fun sendCanBox(frames: List<ByteArray>) {
+        val s = session ?: return
+        for (frame in frames) {
+            write(s, frame)
+            Log.i(LOG_TAG, "CAN box tx: ${frame.joinToString(" ") { "%02X".format(it) }}")
         }
     }
 
@@ -423,6 +496,7 @@ class McuOwner(
         McuOwnerProtocol.radioEvent(command)?.let { listener.onRadio(it); return }
         McuOwnerProtocol.rtcTime(command)?.let { listener.onRtc(it); return }
         if (McuOwnerProtocol.isWake(command)) {
+            scheduleCanBox(canBoxTiming.afterWakeMs)
             listener.onWake()
             return
         }

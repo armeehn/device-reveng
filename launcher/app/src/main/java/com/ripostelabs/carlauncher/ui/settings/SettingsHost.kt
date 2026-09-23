@@ -175,6 +175,11 @@ fun SettingsHost(
 
             SettingsRoute.Games -> GamesScreen(onBack = ::pop)
 
+            SettingsRoute.CanBox -> CanBoxScreen(
+                settingsStore = settingsStore,
+                onBack = ::pop,
+            )
+
             SettingsRoute.Accessories -> AccessoriesScreen(
                 settingsStore = settingsStore,
                 onBack = ::pop,
@@ -330,6 +335,7 @@ sealed interface SettingsRoute {
     data object Vehicle : SettingsRoute
     data object Games : SettingsRoute
     data object Accessories : SettingsRoute
+    data object CanBox : SettingsRoute
     data object CanCapture : SettingsRoute // v0.4.3
     data object GuidedTests : SettingsRoute
     data object RadioInfoCapture : SettingsRoute // v0.4.3

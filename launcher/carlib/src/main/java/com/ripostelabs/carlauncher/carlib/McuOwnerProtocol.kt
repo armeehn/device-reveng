@@ -60,6 +60,16 @@ object McuOwnerProtocol {
     const val ACK_TIMEOUT_MS = 500L
     const val ACK_ATTEMPTS = 3
 
+    /** canbus2's box startup timing (CanDataParseBase.java:284, :347-353; msg 1014 :1313-1322). */
+    const val CAN_BOX_START_DELAY_MS = 2_000L
+    const val CAN_BOX_WAKE_DELAY_MS = 3_000L
+    const val CAN_BOX_REPEAT_GAP_MS = 1_000L
+    const val CAN_BOX_CAR_TYPE_REPEATS = 3
+
+    /** Box commands, inside the `5A A5` frame (HiworldCanParseToyota.java:1768, :1774). */
+    private const val BOX_CAR_TYPE = 0x24
+    private const val BOX_QUERY = 0x6A
+
     /** `sendBTState((byte) 0)` on ACC off (EventService.java:3559); higher values are call states. */
     const val BT_DISCONNECTED = 0
 
@@ -303,6 +313,33 @@ object McuOwnerProtocol {
         mode(Mode.MCU_VERSION),
         mode(lastMode ?: Mode.NONE),
     )
+
+    /**
+     * What canbus2 tells the HiWorld CAN box 2 s after its service starts and 3 s after ACC on
+     * (CanDataParseBase.java:284, :347-353 → HiworldCanParseToyota.java:1325-1333): three data
+     * queries, then the car type. The caller repeats [canBoxCarType] [CAN_BOX_CAR_TYPE_REPEATS]
+     * more times, [CAN_BOX_REPEAT_GAP_MS] apart (msg 1014, :1313-1322).
+     *
+     * Why: on 0.2 the wheel keys produce no box frames at all, and this is the traffic stock sends
+     * that we did not. That the box waits for it is INFERRED, unproven in the car.
+     */
+    fun canBoxInit(car: CarProfile): List<ByteArray> = car.queries.map { canBoxQuery(it) } + canBoxCarType(car)
+
+    /** `24 code 01`: which car the box is in (sendCarTypeToCan, HiworldCanParseToyota.java:1768). */
+    fun canBoxCarType(car: CarProfile): ByteArray = canBox(intArrayOf(0x02, BOX_CAR_TYPE, car.carType, 0x01))
+
+    /** `6A 05 01 id`: ask the box for data block [id] (sendQToCan, HiworldCanParseToyota.java:1774). */
+    private fun canBoxQuery(id: Int): ByteArray = canBox(intArrayOf(0x03, BOX_QUERY, 0x05, 0x01, id))
+
+    /**
+     * A box frame on the owner's port. [McuCommand.framed] builds `0D 08 5A A5 payload CK`, the
+     * checksum being SendUtil.java:60-85's; its first byte is the outer opcode and the rest the
+     * outer payload, as the 0.1 strace showed canbus2's volume and RTC frames on the wire.
+     */
+    private fun canBox(payload: IntArray): ByteArray {
+        val routed = McuCommand.framed(payload)
+        return McuSerial.encode(routed[0].toInt() and BYTE, routed.copyOfRange(1, routed.size))
+    }
 
     /** `96 01`: the MCU says it woke (onCmdMcuSleepState, EventService.java:2270-2280). */
     fun isWake(command: McuSerial.Command): Boolean =
