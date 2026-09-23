@@ -131,6 +131,13 @@ if [ "$PROFILE" = gsi ]; then
   check "grep -q '^service riposte_zlink ' $S/etc/init/riposte.rc" "riposte_zlink init service"
   check "[ -x $S/bin/z-mdnsd ]" "z-mdnsd at the daemon's fixed path"
   check "grep -q '^service riposte_hotspot ' $S/etc/init/riposte.rc" "riposte_hotspot init service"
+  # Root for the launcher is by construction: seeded every boot, checked every boot.
+  check "grep -q '^service riposte_root ' $S/etc/init/riposte.rc" "riposte_root init service (launcher root grant, every boot)"
+  check "[ \"\$(stat -c %a $S/bin/riposte-root.sh)\" = 755 ]" "riposte-root.sh executable"
+  check "! grep -q 'uid_policy' $S/bin/riposte-firstboot.sh" "the grant has one owner: not in the first-boot hook"
+  # One property drives the reverse-camera decoder.
+  check "grep -q '^on property:persist.riposte.camera.mode=\*' $S/etc/init/riposte.rc" "persist.riposte.camera.mode init trigger"
+  check "[ \"\$(stat -c %a $S/bin/riposte-camera-mode.sh)\" = 755 ]" "riposte-camera-mode.sh executable"
 else
   check "[ ! -f $S/bin/rw-system.sh ]" "no rw-system.sh on a stock base"
   check "grep -q '^ro.riposte.os.bt_carkit=0$' $S/build.prop" "ro.riposte.os.bt_carkit=0"

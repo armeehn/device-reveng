@@ -94,3 +94,24 @@ on property:sys.boot_completed=1 && property:ro.riposte.os.car_owner=1
 # ro.riposte.os.bench=1 only: take the port back after the vendor's boot_completed host write.
 on property:sys.boot_completed=1 && property:ro.riposte.os.bench=1
     start riposte_usbadb
+
+# Car-owner builds: the launcher's root grant, every boot (riposte-root.sh). sudaemon is
+# class main, so it is up by boot_completed; the script seeds its allow row when missing and
+# logs `riposte-root: launcher granted` or the reason it is not.
+service riposte_root /system/bin/sh /system/bin/riposte-root.sh
+    class main
+    user root
+    group root
+    seclabel u:r:su:s0
+    oneshot
+    disabled
+
+on property:sys.boot_completed=1 && property:ro.riposte.os.car_owner=1
+    start riposte_root
+
+# Car-owner builds: one property drives the reverse-camera decoder (riposte-camera-mode.sh,
+# values 0..8 documented there). A persisted prop replays at boot, so the mode survives a
+# reboot. The nodes are root-only, hence the su label, the same route TrebleDroid's
+# persist.sys.phh.* handlers take (vndk.rc).
+on property:persist.riposte.camera.mode=* && property:ro.riposte.os.car_owner=1
+    exec_background u:r:su:s0 root -- /system/bin/sh /system/bin/riposte-camera-mode.sh
