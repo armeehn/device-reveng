@@ -128,6 +128,8 @@ object McuOwnerProtocol {
         val radioZone: Int = 0,
         val backlightDay: Int = 100,
         val backlightNight: Int = 60,
+        /** The amp level to restore at boot, as the vendor does; null leaves the MCU's own. */
+        val mainVolume: Int? = null,
     )
 
     /**
@@ -247,8 +249,10 @@ object McuOwnerProtocol {
         mode(Mode.MCU_VERSION),
         setup(SETUP_RDS, if (config.rds) 0 else 1),
         setup(SETUP_ZONE, config.radioZone),
-    ) + vendorInit() + listOf(
+    ) + vendorInit() + listOfNotNull(
         backlight(config.backlightDay, config.backlightNight),
+        // Last: the MCU answers with a 79, and that report is what unlocks the volume slider.
+        config.mainVolume?.let { mainVolume(it) },
     )
 
     /**
