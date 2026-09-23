@@ -8,16 +8,20 @@ package com.ripostelabs.carlauncher.carlib
  * (`HiworldCanParseToyota.java:831-891`, `OnHandleCanKeyCmd`). The id table is that method's
  * `iCanCar_button` → `g_byKeyVal` switch (`:853-885`); [mcuKey] is the `MCU_KEY_*` code it
  * hands to `sendMCUKey` (`:888`) and so the code the gateway's `ProcessCanKey` receives
- * (`EventService.java:13021-13110`). Two ids alias PREV (8, 13) and NEXT (9, 14); which physical
- * button sends which is UNVERIFIED — both are folded here so it cannot matter.
+ * (`EventService.java:13021-13110`). Two ids alias each of PREV and NEXT; which physical button
+ * sends which is UNVERIFIED — both are folded here so it cannot matter.
+ *
+ * Direction follows the car, not the vendor constants: the OEM names 8/13 MCU_KEY_PREV and 9/14
+ * MCU_KEY_NEXT, but in the car 8/13 skip forward (2026-09-07, and backwards on 0.2 on
+ * 2026-09-23 while this table still said PREV). Same rule as [HiworldCanDecoder.swcAction].
  *
  * VOLUME_UP (1) / VOLUME_DOWN (2) are deliberately absent: the CAN app owns their auto-repeat
  * (`:838-848`, one MCU key per frame after [WheelGestures.VOL_REPEAT_FRAMES] held frames), so a
  * hold there is already spoken for.
  */
 enum class WheelKey(val canIds: Set<Int>, val mcuKey: Int) {
-    PREV(setOf(8, 13), SwcFallback.MCU_KEY_PREV),
-    NEXT(setOf(9, 14), SwcFallback.MCU_KEY_NEXT),
+    PREV(setOf(9, 14), SwcFallback.MCU_KEY_PREV),
+    NEXT(setOf(8, 13), SwcFallback.MCU_KEY_NEXT),
     MODE(setOf(12), SwcFallback.MCU_KEY_MODE),
     PLAY_PAUSE(setOf(15), SwcFallback.MCU_KEY_PLAYPAUSE),
     /** Id 5 is TALK while idle and HANGUP during a call (`:862-866`); we read it as TALK. */
