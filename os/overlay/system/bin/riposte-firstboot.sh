@@ -1,9 +1,23 @@
 #!/system/bin/sh
 # One-shot per /data: make CarLauncher the HOME role holder so the first boot
 # opens on it instead of the OEM chooser. The marker lives in /data so a
-# factory reset re-runs it and a re-flash of /system does not.
+# factory reset re-runs it and a re-flash of /system does not. The doze block
+# above the marker is the one exception and says why.
 MARK=/data/local/tmp/riposte-firstboot.done
 LAUNCHER=com.ripostelabs.carlauncher
+
+# Doze and dreams, every boot: the GSI ships both on and stock had neither. Car, 2026-09-23:
+# 2 s after the launcher started, DreamManagerService entered dreamland with SystemUI's
+# DozeService and PowerManagerService logged "Dozing..." with no "Going to sleep" line; the
+# panel stayed black, backlit and deaf to taps until a key woke it. Not under the marker: a unit
+# past its first boot must still get these, and `settings put` is idempotent.
+settings put secure doze_enabled 0                # DreamManager's doze dream (DozeService) is off
+settings put secure doze_always_on 0              # no always-on display
+settings put secure doze_pulse_on_pick_up 0       # no pulse from the pick-up sensor
+settings put secure doze_pulse_on_double_tap 0    # no pulse from a double tap on a dark panel
+settings put secure screensaver_enabled 0         # no screen saver (dream) at all
+settings put secure screensaver_activate_on_dock 0   # ... not when "docked" (the GSI default is on)
+settings put secure screensaver_activate_on_sleep 0  # ... not when the screen would sleep
 
 [ -f "$MARK" ] && exit 0
 
