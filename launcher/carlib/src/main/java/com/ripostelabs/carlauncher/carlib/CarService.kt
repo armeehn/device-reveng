@@ -430,6 +430,7 @@ class CarService(private val appContext: Context) {
     private val radioSource = RadioSource(
         select = { mode -> owner?.setMode(mode) ?: false },
         voice = { on -> owner?.send(McuOwnerProtocol.voiceState(on)) },
+        current = { owner?.lastMode },
     )
 
     /** `mValidMode == SRC_RADIO`: ours on the owner path, the gateway's answer otherwise. */

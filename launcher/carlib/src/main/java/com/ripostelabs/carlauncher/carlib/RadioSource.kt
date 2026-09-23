@@ -25,6 +25,8 @@ package com.ripostelabs.carlauncher.carlib
 class RadioSource(
     /** `42 v` (voiceState). The vendor radio clears it after each mode send and before it exits. */
     private val voice: (Boolean) -> Unit = {},
+    /** The valid mode now (the owner's last send); null when unknown, which counts as still ours. */
+    private val current: () -> McuOwnerProtocol.Mode? = { null },
     /** Last, so `RadioSource { mode -> … }` still reads as the mode selector. */
     private val select: (McuOwnerProtocol.Mode) -> Boolean,
 ) {
@@ -61,6 +63,13 @@ class RadioSource(
         held = false
         // exitCurMode starts with sendVoiceState(false) (MainActivity.java:742-758).
         voice(false)
+
+        // Another source (a media player, CarPlay) took the mode since: nothing to exit.
+        val moved = current()?.let { it != McuOwnerProtocol.Mode.RADIO } ?: false
+        if (moved) {
+            return false
+        }
+
         select(McuOwnerProtocol.Mode.NULL)
         return true
     }

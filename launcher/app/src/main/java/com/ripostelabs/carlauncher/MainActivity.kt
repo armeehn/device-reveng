@@ -177,6 +177,9 @@ class MainActivity : ComponentActivity() {
     /** Riposte OS 0.2 only: Android playback for [ArmAudioRoute]. */
     private var playbackWatch: PlaybackWatch? = null
 
+    /** Riposte OS 0.2 only: the source switching the vendor media apps and btsuite did. */
+    private var armAudioRoute: ArmAudioRoute? = null
+
     /** Riposte OS 0.2 only: whether CAMERA is granted, so the reverse screen can say why not. */
     private var cameraGranted by mutableStateOf(false)
     private lateinit var carService: CarService
@@ -365,10 +368,10 @@ class MainActivity : ComponentActivity() {
                 mcuSleepWake = McuSleepWake.forOwner(it, AndroidAccSource()).also { sw -> sw.start() }
                 ampVolumeKeys = volumeKeys.also { keys -> keys.start(applicationContext) }
 
-                // Android sound and CarPlay reach the amp only once the MCU is told, as
-                // eventcenter did (ArmAudioRoute). The mode send waits for an ACK: off main.
-                val audioRoute = ArmAudioRoute.forOwner(it)
-                playbackWatch = PlaybackWatch(applicationContext, audioRoute::onAndroidSound).also { w -> w.start() }
+                // Android sound, media players, BT audio and CarPlay reach the amp only once the
+                // MCU is told, as eventcenter and the vendor media apps did (ArmAudioRoute).
+                val audioRoute = ArmAudioRoute.forOwner(it).also { r -> armAudioRoute = r }
+                playbackWatch = PlaybackWatch(applicationContext, audioRoute::onPlayback).also { w -> w.start() }
                 lifecycleScope.launch(Dispatchers.IO) {
                     carEvents.carplayState.map { s -> s.connected }.distinctUntilChanged().collect(audioRoute::onProjection)
                 }
@@ -383,6 +386,10 @@ class MainActivity : ComponentActivity() {
             btCarKit = BtCarKit(applicationContext).also { kit ->
                 kit.start()
                 lifecycleScope.launch { kit.vendorView.collect(carEvents::feedVendorBt) }
+                // The A2DP stream is SRC_BTMUSIC, as btsuite selected it.
+                armAudioRoute?.let { r ->
+                    lifecycleScope.launch { kit.snapshot.map { s -> s.audioPlaying }.distinctUntilChanged().collect(r::onBtAudio) }
+                }
             }
         }
         carService.bind()
@@ -390,6 +397,10 @@ class MainActivity : ComponentActivity() {
         TunerHub.attach(CarTunerPort(carService), lifecycleScope)
         appRepository = AppRepository(this, ownerActive = mcuOwner != null)
         nowPlaying = NowPlayingRepository(applicationContext).also { it.start(lifecycleScope) }
+        // No media session left is the vendor players' activity destroy: exitCurMode.
+        armAudioRoute?.let { r ->
+            lifecycleScope.launch { nowPlaying.sources.map { s -> s.isNotEmpty() }.distinctUntilChanged().collect(r::onMediaSessions) }
+        }
         themeStore = ThemeStore(applicationContext)
 
         // v2.7: the notification shelf's mute filter. Constructed before the speech controller
