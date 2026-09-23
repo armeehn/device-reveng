@@ -23,6 +23,12 @@ class ReverseTrigger {
     var engaged: Boolean = false
         private set
 
+    /** What the last [onLine] did, for the log: most calls are speed ticks that move nothing. */
+    var lastEdge: Edge = Edge.NONE
+        private set
+
+    enum class Edge { NONE, UP, UP_TOO_FAST, DOWN }
+
     private var line: Boolean = false
 
     /**
@@ -32,12 +38,14 @@ class ReverseTrigger {
     fun onLine(reverseBit: Boolean, awake: Boolean, speedKmh: Int, thresholdKmh: Int): Boolean {
         val next = reverseBit && awake
         if (next == line) {
+            lastEdge = Edge.NONE
             return engaged
         }
 
         line = next
         if (!next) {
             engaged = false
+            lastEdge = Edge.DOWN
             return false
         }
 
@@ -45,6 +53,7 @@ class ReverseTrigger {
         if (thresholdKmh == THRESHOLD_OFF || speedKmh <= thresholdKmh) {
             engaged = true
         }
+        lastEdge = if (engaged) Edge.UP else Edge.UP_TOO_FAST
         return engaged
     }
 

@@ -79,4 +79,18 @@ class ReverseTriggerTest {
         assertEquals(80, ReverseTrigger.thresholdKmh(3))
         assertEquals(0, ReverseTrigger.thresholdKmh(7))
     }
+
+    /** The log line fires on edges only: a speed tick with the line unchanged is silent. */
+    @Test
+    fun edgeNamesWhatTheCallDid() {
+        assertEquals(ReverseTrigger.Edge.NONE, trigger.lastEdge)
+        trigger.onLine(reverseBit = true, awake = true, speedKmh = 40, thresholdKmh = 30)
+        assertEquals(ReverseTrigger.Edge.UP_TOO_FAST, trigger.lastEdge)
+        trigger.onLine(reverseBit = true, awake = true, speedKmh = 10, thresholdKmh = 30)
+        assertEquals(ReverseTrigger.Edge.NONE, trigger.lastEdge)
+        trigger.onLine(reverseBit = false, awake = true, speedKmh = 10, thresholdKmh = 30)
+        assertEquals(ReverseTrigger.Edge.DOWN, trigger.lastEdge)
+        trigger.onLine(reverseBit = true, awake = true, speedKmh = 10, thresholdKmh = 30)
+        assertEquals(ReverseTrigger.Edge.UP, trigger.lastEdge)
+    }
 }
