@@ -31,6 +31,9 @@ readonly ZLINK_BINS="z-link z-mdnsd z-usbmuxd"    # the loader and the two helpe
 readonly AIS_DIR=riposte/ais                   # the AIS camera server on gsi, see step 3d
 readonly AIS_BIN=ais_server
 readonly AIS_VENDOR_LIBS="libmmosal.so"        # what it links from /vendor/lib64, off a /system daemon's path
+readonly AIS_CLIENT_LIB=libais_camera.so       # what the launcher dlopens, see step 3d
+readonly AIS_CLIENT_DEPS="libais_fibo_carcam.so libais_core.so libais_client.so libais_base.so libais_log.so"
+readonly PUBLIC_LIBS=etc/public.libraries.txt   # the /system libs the linker lets an app dlopen
 readonly LAUNCHER_NAME=CarLauncher
 readonly SUITE_DIR=product/app
 readonly TOOLS_BIN=riposte/bin                 # the debug toolbelt, see step 3c
@@ -200,13 +203,24 @@ if [ "$PROFILE" = gsi ]; then
   [ -x "$ASRC/bin/$AIS_BIN" ] && [ -f "$ASRC/lib64/libais_pr2000.so" ] || die "$BASE/system.img carries no AIS camera server"
   cp "$ASRC/bin/$AIS_BIN" "$SYS/$AIS_DIR/bin/"
   cp "$ASRC/lib64"/libais*.so "$SYS/$AIS_DIR/lib/"
+  # The launcher's side of the same path: its shim dlopens libais_camera.so from the app
+  # namespace, which reaches /system/lib64 only through the public list (stock lists it there,
+  # /system/etc/public.libraries.txt:31). Bundling it in the APK would not do: it links
+  # libgui/libandroid_runtime, private to the system namespace. Nor a public.libraries-riposte.txt:
+  # libnativeloader takes only lib*.riposte.so names from a company file.
+  [ -f "$SYS/$PUBLIC_LIBS" ] || die "the GSI carries no $PUBLIC_LIBS"
+  for l in $AIS_CLIENT_LIB $AIS_CLIENT_DEPS; do cp "$ASRC/lib64/$l" "$SYS/lib64/"; done
+  grep -qx "$AIS_CLIENT_LIB" "$SYS/$PUBLIC_LIBS" || echo "$AIS_CLIENT_LIB" >> "$SYS/$PUBLIC_LIBS"
   umount "$AMNT"
   [ -f "$BASE/vendor.img" ] || die "$BASE/vendor.img missing: the AIS server links $AIS_VENDOR_LIBS from it"
   unsparse "$BASE/vendor.img" "$WORK/base-vendor.raw"
   mount -o ro,loop "$WORK/base-vendor.raw" "$VMNT" || die "cannot mount $BASE/vendor.img"
-  for l in $AIS_VENDOR_LIBS; do cp "$VMNT/lib64/$l" "$SYS/$AIS_DIR/lib/"; done
+  for l in $AIS_VENDOR_LIBS; do cp "$VMNT/lib64/$l" "$SYS/$AIS_DIR/lib/"; cp "$VMNT/lib64/$l" "$SYS/lib64/"; done
   umount "$VMNT"
   label_system_file "$SYS/$AIS_DIR" "$SYS/$AIS_DIR/bin" "$SYS/$AIS_DIR/lib" "$SYS/$AIS_DIR"/bin/* "$SYS/$AIS_DIR"/lib/*
+  # shellcheck disable=SC2086
+  label_system_file $(for l in $AIS_CLIENT_LIB $AIS_CLIENT_DEPS $AIS_VENDOR_LIBS; do printf '%s ' "$SYS/lib64/$l"; done) "$SYS/$PUBLIC_LIBS"
+  log "AIS client on the public list: $AIS_CLIENT_LIB + $(echo $AIS_CLIENT_DEPS $AIS_VENDOR_LIBS | wc -w) deps in /system/lib64"
   chmod 0755 "$SYS/$AIS_DIR"/bin/*
   log "lifted the AIS camera server: $(ls "$SYS/$AIS_DIR/lib" | wc -l) libs + $AIS_BIN"
 fi
