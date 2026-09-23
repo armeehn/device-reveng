@@ -168,6 +168,8 @@ object McuOwnerProtocol {
         val mainVolume: Int? = null,
         /** SYS_SLEEP_TIME defaults to 0, the 8 h row (:9361, getRecordInteger(..., 0) at :3797). */
         val sleepTime: SleepTime = SleepTime.H8,
+        /** The setup table to re-send, as the vendor did from SysVar; null sends none ([McuSetupProtocol.boot]). */
+        val setup: McuSetup? = null,
     )
 
     /**
@@ -300,7 +302,7 @@ object McuOwnerProtocol {
         mode(Mode.MCU_VERSION),
         setup(SETUP_RDS, if (config.rds) 0 else 1),
         setup(SETUP_ZONE, config.radioZone),
-    ) + vendorInit() + listOfNotNull(
+    ) + setupTable(config) + vendorInit() + listOfNotNull(
         // sendSleepTime sits between the config blocks and sendBacklight (:3797-3798).
         sleepTime(config.sleepTime),
         backlight(config.backlightDay, config.backlightNight),
@@ -363,7 +365,7 @@ object McuOwnerProtocol {
     fun reload(config: StartupConfig, lastMode: Mode?): List<ByteArray> = listOf(
         mode(Mode.POWER_ON),
         mode(Mode.MCU_VERSION),
-    ) + configBlocks() + listOf(
+    ) + setupTable(config) + configBlocks() + listOf(
         sleepTime(config.sleepTime),
         backlight(config.backlightDay, config.backlightNight),
         mode(Mode.POWER_ON),
@@ -397,6 +399,10 @@ object McuOwnerProtocol {
         val routed = McuCommand.framed(payload)
         return McuSerial.encode(routed[0].toInt() and BYTE, routed.copyOfRange(1, routed.size))
     }
+
+    /** The typed setup frames both boot and wake re-send (reloadParam, :3627-3632), when there is a table. */
+    private fun setupTable(config: StartupConfig): List<ByteArray> =
+        config.setup?.let(McuSetupProtocol::boot) ?: emptyList()
 
     /** `96 01`: the MCU says it woke (onCmdMcuSleepState, EventService.java:2270-2280). */
     fun isWake(command: McuSerial.Command): Boolean =

@@ -29,6 +29,7 @@ import kotlinx.coroutines.flow.StateFlow
 import com.ripostelabs.carlauncher.carlib.CarService
 import com.ripostelabs.carlauncher.carlib.BtCarKit
 import com.ripostelabs.carlauncher.carlib.McuOwner
+import com.ripostelabs.carlauncher.carlib.McuSetupStore
 import com.ripostelabs.carlauncher.data.AppDirectoryStore
 import com.ripostelabs.carlauncher.data.CarSettingsController
 import com.ripostelabs.carlauncher.data.RadioPresetsStore
@@ -68,6 +69,8 @@ fun SettingsHost(
     mcuStatus: StateFlow<McuOwner.Status>? = null,
     // Riposte OS 0.2: the car-kit Bluetooth reader for the Doctor; null = btsuite's slot.
     carKit: BtCarKit? = null,
+    // Riposte OS 0.2: the MCU setup table the owner re-sends; null = vendor gateway audio.
+    mcuSetup: McuSetupStore? = null,
 ) {
     // A deep link (the top bar's power chip) opens its page alone: the driver came from Home
     // and one Back goes back there. The hub under it left them a second Back away (Maestro
@@ -214,11 +217,15 @@ fun SettingsHost(
                 onBack = ::pop,
             )
 
-            SettingsRoute.Audio -> AudioSettingsScreen(
-                controller = controller,
-                carService = carService,
-                onBack = ::pop,
-            )
+            SettingsRoute.Audio -> if (mcuSetup != null) {
+                McuAudioSettingsScreen(store = mcuSetup, onBack = ::pop)
+            } else {
+                AudioSettingsScreen(
+                    controller = controller,
+                    carService = carService,
+                    onBack = ::pop,
+                )
+            }
 
             SettingsRoute.Climate -> ClimateSettingsScreen(
                 controller = controller,
@@ -249,6 +256,7 @@ fun SettingsHost(
                 controller = controller,
                 carEvents = carEvents,
                 onBack = ::pop,
+                mcuSetup = mcuSetup,
             )
 
             // v2.9: root-only capabilities, including the one destructive action in the app.
