@@ -61,4 +61,22 @@ class RadioSourceTest {
             sent,
         )
     }
+
+    /**
+     * The vendor radio clears the MCU's voice-duck flag around both edges: `42 00` after it
+     * sends the mode (MainActivity.java:503-516) and again before `exitCurMode` (:742-758).
+     */
+    @Test
+    fun voiceFlagClearedOnBothEdges() {
+        val log = mutableListOf<String>()
+        val source = RadioSource(
+            select = { mode -> log += "mode:${mode.name}"; true },
+            voice = { on -> log += "voice:$on" },
+        )
+
+        source.claim()
+        source.release()
+
+        assertEquals(listOf("mode:RADIO", "voice:false", "voice:false", "mode:NULL"), log)
+    }
 }

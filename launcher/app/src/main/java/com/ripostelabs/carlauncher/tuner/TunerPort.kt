@@ -17,6 +17,10 @@ interface TunerPort {
     fun isClaimed(): Boolean
     fun sendKey(key: Int)
     fun tune(freq: Int, fm: Boolean)
+    /** `02 64 slot`: recall slot 0..41 of the MCU's station list. */
+    fun selectPreset(slot: Int)
+    /** `02 65 slot`: store the current station there. */
+    fun storePreset(slot: Int)
 }
 
 /** The launcher's link: owner path writes OP_RADIO_KEY / OP_USER_FREQ, binder path asks the gateway. */
@@ -33,4 +37,6 @@ class CarTunerPort(private val car: CarService) : TunerPort {
     override fun isClaimed(): Boolean = car.isRadioClaimed()
     override fun sendKey(key: Int) = car.sendRadioKey(key)
     override fun tune(freq: Int, fm: Boolean) = car.sendUserFreq(freq, fm)
+    override fun selectPreset(slot: Int) = car.radioSelectPreset(slot)
+    override fun storePreset(slot: Int) = car.radioStorePreset(slot)
 }

@@ -24,6 +24,11 @@ data class TunerState(
     val ta: Boolean,
     val af: Boolean,
     val stationList: IntArray,
+    /** Appended after the list so a reader of the first shape still parses; see [RadioState]. */
+    val pty: Int = 0,
+    val scanning: Boolean = false,
+    val autoStoring: Boolean = false,
+    val zone: Int = 0,
 ) : Parcelable {
 
     override fun describeContents(): Int = 0
@@ -40,6 +45,10 @@ data class TunerState(
         dest.writeInt(if (ta) 1 else 0)
         dest.writeInt(if (af) 1 else 0)
         dest.writeIntArray(stationList)
+        dest.writeInt(pty)
+        dest.writeInt(if (scanning) 1 else 0)
+        dest.writeInt(if (autoStoring) 1 else 0)
+        dest.writeInt(zone)
     }
 
     companion object {
@@ -61,6 +70,10 @@ data class TunerState(
             ta = state.ta,
             af = state.af,
             stationList = IntArray(McuOwnerProtocol.RADIO_FREQ_LIST_SIZE) { state.stationList.getOrElse(it) { 0 } },
+            pty = state.ptyNumber,
+            scanning = state.scanning,
+            autoStoring = state.autoStoring,
+            zone = state.zone,
         )
 
         @JvmField
@@ -77,6 +90,10 @@ data class TunerState(
                 ta = source.readInt() != 0,
                 af = source.readInt() != 0,
                 stationList = source.createIntArray() ?: IntArray(McuOwnerProtocol.RADIO_FREQ_LIST_SIZE),
+                pty = source.readInt(),
+                scanning = source.readInt() != 0,
+                autoStoring = source.readInt() != 0,
+                zone = source.readInt(),
             )
 
             override fun newArray(size: Int): Array<TunerState?> = arrayOfNulls(size)

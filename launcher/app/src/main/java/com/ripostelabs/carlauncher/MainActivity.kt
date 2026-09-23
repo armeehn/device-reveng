@@ -34,6 +34,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.ripostelabs.carlauncher.carlib.BtCarKit
 import com.ripostelabs.carlauncher.carlib.CarEvents
+import com.ripostelabs.carlauncher.carlib.RadioMemory
 import com.ripostelabs.carlauncher.carlib.VolumeMemory
 import com.ripostelabs.carlauncher.carlib.AmpVolumeKeys
 import com.ripostelabs.carlauncher.data.GpsClock
@@ -320,6 +321,8 @@ class MainActivity : ComponentActivity() {
             // wake corrects the clock and hands it on to the MCU, as the vendor gateway did.
             gpsClock = GpsClock(applicationContext, onClockSet = mcuClock::onGpsClock).also { it.start() }
             val volumeMemory = VolumeMemory(applicationContext)
+            val radioMemory = RadioMemory(applicationContext)
+            carService.radioState.seed(radioMemory.restore())
             val volumeKeys = AmpVolumeKeys(carService::setVolume, volumeMemory.level())
             val ownerListener = McuOwner.FanOut(
                 carEvents.ownerListener(CanCaptureService.vehicle(), carService.radioState),
@@ -330,6 +333,7 @@ class MainActivity : ComponentActivity() {
                 carService.volumeState,
                 McuStateExport().also { mcuStateExport = it; it.start() },
                 volumeMemory,
+                radioMemory,
                 volumeKeys,
                 McuSleepWake.PowerKeyListener { mcuSleepWake },
             )
@@ -337,7 +341,10 @@ class MainActivity : ComponentActivity() {
                 ownerGate,
                 ownerListener,
                 openLink = { ownerGate.mcuLink().open() },
-                config = McuOwnerProtocol.StartupConfig(mainVolume = volumeMemory.level()),
+                config = McuOwnerProtocol.StartupConfig(
+                    mainVolume = volumeMemory.level(),
+                    radioZone = radioMemory.zone(),
+                ),
                 initialCar = CarProfiles.byId(settingsStore.settings.value.canBoxCar),
             ).also {
                 carService.attachOwner(it)

@@ -26,6 +26,17 @@ data class RadioState(
     val tp: Boolean = false,
     val stMono: Boolean = false,
     val dxLoc: Boolean = false,
+    /** Sub 0 byte 3 bit 1: the tuner is using PTY (`mRadioPTYState`). */
+    val ptyEnabled: Boolean = false,
+    /** Sub 0 byte 2 bit 2 and bit 3: a traffic announcement is on air; the station carries no PTY. */
+    val traffic: Boolean = false,
+    val noPty: Boolean = false,
+    /** Sub 0 byte 3 bit 7, APS: a preset scan is running (`mRadioAPSState`, the vendor's "scanning" tip). */
+    val scanning: Boolean = false,
+    /** Sub 0 byte 3 bit 6, AMS: auto-store is sweeping the band (`mRadioAMSState`, "searching"). */
+    val autoStoring: Boolean = false,
+    /** The band plan the MCU was given at start (`SETUP_ZONE`); see [RadioZone]. */
+    val zone: Int = 0,
     val stationList: List<Int> = List(McuOwnerProtocol.RADIO_FREQ_LIST_SIZE) { 0 },
     val updatedAt: Long = 0L,
 )
@@ -51,6 +62,19 @@ class RadioStateHolder(
     private val _state = MutableStateFlow(RadioState())
     val state: StateFlow<RadioState> = _state.asStateFlow()
 
+    /**
+     * Fill the cache before the MCU has reported, as `initRadioZone` fills `mRadioFreqList`
+     * (EventService.java:6484) and [RadioMemory] remembers the last station. A report always
+     * wins: once [RadioState.updatedAt] is set the seed is ignored.
+     */
+    fun seed(state: RadioState) {
+        if (_state.value.updatedAt != 0L) {
+            return
+        }
+
+        _state.value = state.copy(updatedAt = 0L)
+    }
+
     /** Called from the owner's pump thread only, so read-modify-write needs no loop. */
     fun onRadio(event: McuOwnerProtocol.RadioEvent) {
         val current = _state.value
@@ -72,6 +96,11 @@ class RadioStateHolder(
             tp = event.tpIcon,
             stMono = event.stMono,
             dxLoc = event.loc,
+            ptyEnabled = event.pty,
+            traffic = event.traffic,
+            noPty = event.noPty,
+            scanning = event.aps,
+            autoStoring = event.ams,
             updatedAt = now,
         )
 

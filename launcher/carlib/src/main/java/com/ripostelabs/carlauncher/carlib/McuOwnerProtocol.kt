@@ -39,12 +39,21 @@ object McuOwnerProtocol {
     private const val OP_BT_STATE = 0x0B      // sendBTState, :4336-4342
     private const val OP_USER_FREQ = 0x0C     // sendUserFreq, :4300
     private const val OP_RTC = 0x13           // sendRTCTimer, :9469
+    private const val OP_VOICE_STATE = 0x42   // CMD_SEND_VOICE_STATE, EventUtils.java:1147; sendVoiceState, :11769
     private const val OP_BACKLIGHT = 0x2E     // sendBacklight, :9639-9659
     private const val OP_CONFIG = 0x4F        // sendFactoryMcuSet and the other 4F sub-id blocks
     private const val OP_SYS_CONFIG = 0x49    // sendSleepTime :9361, sendVolumeGain :9662: `49 sub-id ...`
     private const val CFG_SLEEP_TIME = 0x05   // sendSleepTime's sub-id (:9370)
     private const val CFG_FADER = 0x10        // the 48-byte fader/volume table, all 0x0a on this unit
     private const val BT_STATE_ON = 1         // sendBTState(1), sent after the config blocks
+
+    /**
+     * Two `02` bodies the vendor radio sends as raw MCU commands rather than keys
+     * (`sendRadioCmd`, MainActivity.java:614-619; FreqView.java:191): cmd 100 recalls a slot of
+     * the 42-entry station list, cmd 101 stores the current station into one.
+     */
+    private const val RADIO_CMD_PRESET_SELECT = 0x64
+    private const val RADIO_CMD_PRESET_STORE = 0x65
 
     private const val SETUP_RDS = 0x00
     private const val SETUP_ZONE = 0x01
@@ -256,6 +265,19 @@ object McuOwnerProtocol {
     fun mute(on: Boolean): ByteArray = McuSerial.encode(OP_MUTE, bytes(if (on) 1 else 0))
 
     fun radioKey(key: Int): ByteArray = McuSerial.encode(OP_RADIO_KEY, bytes(key))
+
+    /** `02 64 slot`: PLAY_BY_INDEX, slot 0..41 of the station list (MainActivity.java:169-175). */
+    fun radioPresetSelect(slot: Int): ByteArray = McuSerial.encode(OP_RADIO_KEY, bytes(RADIO_CMD_PRESET_SELECT, slot))
+
+    /** `02 65 slot`: a long press on a list entry stores the current station there (FreqView.java:160-167). */
+    fun radioPresetStore(slot: Int): ByteArray = McuSerial.encode(OP_RADIO_KEY, bytes(RADIO_CMD_PRESET_STORE, slot))
+
+    /**
+     * `42 v`: the radio's `sendVoiceState` (MainActivity.java:817-832). 1 while a voice prompt
+     * has transient audio focus so the MCU ducks the tuner, 0 on focus gain, on every radio
+     * mode send and before leaving the mode.
+     */
+    fun voiceState(on: Boolean): ByteArray = McuSerial.encode(OP_VOICE_STATE, bytes(if (on) 1 else 0))
 
     /** `0C fH fL band` where band is 0 for FM and 1 for AM (sendUserFreq, EventService.java:4300). */
     fun userFreq(freq: Int, fm: Boolean): ByteArray =

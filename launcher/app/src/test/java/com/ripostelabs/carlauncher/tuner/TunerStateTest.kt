@@ -41,4 +41,17 @@ class TunerStateTest {
         assertEquals(0, t.freq)
         assertArrayEquals(IntArray(McuOwnerProtocol.RADIO_FREQ_LIST_SIZE), t.stationList)
     }
+
+    /** The scan runs, the PTY code and the zone ride along after the station list (appended, so old readers still parse). */
+    @Test
+    fun mapsScanRunsPtyAndZone() {
+        val state = RadioState(ptyNumber = 10, scanning = true, autoStoring = false, zone = 1, updatedAt = 3)
+
+        val t = TunerState.of(state)
+
+        assertEquals(10, t.pty)
+        assertTrue(t.scanning)
+        assertFalse(t.autoStoring)
+        assertEquals(1, t.zone)
+    }
 }

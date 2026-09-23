@@ -9,7 +9,8 @@ import com.ripostelabs.carlauncher.tuner.TunerState;
  *
  * Transaction codes, for a client built without the aidl tool (declaration order + 1):
  * claim 1, release 2, isClaimed 3, sendKey 4, tune 5, getState 6, registerCallback 7,
- * unregisterCallback 8. Descriptor `com.ripostelabs.carlauncher.tuner.ITuner`.
+ * unregisterCallback 8, selectPreset 9, storePreset 10. Descriptor
+ * `com.ripostelabs.carlauncher.tuner.ITuner`.
  */
 interface ITuner {
     /** RadioSource.claim(): sendMode(SRC_RADIO). True when the tuner is now the source. */
@@ -28,4 +29,10 @@ interface ITuner {
     TunerState getState();
     void registerCallback(ITunerCallback cb);
     void unregisterCallback(ITunerCallback cb);
+    /**
+     * The MCU's own preset banks (`02 64 slot` / `02 65 slot`, the vendor radio's cmd 100/101).
+     * slot is 0..41 into TunerState.stationList: FM banks 0..17, AM 18..41.
+     */
+    void selectPreset(int slot);
+    void storePreset(int slot);
 }

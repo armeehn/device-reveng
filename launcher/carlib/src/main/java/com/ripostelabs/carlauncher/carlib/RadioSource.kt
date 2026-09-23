@@ -22,7 +22,12 @@ package com.ripostelabs.carlauncher.carlib
  * ours, otherwise SRC_NULL on the wire. Not HOME: SRC_HOME(43) exists in `eSrcMode`
  * (EventUtils.java:2034) but nothing in EventService ever sends it.
  */
-class RadioSource(private val select: (McuOwnerProtocol.Mode) -> Boolean) {
+class RadioSource(
+    /** `42 v` (voiceState). The vendor radio clears it after each mode send and before it exits. */
+    private val voice: (Boolean) -> Unit = {},
+    /** Last, so `RadioSource { mode -> … }` still reads as the mode selector. */
+    private val select: (McuOwnerProtocol.Mode) -> Boolean,
+) {
 
     /** Mirrors `mValidMode == SRC_RADIO`. */
     @Volatile
@@ -32,7 +37,19 @@ class RadioSource(private val select: (McuOwnerProtocol.Mode) -> Boolean) {
     /** Take the tuner source. Returns the MCU's ACK; the source is held either way. */
     fun claim(): Boolean {
         held = true
-        return select(McuOwnerProtocol.Mode.RADIO)
+        val acked = select(McuOwnerProtocol.Mode.RADIO)
+        // sendRadioModeToEventCenter ends with sendVoiceState(false) (MainActivity.java:503-516).
+        voice(false)
+        return acked
+    }
+
+    /** A transient focus loss: `42 01` so the MCU ducks the tuner under the prompt (MainActivity.java:363-399). */
+    fun duck(on: Boolean) {
+        if (!held) {
+            return
+        }
+
+        voice(on)
     }
 
     /** Hand the source back. False when it was never ours, in which case nothing is sent. */
@@ -42,6 +59,8 @@ class RadioSource(private val select: (McuOwnerProtocol.Mode) -> Boolean) {
         }
 
         held = false
+        // exitCurMode starts with sendVoiceState(false) (MainActivity.java:742-758).
+        voice(false)
         select(McuOwnerProtocol.Mode.NULL)
         return true
     }
