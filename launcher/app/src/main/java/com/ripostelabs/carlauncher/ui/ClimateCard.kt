@@ -2,6 +2,7 @@ package com.ripostelabs.carlauncher.ui
 
 import com.ripostelabs.carlauncher.ui.theme.carCard
 import com.ripostelabs.carlauncher.ui.theme.DISABLED_ALPHA
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -43,13 +44,17 @@ import com.ripostelabs.carlauncher.carlib.ClimateState
 fun ClimateReadout(
     carEvents: CarEvents,
     modifier: Modifier = Modifier,
+    // Tap opens the HVAC controls; null keeps the card glance-only (the 0.1 companion build).
+    onClick: (() -> Unit)? = null,
 ) {
     val broadcast by carEvents.climate.collectAsStateSafe(initial = null)
 
     val state: ClimateState? = broadcast?.takeIf { it.valid }
 
     Card(
-        modifier = modifier.carCard(accent = MaterialTheme.colorScheme.tertiary), // marigold in rotation
+        modifier = modifier
+            .carCard(accent = MaterialTheme.colorScheme.tertiary) // marigold in rotation
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
     ) {
         if (state == null) {

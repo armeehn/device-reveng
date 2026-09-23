@@ -279,6 +279,29 @@ class CarService(private val appContext: Context) {
         }
     }
 
+    /** One thread so a press and its release never interleave with another key's, as canbus2's. */
+    private val climateExecutor = Executors.newSingleThreadExecutor { r -> Thread(r, "car-climate") }
+
+    /**
+     * One HVAC button. Owner attached: the box key frame, press then release
+     * [ClimateKeys.RELEASE_GAP_MS] later, as canbus2 sends it; otherwise the 0.1 broadcast the
+     * CAN app turns into the same frame. UNVERIFIED on the car either way.
+     */
+    fun pressClimate(button: ClimateButton) {
+        val o = owner
+        if (o == null) {
+            ClimateControl(appContext).press(button)
+            return
+        }
+
+        val press = ClimateKeys.press(button) ?: return
+        climateExecutor.execute {
+            o.send(press.down)
+            Thread.sleep(ClimateKeys.RELEASE_GAP_MS)
+            o.send(press.up)
+        }
+    }
+
     /** Owner path only: write the clock into the MCU's RTC (`13` frame). The gateway does its own. */
     fun sendRtc(now: LocalDateTime) {
         owner?.send(McuOwnerProtocol.rtc(now))

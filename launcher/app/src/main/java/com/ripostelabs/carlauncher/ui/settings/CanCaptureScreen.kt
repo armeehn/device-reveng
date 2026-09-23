@@ -567,6 +567,18 @@ private fun decodedRows(sig: CanSignal): Map<String, String> = when (sig) {
         put("Set temp L/R", "${temp(sig.leftTempC)} / ${temp(sig.rightTempC)}" + if (sig.dual) " (dual)" else "")
         put("Seat heat L/R", "${level(sig.seatHeatLeft)} / ${level(sig.seatHeatRight)}")
         put("Seat vent L/R", "${level(sig.seatCoolLeft)} / ${level(sig.seatCoolRight)}")
+        put("Defrost", listOfNotNull(
+            if (sig.maxFront) "front" else null,
+            if (sig.rearDefog) "rear" else null,
+            if (sig.autoDefog) "auto" else null,
+        ).joinToString(", ").ifEmpty { "off" })
+        put("Outside", sig.outsideTempC?.let { "%.1f\u00B0C".format(it) } ?: "--")
+    }
+    is CanSignal.ClimateRear -> buildMap {
+        fun level(v: Int) = if (v == 0) "off" else "$v"
+        put("Rear set temp R", sig.rearRightTempC?.let { "%.1f".format(it) } ?: "LO/HI")
+        put("Rear seat heat L/R", "${level(sig.rearSeatHeatLeft)} / ${level(sig.rearSeatHeatRight)}")
+        put("Rear seat vent L/R", "${level(sig.rearSeatCoolLeft)} / ${level(sig.rearSeatCoolRight)}")
     }
     is CanSignal.SysEvent -> buildMap {
         // reverseRaw is the bit WITHOUT the vendor's ACC gate, so it is labelled as raw rather
