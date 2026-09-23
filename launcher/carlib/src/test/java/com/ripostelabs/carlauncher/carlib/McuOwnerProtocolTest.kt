@@ -495,6 +495,28 @@ class McuOwnerProtocolTest {
         assertArrayEquals(McuSerial.encode(0x42, bytes(0x01)), McuOwnerProtocol.voiceState(true))
         assertArrayEquals(McuSerial.encode(0x42, bytes(0x00)), McuOwnerProtocol.voiceState(false))
     }
+
+    // ---- Steering-wheel learn (sendWheelKey, EventService.java:6369-6375) ---------------
+
+    /** `07 70` enters learn mode: LEN 03 + 07 + 70 = 0x7A, ~0x7A = 0x85. */
+    @Test
+    fun wheelLearnEnterFrame() {
+        assertArrayEquals(bytes(0x0D, 0x0A, 0x03, 0x07, 0x70, 0x85, 0x00), McuOwnerProtocol.wheelLearn(WheelKeyMap.LEARN_ENTER))
+    }
+
+    /** `07 00` teaches slot 0: 03 + 07 + 00 = 0x0A, ~0x0A = 0xF5. */
+    @Test
+    fun wheelLearnSlotFrame() {
+        assertArrayEquals(bytes(0x0D, 0x0A, 0x03, 0x07, 0x00, 0xF5, 0x00), McuOwnerProtocol.wheelLearn(0))
+    }
+
+    /** `88 hi lo` is the learned-slot mask, big-endian (OnCmdWheelState, :3060-3068). */
+    @Test
+    fun wheelStateIsABigEndianMask() {
+        assertEquals(0x0105, McuOwnerProtocol.wheelState(command(McuOpcode.WHEEL_STATE.code, 0x01, 0x05)))
+        assertNull(McuOwnerProtocol.wheelState(command(McuOpcode.WHEEL_STATE.code, 0x01)))
+        assertNull(McuOwnerProtocol.wheelState(command(McuOpcode.KEY_EVENT.code, 0x01, 0x05)))
+    }
 }
 
 /** The two BT-call frames eventcenter relays for btsuite; vectors summed by hand like the rest. */

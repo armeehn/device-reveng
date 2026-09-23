@@ -102,6 +102,9 @@ class McuOwner(
 
         /** A `74` resistive-wheel edge; the vendor's STEER_WHEEL_INFOR, unbroadcast. */
         fun onWheelKey(key: McuOwnerProtocol.WheelKey) {}
+
+        /** An `88` learned-slot mask; the vendor's STEER_WHEEL_STATUS ([WheelLearn] reads it). */
+        fun onWheelState(mask: Int) {}
         /** One `73` RADIO_EVENT; [RadioStateHolder] folds them into what the tuner screen reads. */
         fun onRadio(event: McuOwnerProtocol.RadioEvent) {}
 
@@ -130,6 +133,8 @@ class McuOwner(
         override fun onPanelKey(key: McuOwnerProtocol.PanelKey) = targets.forEach { it.onPanelKey(key) }
 
         override fun onWheelKey(key: McuOwnerProtocol.WheelKey) = targets.forEach { it.onWheelKey(key) }
+
+        override fun onWheelState(mask: Int) = targets.forEach { it.onWheelState(mask) }
 
         // Missing until the tuner screen stayed "unavailable" on the farm: the `73` events reached
         // the fan-out and stopped at the interface's no-op default. Every callback goes through.
@@ -498,6 +503,7 @@ class McuOwner(
         McuOwnerProtocol.mute(command)?.let { listener.onMute(it); return }
         McuOwnerProtocol.panelKey(command)?.let { onPanelKey(it); return }
         McuOwnerProtocol.wheelKey(command)?.let { listener.onWheelKey(it); return }
+        McuOwnerProtocol.wheelState(command)?.let { listener.onWheelState(it); return }
         McuOwnerProtocol.radioEvent(command)?.let { listener.onRadio(it); return }
         McuOwnerProtocol.rtcTime(command)?.let { listener.onRtc(it); return }
         if (McuOwnerProtocol.isWake(command)) {
