@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ripostelabs.carlauncher.carlib.CarEvents
+import com.ripostelabs.carlauncher.carlib.McuSetupStore
 import com.ripostelabs.carlauncher.data.CarSettingsController
 import com.ripostelabs.carlauncher.data.PowerOptions
 import com.ripostelabs.carlauncher.data.SettingKeys
@@ -22,6 +23,8 @@ fun PowerSettingsScreen(
     controller: CarSettingsController,
     carEvents: CarEvents,
     onBack: () -> Unit,
+    // Riposte OS 0.2: the sleep option lives in the MCU setup store and goes out as `49 05`.
+    mcuSetup: McuSetupStore? = null,
 ) {
     val snap by controller.snapshot.collectAsStateWithLifecycle()
     snap
@@ -79,15 +82,25 @@ fun PowerSettingsScreen(
                 checked = controller.getBoolean(SettingKeys.SLEEP_SWITCH, false),
                 onChange = { controller.setBoolean(SettingKeys.SLEEP_SWITCH, it) },
             )
-            OptionSetting(
-                controller = controller,
-                label = "Sleep duration",
-                description = "Vendor option 1/2/3; the MCU's unit for these is unverified",
-                key = SettingKeys.SLEEP_TIME,
-                default = PowerOptions.SLEEP_TIME_DEFAULT,
-                options = PowerOptions.SLEEP_TIME,
-                enabled = controller.getBoolean(SettingKeys.SLEEP_SWITCH, false),
-            )
+            if (mcuSetup != null) {
+                val setup by mcuSetup.setup.collectAsStateWithLifecycle()
+                PickerSetting(
+                    label = "Sleep duration",
+                    current = setup.sleepTime,
+                    options = PowerOptions.SLEEP_TIME,
+                    onSelect = mcuSetup::setSleepTime,
+                )
+            } else {
+                OptionSetting(
+                    controller = controller,
+                    label = "Sleep duration",
+                    description = "Vendor option 1/2/3; the MCU's unit for these is unverified",
+                    key = SettingKeys.SLEEP_TIME,
+                    default = PowerOptions.SLEEP_TIME_DEFAULT,
+                    options = PowerOptions.SLEEP_TIME,
+                    enabled = controller.getBoolean(SettingKeys.SLEEP_SWITCH, false),
+                )
+            }
         }
 
         SettingsSection(title = "Screen timeouts") {

@@ -34,6 +34,8 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.ripostelabs.carlauncher.carlib.BtCarKit
 import com.ripostelabs.carlauncher.carlib.CarEvents
+import com.ripostelabs.carlauncher.carlib.McuSetupProtocol
+import com.ripostelabs.carlauncher.carlib.McuSetupStore
 import com.ripostelabs.carlauncher.carlib.RadioMemory
 import com.ripostelabs.carlauncher.carlib.VolumeMemory
 import com.ripostelabs.carlauncher.carlib.AmpVolumeKeys
@@ -155,6 +157,7 @@ class MainActivity : ComponentActivity() {
 
     /** Riposte OS 0.2 only: our MCU port owner. Null on a stock or 0.1 slot. */
     private var mcuOwner: McuOwner? = null
+    private var mcuSetupStore: McuSetupStore? = null
 
     /** Riposte OS 0.2 only: the decoded MCU events on 127.0.0.1:5589 for Helm, the car computer. */
     private var mcuStateExport: McuStateExport? = null
@@ -331,6 +334,9 @@ class MainActivity : ComponentActivity() {
             val volumeMemory = VolumeMemory(applicationContext)
             val radioMemory = RadioMemory(applicationContext)
             carService.radioState.seed(radioMemory.restore())
+            // The MCU setup table (EQ, gains, beep, sleep): persisted here, re-sent at boot.
+            val setupStore = McuSetupStore(applicationContext) { frame -> mcuOwner?.send(frame) }
+            mcuSetupStore = setupStore
             val volumeKeys = AmpVolumeKeys(carService::setVolume, volumeMemory.level())
             val ownerListener = McuOwner.FanOut(
                 carEvents.ownerListener(CanCaptureService.vehicle(), carService.radioState),
@@ -344,6 +350,7 @@ class MainActivity : ComponentActivity() {
                 radioMemory,
                 volumeKeys,
                 McuSleepWake.PowerKeyListener { mcuSleepWake },
+                setupStore,
             )
             mcuOwner = McuOwner(
                 ownerGate,
@@ -352,6 +359,8 @@ class MainActivity : ComponentActivity() {
                 config = McuOwnerProtocol.StartupConfig(
                     mainVolume = volumeMemory.level(),
                     radioZone = radioMemory.zone(),
+                    sleepTime = McuSetupProtocol.sleepOption(setupStore.setup.value.sleepTime),
+                    setup = setupStore.setup.value,
                 ),
                 initialCar = CarProfiles.byId(settingsStore.settings.value.canBoxCar),
             ).also {
@@ -996,6 +1005,7 @@ class MainActivity : ComponentActivity() {
                                 initialRoute = s.initialRoute,
                                 mcuStatus = mcuOwner?.status,
                                 carKit = btCarKit,
+                                mcuSetup = mcuSetupStore,
                             )
 
                             Screen.Themes -> ThemesScreen(
