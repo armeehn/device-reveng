@@ -44,7 +44,7 @@ class McuOwnerProtocolTest {
         val frames = McuOwnerProtocol.startup(McuOwnerProtocol.StartupConfig(rds = true, radioZone = 2, backlightDay = 100, backlightNight = 60))
 
         val blocks = McuOwnerProtocol.vendorInit()
-        assertEquals(5 + blocks.size, frames.size)
+        assertEquals(6 + blocks.size, frames.size)
         assertArrayEquals(McuOwnerProtocol.mode(McuOwnerProtocol.Mode.POWER_ON), frames[0])
         assertArrayEquals(McuOwnerProtocol.mode(McuOwnerProtocol.Mode.MCU_VERSION), frames[1])
         // sendSetup(0, rds ? 0 : 1): RDS on is a ZERO.
@@ -53,7 +53,24 @@ class McuOwnerProtocolTest {
         for (i in blocks.indices) {
             assertArrayEquals(blocks[i], frames[4 + i])
         }
+        // sendSleepTime sits between the config blocks and sendBacklight (initSysEventState :3797-3798).
+        assertArrayEquals(McuOwnerProtocol.sleepTime(McuOwnerProtocol.SleepTime.H8), frames[4 + blocks.size])
         assertArrayEquals(McuOwnerProtocol.backlight(100, 60), frames.last())
+    }
+
+    /**
+     * sendSleepTime (EventService.java:9361-9375): `49 05 hh ll`, minutes big-endian. Setting 0
+     * is 480 min: LEN 05 + 49 + 05 + 01 + E0 = 0x134, ~0x34 = 0xCB. Setting 3 is 2880 = 0x0B40.
+     */
+    @Test
+    fun sleepTimeFrameIsMinutesBigEndian() {
+        assertArrayEquals(
+            bytes(0x0D, 0x0A, 0x05, 0x49, 0x05, 0x01, 0xE0, 0xCB, 0x00),
+            McuOwnerProtocol.sleepTime(McuOwnerProtocol.SleepTime.H8),
+        )
+        val h48 = McuOwnerProtocol.sleepTime(McuOwnerProtocol.SleepTime.H48)
+        assertEquals(0x0B, h48[5].toInt() and 0xFF)
+        assertEquals(0x40, h48[6].toInt() and 0xFF)
     }
 
     /**
@@ -235,18 +252,29 @@ class McuOwnerProtocolTest {
         assertArrayEquals(bytes(0x0D, 0x0A, 0x03, 0x0B, 0x00, 0xF1, 0x00), McuOwnerProtocol.btState(McuOwnerProtocol.BT_DISCONNECTED))
     }
 
-    /** reloadParam's modes and backlight, then POWERON, MCU_VERSION and the resumed mode again. */
+    /**
+     * reloadParam (EventService.java:3622-3632): POWERON, MCU_VERSION, the config blocks, sleep
+     * time, backlight; then ACC_CHANGE_EVENT's own POWERON, MCU_VERSION and the resumed mode (:468-471).
+     */
     @Test
-    fun reloadIsModesBacklightModesThenLastMode() {
+    fun reloadIsModesConfigBacklightModesThenLastMode() {
         val frames = McuOwnerProtocol.reload(McuOwnerProtocol.StartupConfig(), McuOwnerProtocol.Mode.MUSIC)
 
-        assertEquals(6, frames.size)
+        val blocks = McuOwnerProtocol.vendorInit().dropLast(1)
+        assertEquals(7 + blocks.size, frames.size)
         assertArrayEquals(McuOwnerProtocol.mode(McuOwnerProtocol.Mode.POWER_ON), frames[0])
         assertArrayEquals(McuOwnerProtocol.mode(McuOwnerProtocol.Mode.MCU_VERSION), frames[1])
-        assertArrayEquals(McuOwnerProtocol.backlight(100, 60), frames[2])
-        assertArrayEquals(McuOwnerProtocol.mode(McuOwnerProtocol.Mode.POWER_ON), frames[3])
-        assertArrayEquals(McuOwnerProtocol.mode(McuOwnerProtocol.Mode.MCU_VERSION), frames[4])
-        assertArrayEquals(bytes(0x0D, 0x0A, 0x03, 0x01, 0x0B, 0xF0, 0x00), frames[5])
+        for (i in blocks.indices) {
+            assertArrayEquals("block $i", blocks[i], frames[2 + i])
+        }
+        // reloadParam never calls sendBTState: no `0B 01` in the reload.
+        assertTrue(frames.none { it[3].toInt() == 0x0B })
+        val tail = 2 + blocks.size
+        assertArrayEquals(McuOwnerProtocol.sleepTime(McuOwnerProtocol.SleepTime.H8), frames[tail])
+        assertArrayEquals(McuOwnerProtocol.backlight(100, 60), frames[tail + 1])
+        assertArrayEquals(McuOwnerProtocol.mode(McuOwnerProtocol.Mode.POWER_ON), frames[tail + 2])
+        assertArrayEquals(McuOwnerProtocol.mode(McuOwnerProtocol.Mode.MCU_VERSION), frames[tail + 3])
+        assertArrayEquals(bytes(0x0D, 0x0A, 0x03, 0x01, 0x0B, 0xF0, 0x00), frames[tail + 4])
     }
 
     @Test

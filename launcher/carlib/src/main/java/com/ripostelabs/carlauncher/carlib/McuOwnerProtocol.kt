@@ -41,6 +41,8 @@ object McuOwnerProtocol {
     private const val OP_RTC = 0x13           // sendRTCTimer, :9469
     private const val OP_BACKLIGHT = 0x2E     // sendBacklight, :9639-9659
     private const val OP_CONFIG = 0x4F        // sendFactoryMcuSet and the other 4F sub-id blocks
+    private const val OP_SYS_CONFIG = 0x49    // sendSleepTime :9361, sendVolumeGain :9662: `49 sub-id ...`
+    private const val CFG_SLEEP_TIME = 0x05   // sendSleepTime's sub-id (:9370)
     private const val CFG_FADER = 0x10        // the 48-byte fader/volume table, all 0x0a on this unit
     private const val BT_STATE_ON = 1         // sendBTState(1), sent after the config blocks
 
@@ -55,6 +57,9 @@ object McuOwnerProtocol {
     /** `powerOff()` repeats SRC_POWEROFF this many times, 50 ms apart (EventService.java:2702-2727). */
     const val POWER_OFF_REPEATS = 5
     const val POWER_OFF_GAP_MS = 50L
+
+    /** Between the clock stamp and the burst the vendor runs `sync` and waits 500 ms (:2711-2713). */
+    const val POWER_OFF_SYNC_DELAY_MS = 500L
 
     /** `sendDataWaitAck`: wait this long for MODE_ACK, up to this many sends (EventService.java:10583). */
     const val ACK_TIMEOUT_MS = 500L
@@ -132,6 +137,18 @@ object McuOwnerProtocol {
         IDLE_RELEASE(104),
     }
 
+    /**
+     * Settings > sleep time as `sendSleepTime` maps SYS_SLEEP_TIME 0..3 to minutes
+     * (EventService.java:9361-9369). What the MCU does with the figure is not in the decompile;
+     * the name says how long it keeps the unit alive after ACC off.
+     */
+    enum class SleepTime(val minutes: Int) {
+        H8(480),
+        H16(960),
+        H24(1440),
+        H48(2880),
+    }
+
     /** What the launcher must know at start; the vendor reads the same from SysVar. */
     data class StartupConfig(
         val rds: Boolean = true,
@@ -140,6 +157,8 @@ object McuOwnerProtocol {
         val backlightNight: Int = 60,
         /** The amp level to restore at boot, as the vendor does; null leaves the MCU's own. */
         val mainVolume: Int? = null,
+        /** SYS_SLEEP_TIME defaults to 0, the 8 h row (:9361, getRecordInteger(..., 0) at :3797). */
+        val sleepTime: SleepTime = SleepTime.H8,
     )
 
     /**
@@ -260,6 +279,8 @@ object McuOwnerProtocol {
         setup(SETUP_RDS, if (config.rds) 0 else 1),
         setup(SETUP_ZONE, config.radioZone),
     ) + vendorInit() + listOfNotNull(
+        // sendSleepTime sits between the config blocks and sendBacklight (:3797-3798).
+        sleepTime(config.sleepTime),
         backlight(config.backlightDay, config.backlightNight),
         // Last: the MCU answers with a 79, and that report is what unlocks the volume slider.
         config.mainVolume?.let { mainVolume(it) },
@@ -276,7 +297,10 @@ object McuOwnerProtocol {
      * raises an interrupt, while 0.1 (eventcenter) is fine on the same kernel; one of these is
      * the suspected enable (RAV4-84).
      */
-    fun vendorInit(): List<ByteArray> = listOf(
+    fun vendorInit(): List<ByteArray> = configBlocks() + btState(BT_STATE_ON)
+
+    /** The `4F` blocks alone: `reloadParam` re-sends these without the BT state (:3622-3632). */
+    private fun configBlocks(): List<ByteArray> = listOf(
         McuSerial.encode(OP_CONFIG, bytes(CFG_FADER) + ByteArray(48) { 0x0a }),
         McuSerial.encode(OP_CONFIG, bytes(0x0e, 0x00)),
         McuSerial.encode(OP_CONFIG, bytes(0x14, 0x4e, 0x20, 0x00, 0x14, 0x4e, 0x20, 0x00, 0x14, 0x00, 0x00)),
@@ -285,7 +309,16 @@ object McuOwnerProtocol {
         McuSerial.encode(OP_CONFIG, bytes(0x13, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00)),
         McuSerial.encode(OP_CONFIG, bytes(0x16, 0x00, 0x00, 0x00)),
         McuSerial.encode(OP_CONFIG, bytes(0x0f, 0x00, 0x00)),
-        btState(BT_STATE_ON),
+    )
+
+    /**
+     * `49 05 hh ll`, minutes big-endian (sendSleepTime, EventService.java:9361-9375). Not seen in
+     * the 2026-09-18 strace, which also lacks the `01 64` that precedes it: that capture started
+     * after the burst, so the frame is from the decompile alone until the car logs it.
+     */
+    fun sleepTime(time: SleepTime): ByteArray = McuSerial.encode(
+        OP_SYS_CONFIG,
+        bytes(CFG_SLEEP_TIME, (time.minutes shr 8) and BYTE, time.minutes and BYTE),
     )
 
     /**
@@ -299,15 +332,17 @@ object McuOwnerProtocol {
     fun btState(state: Int): ByteArray = McuSerial.encode(OP_BT_STATE, bytes(state))
 
     /**
-     * What ACC_CHANGE_EVENT sends 3 s after wake (EventService.java:465-469): `reloadParam`
-     * (:3622-3643) minus the config blocks named in the header, then the same two modes again and
-     * the mode to resume. The vendor resumes `mValidMode`, reset to SRC_NONE at sleep (:3556), and
-     * relies on the mode's activity to switch source later (msg 290); we resume the last mode set,
-     * or NONE when none was.
+     * What ACC_CHANGE_EVENT sends 3 s after wake (EventService.java:465-471): `reloadParam`
+     * (:3622-3632: the two modes, the config blocks, sleep time, backlight; no BT state), then
+     * the same two modes again and the mode to resume. The vendor resumes `mValidMode`, reset
+     * to SRC_NONE at sleep (:3556), and relies on the mode's activity to switch source later
+     * (msg 290); we resume the last mode set, or NONE when none was.
      */
     fun reload(config: StartupConfig, lastMode: Mode?): List<ByteArray> = listOf(
         mode(Mode.POWER_ON),
         mode(Mode.MCU_VERSION),
+    ) + configBlocks() + listOf(
+        sleepTime(config.sleepTime),
         backlight(config.backlightDay, config.backlightNight),
         mode(Mode.POWER_ON),
         mode(Mode.MCU_VERSION),

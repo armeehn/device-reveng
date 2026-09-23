@@ -47,6 +47,7 @@ class McuOwnerTest {
     /** A pipe whose reads block on a queue and whose writes are recorded; [ackNull] answers SRC_NULL. */
     private class FakeLink(private val ackNull: Boolean) : McuLink {
         val written = CopyOnWriteArrayList<ByteArray>()
+        val writtenAtMs = CopyOnWriteArrayList<Long>()
         private val inbound = LinkedBlockingQueue<ByteArray>()
 
         @Volatile
@@ -66,6 +67,7 @@ class McuOwnerTest {
         }
 
         override fun write(bytes: ByteArray) {
+            writtenAtMs.add(System.currentTimeMillis())
             written.add(bytes.copyOf())
             if (ackNull && bytes.contentEquals(McuOwnerProtocol.mode(McuOwnerProtocol.Mode.NULL))) {
                 feed(McuSerial.encode(McuOpcode.MODE_ACK.code, byteArrayOf(McuOwnerProtocol.Mode.NULL.code.toByte())))
@@ -308,6 +310,9 @@ class McuOwnerTest {
 
         assertEquals(handshake + expected, link.written.size)
         assertEquals(0x13, link.written[handshake][3].toInt())
+        // `sync` then 500 ms between the clock stamp and the first SRC_POWEROFF (:2711-2713).
+        val stampToBurst = link.writtenAtMs[handshake + 1] - link.writtenAtMs[handshake]
+        assertTrue("stamp to burst $stampToBurst ms", stampToBurst >= McuOwnerProtocol.POWER_OFF_SYNC_DELAY_MS)
         for (i in 1..McuOwnerProtocol.POWER_OFF_REPEATS) {
             assertArrayEquals(McuOwnerProtocol.mode(McuOwnerProtocol.Mode.POWER_OFF), link.written[handshake + i])
         }

@@ -129,4 +129,85 @@ class McuSleepWakeTest {
         assertEquals(McuSleepWake.State.AWAKE, m.state)
         assertTrue(port.log.isEmpty())
     }
+
+    /** powerOff arms msg 289 for 6 s (EventService.java:2704-2708, CustomStatusbar.time), then setAccSleep. */
+    @Test
+    fun powerKeySleepsSixSecondsLater() {
+        val acc = FakeAcc(McuSleepWake.Acc.ON)
+        val port = FakePort()
+        val m = machine(acc, port)
+
+        m.powerKey(0)
+        m.poll(McuSleepWake.POWER_KEY_SLEEP_DELAY_MS - second)
+        assertEquals(McuSleepWake.State.AWAKE, m.state)
+        assertTrue(port.log.isEmpty())
+
+        m.poll(McuSleepWake.POWER_KEY_SLEEP_DELAY_MS)
+        assertEquals(McuSleepWake.State.SLEEPING, m.state)
+        assertArrayEquals(McuOwnerProtocol.btState(0), port.sent.single())
+
+        m.poll(McuSleepWake.POWER_KEY_SLEEP_DELAY_MS + McuSleepWake.PORT_CLOSE_DELAY_MS)
+        assertEquals(McuSleepWake.State.ASLEEP, m.state)
+        assertEquals(listOf("send", "close"), port.log)
+    }
+
+    /**
+     * AccObserver fires on a change of the property, never on its level (AccObserver.java:24-35):
+     * after a power-key sleep the port stays closed until ACC reads off and then on again.
+     */
+    @Test
+    fun powerKeySleepWakesOnlyOnAnAccEdge() {
+        val acc = FakeAcc(McuSleepWake.Acc.ON)
+        val port = FakePort()
+        val m = machine(acc, port)
+        m.powerKey(0)
+        m.poll(McuSleepWake.POWER_KEY_SLEEP_DELAY_MS)
+        m.poll(McuSleepWake.POWER_KEY_SLEEP_DELAY_MS + McuSleepWake.PORT_CLOSE_DELAY_MS)
+        port.log.clear()
+
+        m.poll(60 * second)
+        assertEquals("ACC still reads on: no edge, no wake", McuSleepWake.State.ASLEEP, m.state)
+        assertTrue(port.log.isEmpty())
+
+        acc.reading = McuSleepWake.Acc.OFF
+        m.poll(61 * second)
+        assertEquals(McuSleepWake.State.ASLEEP, m.state)
+
+        acc.reading = McuSleepWake.Acc.ON
+        m.poll(62 * second)
+        assertEquals(McuSleepWake.State.WAKING, m.state)
+        assertEquals(listOf("open"), port.log)
+    }
+
+    /**
+     * Msg 289 fires 6 s after the key, so a key during the wake lets the 3 s reload run first;
+     * only then does setAccSleep sleep the unit again (:841-845).
+     */
+    @Test
+    fun powerKeyWhileWakingSleepsAfterTheReload() {
+        val acc = FakeAcc(McuSleepWake.Acc.OFF)
+        val port = FakePort(lastMode = McuOwnerProtocol.Mode.RADIO)
+        val m = machine(acc, port)
+        m.poll(0)
+        m.poll(McuSleepWake.PORT_CLOSE_DELAY_MS)
+        acc.reading = McuSleepWake.Acc.ON
+        val wokeAt = 10 * second
+        m.poll(wokeAt)
+        assertEquals(McuSleepWake.State.WAKING, m.state)
+        port.log.clear()
+        port.sent.clear()
+
+        val keyAt = wokeAt + second
+        m.powerKey(keyAt)
+        m.poll(wokeAt + McuSleepWake.RELOAD_DELAY_MS)
+        assertEquals(McuSleepWake.State.AWAKE, m.state)
+        assertEquals(McuOwnerProtocol.reload(config, McuOwnerProtocol.Mode.RADIO).size, port.sent.size)
+        port.sent.clear()
+
+        m.poll(keyAt + McuSleepWake.POWER_KEY_SLEEP_DELAY_MS - second)
+        assertEquals("inside the wake guard, the key still counts", McuSleepWake.State.AWAKE, m.state)
+        m.poll(keyAt + McuSleepWake.POWER_KEY_SLEEP_DELAY_MS)
+        assertEquals(McuSleepWake.State.SLEEPING, m.state)
+        assertArrayEquals(McuOwnerProtocol.btState(0), port.sent.single())
+    }
 }
