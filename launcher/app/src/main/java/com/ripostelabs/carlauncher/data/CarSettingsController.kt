@@ -167,11 +167,17 @@ class CarSettingsController(
 
     // ---- Backlight -----------------------------------------------------------
 
-    /** Current `Set_Day_Light` / `Set_Night_Light`, with the gateway's defaults when unset. */
-    fun backlight(): Backlight = Backlight(
-        day = getInt(SettingKeys.SET_DAY_LIGHT, Backlight.DEFAULT_DAY),
-        night = getInt(SettingKeys.SET_NIGHT_LIGHT, Backlight.DEFAULT_NIGHT),
-    )
+    /**
+     * Current `Set_Day_Light` / `Set_Night_Light`. Without the rows (Riposte OS 0.2 has no vendor
+     * provider) the targets last pushed to the MCU answer, then the gateway's defaults.
+     */
+    fun backlight(): Backlight {
+        val remembered = carService?.backlight?.targets()
+        return Backlight(
+            day = getInt(SettingKeys.SET_DAY_LIGHT, remembered?.day ?: Backlight.DEFAULT_DAY),
+            night = getInt(SettingKeys.SET_NIGHT_LIGHT, remembered?.night ?: Backlight.DEFAULT_NIGHT),
+        )
+    }
 
     /**
      * Persist both backlight targets and push them to the MCU, the way the vendor slider does

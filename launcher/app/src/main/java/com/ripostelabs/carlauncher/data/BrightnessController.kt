@@ -18,9 +18,9 @@ import com.ripostelabs.carlauncher.carlib.CarService
  * used to move and nothing happened. This drives the **Android framework** backlight instead —
  * `Settings.System.SCREEN_BRIGHTNESS` (0–255) plus manual mode — which a normal app can write
  * once it holds the special-access `WRITE_SETTINGS` permission ([canWrite] / [requestPermission]).
- * As a best-effort second path it also pushes the same level to the MCU as both day and night
- * targets ([CarService.sendBacklight]), without persisting the vendor rows: the persistent vendor
- * path is [CarSettingsController.setBacklight] on the Display screen.
+ * As a best-effort second path it also pushes the level to the MCU as the target the panel is
+ * showing now, the other side unchanged ([CarService.sendBacklight], which remembers both across
+ * boots); the vendor rows are written only by [CarSettingsController.setBacklight].
  *
  * Percent (0–100) is the UI unit; the framework value is 0–255.
  */
@@ -119,10 +119,13 @@ object BrightnessController {
      */
     fun setPercent(context: Context, percent: Int, carService: CarService?): Boolean {
         val value = percentToRaw(percent)
-        // Best-effort MCU path regardless of WRITE_SETTINGS (guarded, no-op if unbound). Both
-        // targets get the level so the push is right whichever side the panel is showing.
-        val mcu = percentToBacklight(percent)
-        runCatching { carService?.sendBacklight(mcu, mcu) }
+        // Best-effort MCU path regardless of WRITE_SETTINGS (guarded, no-op if unbound). The level
+        // lands on the side the headlamps select, the way the vendor's one-level adjust does
+        // (adjustBLLevel(boolean), EventService.java:7971-7987); the other target stays.
+        carService?.let {
+            val targets = it.backlight.withLevel(percentToBacklight(percent))
+            runCatching { it.sendBacklight(targets.day, targets.night) }
+        }
 
         if (!canWrite(context)) return false
         return runCatching {
