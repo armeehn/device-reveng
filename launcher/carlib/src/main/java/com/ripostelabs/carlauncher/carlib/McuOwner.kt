@@ -263,10 +263,13 @@ class McuOwner(
         return sendWithAck(s, mode)
     }
 
-    /** The POWER key path: clock stamp, then SRC_POWEROFF five times 50 ms apart. */
+    /** The POWER key path: clock stamp, the vendor's sync pause, then SRC_POWEROFF five times 50 ms apart. */
     fun powerOff() {
         val s = session ?: return
-        for (frame in McuOwnerProtocol.powerOff(clock())) {
+        val frames = McuOwnerProtocol.powerOff(clock())
+        write(s, frames.first())
+        Thread.sleep(McuOwnerProtocol.POWER_OFF_SYNC_DELAY_MS)
+        for (frame in frames.drop(1)) {
             write(s, frame)
             Thread.sleep(McuOwnerProtocol.POWER_OFF_GAP_MS)
         }

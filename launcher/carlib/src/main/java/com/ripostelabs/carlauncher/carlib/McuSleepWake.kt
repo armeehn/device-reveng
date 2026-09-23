@@ -19,9 +19,15 @@ import android.util.Log
  * ── ACC off (setAccSleep, EventService.java:3522-3587) ──────────────────────────────────────────
  * No mode byte is sent. The only frame is BT state 0, `0B 00` (:3559 → sendBTState :4336-4342),
  * then message 291 closes the port 1500 ms later (:3561-3562 → :865-869 → closeSerialPort :1694).
- * The RTC + SRC_POWEROFF burst is the POWER key path only (`powerOff`, :2702-2727); it arms
- * message 289 which reaches setAccSleep 6000 ms later (CustomStatusbar.java:21) and is not part of
- * ACC off. Sleeping also kills foreground apps (msg 293, :3576-3577); out of scope here.
+ * Sleeping also kills foreground apps (msg 293, :3576-3577); out of scope here.
+ *
+ * ── POWER key (powerOff, :2702-2727) ─────────────────────────────────────────────────────────────
+ * [McuOwner.powerOff] sends the RTC stamp and the SRC_POWEROFF burst. Before that burst the
+ * vendor arms message 289 for 6000 ms (:2704-2708, CustomStatusbar.java:21), which runs
+ * setAccSleep if the port is still open (:841-845). [powerKey] is that timer: the same BT 0 and
+ * close as ACC off, whether or not the property ever changed. The wake after it is an ACC
+ * edge: AccObserver fires on a change of the property, never on its level (AccObserver.java:24-35),
+ * so [accSeenOff] gates every wake on an ACC off reading first.
  *
  * ── ACC on (setAccWakeUp, EventService.java:3428-3520) ──────────────────────────────────────────
  * Message 292 reopens the port (:3446 → :870-872 → openSerialPort :1683), 100 ms later SRC_NULL
@@ -74,7 +80,12 @@ class McuSleepWake(
     private var closeAtMs = 0L
     private var reloadAtMs = 0L
     private var guardUntilMs = 0L
+    private var accSeenOff = false
     private var worker: Thread? = null
+
+    /** Deadline of the vendor's msg 289; [Long.MAX_VALUE] when no POWER key is pending. */
+    @Volatile
+    private var keySleepAtMs = Long.MAX_VALUE
 
     @Volatile
     private var running = false
@@ -97,24 +108,34 @@ class McuSleepWake(
         worker = null
     }
 
+    /** The POWER key was seen: sleep in [POWER_KEY_SLEEP_DELAY_MS] unless ACC does it first. */
+    fun powerKey(nowMs: Long) {
+        keySleepAtMs = nowMs + POWER_KEY_SLEEP_DELAY_MS
+    }
+
     /** One vendor poll. Timings are deadlines against [nowMs], never sleeps. */
     fun poll(nowMs: Long) {
         val reading = acc.read()
+        if (reading == Acc.OFF) {
+            accSeenOff = true
+        }
+        val accOn = reading == Acc.ON && accSeenOff
 
         when (state) {
             State.AWAKE -> {
+                if (nowMs >= keySleepAtMs) {
+                    sleep(nowMs, "POWER key")
+                    return
+                }
                 if (reading != Acc.OFF || nowMs < guardUntilMs) {
                     return
                 }
-                Log.i(LOG_TAG, "ACC off: BT state 0, port closes in $PORT_CLOSE_DELAY_MS ms")
-                port.send(McuOwnerProtocol.btState(McuOwnerProtocol.BT_DISCONNECTED))
-                closeAtMs = nowMs + PORT_CLOSE_DELAY_MS
-                state = State.SLEEPING
+                sleep(nowMs, "ACC off")
             }
 
             State.SLEEPING -> {
                 // ACC back before the port closed: the vendor cancels 291 and reopens anyway (:3437-3446).
-                if (reading == Acc.ON) {
+                if (accOn) {
                     port.close()
                     state = State.ASLEEP
                     wake(nowMs)
@@ -128,13 +149,18 @@ class McuSleepWake(
             }
 
             State.ASLEEP -> {
-                if (reading != Acc.ON) {
+                if (!accOn) {
                     return
                 }
                 wake(nowMs)
             }
 
             State.WAKING -> {
+                // setAccSleep drops the pending ACC_CHANGE_EVENT (:3567): the reload never runs.
+                if (nowMs >= keySleepAtMs) {
+                    sleep(nowMs, "POWER key")
+                    return
+                }
                 if (nowMs < reloadAtMs) {
                     return
                 }
@@ -146,8 +172,18 @@ class McuSleepWake(
         }
     }
 
+    /** setAccSleep's wire part: BT state 0 now, the port closes [PORT_CLOSE_DELAY_MS] later. */
+    private fun sleep(nowMs: Long, why: String) {
+        Log.i(LOG_TAG, "$why: BT state 0, port closes in $PORT_CLOSE_DELAY_MS ms")
+        keySleepAtMs = Long.MAX_VALUE
+        port.send(McuOwnerProtocol.btState(McuOwnerProtocol.BT_DISCONNECTED))
+        closeAtMs = nowMs + PORT_CLOSE_DELAY_MS
+        state = State.SLEEPING
+    }
+
     private fun wake(nowMs: Long) {
         Log.i(LOG_TAG, "ACC on: reopen, reload in $RELOAD_DELAY_MS ms")
+        accSeenOff = false
         port.open()
         reloadAtMs = nowMs + RELOAD_DELAY_MS
         guardUntilMs = nowMs + WAKE_GUARD_MS
@@ -162,6 +198,19 @@ class McuSleepWake(
                 Log.w(LOG_TAG, "poll failed in $state: ${e.message}")
             }
             Thread.sleep(POLL_MS)
+        }
+    }
+
+    /**
+     * Feeds [powerKey] from the owner's key stream. It sits in the owner's [McuOwner.FanOut], which
+     * is built before the machine exists, so it looks the machine up on each key.
+     */
+    class PowerKeyListener(private val machine: () -> McuSleepWake?) : McuOwner.Listener {
+        override fun onPanelKey(key: McuOwnerProtocol.PanelKey) {
+            if (key.code != McuOwnerProtocol.Key.POWER) {
+                return
+            }
+            machine()?.let { it.powerKey(it.clock()) }
         }
     }
 
@@ -191,6 +240,9 @@ class McuSleepWake(
 
         /** setAccWakeUp → ACC_CHANGE_EVENT → reloadParam (EventService.java:3489). */
         const val RELOAD_DELAY_MS = 3_000L
+
+        /** powerOff → msg 289 → setAccSleep (EventService.java:2704-2708, CustomStatusbar.java:21). */
+        const val POWER_KEY_SLEEP_DELAY_MS = 6_000L
 
         fun forOwner(
             owner: McuOwner,

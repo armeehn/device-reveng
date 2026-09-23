@@ -324,6 +324,7 @@ class MainActivity : ComponentActivity() {
                 McuStateExport().also { mcuStateExport = it; it.start() },
                 volumeMemory,
                 volumeKeys,
+                McuSleepWake.PowerKeyListener { mcuSleepWake },
             )
             mcuOwner = McuOwner(
                 ownerGate,
