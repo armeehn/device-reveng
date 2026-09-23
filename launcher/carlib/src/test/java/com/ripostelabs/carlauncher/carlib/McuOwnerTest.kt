@@ -28,6 +28,12 @@ class McuOwnerTest {
         // acked twice, and every exact frame count and write index drifted: three different
         // pairs of cases went red on CI in one day. The no-ack cases now cost ACK_ATTEMPTS×0.5 s.
         const val ACK_MS = McuOwnerProtocol.ACK_TIMEOUT_MS
+
+        // The car's split, 2026-09-22: len 61 (66-byte frame), 50 bytes in the first relay.
+        const val SPLIT_PAYLOAD = 61
+        const val SPLIT_FIRST = 50
+        const val SPLIT_CMD = 0x7E
+
         const val SLOW_START_MS = 100L
     }
 
@@ -224,6 +230,38 @@ class McuOwnerTest {
         assertFalse("0x32 must decode to a real signal, not Unknown", recorder.signals[0] is CanSignal.Unknown)
         assertEquals(0x97, recorder.other[0].opcode)
         assertEquals(0L, counted.badChecksum)
+    }
+
+    /**
+     * The car on 2026-09-22, every ~40 s and always as a pair:
+     *
+     *     CAN relay frame malformed: len says 61, so 66 bytes, but got 50
+     *     CAN relay frame malformed: bad header; expected 5A A5
+     *
+     * The MCU split one 66-byte box frame over two 0xA5 commands. canbus2 never assumed one frame
+     * per command: `header5AA5` appends each body to a 512-byte stream buffer and cuts frames out
+     * of that. The owner must reassemble the same way, or every long frame is lost.
+     */
+    @Test
+    fun reassemblesABoxFrameSplitAcrossTwoRelays() {
+        val link = FakeLink(ackNull = true)
+        val recorder = Recorder()
+        val owner = owner(link, recorder = recorder)
+        owner.start()
+        waitFor("running") { owner.status.value as? McuOwner.Status.Running }
+
+        val payload = ByteArray(SPLIT_PAYLOAD) { it.toByte() }
+        val frame = McuFrame.encode(SPLIT_CMD, payload)
+        link.feed(McuSerial.encode(McuSerial.OP_CAN, frame.copyOfRange(0, SPLIT_FIRST)))
+        link.feed(McuSerial.encode(McuSerial.OP_CAN, frame.copyOfRange(SPLIT_FIRST, frame.size)))
+
+        // Three: the handshake's MODE_ACK, then the two relays.
+        waitFor("three frames counted") {
+            (owner.status.value as? McuOwner.Status.Running)?.takeIf { it.frames == 3L }
+        }
+        owner.stop()
+
+        assertEquals(listOf<CanSignal>(CanSignal.Unknown(SPLIT_CMD, payload)), recorder.signals.toList())
     }
 
     /** A started owner with the handshake's own writes already counted. */

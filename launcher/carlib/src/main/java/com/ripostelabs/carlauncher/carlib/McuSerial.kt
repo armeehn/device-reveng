@@ -66,7 +66,8 @@ object McuSerial {
         /**
          * The CAN-box frame inside an [OP_CAN] command, or null for any other opcode. Trailing
          * bytes after the inner frame are tolerated, exactly as [HiworldCanDecoder.decodeFrame]
-         * ignores its "C2": the inner len says where the frame ends.
+         * ignores its "C2": the inner len says where the frame ends. Right only when the relay holds
+         * one whole frame; the MCU also splits frames across relays, which [McuCanRelay] rebuilds.
          */
         fun innerFrame(): McuFrame.Decoded? {
             if (opcode != OP_CAN) {
