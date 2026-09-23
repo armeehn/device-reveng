@@ -50,7 +50,7 @@ enum class McuOpcode(val code: Int, val handler: String) {
     SEND_99(0x99, "onCmdMcuSend99"),
     CAR_AIR(0xA1, "onCmdCarAirEvent"),
 
-    /** The CAN box's frame, relayed whole; see [McuSerial.Command.innerFrame]. */
+    /** A slice of the CAN box's stream, reassembled by [McuCanRelay]. */
     CAN(McuSerial.OP_CAN, "onCmdCanEvent"),
     ATA(0xA6, "onCmdMcuATAData"),
     ;

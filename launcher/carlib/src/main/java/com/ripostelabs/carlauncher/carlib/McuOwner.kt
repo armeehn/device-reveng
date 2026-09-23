@@ -355,6 +355,7 @@ class McuOwner(
 
     private fun pump(s: Session) {
         val reader = McuSerial.Reader()
+        canRelay = McuCanRelay()
         val buffer = ByteArray(READ_BUFFER)
         var frames = 0L
         var bad = 0L
@@ -401,6 +402,9 @@ class McuOwner(
 
     private val loggedUnhandled = mutableSetOf<Int>()
 
+    /** The box's stream as the 0xA5 relays rebuild it; [pump] starts a fresh one per session. */
+    private var canRelay = McuCanRelay()
+
     private fun dispatch(command: McuSerial.Command) {
         val awaited = awaitingAck
         if (awaited != null && McuOwnerProtocol.isModeAck(command, awaited)) {
@@ -423,21 +427,10 @@ class McuOwner(
             return
         }
 
-        // 0xA5 relays the CAN box's own frame; the decoder keys on the box's cmd, not the relay opcode.
-        when (val inner = command.innerFrame()) {
-            is McuFrame.Decoded.Frame -> {
-                listener.onCanSignal(HiworldCanDecoder.decodePayload(inner.cmd, inner.payload), System.currentTimeMillis())
-                return
-            }
-
-            is McuFrame.Decoded.Malformed -> {
-                // The bytes are what a parser fix needs: every relayed wheel key goes this way.
-                Log.w(LOG_TAG, "CAN relay frame malformed: ${inner.reason}: " +
-                    command.payload.joinToString(" ") { "%02X".format(it) })
-                return
-            }
-
-            null -> Unit
+        // 0xA5 relays a slice of the CAN box's stream, not always one whole frame; see McuCanRelay.
+        if (command.opcode == McuSerial.OP_CAN) {
+            canRelay.feed(command.payload).forEach(::onRelayed)
+            return
         }
 
         // Once per opcode: the MCU streams 0x8E (G-sensor, RADAR_3DH) at 10 Hz for the whole
@@ -457,6 +450,24 @@ class McuOwner(
      * [powerOff] after the notify: the dex confirms the switch's default arm falls through to
      * notifyValidModeEvt(4098) and then powerOff() (:2695-2698), which jadx renders as unreachable.
      */
+    /** One box frame cut from the relay stream; the decoder keys on the box's cmd, not the relay opcode. */
+    private val loggedBoxCmds = mutableSetOf<Int>()
+
+    private fun onRelayed(inner: McuFrame.Decoded) {
+        when (inner) {
+            is McuFrame.Decoded.Frame -> {
+                // Once per box cmd: the first 0x11 in a car log proves the wheel keys arrive.
+                if (loggedBoxCmds.add(inner.cmd)) {
+                    Log.i(LOG_TAG, "CAN box cmd 0x%02X first seen (%d bytes)".format(inner.cmd, inner.payload.size))
+                }
+                listener.onCanSignal(HiworldCanDecoder.decodePayload(inner.cmd, inner.payload), System.currentTimeMillis())
+            }
+
+            is McuFrame.Decoded.Malformed ->
+                Log.w(LOG_TAG, "CAN relay frame malformed: ${inner.reason}")
+        }
+    }
+
     private fun onPanelKey(key: McuOwnerProtocol.PanelKey) {
         if (reversing && !McuOwnerProtocol.panelKeyPassesReverse(key.code)) {
             return
