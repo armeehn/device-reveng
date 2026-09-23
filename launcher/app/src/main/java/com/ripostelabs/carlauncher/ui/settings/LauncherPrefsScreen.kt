@@ -38,6 +38,7 @@ import com.ripostelabs.carlauncher.data.CarSettingsController // v2.8
 import com.ripostelabs.carlauncher.data.DayNightMode
 import com.ripostelabs.carlauncher.data.DriverSideMode // v2.8
 import com.ripostelabs.carlauncher.data.LauncherSettings
+import com.ripostelabs.carlauncher.data.NavBarMode
 import com.ripostelabs.carlauncher.data.SettingKeys // v2.8
 import com.ripostelabs.carlauncher.data.SettingsStore
 import com.ripostelabs.carlauncher.ui.collectAsStateSafe
@@ -225,6 +226,20 @@ fun LauncherPrefsScreen(
                 checked = settings.replaceSystemBars,
                 onChange = settingsStore::setReplaceSystemBars,
                 enabled = rootAvailable,
+            )
+            PickerSetting(
+                label = "Nav bar",
+                description = "The Back, Home and Apps bar over other apps. Auto-hide folds it " +
+                    "to a thin edge handle after 3 s; tap the handle to bring it back. Never " +
+                    "shown over wireless CarPlay, which has its own Home.",
+                current = settings.navBarMode,
+                options = listOf(
+                    NavBarMode.AUTO_HIDE to "Auto-hide",
+                    NavBarMode.ALWAYS_SHOWN to "Always shown",
+                    NavBarMode.OFF to "Off",
+                ),
+                onSelect = settingsStore::setNavBarMode,
+                enabled = rootAvailable && settings.replaceSystemBars,
             )
         }
 
