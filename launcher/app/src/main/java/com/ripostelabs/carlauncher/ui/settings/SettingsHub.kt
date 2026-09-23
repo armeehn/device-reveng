@@ -8,6 +8,7 @@ import androidx.compose.material.icons.filled.BrightnessMedium
 import androidx.compose.material.icons.filled.DataObject
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.SportsEsports
+import androidx.compose.material.icons.filled.Usb
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.GridView
@@ -160,6 +161,12 @@ fun SettingsHub(
                 title = "CAN box",
                 subtitle = "Which car the CAN box is told it is in",
                 onClick = { onOpen(SettingsRoute.CanBox) },
+            )
+            SettingsCategoryCard(
+                icon = Icons.Filled.Usb,
+                title = "USB port",
+                subtitle = "Car devices (host) or a computer with adb (peripheral)",
+                onClick = { onOpen(SettingsRoute.UsbPort) },
             )
             SettingsCategoryCard(
                 icon = Icons.Filled.BugReport,
