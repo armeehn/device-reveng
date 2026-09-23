@@ -40,6 +40,7 @@ object McuOwnerProtocol {
     private const val OP_USER_FREQ = 0x0C     // sendUserFreq, :4300
     private const val OP_RTC = 0x13           // sendRTCTimer, :9469
     private const val OP_PLAY_STATE = 0x19    // sendPlayState, :4327-4328: 1 = paused
+    private const val OP_BLACK_SCREEN = 0x1F  // sendBlackScreen, :9679-9680
     private const val OP_VOICE_STATE = 0x42   // CMD_SEND_VOICE_STATE, EventUtils.java:1147; sendVoiceState, :11769
     private const val OP_BACKLIGHT = 0x2E     // sendBacklight, :9639-9659
     private const val OP_SOUND_STATE = 0x3F   // sendNavStateToMcu, :8076-8083: nav byte, system byte
@@ -169,8 +170,9 @@ object McuOwnerProtocol {
     data class StartupConfig(
         val rds: Boolean = true,
         val radioZone: Int = 0,
-        val backlightDay: Int = 100,
-        val backlightNight: Int = 60,
+        /** `Set_Day_Light` / `Set_Night_Light` default rows (setRecordDefaultValue, :6502-6503). */
+        val backlightDay: Int = 20,
+        val backlightNight: Int = 8,
         /** The amp level to restore at boot, as the vendor does; null leaves the MCU's own. */
         val mainVolume: Int? = null,
         /** SYS_SLEEP_TIME defaults to 0, the 8 h row (:9361, getRecordInteger(..., 0) at :3797). */
@@ -197,6 +199,9 @@ object McuOwnerProtocol {
         val hdmi: Boolean,
         val leftTurn: Boolean,
     )
+
+    /** The panel's lit state, as `sendBlackScreen(boolean)` takes it (:9669-9672). */
+    enum class Screen(val lit: Int) { ON(1), OFF(0) }
 
     /** `79` MAIN_VOLUME: bit 7 set means the change was silent (onCmdMainVolEvent, :2943-2964). */
     data class MainVolume(val level: Int, val silent: Boolean)
@@ -270,6 +275,13 @@ object McuOwnerProtocol {
         McuSerial.encode(OP_BACKLIGHT, bytes(day, night, BACKLIGHT_FINE_LOW, BACKLIGHT_FINE_HIGH))
 
     fun mainVolume(level: Int): ByteArray = setup(SETUP_MAIN_VOLUME, level)
+
+    /**
+     * `1F main second`, 1 = lit (sendBlackScreen, :9679-9680): what the vendor's black-screen
+     * overlay sends when it shows and hides. This unit has no second screen, so byte 2 stays lit.
+     */
+    fun blackScreen(screen: Screen): ByteArray =
+        McuSerial.encode(OP_BLACK_SCREEN, bytes(screen.lit, Screen.ON.lit))
 
     fun mute(on: Boolean): ByteArray = McuSerial.encode(OP_MUTE, bytes(if (on) 1 else 0))
 
@@ -623,6 +635,7 @@ object McuOwnerProtocol {
         const val RETURN = 0x55       // MCU_KEY_RETURN, :1598: the vendor's BACK
         const val TASK_LIST = 0x71    // MCU_KEY_TASK_LIST, :1623
         const val VOICE = 0x74        // MCU_KEY_SHENGKONG, :1609
+        const val DIM = 246           // ProccessDIMKey, :644 and :2521
     }
 
     /**

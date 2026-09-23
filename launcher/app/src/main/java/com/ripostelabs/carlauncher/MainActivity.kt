@@ -39,6 +39,7 @@ import com.ripostelabs.carlauncher.carlib.McuSetupStore
 import com.ripostelabs.carlauncher.carlib.RadioMemory
 import com.ripostelabs.carlauncher.carlib.VolumeMemory
 import com.ripostelabs.carlauncher.carlib.AmpVolumeKeys
+import com.ripostelabs.carlauncher.carlib.DimKey
 import com.ripostelabs.carlauncher.data.GpsClock
 import com.ripostelabs.carlauncher.data.McuClock
 import com.ripostelabs.carlauncher.data.AccessoryRuntime
@@ -351,17 +352,24 @@ class MainActivity : ComponentActivity() {
                 volumeKeys,
                 McuSleepWake.PowerKeyListener { mcuSleepWake },
                 setupStore,
+                // Backlight: the headlamp bit picks the side a level lands on; the DIM key steps it.
+                carService.backlight,
+                DimKey(carService.backlight, carService::sendBacklight),
             )
-            mcuOwner = McuOwner(
-                ownerGate,
-                ownerListener,
-                openLink = { ownerGate.mcuLink().open() },
-                config = McuOwnerProtocol.StartupConfig(
+            // The boot and wake `2E` replay the targets the user last set, as the vendor's rows did.
+            val startupConfig = carService.backlight.config(
+                McuOwnerProtocol.StartupConfig(
                     mainVolume = volumeMemory.level(),
                     radioZone = radioMemory.zone(),
                     sleepTime = McuSetupProtocol.sleepOption(setupStore.setup.value.sleepTime),
                     setup = setupStore.setup.value,
                 ),
+            )
+            mcuOwner = McuOwner(
+                ownerGate,
+                ownerListener,
+                openLink = { ownerGate.mcuLink().open() },
+                config = startupConfig,
                 initialCar = CarProfiles.byId(settingsStore.settings.value.canBoxCar),
             ).also {
                 carService.attachOwner(it)
@@ -374,7 +382,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 carCommandPort = CarCommandPort(carService.asCommandTarget()).also { port -> port.start() }
-                mcuSleepWake = McuSleepWake.forOwner(it, AndroidAccSource()).also { sw -> sw.start() }
+                mcuSleepWake = McuSleepWake.forOwner(it, AndroidAccSource(), startupConfig).also { sw -> sw.start() }
                 ampVolumeKeys = volumeKeys.also { keys -> keys.start(applicationContext) }
 
                 // Android sound, media players, BT audio and CarPlay reach the amp only once the

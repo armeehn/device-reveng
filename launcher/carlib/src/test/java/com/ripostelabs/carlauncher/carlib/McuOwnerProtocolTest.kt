@@ -39,6 +39,29 @@ class McuOwnerProtocolTest {
         )
     }
 
+    /** The default rows the vendor writes at first boot (setRecordDefaultValue, EventService.java:6502-6503). */
+    @Test
+    fun startupConfigDefaultsAreTheVendorRows() {
+        val config = McuOwnerProtocol.StartupConfig()
+
+        assertEquals(20, config.backlightDay)
+        assertEquals(8, config.backlightNight)
+    }
+
+    /** `1F main second`, 1 = lit (sendBlackScreen, :9679-9680); no second screen, so byte 2 stays 1. */
+    @Test
+    fun blackScreenFrames() {
+        // 04 + 1F + 00 + 01 = 0x24 → ~24 = DB
+        assertArrayEquals(
+            bytes(0x0D, 0x0A, 0x04, 0x1F, 0x00, 0x01, 0xDB, 0x00),
+            McuOwnerProtocol.blackScreen(McuOwnerProtocol.Screen.OFF),
+        )
+        assertArrayEquals(
+            bytes(0x0D, 0x0A, 0x04, 0x1F, 0x01, 0x01, 0xDA, 0x00),
+            McuOwnerProtocol.blackScreen(McuOwnerProtocol.Screen.ON),
+        )
+    }
+
     @Test
     fun startupIsPowerOnVersionSetupVendorBlocksBacklight() {
         val frames = McuOwnerProtocol.startup(McuOwnerProtocol.StartupConfig(rds = true, radioZone = 2, backlightDay = 100, backlightNight = 60))
@@ -271,7 +294,7 @@ class McuOwnerProtocolTest {
         assertTrue(frames.none { it[3].toInt() == 0x0B })
         val tail = 2 + blocks.size
         assertArrayEquals(McuOwnerProtocol.sleepTime(McuOwnerProtocol.SleepTime.H8), frames[tail])
-        assertArrayEquals(McuOwnerProtocol.backlight(100, 60), frames[tail + 1])
+        assertArrayEquals(McuOwnerProtocol.backlight(20, 8), frames[tail + 1])
         assertArrayEquals(McuOwnerProtocol.mode(McuOwnerProtocol.Mode.POWER_ON), frames[tail + 2])
         assertArrayEquals(McuOwnerProtocol.mode(McuOwnerProtocol.Mode.MCU_VERSION), frames[tail + 3])
         assertArrayEquals(bytes(0x0D, 0x0A, 0x03, 0x01, 0x0B, 0xF0, 0x00), frames[tail + 4])

@@ -171,6 +171,13 @@ class CarService(private val appContext: Context) {
     /** The volume cache the owner's `79`/`78` frames feed (a FanOut target); the binder otherwise. */
     val volumeState = VolumeStateHolder()
 
+    /**
+     * The backlight targets across boots (a FanOut target for the headlamp bit). Every
+     * [sendBacklight] writes it, so the boot and wake `2E` replay the last thing the user set,
+     * as the vendor's provider rows did (EventService.java:9639-9641).
+     */
+    val backlight = BacklightMemory(BacklightMemory.Prefs(appContext))
+
     /** Owner attached: [read] the cache, null until the MCU has reported; otherwise the binder. */
     private inline fun <T> volume(read: (VolumeState) -> T, binder: IEventService.() -> T?): T? {
         if (owner == null) {
@@ -570,10 +577,29 @@ class CarService(private val appContext: Context) {
      * broadcast and never reaches the MCU (`EventService.java:4847-4854`).
      */
     fun sendBacklight(day: Int, night: Int) {
+        val clampedDay = clampBacklight(day)
+        val clampedNight = clampBacklight(night)
+        backlight.remember(clampedDay, clampedNight)
+
         // Owner path: the `2E` frame straight to the MCU; the binder otherwise. Without this branch
         // the Display slider moved and the panel stayed put on Riposte OS 0.2.
-        owner?.let { it.send(McuOwnerProtocol.backlight(clampBacklight(day), clampBacklight(night))); return }
-        call { sendBacklight(clampBacklight(day).toByte(), clampBacklight(night).toByte()) }
+        owner?.let { it.send(McuOwnerProtocol.backlight(clampedDay, clampedNight)); return }
+        call { sendBacklight(clampedDay.toByte(), clampedNight.toByte()) }
+    }
+
+    /**
+     * The `1F` the vendor sends around its black-screen overlay (sendBlackScreen,
+     * EventService.java:9679-9685). Owner path only: the AIDL has no equivalent, the gateway
+     * drives it from its own overlay.
+     */
+    fun sendBlackScreen(screen: McuOwnerProtocol.Screen) {
+        val mcuOwner = owner
+        if (mcuOwner == null) {
+            Log.w(TAG, "sendBlackScreen: no port owner")
+            return
+        }
+
+        mcuOwner.send(McuOwnerProtocol.blackScreen(screen))
     }
 
     /**
