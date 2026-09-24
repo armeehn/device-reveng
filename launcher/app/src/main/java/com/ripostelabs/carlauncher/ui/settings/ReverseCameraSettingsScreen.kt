@@ -1,11 +1,14 @@
 package com.ripostelabs.carlauncher.ui.settings
 
+import android.content.Intent
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ripostelabs.carlauncher.data.CarSettingsController
 import com.ripostelabs.carlauncher.data.ReverseCameraDecoder
 import com.ripostelabs.carlauncher.data.SettingKeys
+import com.ripostelabs.carlauncher.ui.CameraTestActivity
 
 /**
  * v1.3 — Reverse camera. Mirrors the vendor "Reversing/Backcar" settings page, reskinned.
@@ -23,6 +26,7 @@ fun ReverseCameraSettingsScreen(
 ) {
     val snap by controller.snapshot.collectAsStateWithLifecycle()
     snap
+    val context = LocalContext.current
 
     SettingsScaffold(title = "Reverse camera", onBack = onBack) {
         SettingsSection(title = "Camera input") {
@@ -44,6 +48,12 @@ fun ReverseCameraSettingsScreen(
                 description = "Flip the reverse image horizontally",
                 checked = controller.getBoolean(SettingKeys.BACKCAR_CAMERA_MIRRORING, true),
                 onChange = { controller.setBoolean(SettingKeys.BACKCAR_CAMERA_MIRRORING, it) },
+            )
+            // The picture without reversing: a bench check of the feed and the input type above.
+            ActionRow(
+                label = "Test camera",
+                description = "Show the camera picture now, without reverse",
+                onClick = { context.startActivity(Intent(context, CameraTestActivity::class.java)) },
             )
         }
 
