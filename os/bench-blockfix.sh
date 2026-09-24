@@ -12,6 +12,9 @@ I=${1:-$HOME/rav4-headunit/os/0.2-bench}
 UNIT=${UNIT:-da40e9ac}
 SLOT=b
 BS=4096
+readonly ADB_USB=18d1:4ee7
+CMP_ERR=$(mktemp)
+trap 'rm -f "$CMP_ERR"' EXIT
 a() { adb -s "$UNIT" "$@"; }
 log() { echo "[blockfix $(date +%T)] $*"; }
 
@@ -19,8 +22,13 @@ for p in ${PARTS:-vendor system_ext product system}; do
   img=$I/$p.img; size=$(stat -c %s "$img"); blocks=$((size / BS))
   dev=/dev/block/mapper/${p}_$SLOT
   log "$p: reading $((size / 1048576)) MiB"
-  # cmp -l prints 1-based byte offsets that differ.
-  offs=$(a exec-out "dd if=$dev bs=$BS count=$blocks 2>/dev/null" | cmp -l - "$img" 2>/dev/null | awk '{print $1}')
+  # cmp -l prints 1-based byte offsets that differ. A dropped link gives a short or empty
+  # stream: cmp then says "EOF on -" and lists no offsets, which once read as "clean".
+  offs=$(a exec-out "dd if=$dev bs=$BS count=$blocks 2>/dev/null" | cmp -l - "$img" 2>"$CMP_ERR" | awk '{print $1}')
+  if [ -s "$CMP_ERR" ]; then
+    log "$p: read failed ($(head -1 "$CMP_ERR")); usbreset $ADB_USB and rerun"
+    exit 1
+  fi
   if [ -z "$offs" ]; then log "$p: clean"; continue; fi
   bad=$(for o in $offs; do echo $(( (o - 1) / BS )); done | sort -un)
   log "$p: $(echo "$offs" | wc -l) bytes differ in $(echo "$bad" | wc -l) block(s): $(echo $bad | cut -c1-80)"
