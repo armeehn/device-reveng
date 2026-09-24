@@ -249,6 +249,17 @@
             android:foregroundServiceType="connectedDevice" />
 
         <!--
+          The reverse picture on demand for bench checks (Settings > Reverse camera). Exported
+          so `adb shell am start -n com.ripostelabs.carlauncher/.ui.CameraTestActivity` works.
+        -->
+        <activity
+            android:name=".ui.CameraTestActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:screenOrientation="landscape"
+            android:theme="@style/Theme.CarLauncher" />
+
+        <!--
           A no-UI trampoline, deliberately NOT the launcher activity. USB_DEVICE_ATTACHED has to
           sit on an activity for Android to grant device permission, but putting it on the HOME
           activity would tie the launcher's own lifecycle to plugging in an adapter.
