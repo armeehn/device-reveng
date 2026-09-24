@@ -37,6 +37,8 @@ jobs:
           os/test-root-camera.sh
       - name: usb role script
         run: os/test-usb-role.sh
+      - name: init services keep their lib path
+        run: os/test-rc-libpath.sh
       - name: blockfix stops on a failed read
         run: os/test-blockfix.sh
       - name: touchswap compiles
