@@ -140,6 +140,7 @@ if [ "$PROFILE" = gsi ]; then
   check "[ -x $S/riposte/ais/bin/ais_server ] && [ -f $S/riposte/ais/lib/libais_pr2000.so ]" "AIS camera server lifted under riposte/ais"
   check "[ -f $S/riposte/ais/lib/libmmosal.so ]" "libmmosal.so beside it (vendor lib, off a /system daemon's search path)"
   check "grep -q '^service riposte_ais ' $S/etc/init/riposte.rc" "riposte_ais init service"
+  check "[ \"\$(stat -c %a $S/bin/riposte-ais.sh)\" = 755 ]" "riposte-ais.sh executable (sets the lib path the secure exec drops)"
   # The launcher's dlopen of the AIS client (AisCameraNative): on the public list, deps beside it.
   # Exactly the 64-bit entry: a bare name is preloaded by both zygotes and the 32-bit one has no
   # such file, which is the boot loop of 0.2 vc688. Then every path the entry commits to exists.
