@@ -40,8 +40,12 @@ import com.ripostelabs.carlauncher.carlib.AndroidOwnerGate
 import com.ripostelabs.carlauncher.carlib.RadarState
 import com.ripostelabs.carlauncher.data.AisCamera
 import com.ripostelabs.carlauncher.data.AisCameraNative
+import com.ripostelabs.carlauncher.data.AisCameraWorker
 import com.ripostelabs.carlauncher.data.ReverseFeedPath
 import com.ripostelabs.carlauncher.ui.theme.carShape
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledExecutorService
 
 /**
  * ReverseCameraScreen — the launcher's own reverse feed, Riposte OS 0.2 only.
@@ -195,41 +199,53 @@ private interface ReverseSession {
 
 /**
  * The AIS session: one [AisCamera] over the unit's client library, the texture wrapped as the
- * Surface the client draws into. Failures show as their reason, like the camera2 session.
+ * Surface the client draws into. Failures show as their reason, like the camera2 session; a
+ * late picture clears the reason (null). The client calls run on [AisCameraWorker], never on
+ * the main thread: open_camera blocks while ais_server is absent.
  *
- *     open(texture) ─▶ Surface(texture) ─▶ AisCamera.open ─▶ [1 s later] frame count logged
- *     close()       ─▶ AisCamera.close ─▶ surface.release
+ *     open(texture) ─▶ Surface(texture) ─▶ worker: AisCamera.open ─▶ [1 s later] frame count logged
+ *     close()       ─▶ worker: AisCamera.close ─▶ surface.release
  */
-private class AisReverseSession(private val onFailure: (String) -> Unit) : ReverseSession {
+private class AisReverseSession(private val onFailure: (String?) -> Unit) : ReverseSession {
     private val handler = Handler(Looper.getMainLooper())
-    private val camera = AisCamera(AisCameraNative)
+    private val camera = AisCameraWorker(AisCamera(AisCameraNative), AIS_WORKER, AIS_TIMER, post = { handler.post(it) })
     private var surface: Surface? = null
 
     override fun open(texture: SurfaceTexture) {
         val target = Surface(texture)
         surface = target
 
-        val state = camera.open(target)
-        if (state is AisCamera.State.Failed) {
-            Log.w(TAG, state.reason)
-            onFailure(state.reason)
-            return
-        }
+        camera.open(target) { state ->
+            if (state is AisCamera.State.Failed) {
+                Log.w(TAG, state.reason)
+                onFailure(state.reason)
+                return@open
+            }
+            onFailure(null)
 
-        // The only sign of a picture from here: the client's frame counter, the number stock
-        // polls for signal detection (CamerasSignalDetection.java:523).
-        handler.postDelayed(
-            { Log.i(TAG, "AIS frames after $FIRST_FRAME_CHECK_MS ms: ${camera.frames()}") },
-            FIRST_FRAME_CHECK_MS,
-        )
+            // The only sign of a picture from here: the client's frame counter, the number stock
+            // polls for signal detection (CamerasSignalDetection.java:523).
+            handler.postDelayed(
+                { camera.frames { Log.i(TAG, "AIS frames after $FIRST_FRAME_CHECK_MS ms: $it") } },
+                FIRST_FRAME_CHECK_MS,
+            )
+        }
     }
 
     override fun close() {
         handler.removeCallbacksAndMessages(null)
-        camera.close()
-
-        surface?.release()
+        val target = surface
         surface = null
+
+        camera.close { target?.release() }
+    }
+
+    private companion object {
+        // One client library per process, so one worker for every session: calls stay in order
+        // across a quick reverse-drive-reverse. Daemon threads: a stuck open never holds the app.
+        val AIS_WORKER: ExecutorService = Executors.newSingleThreadExecutor { Thread(it, "ais-camera").apply { isDaemon = true } }
+        val AIS_TIMER: ScheduledExecutorService =
+            Executors.newSingleThreadScheduledExecutor { Thread(it, "ais-deadline").apply { isDaemon = true } }
     }
 }
 
