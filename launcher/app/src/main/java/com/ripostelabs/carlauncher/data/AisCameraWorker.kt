@@ -14,7 +14,8 @@ import java.util.concurrent.atomic.AtomicBoolean
  * on reverse. Every client call now runs on one worker thread, in call order; answers come back
  * through [post] (the main looper in the app).
  *
- *     open(s)       ─▶ worker: camera.open [─▶ close, wait, open: up to twice on a failure] ─▶ post(onResult(state))
+ *     open(s)       ─▶ worker: [no lock: warm up, see warmUp] ─▶ camera.open
+ *                             [─▶ close, wait, open: up to twice on a failure] ─▶ post(onResult(state))
  *                   └▶ timer: no answer after openTimeoutMs ─▶ post(onResult(Failed(NOT_ANSWERING)))
  *     close(release) ─▶ worker: camera.close ─▶ release()     queued behind a stuck open
  *
@@ -28,7 +29,27 @@ class AisCameraWorker<S : Any>(
     private val post: (() -> Unit) -> Unit,
     private val openTimeoutMs: Long = OPEN_TIMEOUT_MS,
     private val retryDelayMs: Long = RETRY_DELAY_MS,
+    private val signal: Signal? = null,
+    private val warmTimeoutMs: Long = WARM_TIMEOUT_MS,
+    private val warmPollMs: Long = WARM_POLL_MS,
 ) {
+    /**
+     * The PR2000's signal lock, which the worker needs to see and nudge. On the bench it only
+     * detects the camera while a stream runs, and the server sizes a stream from that lock:
+     * with no lock yet every open is 0 x 0 and never streams (2026-09-25). [DecoderSignal] is the
+     * app's root-shell side.
+     */
+    interface Signal {
+        /** True when the decoder has a signal the server can size (camera_status 1..13). */
+        fun locked(): Boolean
+
+        /** A fixed mode the server can size, so a first stream starts before any detection. */
+        fun forceStreamable()
+
+        /** Reset and auto-detect on the reverse input, as stock does after a bad signal. */
+        fun redetect()
+    }
+
     /** Bumped by every open and close: an answer tagged with an older value is stale. */
     @Volatile
     private var generation = 0
@@ -53,6 +74,15 @@ class AisCameraWorker<S : Any>(
         }, openTimeoutMs, TimeUnit.MILLISECONDS)
 
         worker.execute {
+            // No lock yet (first reverse after power-on): stream in a fixed mode, let the decoder
+            // detect under it, then open for real. The notice covers the ~15 s it takes.
+            if (signal != null && !signal.locked()) {
+                answered.set(true)
+                deadline.cancel(false)
+                deliver(AisCamera.State.Failed(WARMING_UP))
+                warmUp(surface, signal, mine)
+            }
+
             var state = camera.open(surface)
 
             // The first stream start after a server start can fail while the PR2000 relocks
@@ -71,6 +101,25 @@ class AisCameraWorker<S : Any>(
             deadline.cancel(false)
             deliver(state)
         }
+    }
+
+    /**
+     * The order that brought the picture on the bench, twice: a PAL stream (status 2, sized
+     * 720x576), a redetect under it, a wait for the lock (AHD 720p30 came up as 7), a close.
+     */
+    private fun warmUp(surface: S, signal: Signal, mine: Int) {
+        Log.i(TAG, "decoder has no lock: warming up under a fixed-mode stream")
+        signal.forceStreamable()
+        camera.open(surface)
+        signal.redetect()
+
+        var waited = 0L
+        while (!signal.locked() && waited < warmTimeoutMs && generation == mine) {
+            Thread.sleep(warmPollMs)
+            waited += warmPollMs
+        }
+        Log.i(TAG, "decoder ${if (signal.locked()) "locked" else "still unlocked"} after $waited ms")
+        camera.close()
     }
 
     /** Frames drawn so far (null when nothing streams), asked on the worker like every other call. */
@@ -104,6 +153,12 @@ class AisCameraWorker<S : Any>(
         /** Two tries after the first, a second apart: both fit inside [OPEN_TIMEOUT_MS]. */
         private const val OPEN_RETRIES = 2
         private const val RETRY_DELAY_MS = 1_000L
+
+        /** Detection reported ~15 s after the redetect on the bench; 20 s leaves room. */
+        private const val WARM_TIMEOUT_MS = 20_000L
+        private const val WARM_POLL_MS = 500L
+
+        const val WARMING_UP = "Finding the camera signal"
 
         const val NOT_ANSWERING = "AIS camera server not answering"
     }

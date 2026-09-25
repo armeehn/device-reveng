@@ -41,6 +41,7 @@ import com.ripostelabs.carlauncher.carlib.RadarState
 import com.ripostelabs.carlauncher.data.AisCamera
 import com.ripostelabs.carlauncher.data.AisCameraNative
 import com.ripostelabs.carlauncher.data.AisCameraWorker
+import com.ripostelabs.carlauncher.data.DecoderSignal
 import com.ripostelabs.carlauncher.data.ReverseFeedPath
 import com.ripostelabs.carlauncher.ui.theme.carShape
 import java.util.concurrent.ExecutorService
@@ -208,7 +209,9 @@ private interface ReverseSession {
  */
 private class AisReverseSession(private val onFailure: (String?) -> Unit) : ReverseSession {
     private val handler = Handler(Looper.getMainLooper())
-    private val camera = AisCameraWorker(AisCamera(AisCameraNative), AIS_WORKER, AIS_TIMER, post = { handler.post(it) })
+    private val camera = AisCameraWorker(
+        AisCamera(AisCameraNative), AIS_WORKER, AIS_TIMER, post = { handler.post(it) }, signal = DecoderSignal,
+    )
     private var surface: Surface? = null
 
     override fun open(texture: SurfaceTexture) {
