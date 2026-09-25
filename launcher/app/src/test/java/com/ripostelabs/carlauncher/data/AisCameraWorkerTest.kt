@@ -99,6 +99,35 @@ class AisCameraWorkerTest {
         assertEquals(emptyList<AisCamera.State>(), results.toList())
     }
 
+    /** Stream start fails first, as it did while the PR2000 relocked after a server start. */
+    private class FailsFirst : AisCamera.Backend<String> {
+        val calls: MutableList<String> = Collections.synchronizedList(mutableListOf())
+        private var opens = 0
+
+        override fun load(): String? = null
+        override fun open(cameraIndex: Int): Int {
+            opens++
+            calls += "open"
+            return if (opens == 1) STREAM_FAILED else AisCamera.OPEN_OK
+        }
+        override fun setSurface(surface: String, slot: Int) { calls += "setSurface" }
+        override fun deleteSurface(slot: Int) { calls += "deleteSurface" }
+        override fun close() { calls += "close" }
+        override fun frameCount(slot: Int): Int = 0
+    }
+
+    @Test
+    fun aFailedOpenIsClosedAndRetried() {
+        val backend = FailsFirst()
+        val subject = AisCameraWorker(AisCamera(backend), worker, timer, post = { it() }, retryDelayMs = 0L)
+
+        subject.open("tex") { results += it }
+
+        waitFor { results.isNotEmpty() }
+        assertEquals(AisCamera.State.Streaming, results.last())
+        assertEquals(listOf("open", "close", "open", "setSurface"), backend.calls)
+    }
+
     private fun waitFor(condition: () -> Boolean) {
         val until = System.currentTimeMillis() + WAIT_MS
         while (!condition()) {
@@ -113,5 +142,6 @@ class AisCameraWorkerTest {
         const val DEADLINE_MS = 100L
         const val WAIT_MS = 5_000L
         const val POLL_MS = 5L
+        const val STREAM_FAILED = -8
     }
 }

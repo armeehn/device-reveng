@@ -14,7 +14,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * on reverse. Every client call now runs on one worker thread, in call order; answers come back
  * through [post] (the main looper in the app).
  *
- *     open(s)       ─▶ worker: camera.open ─▶ post(onResult(state))
+ *     open(s)       ─▶ worker: camera.open [─▶ close, wait, open: up to twice on a failure] ─▶ post(onResult(state))
  *                   └▶ timer: no answer after openTimeoutMs ─▶ post(onResult(Failed(NOT_ANSWERING)))
  *     close(release) ─▶ worker: camera.close ─▶ release()     queued behind a stuck open
  *
@@ -27,6 +27,7 @@ class AisCameraWorker<S : Any>(
     private val timer: ScheduledExecutorService,
     private val post: (() -> Unit) -> Unit,
     private val openTimeoutMs: Long = OPEN_TIMEOUT_MS,
+    private val retryDelayMs: Long = RETRY_DELAY_MS,
 ) {
     /** Bumped by every open and close: an answer tagged with an older value is stale. */
     @Volatile
@@ -52,7 +53,20 @@ class AisCameraWorker<S : Any>(
         }, openTimeoutMs, TimeUnit.MILLISECONDS)
 
         worker.execute {
-            val state = camera.open(surface)
+            var state = camera.open(surface)
+
+            // The first stream start after a server start can fail while the PR2000 relocks
+            // (open_camera -> -8, bench 2026-09-25). Stock closes and reopens on a bad signal
+            // (BackcarEvent.java:1428-1434); so does this, unless a close came in meanwhile.
+            var retries = 0
+            while (state is AisCamera.State.Failed && retries < OPEN_RETRIES && generation == mine) {
+                retries++
+                Log.i(TAG, "open failed (${state.reason}), retry $retries of $OPEN_RETRIES")
+                camera.close()
+                Thread.sleep(retryDelayMs)
+                state = camera.open(surface)
+            }
+
             answered.set(true)
             deadline.cancel(false)
             deliver(state)
@@ -86,6 +100,10 @@ class AisCameraWorker<S : Any>(
 
         /** Room for a cold server start; a call still stuck after it has no server to talk to. */
         const val OPEN_TIMEOUT_MS = 5_000L
+
+        /** Two tries after the first, a second apart: both fit inside [OPEN_TIMEOUT_MS]. */
+        private const val OPEN_RETRIES = 2
+        private const val RETRY_DELAY_MS = 1_000L
 
         const val NOT_ANSWERING = "AIS camera server not answering"
     }
