@@ -52,6 +52,9 @@ printf '#!/system/bin/sh\n' > "$W/sys/bin/ais_server"; chmod 0755 "$W/sys/bin/ai
 # every GSI ships that it is appended to.
 for l in libais_camera.so libais_fibo_carcam.so libais_core.so libais_client.so libais_base.so libais_log.so; do : > "$W/sys/lib64/$l"; done
 printf 'libandroid.so\nlibc.so\n' > "$W/sys/etc/public.libraries.txt"
+# The platform policy build.sh appends the AIS socket rules to (step 3d); the unit compiles it at boot.
+mkdir -p "$W/sys/etc/selinux"
+printf '(type su)\n' > "$W/sys/etc/selinux/plat_sepolicy.cil"
 # Phone-side Bluetooth roles as a stock or GSI build.prop carries them: tier2 must keep them
 # byte for byte, gsi must override them (init keeps the last value of a duplicated key).
 printf 'ro.build.version.release=13\nro.build.type=userdebug\nbluetooth.profile.a2dp.source.enabled=true\nbluetooth.profile.hfp.ag.enabled=true\n' > "$W/sys/build.prop"

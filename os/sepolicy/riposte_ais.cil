@@ -1,0 +1,18 @@
+; The reverse camera's AIS sockets, appended to the GSI's plat_sepolicy.cil by build.sh step 3d.
+; The unit compiles that file at every boot (its hash never matches the vendor's precompiled one).
+;
+;   launcher (priv_app, s0:c512,c768) ──connect──▶ /dev/socket/ais_socket_N ◀──bind── ais_server (su)
+;
+; ais_server makes one socket per client under /dev/socket; each would be socket_device (s0), and
+; plat_sepolicy.cil's mlsconstrain on sock_file write refuses priv_app across levels whatever an
+; allow says (bench 2026-09-25). The type transition gives every one an MLS-trusted type instead.
+; Checked offline with secilc against the unit's own vendor policy before it shipped.
+(type riposte_ais_socket)
+(roletype object_r riposte_ais_socket)
+(typeattributeset file_type (riposte_ais_socket))
+(typeattributeset dev_type (riposte_ais_socket))
+(typeattributeset mlstrustedobject (riposte_ais_socket))
+(typetransition su socket_device sock_file riposte_ais_socket)
+(allow su riposte_ais_socket (sock_file (create write unlink setattr getattr)))
+(allow priv_app riposte_ais_socket (sock_file (write getattr setattr)))
+(allow priv_app su (unix_stream_socket (connectto)))

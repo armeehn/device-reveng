@@ -12,5 +12,9 @@ AIS=/system/riposte/ais
 
 # The i18n APEX too: libais_config.so pulls the GSI's libxml2, which needs libandroidicu.so, and
 # this unlisted path gets no APEX link (2026-09-24: "AIS SERVER EXIT -2" every 5 s without it).
+# Its sleep gate serves no client while sys.acc.state is unset (libais_core.so); stock's eventcenter
+# set it, 0.2 has no eventcenter. The server only runs with the car on, so on is the truth here.
+[ -n "$(getprop sys.acc.state)" ] || setprop sys.acc.state 1
+
 export LD_LIBRARY_PATH=$AIS/lib:/apex/com.android.i18n/lib64
 exec "$AIS/bin/ais_server"

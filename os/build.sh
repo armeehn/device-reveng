@@ -32,6 +32,7 @@ readonly AIS_DIR=riposte/ais                   # the AIS camera server on gsi, s
 readonly AIS_BIN=ais_server
 readonly AIS_VENDOR_LIBS="libmmosal.so"        # what it links from /vendor/lib64, off a /system daemon's path
 readonly AIS_CLIENT_LIB=libais_camera.so       # what the launcher dlopens, see step 3d
+readonly PLAT_SEPOLICY=etc/selinux/plat_sepolicy.cil   # compiled by init at every boot, see step 3d
 readonly AIS_CLIENT_DEPS="libais_fibo_carcam.so libais_core.so libais_client.so libais_base.so libais_log.so"
 readonly PUBLIC_LIBS=etc/public.libraries.txt   # the /system libs the linker lets an app dlopen
 readonly LAUNCHER_NAME=CarLauncher
@@ -230,6 +231,10 @@ if [ "$PROFILE" = gsi ]; then
   log "AIS client on the public list as '$AIS_PUBLIC_ENTRY' + $(echo $AIS_CLIENT_DEPS $AIS_VENDOR_LIBS | wc -w) deps in /system/lib64"
   chmod 0755 "$SYS/$AIS_DIR"/bin/*
   log "lifted the AIS camera server: $(ls "$SYS/$AIS_DIR/lib" | wc -l) libs + $AIS_BIN"
+  # The launcher reaches the server's sockets only with these rules (sepolicy/riposte_ais.cil).
+  [ -f "$SYS/$PLAT_SEPOLICY" ] || die "the GSI carries no $PLAT_SEPOLICY"
+  cat "$HERE/sepolicy/riposte_ais.cil" >> "$SYS/$PLAT_SEPOLICY"
+  log "AIS socket policy appended to $PLAT_SEPOLICY"
 fi
 
 # Default grants for the launcher and the suite: a head unit has no one to tap a permission

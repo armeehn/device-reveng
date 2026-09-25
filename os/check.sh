@@ -143,6 +143,9 @@ if [ "$PROFILE" = gsi ]; then
   check "grep -q '^service riposte_ais ' $S/etc/init/riposte.rc" "riposte_ais init service"
   check "[ \"\$(stat -c %a $S/bin/riposte-ais.sh)\" = 755 ]" "riposte-ais.sh executable (sets the lib path the secure exec drops)"
   check "grep -q '/apex/com.android.i18n/lib64' $S/bin/riposte-ais.sh" "ais_server's path reaches the i18n APEX (libxml2 needs libandroidicu.so)"
+  check "grep -q 'setprop sys.acc.state 1' $S/bin/riposte-ais.sh" "ais_server sees ACC on (it serves no client while sys.acc.state is unset)"
+  check "grep -qx '(typetransition su socket_device sock_file riposte_ais_socket)' $S/etc/selinux/plat_sepolicy.cil" "AIS sockets get the MLS-trusted riposte_ais_socket type"
+  check "grep -qx '(allow priv_app su (unix_stream_socket (connectto)))' $S/etc/selinux/plat_sepolicy.cil" "the launcher may connect to ais_server"
   # The launcher's dlopen of the AIS client (AisCameraNative): on the public list, deps beside it.
   # Exactly the 64-bit entry: a bare name is preloaded by both zygotes and the 32-bit one has no
   # such file, which is the boot loop of 0.2 vc688. Then every path the entry commits to exists.
