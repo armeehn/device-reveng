@@ -128,6 +128,60 @@ class AisCameraWorkerTest {
         assertEquals(listOf("open", "close", "open", "setSurface"), backend.calls)
     }
 
+    /** A backend that always opens; the calls land in [log] beside the decoder's. */
+    private class Opens(private val log: MutableList<String>) : AisCamera.Backend<String> {
+        override fun load(): String? = null
+        override fun open(cameraIndex: Int): Int { log += "open"; return AisCamera.OPEN_OK }
+        override fun setSurface(surface: String, slot: Int) { log += "setSurface" }
+        override fun deleteSurface(slot: Int) { log += "deleteSurface" }
+        override fun close() { log += "close" }
+        override fun frameCount(slot: Int): Int = 0
+    }
+
+    /** The PR2000 as the bench showed it: no lock until a redetect runs under a live stream. */
+    private class Decoder(private val log: MutableList<String>, locked: Boolean) : AisCameraWorker.Signal {
+        @Volatile var locked = locked
+
+        override fun locked(): Boolean = locked
+        override fun forceStreamable() { log += "forceStreamable" }
+        override fun redetect() {
+            log += "redetect"
+            locked = log.contains("setSurface")
+        }
+    }
+
+    @Test
+    fun noLockWarmsUpUnderAStreamThenReopens() {
+        val log: MutableList<String> = Collections.synchronizedList(mutableListOf())
+        val subject = AisCameraWorker(
+            AisCamera(Opens(log)), worker, timer, post = { it() },
+            signal = Decoder(log, locked = false), warmPollMs = 1L,
+        )
+
+        subject.open("tex") { results += it }
+
+        waitFor { results.lastOrNull() == AisCamera.State.Streaming }
+        assertEquals(AisCamera.State.Failed(AisCameraWorker.WARMING_UP), results.first())
+        assertEquals(
+            listOf("forceStreamable", "open", "setSurface", "redetect", "close", "deleteSurface", "open", "setSurface"),
+            log.toList(),
+        )
+    }
+
+    @Test
+    fun aLockedDecoderOpensStraightAway() {
+        val log: MutableList<String> = Collections.synchronizedList(mutableListOf())
+        val subject = AisCameraWorker(
+            AisCamera(Opens(log)), worker, timer, post = { it() }, signal = Decoder(log, locked = true),
+        )
+
+        subject.open("tex") { results += it }
+
+        waitFor { results.isNotEmpty() }
+        assertEquals(listOf(AisCamera.State.Streaming), results.toList())
+        assertEquals(listOf("open", "setSurface"), log.toList())
+    }
+
     private fun waitFor(condition: () -> Boolean) {
         val until = System.currentTimeMillis() + WAIT_MS
         while (!condition()) {
