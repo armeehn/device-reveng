@@ -10,5 +10,7 @@
 AIS=/system/riposte/ais
 [ -x "$AIS/bin/ais_server" ] || exit 0
 
-export LD_LIBRARY_PATH=$AIS/lib
+# The i18n APEX too: libais_config.so pulls the GSI's libxml2, which needs libandroidicu.so, and
+# this unlisted path gets no APEX link (2026-09-24: "AIS SERVER EXIT -2" every 5 s without it).
+export LD_LIBRARY_PATH=$AIS/lib:/apex/com.android.i18n/lib64
 exec "$AIS/bin/ais_server"
