@@ -26,9 +26,10 @@ readonly BT_CARKIT_COD=38,4,8
 # The logcat ring (overlay/system/bin/riposte-logring.sh): 8 MiB x (1 live + 12 rotated) files.
 readonly LOGRING_ROTATE_KB=8192
 readonly LOGRING_ROTATE_COUNT=12
-# Secure settings the first-boot hook must turn off: the GSI's doze dream and screen savers.
+# Secure settings the first-boot hook must turn off: the GSI's doze dream and screen savers, and
+# SystemUI's saved "was dozing" flag (RestartDozeListener replays it as a sleep on every boot).
 readonly DOZE_OFF_KEYS="doze_enabled doze_always_on doze_pulse_on_pick_up doze_pulse_on_double_tap
-  screensaver_enabled screensaver_activate_on_dock screensaver_activate_on_sleep"
+  screensaver_enabled screensaver_activate_on_dock screensaver_activate_on_sleep restart_nap_after_start"
 
 BASE="" OUT="" PROFILE=tier1 SUITE="" SYSTEM="" BOOT="" TOOLS=0
 while [ $# -gt 0 ]; do

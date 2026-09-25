@@ -18,6 +18,11 @@ settings put secure doze_pulse_on_double_tap 0    # no pulse from a double tap o
 settings put secure screensaver_enabled 0         # no screen saver (dream) at all
 settings put secure screensaver_activate_on_dock 0   # ... not when "docked" (the GSI default is on)
 settings put secure screensaver_activate_on_sleep 0  # ... not when the screen would sleep
+# SystemUI's RestartDozeListener saves "was dozing" here and, when SystemUI starts, wakes the
+# panel and calls goToSleep if it is set (bench, 2026-09-24: am trace-ipc caught the call ~27 s
+# into boot). The flag was saved while the doze dream was still on, and with doze off nothing
+# clears it, so every boot replayed a sleep that DozeGuard then undid: the panel flashed.
+settings put secure restart_nap_after_start 0
 
 [ -f "$MARK" ] && exit 0
 
