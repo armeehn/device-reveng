@@ -485,7 +485,7 @@ class MainActivity : ComponentActivity() {
         }
         themeStore = ThemeStore(applicationContext)
         navBar = NavBar(applicationContext)
-        reverseWindow = ReverseCameraWindow(applicationContext)
+        reverseWindow = ReverseCameraWindow(applicationContext) { on -> settingsStore.setReverseGuideLines(on) }
 
         // v2.7: the notification shelf's mute filter. Constructed before the speech controller
         // below, which shares it.
@@ -783,6 +783,7 @@ class MainActivity : ComponentActivity() {
                     ReverseCameraWindow.Options(
                         showRadar = carSettingsController.getBoolean(SettingKeys.BACKCAR_DISPLAY_RADAR, true),
                         mirrored = carSettingsController.getBoolean(SettingKeys.BACKCAR_CAMERA_MIRRORING, false),
+                        guideLines = settingsStore.settings.value.reverseGuideLines,
                     )
                 }
             }

@@ -6,9 +6,12 @@ import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
 import android.view.WindowManager
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
@@ -42,15 +45,18 @@ import com.ripostelabs.carlauncher.ui.theme.CarTheme
  * because both are overlays and this one is added later. Removing the window disposes the
  * composition, which is what releases the camera.
  */
-class ReverseCameraWindow(private val context: Context) {
+class ReverseCameraWindow(
+    private val context: Context,
+    private val onToggleGuideLines: (Boolean) -> Unit = {},
+) {
 
     private companion object {
         const val TAG = "ReverseCameraWindow"
         const val OVERLAY_APPOP = "SYSTEM_ALERT_WINDOW"
     }
 
-    /** The vendor's two decorations of the feed, read once per picture (see [render]). */
-    data class Options(val showRadar: Boolean, val mirrored: Boolean)
+    /** The vendor's two decorations of the feed and our guide lines, read once per picture (see [render]). */
+    data class Options(val showRadar: Boolean, val mirrored: Boolean, val guideLines: Boolean = true)
 
     private val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
     private val host = Host()
@@ -131,12 +137,27 @@ class ReverseCameraWindow(private val context: Context) {
     @androidx.compose.runtime.Composable
     private fun Picture() {
         CarLauncherTheme(theme = theme, night = night) {
-            ReverseCameraScreen(
-                verdict = verdict,
-                radar = radar,
-                showRadar = options.showRadar,
-                mirrored = options.mirrored,
-            )
+            Box(modifier = Modifier.fillMaxSize()) {
+                ReverseCameraScreen(
+                    verdict = verdict,
+                    radar = radar,
+                    showRadar = options.showRadar,
+                    mirrored = options.mirrored,
+                )
+
+                // Guide lines and their chip over the feed. HomeScreen's ReverseOverlay draws
+                // them in the activity, and this window sits above it, so on 0.2 the picture
+                // hid them (bench, 2026-09-26). No radar here: the screen above draws its own.
+                ReverseOverlay(
+                    visible = verdict == ReverseCameraGate.Verdict.PREVIEW,
+                    guideLines = options.guideLines,
+                    onToggleGuideLines = { on ->
+                        options = options.copy(guideLines = on)
+                        onToggleGuideLines(on)
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
         }
     }
 
