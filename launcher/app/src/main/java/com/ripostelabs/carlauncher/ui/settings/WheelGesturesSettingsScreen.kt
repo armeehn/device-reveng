@@ -47,6 +47,8 @@ fun WheelGesturesSettingsScreen(
     }
 
     val actions = WheelGestureAction.values().map { it to it.label }
+    // A plain press bound to NONE is not "nothing": the key keeps its stock action.
+    val pressActions = actions.map { (a, label) -> a to if (a == WheelGestureAction.NONE) STOCK_LABEL else label }
 
     SettingsScaffold(title = "Wheel gestures", onBack = onBack) {
         SettingsSection(title = "Last gesture") {
@@ -62,7 +64,7 @@ fun WheelGesturesSettingsScreen(
         SettingsSection {
             ToggleSetting(
                 label = "Wheel gestures",
-                description = "Hold and double-press actions decoded from the CAN frames",
+                description = "Press, hold and double-press actions decoded from the CAN frames",
                 checked = bindings.enabled,
                 onChange = settingsStore::setWheelGesturesEnabled,
             )
@@ -70,6 +72,13 @@ fun WheelGesturesSettingsScreen(
 
         WheelGestureBindings.BINDABLE.forEach { key ->
             SettingsSection(title = keyLabel(key)) {
+                PickerSetting(
+                    label = "Press",
+                    current = bindings.pressOf(key),
+                    options = pressActions,
+                    onSelect = { settingsStore.setWheelPress(key, it) },
+                    enabled = bindings.enabled,
+                )
                 PickerSetting(
                     label = "Hold",
                     current = bindings.longOf(key),
@@ -96,6 +105,8 @@ fun WheelGesturesSettingsScreen(
         }
     }
 }
+
+private const val STOCK_LABEL = "Stock action"
 
 private fun gestureLabel(g: WheelGesture): String = when (g) {
     is WheelGesture.Press -> "Press"

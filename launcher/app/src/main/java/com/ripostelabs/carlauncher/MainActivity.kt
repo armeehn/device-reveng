@@ -78,6 +78,7 @@ import com.ripostelabs.carlauncher.carlib.SysVar // v0.4.9 vendor hidden-apps li
 import com.ripostelabs.carlauncher.carlib.VendorBtService
 import com.ripostelabs.carlauncher.carlib.VendorBtState
 import com.ripostelabs.carlauncher.carlib.WheelGesture
+import com.ripostelabs.carlauncher.data.WheelGestureAction
 import com.ripostelabs.carlauncher.carlib.WheelKey
 import com.ripostelabs.carlauncher.carlib.WheelKeyMap
 import com.ripostelabs.carlauncher.carlib.WheelKeySwallow
@@ -738,14 +739,15 @@ class MainActivity : ComponentActivity() {
         )
         lifecycleScope.launch {
             carEvents.wheelGestures.collect { gesture ->
-                // Riposte OS 0.2: no vendor acts on the plain press, so the router does.
-                if (gesture is WheelGesture.Press) {
+                val action = settingsStore.settings.value.wheelGestures.actionFor(gesture)
+
+                // Riposte OS 0.2: no vendor acts on the plain press, so the router does,
+                // unless the user rebound that key on the Wheel gestures page.
+                if (gesture is WheelGesture.Press && action == WheelGestureAction.NONE) {
                     keyRouter?.onCanPress(gesture.key)
                     return@collect
                 }
-                val bindings = settingsStore.settings.value.wheelGestures
-                if (!bindings.enabled) return@collect
-                if (wheelGestures.run(bindings.actionFor(gesture))) carFeedback.tap()
+                if (wheelGestures.run(action)) carFeedback.tap()
             }
         }
 

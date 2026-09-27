@@ -244,6 +244,7 @@ class SettingsStore(context: Context) {
                             prefs[WHEEL_LONG_KEY], WheelGestureBindings.DEFAULT_LONG,
                         ),
                         double = WheelGestureBindings.decode(prefs[WHEEL_DOUBLE_KEY], emptyMap()),
+                        press = WheelGestureBindings.decode(prefs[WHEEL_PRESS_KEY], emptyMap()),
                     ),
                     wheelKeyMapJson = prefs[WHEEL_KEY_MAP_KEY] ?: "",
                     accessoryConfigJson = prefs[ACCESSORY_CONFIG_KEY] ?: "",
@@ -358,6 +359,12 @@ class SettingsStore(context: Context) {
         ds.edit { it[WHEEL_DOUBLE_KEY] = WheelGestureBindings.encode(next) }
     }
 
+    /** Rebind [key]'s plain press; [WheelGestureAction.NONE] restores the stock action. */
+    fun setWheelPress(key: WheelKey, action: WheelGestureAction) = scope.launch {
+        val next = settings.value.wheelGestures.press + (key to action)
+        ds.edit { it[WHEEL_PRESS_KEY] = WheelGestureBindings.encode(next) }
+    }
+
     /** Shadow the replaced OEM apps ([OemApps]) in the drawer, or show them again. */
     fun setHideReplacedOemApps(enabled: Boolean) = scope.launch {
         ds.edit { it[HIDE_REPLACED_OEM_KEY] = enabled }
@@ -402,6 +409,7 @@ class SettingsStore(context: Context) {
         val WHEEL_GESTURES_KEY = booleanPreferencesKey("wheel_gestures_enabled")
         val WHEEL_LONG_KEY = stringPreferencesKey("wheel_gestures_long")
         val WHEEL_DOUBLE_KEY = stringPreferencesKey("wheel_gestures_double")
+        val WHEEL_PRESS_KEY = stringPreferencesKey("wheel_gestures_press")
         val WHEEL_KEY_MAP_KEY = stringPreferencesKey("wheel_key_map") // Riposte OS 0.2 learn page
         val ACCESSORY_CONFIG_KEY = stringPreferencesKey("accessory_config") // AccessoryConfig blob
         val HIDE_REPLACED_OEM_KEY = booleanPreferencesKey("hide_replaced_oem_apps") // OemApps shadow

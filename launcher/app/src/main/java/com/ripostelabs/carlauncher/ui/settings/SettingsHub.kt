@@ -105,13 +105,13 @@ fun SettingsHub(
             SettingsCategoryCard(
                 icon = Icons.Filled.SettingsRemote,
                 title = "Steering wheel",
-                subtitle = "Learn & map wheel keys, live key monitor",
+                subtitle = "Resistive wheel learn, live key monitor",
                 onClick = { onOpen(SettingsRoute.SteeringWheel) },
             )
             SettingsCategoryCard(
                 icon = Icons.Filled.TouchApp,
                 title = "Wheel gestures",
-                subtitle = "Hold and double-press actions for the wheel keys",
+                subtitle = "Remap press, hold and double press of the wheel keys",
                 onClick = { onOpen(SettingsRoute.WheelGestures) },
             )
             SettingsCategoryCard(
