@@ -62,9 +62,12 @@ into its own always-on service and gives the OS one car API.
 
 - **Identity.** The service is signed with the AOSP platform test key and runs as
   `android.uid.system`: the GSI's platform cert *is* that public key, proven on the unit. It holds
-  `REBOOT`, `MASTER_CLEAR`, `DEVICE_POWER` and opens `/dev/ttyHS1` itself: no root shell, no
-  `riposte-mcubridge.sh`. The key is public, so this is a property of owner builds, not a
-  security boundary.
+  `REBOOT`, `MASTER_CLEAR`, `DEVICE_POWER`. The key is public, so this is a property of owner
+  builds, not a security boundary.
+- **The tty still rides the bridge.** On the 0.2 GSI `/dev/ttyHS1` is labelled `device`
+  (`ls -lZ`, 2026-09-27), which no app domain may open, `system_app` included. The service opens
+  the same `riposte.mcu.link` the launcher did (`tcp:127.0.0.1:5588` from
+  `riposte-mcubridge.sh`, one connection at a time); a vendor label for the node would retire it.
 - **One owner.** The service is the only process that opens the MCU tty. The launcher's
   `CarService` becomes a client of `ICarService`; its vendor (`IEventService`) path stays for
   stock firmware only.
@@ -142,6 +145,31 @@ oneway interface ICarListener {
     void onReverse(in ReverseState state);
 }
 ```
+
+### Built so far (apiVersion 2)
+
+`McuOwner` runs in the service from `onCreate`, behind the same gate as before (`ro.riposte.os.car_owner=1`,
+no `eventcenter`). The launcher reads the service's `com.ripostelabs.car.API` meta-data: 2 or more
+makes it a client (`RemoteMcuOwner`), anything else keeps the owner in the launcher. Never both.
+
+```aidl
+// ICarService, after reboot(): all CONTROL except currentSource (READ)
+void openLink();                     // McuOwner.start: boot, ACC wake
+void closeLink();                    // McuOwner.stop: ACC sleep
+void setStartup(in byte[] frames);   // handshake frames, FramePack; a change re-runs the handshake
+boolean setSource(int mode);         // McuOwnerProtocol.Mode code, waits for MODE_ACK
+int currentSource();                 // -1 before the first setSource
+void selectCar(String carId);        // CarProfile.id, kept across boots
+void sendMcuFrame(in byte[] frame);
+
+// ICarListener
+void onMcuEvent(in McuEvent event);  // COMMAND: raw inbound frame; CAN_BOX_CAR: CarProfile.id
+```
+
+`onMcuEvent` carries the raw command and the client decodes it with `McuDecoder`, the code the
+owner runs, so one parcel serves every `McuOwner.Listener` call. `onStatus` carries the owner
+state; frame counters go out at most once a second. The service keeps the last startup frames
+and car, so the boot handshake already has the launcher's volume and setup table.
 
 ### The launcher's 30 vendor calls, mapped
 

@@ -3,6 +3,7 @@
      image's platform key (platform-testkey/). Persistent: the system starts it at boot and
      restarts it after a crash, once it sits in /system/priv-app. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:sharedUserId="android.uid.system">
 
     <!-- Status and listener reads: any app may hold it. -->
@@ -16,6 +17,11 @@
         android:protectionLevel="signature|privileged" />
 
     <uses-permission android:name="android.permission.REBOOT" />
+    <!-- The MCU link on 0.2 images is a loopback socket (riposte-mcubridge.sh); sockets need inet. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- carlib declares these for the launcher's receivers and GPS speed; the service uses neither. -->
+    <uses-permission android:name="com.szchoiceway.permission.broadcast" tools:node="remove" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" tools:node="remove" />
 
     <application
         android:label="Riposte Car"
@@ -24,6 +30,11 @@
         <service
             android:name=".CarService"
             android:exported="true"
-            android:permission="com.ripostelabs.car.permission.CONTROL" />
+            android:permission="com.ripostelabs.car.permission.CONTROL">
+            <!-- ICarService.apiVersion (CarBinder.API_VERSION), read by clients before binding. -->
+            <meta-data
+                android:name="com.ripostelabs.car.API"
+                android:value="2" />
+        </service>
     </application>
 </manifest>

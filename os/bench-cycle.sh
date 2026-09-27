@@ -50,6 +50,18 @@ have=$(sha256sum "$APPS/carlauncher.apk" | awk '{print $1}')
 [ "$want" = "$have" ] || die "launcher $VC checksum mismatch"
 log "launcher $VC ok"
 
+# 1b. the car service of the same release (the MCU owner on images that carry it). A release
+# from before the service shipped has none: the stale copy goes, and the launcher owns the port.
+if curl -sf -o "$APPS/carservice.apk" "$LAUNCHER_URL/carservice-0.7-$VC.apk"; then
+  want=$(curl -sf "$LAUNCHER_URL/carservice-0.7-$VC.apk.sha256" | awk '{print $1}')
+  have=$(sha256sum "$APPS/carservice.apk" | awk '{print $1}')
+  [ "$want" = "$have" ] || die "car service $VC checksum mismatch"
+  log "car service $VC ok"
+else
+  rm -f "$APPS/carservice.apk"
+  log "no car service for $VC: the image leaves it out"
+fi
+
 # 2. build. The images are replaced; RESULT.md, the record ACCEPTANCE.md asks for next to
 # them, stays (a rebuild once deleted it).
 mkdir -p "$OUT"

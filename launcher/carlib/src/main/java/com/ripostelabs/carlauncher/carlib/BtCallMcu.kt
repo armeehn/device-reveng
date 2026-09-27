@@ -67,7 +67,7 @@ class BtCallMcu(
         /** The vendor's sleep between the mute and the hang-up command (EventHandle.java:47). */
         const val HANG_UP_SETTLE_MS = 300L
 
-        fun forOwner(owner: McuOwner): BtCallMcu = BtCallMcu(object : Mcu {
+        fun forOwner(owner: McuPort): BtCallMcu = BtCallMcu(object : Mcu {
             override fun send(frame: ByteArray) = owner.send(frame)
         })
     }
