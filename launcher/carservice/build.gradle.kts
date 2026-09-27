@@ -35,6 +35,18 @@ fun platformKeystore(): File {
     return store
 }
 
+// versionCode from git as the launcher derives it (app/build.gradle.kts): the commit count at
+// the merge-base with origin/main, so the service ships with the launcher release's number.
+fun git(vararg args: String): String = providers.exec {
+    workingDir = projectDir
+    isIgnoreExitValue = true
+    commandLine("git", *args)
+}.standardOutput.asText.get().trim()
+
+val versionAnchor = git("merge-base", "HEAD", "origin/main").ifEmpty { "HEAD" }
+val gitVersionCode = git("rev-list", "--count", versionAnchor).toIntOrNull()
+    ?: throw GradleException("Not a git checkout: the car service version is derived from git history.")
+
 android {
     namespace = "com.ripostelabs.car"
     compileSdk = 34
@@ -43,7 +55,7 @@ android {
         applicationId = "com.ripostelabs.car"
         minSdk = 33
         targetSdk = 33
-        versionCode = 1
+        versionCode = gitVersionCode
         versionName = "0.3"
     }
 
@@ -86,5 +98,9 @@ android {
 }
 
 dependencies {
+    // McuOwner, the ICarService AIDL and the parcels live in carlib, shared with the launcher.
+    implementation(project(":carlib"))
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+
     testImplementation("junit:junit:4.13.2")
 }

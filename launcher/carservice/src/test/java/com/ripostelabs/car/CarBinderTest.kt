@@ -1,5 +1,8 @@
 package com.ripostelabs.car
 
+import android.os.RemoteException
+import com.ripostelabs.carlauncher.carlib.McuOwner
+import com.ripostelabs.carlauncher.carlib.McuSerial
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
@@ -13,27 +16,55 @@ class CarBinderTest {
         val held = mutableListOf<ICarListener>()
         override fun add(listener: ICarListener) { held += listener }
         override fun remove(listener: ICarListener) { held -= listener }
+        override fun each(action: (ICarListener) -> Unit) = held.toList().forEach(action)
     }
 
-    private class FakeListener : ICarListener.Stub() {
+    private class FakeListener(private val dead: Boolean = false) : ICarListener.Stub() {
         val seen = mutableListOf<CarStatus>()
+        val events = mutableListOf<McuEvent>()
         override fun onStatus(status: CarStatus) { seen += status }
+        override fun onMcuEvent(event: McuEvent) {
+            if (dead) {
+                throw RemoteException("gone")
+            }
+            events += event
+        }
+    }
+
+    /** Records what reached the owner, so a refused call can be shown to have done nothing. */
+    private class FakeLink : Link {
+        var status: McuOwner.Status = McuOwner.Status.Idle
+        val calls = mutableListOf<String>()
+        override fun status() = status
+        override fun open() { calls += "open" }
+        override fun close() { calls += "close" }
+        override fun setStartup(packed: ByteArray) { calls += "startup ${packed.size}" }
+        override fun setSource(mode: Int): Boolean { calls += "source $mode"; return true }
+        override fun currentSource() = 7
+        override fun selectCar(id: String) { calls += "car $id" }
+        override fun send(frame: ByteArray) { calls += "send ${frame.size}" }
     }
 
     private var reboots = 0
     private val listeners = FakeListeners()
+    private val link = FakeLink()
 
     private fun binder(vararg held: String) =
-        CarBinder(Gate { it in held }, listeners, { reboots++ }, systemUid)
+        CarBinder(Gate { it in held }, listeners, { reboots++ }, systemUid, link)
 
     @Test
-    fun apiVersionIsOne() {
-        assertEquals(1, binder().apiVersion())
+    fun apiVersionIsTwo() {
+        assertEquals(2, binder().apiVersion())
     }
 
     @Test
-    fun statusCarriesOwnUidAndNoMcuLinkYet() {
-        assertEquals(CarStatus(mcuLinkUp = false, uid = systemUid), binder(READ_PERMISSION).status())
+    fun statusCarriesOwnUidAndOwnerState() {
+        link.status = McuOwner.Status.Running(acked = true, frames = 5, badChecksum = 1, skipped = 0)
+        val s = binder(READ_PERMISSION).status()
+
+        assertEquals(systemUid, s.uid)
+        assertTrue(s.mcuLinkUp)
+        assertEquals(link.status, s.ownerStatus())
     }
 
     @Test
@@ -47,7 +78,7 @@ class CarBinderTest {
         binder(READ_PERMISSION).registerListener(l)
 
         assertEquals(listOf<ICarListener>(l), listeners.held)
-        assertEquals(listOf(CarStatus(mcuLinkUp = false, uid = systemUid)), l.seen)
+        assertEquals(listOf(CarStatus(uid = systemUid)), l.seen)
     }
 
     @Test
@@ -76,5 +107,58 @@ class CarBinderTest {
     fun rebootWithReadOnlyIsRefusedBeforePower() {
         assertThrows(SecurityException::class.java) { binder(READ_PERMISSION).reboot() }
         assertEquals(0, reboots)
+    }
+
+    @Test
+    fun linkCallsWithControlReachTheOwner() {
+        val b = binder(CONTROL_PERMISSION)
+        b.openLink()
+        b.setStartup(byteArrayOf(0, 1, 9))
+        b.selectCar("hiworld_toyota:1:2")
+        assertTrue(b.setSource(3))
+        b.sendMcuFrame(byteArrayOf(1, 2))
+        b.closeLink()
+
+        assertEquals(listOf("open", "startup 3", "car hiworld_toyota:1:2", "source 3", "send 2", "close"), link.calls)
+    }
+
+    // Everything that moves the car needs CONTROL: READ alone is refused before the owner hears it.
+    @Test
+    fun linkCallsWithReadOnlyAreRefused() {
+        val b = binder(READ_PERMISSION)
+        val calls = listOf<() -> Unit>(
+            { b.openLink() },
+            { b.closeLink() },
+            { b.setStartup(byteArrayOf()) },
+            { b.setSource(1) },
+            { b.selectCar("x") },
+            { b.sendMcuFrame(byteArrayOf(1)) },
+        )
+        for (call in calls) {
+            assertThrows(SecurityException::class.java) { call() }
+        }
+
+        assertTrue(link.calls.isEmpty())
+    }
+
+    @Test
+    fun currentSourceNeedsOnlyRead() {
+        assertEquals(7, binder(READ_PERMISSION).currentSource())
+        assertThrows(SecurityException::class.java) { binder().currentSource() }
+    }
+
+    @Test
+    fun publishReachesEveryListenerAndDropsTheDead() {
+        val b = binder(READ_PERMISSION)
+        val live = FakeListener()
+        val dead = FakeListener(dead = true)
+        b.registerListener(live)
+        b.registerListener(dead)
+
+        val event = McuEvent.of(McuSerial.Command(0x71, byteArrayOf(1, 2)))
+        b.publish(event)
+
+        assertEquals(listOf(event), live.events)
+        assertEquals(listOf<ICarListener>(live), listeners.held)
     }
 }

@@ -72,7 +72,9 @@ class McuOwner(
     /** Runs the CAN box round off the owner and pump threads; tests inspect its queue. */
     private val canBoxScheduler: ScheduledExecutorService =
         Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "mcu-owner-canbox").apply { isDaemon = true } },
-) {
+    /** Sees every inbound command before it is decoded; the car service forwards it to its clients. */
+    private val tap: (McuSerial.Command) -> Unit = {},
+) : McuPort {
 
     /** When the CAN box round runs ([McuOwnerProtocol.canBoxInit]); tests shorten it. */
     data class CanBoxTiming(
@@ -179,7 +181,7 @@ class McuOwner(
     }
 
     private val _status = MutableStateFlow<Status>(Status.Idle)
-    val status: StateFlow<Status> = _status.asStateFlow()
+    override val status: StateFlow<Status> = _status.asStateFlow()
 
     /** One open link and its writer thread; replaced on every reopen so a stuck write cannot queue behind itself. */
     private class Session(val link: McuLink) {
@@ -210,10 +212,6 @@ class McuOwner(
     @Volatile
     private var ackReceived = false
 
-    /** Mirrors `mBackcarConnected`: while set, most panel keys are dropped as the vendor drops them. */
-    @Volatile
-    private var reversing = false
-
     /** Whose frames [McuOwnerProtocol.canBoxInit] builds; the driver's choice in Settings. */
     @Volatile
     private var car: CarProfile = initialCar
@@ -222,10 +220,23 @@ class McuOwner(
     private var canBoxRound: List<ScheduledFuture<*>> = emptyList()
     /** The last [setMode] argument, so a wake can resume it ([McuOwnerProtocol.reload]). */
     @Volatile
-    var lastMode: McuOwnerProtocol.Mode? = null
+    override var lastMode: McuOwnerProtocol.Mode? = null
         private set
 
-    fun start() {
+    /** Startup frames sent in place of [config]'s; the car service keeps its clients' here. */
+    @Volatile
+    private var startup: List<ByteArray>? = null
+
+    /** The owner's own share of an event, after the listener heard it: box round on wake, key echo. */
+    private val effects = object : Listener {
+        override fun onWake() = scheduleCanBox(canBoxTiming.afterWakeMs)
+
+        override fun onPanelKey(key: McuOwnerProtocol.PanelKey) = echo(key)
+    }
+
+    private val decoder = McuDecoder(FanOut(listener, effects))
+
+    override fun start() {
         if (worker != null) {
             return
         }
@@ -247,7 +258,7 @@ class McuOwner(
         w.start()
     }
 
-    fun stop() {
+    override fun stop() {
         val w = worker
         worker = null
         w?.interrupt()
@@ -261,7 +272,7 @@ class McuOwner(
      * Tell the CAN box it is in [profile]. A change re-sends the startup at once, so the box
      * does not keep the old car until the next wake; with no port open it waits for the handshake.
      */
-    fun selectCar(profile: CarProfile) {
+    override fun selectCar(profile: CarProfile) {
         if (profile == car) {
             return
         }
@@ -274,15 +285,23 @@ class McuOwner(
     }
 
     /** Raw send for callers that build their own frames with [McuOwnerProtocol]. */
-    fun send(frame: ByteArray) {
+    override fun send(frame: ByteArray) {
         val s = session ?: return
         write(s, frame)
     }
 
-    fun setMode(mode: McuOwnerProtocol.Mode): Boolean {
+    override fun setMode(mode: McuOwnerProtocol.Mode): Boolean {
         val s = session ?: return false
         lastMode = mode
         return sendWithAck(s, mode)
+    }
+
+    /** In process, letting go of the owner is closing the port. */
+    override fun release() = stop()
+
+    /** Send [frames] instead of [config]'s at the next handshake. */
+    fun useStartup(frames: List<ByteArray>) {
+        startup = frames
     }
 
     /** The POWER key path: clock stamp, the vendor's sync pause, then SRC_POWEROFF five times 50 ms apart. */
@@ -345,7 +364,7 @@ class McuOwner(
 
     /** Startup frames, then SRC_NULL with the ACK wait; Running unless the link died underneath. */
     private fun handshake(s: Session) {
-        for (frame in McuOwnerProtocol.startup(config)) {
+        for (frame in startup ?: McuOwnerProtocol.startup(config)) {
             write(s, frame)
         }
         val acked = sendWithAck(s, McuOwnerProtocol.Mode.NULL)
@@ -454,7 +473,7 @@ class McuOwner(
 
     private fun pump(s: Session) {
         val reader = McuSerial.Reader()
-        canRelay = McuCanRelay()
+        decoder.reset()
         val buffer = ByteArray(READ_BUFFER)
         var frames = 0L
         var bad = 0L
@@ -499,11 +518,6 @@ class McuOwner(
         }
     }
 
-    private val loggedUnhandled = mutableSetOf<Int>()
-
-    /** The box's stream as the 0xA5 relays rebuild it; [pump] starts a fresh one per session. */
-    private var canRelay = McuCanRelay()
-
     private fun dispatch(command: McuSerial.Command) {
         val awaited = awaitingAck
         if (awaited != null && McuOwnerProtocol.isModeAck(command, awaited)) {
@@ -514,75 +528,22 @@ class McuOwner(
             return
         }
 
-        McuOwnerProtocol.sysEvent(command)?.let { reversing = it.reverse; listener.onSysEvent(it); return }
-        McuOwnerProtocol.mainVolume(command)?.let { listener.onMainVolume(it); return }
-        McuOwnerProtocol.mute(command)?.let { listener.onMute(it); return }
-        McuOwnerProtocol.panelKey(command)?.let { onPanelKey(it); return }
-        McuOwnerProtocol.wheelKey(command)?.let { listener.onWheelKey(it); return }
-        McuOwnerProtocol.wheelState(command)?.let { listener.onWheelState(it); return }
-        McuOwnerProtocol.radioEvent(command)?.let { listener.onRadio(it); return }
-        McuOwnerProtocol.rtcTime(command)?.let { listener.onRtc(it); return }
-        McuOwnerProtocol.mcuVersion(command)?.let { listener.onMcuVersion(it); return }
-        if (McuOwnerProtocol.isWake(command)) {
-            scheduleCanBox(canBoxTiming.afterWakeMs)
-            listener.onWake()
-            return
-        }
-
-        // 0xA5 relays a slice of the CAN box's stream, not always one whole frame; see McuCanRelay.
-        if (command.opcode == McuSerial.OP_CAN) {
-            val cut = canRelay.feed(command.payload)
-            listener.onCanRelay(command.payload, cut)
-            cut.forEach(::onRelayed)
-            return
-        }
-
-        // Once per opcode: the MCU streams 0x8E (G-sensor, RADAR_3DH) at 10 Hz for the whole
-        // drive and the vendor only stores the bytes; the log is for the first sighting.
-        if (loggedUnhandled.add(command.opcode)) {
-            Log.i(LOG_TAG, "unhandled opcode 0x%02X (%d bytes): %s".format(
-                command.opcode, command.payload.size, command.payload.joinToString(" ") { "%02X".format(it) }))
-        }
-        listener.onOther(command)
+        tap(command)
+        decoder.decode(command)
     }
 
     /**
      * The port owner's share of a `72` key, before the apps hear of it (onCmdKeyEvent,
-     * EventService.java:2401-2699). With the camera up only [McuOwnerProtocol.panelKeyPassesReverse]
-     * keys count. VOL+/VOL-/MUTE go back to the MCU as `08 xx` (sendSystemKey, :4263), which is
+     * EventService.java:2401-2699). The decoder already dropped what reverse holds back.
+     * VOL+/VOL-/MUTE go back to the MCU as `08 xx` (sendSystemKey, :4263), which is
      * what moves the amplifier; the MCU then reports the result on `79`/`78`. POWER runs
      * [powerOff] after the notify: the dex confirms the switch's default arm falls through to
      * notifyValidModeEvt(4098) and then powerOff() (:2695-2698), which jadx renders as unreachable.
      */
-    /** One box frame cut from the relay stream; the decoder keys on the box's cmd, not the relay opcode. */
-    private val loggedBoxCmds = mutableSetOf<Int>()
-
-    private fun onRelayed(inner: McuFrame.Decoded) {
-        when (inner) {
-            is McuFrame.Decoded.Frame -> {
-                // Once per box cmd: the first 0x11 in a car log proves the wheel keys arrive.
-                if (loggedBoxCmds.add(inner.cmd)) {
-                    Log.i(LOG_TAG, "CAN box cmd 0x%02X first seen (%d bytes)".format(inner.cmd, inner.payload.size))
-                }
-                listener.onCanSignal(HiworldCanDecoder.decodePayload(inner.cmd, inner.payload), System.currentTimeMillis())
-            }
-
-            is McuFrame.Decoded.Malformed ->
-                Log.w(LOG_TAG, "CAN relay frame malformed: ${inner.reason}")
-        }
-    }
-
-    private fun onPanelKey(key: McuOwnerProtocol.PanelKey) {
-        if (reversing && !McuOwnerProtocol.panelKeyPassesReverse(key.code)) {
-            return
-        }
-
-        listener.onKey(key.code)
-        listener.onPanelKey(key)
-
-        val echo = McuOwnerProtocol.panelSystemKey(key.code)
-        if (echo != null) {
-            send(McuOwnerProtocol.systemKey(echo))
+    private fun echo(key: McuOwnerProtocol.PanelKey) {
+        val system = McuOwnerProtocol.panelSystemKey(key.code)
+        if (system != null) {
+            send(McuOwnerProtocol.systemKey(system))
             return
         }
 

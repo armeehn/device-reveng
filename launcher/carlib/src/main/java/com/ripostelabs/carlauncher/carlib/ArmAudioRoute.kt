@@ -191,7 +191,7 @@ class ArmAudioRoute(private val mcu: Mcu, private val run: Executor = ownThread(
     private fun bit(on: Boolean) = if (on) 1 else 0
 
     /** [Mcu] over the owner. */
-    private class OwnerMcu(private val owner: McuOwner) : Mcu {
+    private class OwnerMcu(private val owner: McuPort) : Mcu {
         override val lastMode: Mode?
             get() = owner.lastMode
 
@@ -203,7 +203,7 @@ class ArmAudioRoute(private val mcu: Mcu, private val run: Executor = ownThread(
     companion object {
         const val LOG_TAG = "ArmAudioRoute"
 
-        fun forOwner(owner: McuOwner): ArmAudioRoute = ArmAudioRoute(OwnerMcu(owner))
+        fun forOwner(owner: McuPort): ArmAudioRoute = ArmAudioRoute(OwnerMcu(owner))
 
         private fun ownThread(): Executor = Executors.newSingleThreadExecutor { r ->
             Thread(r, "arm-audio-route").apply { isDaemon = true }

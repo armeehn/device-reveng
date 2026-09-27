@@ -60,6 +60,9 @@ import com.ripostelabs.carlauncher.carlib.ArmAudioRoute
 import com.ripostelabs.carlauncher.carlib.CarProfiles
 import com.ripostelabs.carlauncher.carlib.McuDiagnostics
 import com.ripostelabs.carlauncher.carlib.McuOwner
+import com.ripostelabs.carlauncher.carlib.McuPort
+import com.ripostelabs.carlauncher.carlib.RemoteMcuOwner
+import com.ripostelabs.carlauncher.carlib.ServiceCarBinding
 import com.ripostelabs.carlauncher.carlib.KeyAction
 import com.ripostelabs.carlauncher.carlib.KeyRouter
 import com.ripostelabs.carlauncher.carlib.McuOwnerProtocol
@@ -171,7 +174,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var carEvents: CarEvents
 
     /** Riposte OS 0.2 only: our MCU port owner. Null on a stock or 0.1 slot. */
-    private var mcuOwner: McuOwner? = null
+    private var mcuOwner: McuPort? = null
     private var mcuSetupStore: McuSetupStore? = null
 
     /** Riposte OS 0.2 only: the decoded MCU events on 127.0.0.1:5589 for Helm, the car computer. */
@@ -411,13 +414,23 @@ class MainActivity : ComponentActivity() {
                     setup = setupStore.setup.value,
                 ),
             )
-            mcuOwner = McuOwner(
-                ownerGate,
-                ownerListener,
-                openLink = { ownerGate.mcuLink().open() },
-                config = startupConfig,
-                initialCar = CarProfiles.byId(settingsStore.settings.value.canBoxCar),
-            ).also {
+            // One owner (os/CARHAL.md): the car service when the image has one, else this process.
+            val port = when (RemoteMcuOwner.choose(ServiceCarBinding.installedApi(applicationContext))) {
+                RemoteMcuOwner.Owner.SERVICE -> RemoteMcuOwner(
+                    ServiceCarBinding(applicationContext),
+                    ownerListener,
+                    McuOwnerProtocol.startup(startupConfig),
+                )
+
+                RemoteMcuOwner.Owner.LOCAL -> McuOwner(
+                    ownerGate,
+                    ownerListener,
+                    openLink = { ownerGate.mcuLink().open() },
+                    config = startupConfig,
+                    initialCar = CarProfiles.byId(settingsStore.settings.value.canBoxCar),
+                )
+            }
+            mcuOwner = port.also {
                 carService.attachOwner(it)
                 it.start()
                 // The Settings choice reaches the box at once; McuOwner ignores an unchanged car.
@@ -1492,7 +1505,7 @@ class MainActivity : ComponentActivity() {
         // Release the carriers: a virtio port admits one opener, so a recreated activity that
         // found the old one still open would report "Device or resource busy" as a silent MCU.
         busSource?.stop()
-        mcuOwner?.stop()
+        mcuOwner?.release()
         gpsClock?.stop()
         mcuStateExport?.stop()
         carCommandPort?.stop()

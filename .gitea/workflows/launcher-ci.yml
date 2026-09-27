@@ -486,6 +486,14 @@ jobs:
           name: carlauncher-release-apk
           path: artifact
 
+      # The car service from the same run: it ships beside the launcher, same tag and
+      # versionCode (both derived from git), for os/bench-cycle.sh to put into the image.
+      - name: Fetch the car service APK from this run
+        uses: christopherHX/gitea-download-artifact@v4
+        with:
+          name: carservice-release-apk
+          path: carservice-artifact
+
       # The version comes from output-metadata.json, AGP's record of what is
       # actually baked into the APK sitting next to it — so the tag can never
       # disagree with the artifact it names. The build file carries no version
@@ -587,6 +595,15 @@ jobs:
           cp "${apks[0]}" "${asset}"
           sha="$(sha256sum "${asset}" | cut -d' ' -f1)"
 
+          mapfile -t cs_apks < <(find carservice-artifact -type f -name '*.apk')
+          if [ "${#cs_apks[@]}" -ne 1 ]; then
+            echo "::error::expected exactly one car service APK, found ${#cs_apks[@]}"
+            exit 1
+          fi
+          cs_asset="carservice-${TAG}.apk"
+          cp "${cs_apks[0]}" "${cs_asset}"
+          cs_sha="$(sha256sum "${cs_asset}" | cut -d' ' -f1)"
+
           # Percent-encode for the query string: a literal "+" there decodes to a
           # SPACE, which published the first release asset under a name that did
           # not match its tag. The filename on disk keeps the "+".
@@ -610,6 +627,8 @@ jobs:
           | versionCode | \`${VERSION_CODE}\` |
           | APK | \`${asset}\` |
           | SHA-256 | \`${sha}\` |
+          | carservice APK | \`${cs_asset}\` |
+          | carservice SHA-256 | \`${cs_sha}\` |
 
           This asset is the CI artifact of the tagged main build — the only APK that
           goes on-device. To identify what is already installed, pull the APK off the
@@ -645,7 +664,16 @@ jobs:
             echo "::error::attaching ${asset} to release ${TAG} failed with HTTP ${up}"
             exit 1
           fi
-          echo "Published ${TAG} with ${asset} (sha256 ${sha})."
+          cs_q="$(printf '%s' "${cs_asset}" | jq -sRr @uri)"
+          up=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+            -H "Authorization: token ${TOKEN}" \
+            -F "attachment=@${cs_asset}" \
+            "${api}/releases/${id}/assets?name=${cs_q}")
+          if [ "$up" != "201" ]; then
+            echo "::error::attaching ${cs_asset} to release ${TAG} failed with HTTP ${up}"
+            exit 1
+          fi
+          echo "Published ${TAG} with ${asset} (sha256 ${sha}) and ${cs_asset} (sha256 ${cs_sha})."
 
       # Publish the release to github.com/armeehn/carlauncher-releases — a PUBLIC,
       # releases-only repo (the source stays here, private). The launcher's in-app

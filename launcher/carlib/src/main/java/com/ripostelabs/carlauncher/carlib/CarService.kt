@@ -150,13 +150,13 @@ class CarService(private val appContext: Context) {
 
     /** Riposte OS 0.2: our own port owner. While set, commands go to it and the binder is never bound. */
     @Volatile
-    private var owner: McuOwner? = null
+    private var owner: McuPort? = null
 
     /** Riposte OS 0.2: true while [owner] answers instead of the vendor gateway. */
     val ownerAttached: Boolean
         get() = owner != null
 
-    fun attachOwner(mcuOwner: McuOwner) {
+    fun attachOwner(mcuOwner: McuPort) {
         owner = mcuOwner
         _connected.value = true
     }
@@ -222,7 +222,7 @@ class CarService(private val appContext: Context) {
     }
 
     fun unbind() {
-        owner?.let { it.stop(); owner = null; _connected.value = false; return }
+        owner?.let { it.release(); owner = null; _connected.value = false; return }
         runCatching { appContext.unbindService(connection) }
         service = null
         _connected.value = false

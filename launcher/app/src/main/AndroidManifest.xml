@@ -91,6 +91,10 @@
     <!-- Not required: a stock or 0.1 slot never opens a camera (lint PermissionImpliesUnsupportedChromeOsHardware). -->
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
+    <!-- Riposte OS 0.3: bind the car service, which owns the MCU link (os/CARHAL.md). A
+         signature|privileged grant: this priv-app holds it once the service is on the image. -->
+    <uses-permission android:name="com.ripostelabs.car.permission.CONTROL" />
+
     <!-- Narrow visibility fallback if QUERY_ALL_PACKAGES is ever stripped. -->
     <queries>
         <intent>

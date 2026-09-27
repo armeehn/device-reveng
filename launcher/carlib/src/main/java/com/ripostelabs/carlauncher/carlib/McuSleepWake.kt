@@ -215,7 +215,7 @@ class McuSleepWake(
     }
 
     /** [Port] over the owner: stop/start are the vendor's close/open (msgs 291/292). */
-    private class OwnerPort(private val owner: McuOwner) : Port {
+    private class OwnerPort(private val owner: McuPort) : Port {
         override fun open() = owner.start()
 
         override fun close() = owner.stop()
@@ -245,7 +245,7 @@ class McuSleepWake(
         const val POWER_KEY_SLEEP_DELAY_MS = 6_000L
 
         fun forOwner(
-            owner: McuOwner,
+            owner: McuPort,
             acc: AccSource,
             config: McuOwnerProtocol.StartupConfig = McuOwnerProtocol.StartupConfig(),
         ): McuSleepWake = McuSleepWake(OwnerPort(owner), acc, config)
