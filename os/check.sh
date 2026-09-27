@@ -22,9 +22,9 @@ readonly FRAMEWORK=framework/framework.jar
 # Car-kit Bluetooth roles (overlay/props): on, off, and the class of device on a gsi output.
 readonly BT_CARKIT_ON="bluetooth.profile.a2dp.sink.enabled bluetooth.profile.hfp.hf.enabled
   bluetooth.profile.avrcp.controller.enabled bluetooth.profile.pbap.client.enabled
-  bluetooth.profile.map.client.enabled"
+  bluetooth.profile.map.client.enabled bluetooth.profile.pan.panu.enabled"
 readonly BT_CARKIT_OFF="bluetooth.profile.a2dp.source.enabled bluetooth.profile.hfp.ag.enabled
-  bluetooth.profile.avrcp.target.enabled"
+  bluetooth.profile.avrcp.target.enabled bluetooth.profile.pan.nap.enabled"
 readonly BT_CARKIT_COD=38,4,8
 # The logcat ring (overlay/system/bin/riposte-logring.sh): 8 MiB x (1 live + 12 rotated) files.
 readonly LOGRING_ROTATE_KB=8192

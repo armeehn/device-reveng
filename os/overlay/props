@@ -24,6 +24,12 @@ ro.riposte.os.bt_carkit=${RIPOSTE_BT_CARKIT}
 @carkit bluetooth.profile.a2dp.source.enabled=false
 @carkit bluetooth.profile.hfp.ag.enabled=false
 @carkit bluetooth.profile.avrcp.target.enabled=false
+# Internet from the phone's hotspot: the unit is the PAN user (PANU), the phone the NAP.
+# PanService then brings up bt-pan as a Bluetooth network (BluetoothTetheringNetworkFactory,
+# DHCP from the phone). The unit never shares its own uplink, so NAP is off; PanService
+# stays up on PANU alone (bench, 2026-09-27).
+@carkit bluetooth.profile.pan.panu.enabled=true
+@carkit bluetooth.profile.pan.nap.enabled=false
 @carkit bluetooth.device.class_of_device=38,4,8
 # The unit has no cell network for NITZ and no telephony time zone; without this the GSI boots
 # in GMT and every clock on the panel is off by seven or eight hours. Kelowna, BC.
