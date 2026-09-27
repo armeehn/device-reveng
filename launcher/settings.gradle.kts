@@ -26,3 +26,4 @@ rootProject.name = "CarLauncher"
 
 include(":app")
 include(":carlib")
+include(":carservice")

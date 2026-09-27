@@ -2,6 +2,7 @@
 # Static verification of a built Riposte OS output, without a car.
 #
 # Usage: check.sh --base DIR --out DIR [--profile tier1|tier2|gsi] [--system IMG] [--suite N] [--tools]
+#                 [--carservice]
 # Exit 0 when every assertion holds; each failure is printed, nothing is hidden.
 # Runs as root on x (loop mounts).
 
@@ -13,6 +14,8 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 readonly LAUNCHER_PKG=com.ripostelabs.carlauncher
 # Relative to the system root (system_root): system/ on stock, system/system/ on a GSI.
 readonly LAUNCHER_APK=priv-app/CarLauncher/CarLauncher.apk
+readonly CARSERVICE_PKG=com.ripostelabs.car
+readonly CARSERVICE_APK=priv-app/RiposteCar/RiposteCar.apk
 readonly PRIVAPP_XML=etc/permissions/privapp-permissions-ripostelabs.xml
 readonly DEFPERM_XML=etc/default-permissions/default-permissions-ripostelabs.xml
 readonly FRAMEWORK=framework/framework.jar
@@ -31,7 +34,7 @@ readonly LOGRING_ROTATE_COUNT=12
 readonly DOZE_OFF_KEYS="doze_enabled doze_always_on doze_pulse_on_pick_up doze_pulse_on_double_tap
   screensaver_enabled screensaver_activate_on_dock screensaver_activate_on_sleep restart_nap_after_start"
 
-BASE="" OUT="" PROFILE=tier1 SUITE="" SYSTEM="" BOOT="" TOOLS=0
+BASE="" OUT="" PROFILE=tier1 SUITE="" SYSTEM="" BOOT="" TOOLS=0 CARSERVICE=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --base) BASE=$2; shift 2 ;;
@@ -39,6 +42,7 @@ while [ $# -gt 0 ]; do
     --profile) PROFILE=$2; shift 2 ;;
     --suite) SUITE=$2; shift 2 ;;
     --tools) TOOLS=1; shift ;;
+    --carservice) CARSERVICE=1; shift ;;
     --system) SYSTEM=$2; shift 2 ;;
     --boot) BOOT=$2; shift 2 ;;
     *) die "unknown arg $1" ;;
@@ -102,8 +106,26 @@ echo "privapp allowlist"
 check "python3 -c 'import xml.etree.ElementTree as E; t=E.parse(\"$S/$PRIVAPP_XML\"); assert t.find(\"privapp-permissions\").get(\"package\")==\"$LAUNCHER_PKG\"'" "allowlist parses and names the launcher"
 WANT=$("$AAPT2" dump permissions "$S/$LAUNCHER_APK" | sed -n "s/^uses-permission: name='\([^']*\)'.*/\1/p" | sort)
 # shellcheck disable=SC2034  # used inside the eval below
-HAVE=$(python3 -c 'import xml.etree.ElementTree as E,sys; print("\n".join(sorted(p.get("name") for p in E.parse(sys.argv[1]).iter("permission"))))' "$S/$PRIVAPP_XML")
+# The permissions the allowlist grants one package (the file holds one block per priv-app).
+allowed_for() { # pkg
+  python3 -c 'import xml.etree.ElementTree as E,sys; print("\n".join(sorted(p.get("name") for e in E.parse(sys.argv[1]).iter("privapp-permissions") if e.get("package")==sys.argv[2] for p in e.iter("permission"))))' "$S/$PRIVAPP_XML" "$1"
+}
+# shellcheck disable=SC2034  # used inside the eval below
+HAVE=$(allowed_for "$LAUNCHER_PKG")
 check "[ \"\$WANT\" = \"\$HAVE\" ]" "allowlist == every permission the APK requests ($(wc -l <<<"$WANT") entries)"
+
+# The car service (build.sh step 3), when its APK was supplied: a system-uid priv-app.
+if [ "$CARSERVICE" = 1 ]; then
+  echo "car service"
+  check "[ \"\$(pkg_of $S/$CARSERVICE_APK)\" = $CARSERVICE_PKG ]" "car service package is $CARSERVICE_PKG at $CARSERVICE_APK"
+  check "[ \"\$(stat -c %U:%G:%a $S/$CARSERVICE_APK)\" = root:root:644 ]" "car service APK root:root 0644"
+  check "[ \"\$(getfattr --absolute-names -n security.selinux --only-values $S/$CARSERVICE_APK 2>/dev/null)\" = $SELINUX_SYSTEM_FILE ]" "car service APK labelled system_file"
+  # shellcheck disable=SC2034  # used inside the eval below
+  CS_WANT=$("$AAPT2" dump permissions "$S/$CARSERVICE_APK" | sed -n "s/^uses-permission: name='\([^']*\)'.*/\1/p" | sort)
+  # shellcheck disable=SC2034
+  CS_HAVE=$(allowed_for "$CARSERVICE_PKG")
+  check "[ -n \"\$CS_WANT\" ] && [ \"\$CS_WANT\" = \"\$CS_HAVE\" ]" "allowlist == every permission the car service requests"
+fi
 
 echo "first boot"
 check "[ -f $S/etc/init/riposte.rc ]" "init rc present"
