@@ -169,10 +169,26 @@ class McuSetupProtocolTest {
         assertNull(McuSetupProtocol.loudness(command(0x7B)))
     }
 
-    /** onCmdBMTVolEvent (:2880): `76 bass mid treble x`, needs four payload bytes. */
+    /**
+     * onCmdBMTVolEvent (:2894): `76 bass mid treble`. The vendor's `length < 5` counts the opcode
+     * and the trailing CK (onRadioPSName reads `length - 3` from byte 2), so three payload bytes
+     * are a whole report; a fourth, if the MCU sends one, is ignored.
+     */
     @Test
     fun toneReport() {
+        assertEquals(McuSetup.Tone(7, 8, 9), McuSetupProtocol.tone(command(0x76, 7, 8, 9)))
         assertEquals(McuSetup.Tone(7, 8, 9), McuSetupProtocol.tone(command(0x76, 7, 8, 9, 0)))
-        assertNull(McuSetupProtocol.tone(command(0x76, 7, 8, 9)))
+        assertNull(McuSetupProtocol.tone(command(0x76, 7, 8)))
+    }
+
+    /** The four reports as one typed event; anything else is not an audio report. */
+    @Test
+    fun audioReportTypesAllFour() {
+        assertEquals(McuSetupProtocol.AudioReport.Tone(McuSetup.Tone(7, 8, 9)), McuSetupProtocol.audioReport(command(0x76, 7, 8, 9)))
+        assertEquals(McuSetupProtocol.AudioReport.Eq(2), McuSetupProtocol.audioReport(command(0x77, 2)))
+        assertEquals(McuSetupProtocol.AudioReport.BalanceFader(7, 9), McuSetupProtocol.audioReport(command(0x7A, 7, 9)))
+        assertEquals(McuSetupProtocol.AudioReport.Loudness(false), McuSetupProtocol.audioReport(command(0x7B, 0)))
+        assertNull(McuSetupProtocol.audioReport(command(0x79, 7)))
+        assertNull(McuSetupProtocol.audioReport(command(0x7A, 7)))
     }
 }

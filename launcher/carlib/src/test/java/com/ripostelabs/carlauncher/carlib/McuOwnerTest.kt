@@ -96,6 +96,7 @@ class McuOwnerTest {
         val versions = CopyOnWriteArrayList<String>()
         val relays = CopyOnWriteArrayList<Pair<ByteArray, List<McuFrame.Decoded>>>()
         val cars = CopyOnWriteArrayList<CarProfile>()
+        val audio = CopyOnWriteArrayList<McuSetupProtocol.AudioReport>()
 
         override fun onSysEvent(event: McuOwnerProtocol.SysEvent) { sys.add(event) }
         override fun onMainVolume(volume: McuOwnerProtocol.MainVolume) { this.volume.add(volume) }
@@ -110,6 +111,7 @@ class McuOwnerTest {
         override fun onMcuVersion(version: String) { versions.add(version) }
         override fun onCanRelay(body: ByteArray, cut: List<McuFrame.Decoded>) { relays.add(body.copyOf() to cut) }
         override fun onCanBoxCar(car: CarProfile) { cars.add(car) }
+        override fun onAudio(report: McuSetupProtocol.AudioReport) { audio.add(report) }
     }
 
     // The write watchdog is off the clock here (a CI stall once declared a fake link dead
@@ -487,6 +489,26 @@ class McuOwnerTest {
         assertTrue(recorder.other.isEmpty())
     }
 
+    /** `77` and `7A` reach onAudio decoded, and not onOther. */
+    @Test
+    fun audioReportsDispatchOnAudio() {
+        val link = FakeLink(ackNull = true)
+        val recorder = Recorder()
+        val owner = owner(link, recorder = recorder)
+        owner.start()
+        waitFor("running") { owner.status.value as? McuOwner.Status.Running }
+
+        link.feed(McuSerial.encode(McuOpcode.EQ.code, bytes(3)))
+        link.feed(McuSerial.encode(McuOpcode.BALANCE.code, bytes(6, 8)))
+
+        waitFor("frames") { (owner.status.value as? McuOwner.Status.Running)?.takeIf { it.frames == 3L } }
+        owner.stop()
+
+        val expected = listOf(McuSetupProtocol.AudioReport.Eq(3), McuSetupProtocol.AudioReport.BalanceFader(6, 8))
+        assertEquals(expected, recorder.audio.toList())
+        assertTrue(recorder.other.isEmpty())
+    }
+
     /** FanOut forwards every callback, the tuner's `73` events and the key edges included. */
     @Test
     fun fanOutForwardsRadioAndKeys() {
@@ -499,8 +521,10 @@ class McuOwnerTest {
         fanOut.onRadio(freq)
         fanOut.onPanelKey(panel)
         fanOut.onWake()
+        fanOut.onAudio(McuSetupProtocol.AudioReport.Loudness(true))
 
         for (recorder in listOf(a, b)) {
+            assertEquals(listOf(McuSetupProtocol.AudioReport.Loudness(true)), recorder.audio.toList())
             assertEquals(listOf<McuOwnerProtocol.RadioEvent>(freq), recorder.radio)
             assertEquals(listOf(panel), recorder.panel)
             assertEquals(1, recorder.wakes.size)

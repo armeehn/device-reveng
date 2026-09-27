@@ -115,6 +115,9 @@ class McuOwner(
         /** A framed body no handler claims; logged by the caller, never dropped silently. */
         fun onOther(command: McuSerial.Command) {}
 
+        /** A `76`/`77`/`7A`/`7B` tone, EQ, balance/fader or loudness report ([McuSetupProtocol.audioReport]). */
+        fun onAudio(report: McuSetupProtocol.AudioReport) {}
+
         /** RX `96 01`: the MCU reports it woke (onCmdMcuSleepState, EventService.java:2270-2280). */
         fun onWake() {}
 
@@ -154,6 +157,8 @@ class McuOwner(
         override fun onCanSignal(signal: CanSignal, atMs: Long) = targets.forEach { it.onCanSignal(signal, atMs) }
 
         override fun onOther(command: McuSerial.Command) = targets.forEach { it.onOther(command) }
+
+        override fun onAudio(report: McuSetupProtocol.AudioReport) = targets.forEach { it.onAudio(report) }
 
         override fun onWake() = targets.forEach { it.onWake() }
 

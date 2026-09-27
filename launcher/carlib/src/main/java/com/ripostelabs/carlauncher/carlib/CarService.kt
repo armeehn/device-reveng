@@ -186,6 +186,17 @@ class CarService(private val appContext: Context) {
         return volumeState.state.value?.let(read)
     }
 
+    /** The audio cache and setters on the owner path (a FanOut target); the binder otherwise. */
+    val ownerAudio = OwnerAudio(send = { frame -> owner?.send(frame) })
+
+    /** Owner attached: [read] the audio cache, null until reported or sent; otherwise the binder. */
+    private inline fun <T> audio(read: (AudioState) -> T?, binder: IEventService.() -> T?): T? {
+        if (owner == null) {
+            return call(binder)
+        }
+        return read(ownerAudio.state.value)
+    }
+
     /** Owner attached: [read] the cache, null until the MCU has reported; otherwise the binder. */
     private inline fun <T> tuner(read: (RadioState) -> T, binder: IEventService.() -> T?): T? {
         if (owner == null) {
@@ -542,9 +553,12 @@ class CarService(private val appContext: Context) {
 
     // ---- v1.5: Audio / EQ (CAR_API §3.2; ordinals confirmed in AIDL_ORDINALS.md) --------
     /** Current EQ preset index (getEQMode, ordinal 55). */
-    fun getEqMode(): Int? = call { getEQMode() }
+    fun getEqMode(): Int? = audio({ it.eqMode }) { getEQMode() }
     /** Select an EQ preset (sendEQMode, ordinal 5). Preset indices are vendor-defined. */
-    fun setEqMode(mode: Int) { call { sendEQMode(mode) } }
+    fun setEqMode(mode: Int) {
+        owner?.let { ownerAudio.setEqMode(mode); return }
+        call { sendEQMode(mode) }
+    }
 
     /**
      * Raw amp balance/fader as `[balance, fader]` (getBALFADValue ordinal 54 / sendBalFadValue
@@ -557,19 +571,30 @@ class CarService(private val appContext: Context) {
      *    -8..8/centre-0 model made Centre play hard left. Callers map the centred display domain
      *    via [ampToDisplay]/[displayToAmp]; see AudioSettingsScreen.
      */
-    fun getBalanceFader(): IntArray? = call { getBALFADValue() }
+    fun getBalanceFader(): IntArray? = audio({ s -> s.balance?.let { b -> s.fader?.let { intArrayOf(b, it) } } }) {
+        getBALFADValue()
+    }
     /** Set raw amp balance (0..14) and fader (0..14); centre is 7. */
-    fun setBalanceFader(balance: Int, fader: Int) { call { sendBalFadValue(balance, fader) } }
+    fun setBalanceFader(balance: Int, fader: Int) {
+        owner?.let { ownerAudio.setBalanceFader(balance, fader); return }
+        call { sendBalFadValue(balance, fader) }
+    }
 
-    /** Loudness on/off (getLoudness, ordinal 53). There is no AIDL setter — read-only here. */
-    fun getLoudness(): Boolean? = call { getLoudness() }
+    /** Loudness on/off (getLoudness, ordinal 53; `7B` on the owner path). No setter exists. */
+    fun getLoudness(): Boolean? = audio({ it.loudness }) { getLoudness() }
 
     /** Subwoofer / software volume (getSndSWVol / sendSndSWVol, ordinals 58 / 57). */
-    fun getSubVolume(): Int? = call { getSndSWVol() }
-    fun setSubVolume(level: Int) { call { sendSndSWVol(level) } }
+    fun getSubVolume(): Int? = audio({ it.subwoofer }) { getSndSWVol() }
+    fun setSubVolume(level: Int) {
+        owner?.let { ownerAudio.setSubwoofer(level); return }
+        call { sendSndSWVol(level) }
+    }
 
     /** Test beep through the audio path (beep, ordinal 7). */
-    fun beep() { call { beep() } }
+    fun beep() {
+        owner?.let { ownerAudio.beep(); return }
+        call { beep() }
+    }
 
     // ---- Backlight / brightness (CAR_API §3.2) -----------------------------
     /**
