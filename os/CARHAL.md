@@ -43,3 +43,137 @@ our own hardware must offer so nothing above the line changes.
   `com.choiceway.eventcenter.*` keep working without a rebuild.
 - What the emulator cannot show (rows 1-11) is verified at the car with `ACCEPTANCE.md`,
   and on a Riposte board with the same list.
+
+## The car service (Riposte OS 0.3, Plane RAV4-129)
+
+0.2 removed the vendor's `eventcenter`, and with it the `IEventService` binder (144 calls) that
+12 OEM apps and our launcher's `CarService` (30 calls) used. `McuOwner` took over the MCU link,
+but it lives in the launcher process: a launcher crash takes the MCU link and the reverse camera
+with it, and every vendor call without an owner path became a silent no-op. 0.3 moves the owner
+into its own always-on service and gives the OS one car API.
+
+    launcher · suite apps · diagnostics
+            │  ICarService (binder, com.ripostelabs.car)   ▲ ICarListener (oneway callbacks)
+            ▼                                              │
+    ┌──────────────── com.ripostelabs.car  (android.uid.system, persistent) ────────────────┐
+    │ McuOwner ─ /dev/ttyHS1      decoders (Hiworld, raw CAN)      power (PowerManager)     │
+    │ reverse state + PR2000 decoder (/sys/pr2000, sys.acc.state)  settings store (SysVar)  │
+    └────────────────────────────────────────────────────────────────────────────────────────┘
+
+- **Identity.** The service is signed with the AOSP platform test key and runs as
+  `android.uid.system` (RAV4-130: the GSI's platform cert *is* that public key). It holds
+  `REBOOT`, `MASTER_CLEAR`, `DEVICE_POWER` and opens `/dev/ttyHS1` itself: no root shell, no
+  `riposte-mcubridge.sh`. The key is public, so this is a property of owner builds, not a
+  security boundary.
+- **One owner.** The service is the only process that opens the MCU tty. The launcher's
+  `CarService` becomes a client of `ICarService`; its vendor (`IEventService`) path stays for
+  stock firmware only.
+- **Survives the UI.** `android:persistent="true"`, started by the system at boot; the
+  launcher binds to it and rebinds after its own crash. Reverse state keeps flowing while no
+  client is bound.
+- **Drawing stays in the app.** AIS draws into a `Surface` the app owns, so the camera session
+  (`AisCamera`, `AisCameraWorker`) stays in the launcher. The service owns everything around it:
+  the reverse trigger, the decoder mode and lock (`DecoderSignal`), `sys.acc.state`.
+
+### Permissions
+
+| Permission | Level | Held by | Gates |
+|---|---|---|---|
+| `com.ripostelabs.car.permission.READ` | `normal` | any app | status, listener, settings reads |
+| `com.ripostelabs.car.permission.CONTROL` | `signature\|privileged` | launcher (priv-app), system | everything that changes the car, power, raw frames |
+
+### Interface
+
+```aidl
+package com.ripostelabs.car;
+
+interface ICarService {
+    int apiVersion();                                   // 1 for 0.3; additions bump it
+    CarStatus status();                                 // link, ACC, reverse, lamps, versions, car profile
+    void registerListener(ICarListener listener);
+    void unregisterListener(ICarListener listener);
+
+    // Source (McuOwnerProtocol.Mode)
+    boolean setSource(int mode);
+    int currentSource();                                // -1 when the MCU has not reported one
+    void exitSource(int mode);
+
+    // Audio (amp behind the MCU)
+    void setVolume(int level);                          // 0..40
+    void setMute(boolean on);
+    int getEqMode();          void setEqMode(int mode);
+    int[] getBalanceFader();  void setBalanceFader(int balance, int fader);
+    boolean getLoudness();    void setLoudness(boolean on);
+    int getSubVolume();       void setSubVolume(int level);
+    void beep();
+
+    // Radio (Si479x behind the MCU)
+    void radioKey(int key);
+    void tune(int freq, boolean fm);
+    void presetSelect(int slot);
+    void presetStore(int slot);
+
+    // Keys, display
+    void injectWheelKey(int key);
+    void setBacklight(int day, int night);
+
+    // Reverse camera
+    ReverseState reverseState();                        // trigger, decoder mode, lock status
+    void setDecoderMode(int mode);                      // 0 auto .. 8 (ReverseCameraDecoder rows)
+
+    // Power
+    void reboot();
+    void factoryReset(int scope);                       // scopes defined by RAV4-134
+
+    // Vendor settings rows (Sys_* keys, SysVarLocalStore)
+    String getSetting(String key, String fallback);
+    boolean setSetting(String key, String value);
+
+    // Diagnostics
+    void sendMcuFrame(in byte[] frame);                 // CONTROL only; logged
+}
+
+oneway interface ICarListener {
+    void onStatus(in CarStatus status);
+    void onKey(int origin, int code, int action);       // panel, wheel; press/hold/double decoded
+    void onVolume(int level, boolean muted);
+    void onRadio(in RadioEvent event);
+    void onCanSignal(in CanSignalParcel signal, long atMs);
+    void onReverse(in ReverseState state);
+}
+```
+
+### The launcher's 30 vendor calls, mapped
+
+`owner today` says whether 0.2 already serves the call without `eventcenter`; the rows marked
+**no** are silent no-ops on 0.2 until the service lands.
+
+| `CarService` call (vendor `IEventService`) | owner today | 0.3 `ICarService` |
+|---|---|---|
+| `getValidMode` | yes | `currentSource` |
+| `IsBackCarConneted` | **no** | `reverseState().trigger` |
+| `getMCUVer` (×2) | **no** (listener only) | `status().mcuVersion` |
+| `getValidModeTitleInfor` | yes | `currentSource` + title table in the client |
+| `getCanVer` | **no** | `status().canVersion` |
+| `sendSoftWareReboot` | yes (root shell, #301) | `reboot` |
+| `sendFactorySet` | **no** | `factoryReset(scope)` |
+| `sendMode` (×2) | yes | `setSource` |
+| `sendWheelKey` | **no** | `injectWheelKey` |
+| `sendMuteState` | yes | `setMute` |
+| `IsMuteOn` | partly | `status().muted` |
+| `sendVolState` | yes | `setVolume` |
+| `sendRadioKey` | yes | `radioKey` |
+| `sendUserFreq` | yes | `tune` |
+| `setCurModeCallback` / `setRadioCallback` | yes (listener) | `registerListener` → `onRadio` |
+| `exitCurMode` | yes | `exitSource` |
+| `getEQMode` / `sendEQMode` | **no** | `getEqMode` / `setEqMode` |
+| `getBALFADValue` / `sendBalFadValue` | **no** | `getBalanceFader` / `setBalanceFader` |
+| `getLoudness` | **no** | `getLoudness` (+ `setLoudness`) |
+| `getSndSWVol` / `sendSndSWVol` | **no** | `getSubVolume` / `setSubVolume` |
+| `beep` | **no** | `beep` |
+| `sendBacklight` | yes | `setBacklight` |
+| `changeSetup` / `getSettingString` | local store (0.2) | `setSetting` / `getSetting` |
+
+The EQ, balance, loudness, sub-volume and beep rows need their MCU frames confirmed on the unit
+before the service can serve them: `McuOwnerProtocol` has no builder for them yet, and their
+frames still have to be read out of the vendor's `EventService` (`sendEQMode` & co.).
