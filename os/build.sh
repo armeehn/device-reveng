@@ -6,7 +6,8 @@
 #
 # Usage: build.sh --base DIR --apps DIR --out DIR [--profile tier1|tier2|gsi] [--system IMG]
 #                 [--version V] [--car-owner] [--bench]
-#   --apps holds carlauncher.apk (release-signed) and suite/*.apk.
+#   --apps holds carlauncher.apk (release-signed) and suite/*.apk; carservice.apk (platform-signed,
+#   gsi only) is optional.
 #   --boot replaces base/boot.img (e.g. a magisk-patch.sh output for a rootable slot).
 #   --system replaces base/system.img (an AOSP GSI, .img or .img.xz); profile gsi removes the
 #   whole OEM stack from product and implies --car-owner.
@@ -36,6 +37,8 @@ readonly PLAT_SEPOLICY=etc/selinux/plat_sepolicy.cil   # compiled by init at eve
 readonly AIS_CLIENT_DEPS="libais_fibo_carcam.so libais_core.so libais_client.so libais_base.so libais_log.so"
 readonly PUBLIC_LIBS=etc/public.libraries.txt   # the /system libs the linker lets an app dlopen
 readonly LAUNCHER_NAME=CarLauncher
+readonly CARSERVICE_PKG=com.ripostelabs.car     # the car service, see step 3 and CARHAL.md
+readonly CARSERVICE_NAME=RiposteCar
 readonly SUITE_DIR=product/app
 readonly TOOLS_BIN=riposte/bin                 # the debug toolbelt, see step 3c
 readonly TOOLS_BB=riposte/bin/bb               # one symlink per busybox applet
@@ -149,6 +152,20 @@ fi
 # ---- 3. add apps ---------------------------------------------------------------
 [ "$(apk_package "$APPS/carlauncher.apk")" = "$LAUNCHER_PKG" ] || die "carlauncher.apk is not $LAUNCHER_PKG"
 install_apk "$SYS" "$LAUNCHER_DIR" "$LAUNCHER_NAME" "$APPS/carlauncher.apk"
+# The car service runs as android.uid.system, which only the platform key may claim: the AOSP test
+# key it is signed with is the gsi base's platform key, not a stock image's. Optional, so builds
+# made before it existed still work.
+CARSERVICE=0
+if [ ! -f "$APPS/carservice.apk" ]; then
+  log "no carservice.apk in $APPS: car service skipped"
+elif [ "$PROFILE" != gsi ]; then
+  log "car service skipped: profile $PROFILE is not signed with the AOSP platform key"
+else
+  [ "$(apk_package "$APPS/carservice.apk")" = "$CARSERVICE_PKG" ] || die "carservice.apk is not $CARSERVICE_PKG"
+  install_apk "$SYS" "$LAUNCHER_DIR" "$CARSERVICE_NAME" "$APPS/carservice.apk"
+  CARSERVICE=1
+  log "installed $CARSERVICE_NAME ($CARSERVICE_PKG)"
+fi
 # Where /product really is at runtime. A GSI ships its own /system/product and links /product
 # to it, so the super's product partition never mounts there (unit, 2026-09-19): the suite and
 # the boot animation go into the system image on that profile.
@@ -359,6 +376,12 @@ mkdir -p "$SYS/$(dirname "$PRIVAPP_XML")"
   "$AAPT2" dump permissions "$APPS/carlauncher.apk" \
     | sed -n "s/^uses-permission: name='\([^']*\)'.*/        <permission name=\"\1\"\/>/p"
   echo "    </privapp-permissions>"
+  if [ "$CARSERVICE" = 1 ]; then
+    echo "    <privapp-permissions package=\"$CARSERVICE_PKG\">"
+    "$AAPT2" dump permissions "$APPS/carservice.apk" \
+      | sed -n "s/^uses-permission: name='\([^']*\)'.*/        <permission name=\"\1\"\/>/p"
+    echo "    </privapp-permissions>"
+  fi
   echo "</permissions>"
 } > "$SYS/$PRIVAPP_XML"
 label_system_file "$SYS/$PRIVAPP_XML"
@@ -408,6 +431,7 @@ done
 {
   echo "version=$VERSION"; echo "profile=$PROFILE"; echo "car_owner=$CAR_OWNER"; echo "bt_carkit=$BT_CARKIT"; echo "bench=$BENCH"; echo "built=$(date -u +%FT%TZ)"
   echo "launcher=$(apk_package "$APPS/carlauncher.apk") vc$("$AAPT2" dump badging "$APPS/carlauncher.apk" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p")"
+  echo "carservice=$CARSERVICE"
   echo "suite=$SUITE_N"; echo "tools=$TOOLS_N"; echo "system=${SYSTEM:-$BASE/system.img}"; echo "boot=${BOOT:-$BASE/boot.img}"
   echo "removed=$(awk -F'\t' 'NF{print $1}' <<<"$REMOVE" | paste -sd,)"
 } > "$OUT/MANIFEST"

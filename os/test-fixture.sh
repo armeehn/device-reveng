@@ -24,10 +24,10 @@ W=$(mktemp -d "${TMPDIR:-/var/tmp}/riposte-fx.XXXXXX")
 trap 'rm -rf "$W"' EXIT
 mkdir -p "$W/base" "$W/apps/suite" "$W/out" "$W/sys" "$W/prod"
 
-# A valid, unsigned APK whose only content is a package name.
-mint_apk() { # pkg out
+# A valid, unsigned APK whose only content is a package name (and any manifest elements given).
+mint_apk() { # pkg out [elements]
   local d; d=$(mktemp -d "$W/mint.XXXX")
-  printf '<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="%s"><application/></manifest>' "$1" > "$d/AndroidManifest.xml"
+  printf '<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="%s">%s<application/></manifest>' "$1" "${3:-}" > "$d/AndroidManifest.xml"
   "$AAPT2" link --manifest "$d/AndroidManifest.xml" -I "$ANDROID_JAR" -o "$2"
 }
 
@@ -106,8 +106,12 @@ xz -c "$W/sar.img" > "$W/gsi.img.xz"
 # downloads 70 MB itself.
 TOOLS_ARG="" TOOLS_CHECK=""
 if [ -f "$TOOLS_CACHE/busybox" ]; then TOOLS_ARG="--tools $TOOLS_CACHE"; TOOLS_CHECK=--tools; fi
+# The car service goes in on gsi only; the tier2 build above ran without it, the way every build
+# before RAV4-132 does.
+mint_apk com.ripostelabs.car "$W/apps/carservice.apk" '<uses-permission xmlns:android="http://schemas.android.com/apk/res/android" android:name="android.permission.REBOOT"/>'
 # shellcheck disable=SC2086
 "$HERE/build.sh" --base "$W/base" --system "$W/gsi.img.xz" --apps "$W/apps" --out "$W/out-gsi" --profile gsi $TOOLS_ARG
+grep -q '^carservice=1$' "$W/out-gsi/MANIFEST" || die "gsi build left the supplied car service out"
 grep -q '^car_owner=1$' "$W/out-gsi/MANIFEST" || die "gsi profile did not imply --car-owner"
 grep -q '^bt_carkit=1$' "$W/out-gsi/MANIFEST" || die "gsi profile did not turn the car-kit roles on"
 # The AIS client goes on the public list for the 64-bit zygote only: the fixture has no
@@ -126,7 +130,7 @@ if [ -n "$TOOLS_ARG" ]; then
   umount "$OUTSYS"
 fi
 # shellcheck disable=SC2086
-"$HERE/check.sh" --base "$W/base" --system "$W/gsi.img.xz" --out "$W/out-gsi" --profile gsi --suite "$N" $TOOLS_CHECK
+"$HERE/check.sh" --base "$W/base" --system "$W/gsi.img.xz" --out "$W/out-gsi" --profile gsi --suite "$N" $TOOLS_CHECK --carservice
 
 echo "== negative control: --car-owner with eventcenter in the base must refuse"
 if "$HERE/build.sh" --base "$W/base" --apps "$W/apps" --out "$W/out-owner" --car-owner >/dev/null 2>&1; then

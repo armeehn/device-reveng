@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The car service (os/CARHAL.md "The car service"). System uid: the APK is signed with the
+     image's platform key (platform-testkey/). Persistent: the system starts it at boot and
+     restarts it after a crash, once it sits in /system/priv-app. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    android:sharedUserId="android.uid.system">
+
+    <!-- Status and listener reads: any app may hold it. -->
+    <permission
+        android:name="com.ripostelabs.car.permission.READ"
+        android:protectionLevel="normal" />
+
+    <!-- Everything that changes the car or its power: launcher (priv-app) and system only. -->
+    <permission
+        android:name="com.ripostelabs.car.permission.CONTROL"
+        android:protectionLevel="signature|privileged" />
+
+    <uses-permission android:name="android.permission.REBOOT" />
+
+    <application
+        android:label="Riposte Car"
+        android:persistent="true">
+
+        <service
+            android:name=".CarService"
+            android:exported="true"
+            android:permission="com.ripostelabs.car.permission.CONTROL" />
+    </application>
+</manifest>

@@ -157,6 +157,14 @@ jobs:
           path: launcher/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
 
+      # The car service (RAV4-132), platform-signed: the carservice.apk os/build.sh takes.
+      - name: Upload car service APK
+        uses: christopherHX/gitea-upload-artifact@v4
+        with:
+          name: carservice-release-apk
+          path: launcher/carservice/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+
       # The `farm` variant is the debug build under the RELEASE application id, x86_64
       # only (app/build.gradle.kts). The Maestro flows name com.ripostelabs.carlauncher,
       # so the plain debug build — com.ripostelabs.carlauncher.debug — is invisible to
