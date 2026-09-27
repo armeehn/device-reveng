@@ -44,7 +44,7 @@ our own hardware must offer so nothing above the line changes.
 - What the emulator cannot show (rows 1-11) is verified at the car with `ACCEPTANCE.md`,
   and on a Riposte board with the same list.
 
-## The car service (Riposte OS 0.3, Plane RAV4-129)
+## The car service (Riposte OS 0.3)
 
 0.2 removed the vendor's `eventcenter`, and with it the `IEventService` binder (144 calls) that
 12 OEM apps and our launcher's `CarService` (30 calls) used. `McuOwner` took over the MCU link,
@@ -61,7 +61,7 @@ into its own always-on service and gives the OS one car API.
     └────────────────────────────────────────────────────────────────────────────────────────┘
 
 - **Identity.** The service is signed with the AOSP platform test key and runs as
-  `android.uid.system` (RAV4-130: the GSI's platform cert *is* that public key). It holds
+  `android.uid.system`: the GSI's platform cert *is* that public key, proven on the unit. It holds
   `REBOOT`, `MASTER_CLEAR`, `DEVICE_POWER` and opens `/dev/ttyHS1` itself: no root shell, no
   `riposte-mcubridge.sh`. The key is public, so this is a property of owner builds, not a
   security boundary.
@@ -123,7 +123,7 @@ interface ICarService {
 
     // Power
     void reboot();
-    void factoryReset(int scope);                       // scopes defined by RAV4-134
+    void factoryReset(int scope);                       // scopes: an owner decision, still open
 
     // Vendor settings rows (Sys_* keys, SysVarLocalStore)
     String getSetting(String key, String fallback);
@@ -146,7 +146,7 @@ oneway interface ICarListener {
 ### The launcher's 30 vendor calls, mapped
 
 `owner today` says whether 0.2 already serves the call without `eventcenter`; the rows marked
-**no** are silent no-ops on 0.2 until the service lands.
+**no** are silent no-ops on 0.2 until the service arrives.
 
 | `CarService` call (vendor `IEventService`) | owner today | 0.3 `ICarService` |
 |---|---|---|
@@ -175,5 +175,5 @@ oneway interface ICarListener {
 | `changeSetup` / `getSettingString` | local store (0.2) | `setSetting` / `getSetting` |
 
 The EQ, balance, loudness, sub-volume and beep rows need their MCU frames confirmed on the unit
-before the service can serve them: `McuOwnerProtocol` has no builder for them yet, and their
-frames still have to be read out of the vendor's `EventService` (`sendEQMode` & co.).
+first. `McuOwnerProtocol` has no builder for them yet. Their frames still have to be read out of
+the vendor's `EventService` (`sendEQMode` & co.).
