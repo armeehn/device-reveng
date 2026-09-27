@@ -89,6 +89,8 @@ class NavBar(private val context: Context) {
         /** Window height while folded: a finger needs more than the 6 dp it can see. */
         const val HANDLE_TOUCH_DP = 12
         const val HANDLE_ALPHA = 0.4f
+        /** The keys strip lets the app underneath show through: it sits over the app's bottom edge. */
+        const val BAR_ALPHA = 0.6f
         const val ICON_DP = 34
         const val KEYCODE_BACK = 4
         const val KEYCODE_APP_SWITCH = 187
@@ -239,7 +241,7 @@ class NavBar(private val context: Context) {
     @Composable
     private fun Keys(c: ThemeColors) {
         Box(
-            modifier = Modifier.fillMaxSize().background(Color(c.surface)),
+            modifier = Modifier.fillMaxSize().background(Color(c.surface).copy(alpha = BAR_ALPHA)),
             contentAlignment = Alignment.Center,
         ) {
             Row(
