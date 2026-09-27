@@ -21,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.unit.dp
 import com.ripostelabs.carlauncher.carlib.RadarState
 import com.ripostelabs.carlauncher.ui.theme.proximityRamp
@@ -55,6 +56,8 @@ fun ReverseOverlay(
     radar: RadarState? = null,               // v0.9
     guideLines: Boolean = true,              // v0.4.7.1 hoisted + persisted by the caller
     onToggleGuideLines: (Boolean) -> Unit = {},
+    steeringDeg: Double? = null,             // from the CAN box; null = no reading
+    mirrored: Boolean = false,               // the feed's mirror setting; dynamic lines follow it
 ) {
     AnimatedVisibility(
         visible = visible,
@@ -67,7 +70,7 @@ fun ReverseOverlay(
         Box(modifier = Modifier.fillMaxSize()) {
             // Optional static parking-guide lines (fixed trajectory, not steering-linked).
             if (guideLines) {
-                ParkingGuideLines(modifier = Modifier.fillMaxSize())
+                ParkingGuideLines(steeringDeg = steeringDeg, mirrored = mirrored, modifier = Modifier.fillMaxSize())
             }
 
             // Small, non-intrusive toggle for the guide lines (top-end corner). The chip stays
@@ -122,13 +125,13 @@ fun ReverseOverlay(
 }
 
 /**
- * Static (fixed) parking-guide lines: two side rails converging slightly toward the top plus
- * three distance bands (red/yellow/green). These are GEOMETRIC guides only — not linked to
- * steering angle (that dynamic trajectory would come from ZXW_CAN_WHEEL_TRACK_EVT, which the
- * vendor view already renders). Drawn semi-transparent so they read over the camera feed.
+ * Parking-guide lines: two side rails plus three distance bands (red/yellow/green), drawn
+ * semi-transparent so they read over the camera feed. With a steering angle ([steeringDeg],
+ * the CAN box's `0x11` reading) the rails are the rear corners' path at that angle
+ * ([GuideTrajectory]); without one they are the fixed static rails below.
  */
 @Composable
-private fun ParkingGuideLines(modifier: Modifier = Modifier) {
+private fun ParkingGuideLines(steeringDeg: Double?, mirrored: Boolean, modifier: Modifier = Modifier) {
     // Same derived clear/near/close ramp as RadarSideStrip — the tertiary role collapses
     // into primary in themes that leave accent3 unset (see proximityRamp).
     val ramp = proximityRamp(MaterialTheme.colorScheme)
@@ -138,6 +141,11 @@ private fun ParkingGuideLines(modifier: Modifier = Modifier) {
     Canvas(modifier = modifier) {
         val w = size.width
         val h = size.height
+        if (steeringDeg != null) {
+            drawTrajectory(GuideTrajectory.rails(steeringDeg, mirrored), red, amber, green)
+            return@Canvas
+        }
+
         // Guides occupy the lower ~55% of the screen (near field behind the car).
         val top = h * 0.45f
         val bottom = h * 0.98f
@@ -161,6 +169,36 @@ private fun ParkingGuideLines(modifier: Modifier = Modifier) {
         bandAt(0.85f, green)
     }
 }
+
+/**
+ * The dynamic rails as polylines, and a band across them where each rail is a fixed share of
+ * the way back: near = red, mid = amber, far = green, as on the static lines.
+ */
+private fun DrawScope.drawTrajectory(rails: GuideTrajectory.Rails, red: Color, amber: Color, green: Color) {
+    val w = size.width
+    val h = size.height
+    val stroke = (w * STROKE_FRACTION).coerceAtLeast(MIN_STROKE_PX)
+    fun at(p: GuideTrajectory.Point) = Offset(p.x * w, p.y * h)
+
+    for (rail in listOf(rails.left, rails.right)) {
+        for (i in 1 until rail.size) {
+            drawLine(green, at(rail[i - 1]), at(rail[i]), strokeWidth = stroke)
+        }
+    }
+
+    for ((share, color) in listOf(NEAR_BAND to red, MID_BAND to amber, FAR_BAND to green)) {
+        val i = (share * (rails.left.size - 1)).toInt()
+        drawLine(color, at(rails.left[i]), at(rails.right[i]), strokeWidth = stroke)
+    }
+}
+
+/** Band positions along the dynamic rails, as a share of their length. */
+private const val NEAR_BAND = 0.12f
+private const val MID_BAND = 0.45f
+private const val FAR_BAND = 0.85f
+
+private const val STROKE_FRACTION = 0.006f
+private const val MIN_STROKE_PX = 3f
 
 /** Driving-relevant touch target (LAUNCHER_DESIGN §1.2) for the guide-line toggle. */
 private const val TOGGLE_TARGET_DP = 76

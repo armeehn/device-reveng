@@ -56,7 +56,13 @@ class ReverseCameraWindow(
     }
 
     /** The vendor's two decorations of the feed and our guide lines, read once per picture (see [render]). */
-    data class Options(val showRadar: Boolean, val mirrored: Boolean, val guideLines: Boolean = true)
+    data class Options(
+        val showRadar: Boolean,
+        val mirrored: Boolean,
+        val guideLines: Boolean = true,
+        /** "Dynamic (steering)" in Reverse camera settings: the lines follow [steer]. */
+        val dynamicGuides: Boolean = false,
+    )
 
     private val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
     private val host = Host()
@@ -66,6 +72,12 @@ class ReverseCameraWindow(
     private var verdict by mutableStateOf(ReverseCameraGate.Verdict.HIDDEN)
     private var radar by mutableStateOf<RadarState?>(null)
     private var options by mutableStateOf(Options(showRadar = true, mirrored = false))
+    private var steeringDeg by mutableStateOf<Double?>(null)
+
+    /** The CAN box's latest steering angle (null = no reading); the dynamic lines follow it. */
+    fun steer(deg: Double?) {
+        steeringDeg = deg
+    }
 
     /** Theme for the label and the radar bands; the feed itself has no theme. */
     fun update(theme: CarTheme, night: Boolean) {
@@ -155,6 +167,8 @@ class ReverseCameraWindow(
                         options = options.copy(guideLines = on)
                         onToggleGuideLines(on)
                     },
+                    steeringDeg = if (options.dynamicGuides) steeringDeg else null,
+                    mirrored = options.mirrored,
                     modifier = Modifier.fillMaxSize(),
                 )
             }
