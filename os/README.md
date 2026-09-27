@@ -194,11 +194,18 @@ Profile `gsi` keeps the `@carkit` lines of `overlay/props`:
     bluetooth.profile.a2dp.source.enabled=false     ┐ the phone-side roles the GSI ships;
     bluetooth.profile.hfp.ag.enabled=false          │ off as in AOSP automotive
     bluetooth.profile.avrcp.target.enabled=false    ┘
+    bluetooth.profile.pan.panu.enabled=true         internet from the phone's hotspot
+    bluetooth.profile.pan.nap.enabled=false         the unit never shares an uplink
     bluetooth.device.class_of_device=38,4,8         Audio/Video · Car Audio
 
 `ro.riposte.os.bt_carkit` says which set the image carries. Setup Doctor reads the three
 car-kit profiles on the bench; audio through the amp and a call are car tests. The
 launcher's `BtCarKit` (carlib) drives the profiles on 0.2.
+
+Internet over Bluetooth: with Personal Hotspot on, pair the phone, then Settings >
+Connected devices > the phone > "Internet access" connects PAN. `bt-pan` gets an address
+from the phone and becomes the default network while no Wi-Fi station is up (in the car
+Wi-Fi is the CarPlay access point, not an uplink).
 
 ## Overlay
 
