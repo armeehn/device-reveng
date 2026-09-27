@@ -157,6 +157,12 @@ fun SettingsHub(
                 onClick = { onOpen(SettingsRoute.Vehicle) },
             )
             SettingsCategoryCard(
+                icon = Icons.Filled.Tune,
+                title = "Car settings",
+                subtitle = "Door locks, lights and lock feedback, set in the car",
+                onClick = { onOpen(SettingsRoute.CarSettings) },
+            )
+            SettingsCategoryCard(
                 icon = Icons.Filled.Cable,
                 title = "CAN box",
                 subtitle = "Which car the CAN box is told it is in",
