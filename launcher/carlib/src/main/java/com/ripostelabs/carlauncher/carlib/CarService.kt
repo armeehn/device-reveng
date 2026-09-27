@@ -265,7 +265,11 @@ class CarService(private val appContext: Context) {
     /** CANBOX firmware version (getCanVer, ordinal 105). */
     fun getCanVersion(): String? = call { getCanVer() }
     /** Soft reboot the head unit (sendSoftWareReboot, ordinal 135). */
-    fun reboot() { call { sendSoftWareReboot() } }
+    fun reboot() {
+        // 0.2 has no eventcenter to ask: with our MCU owner live, the root shell reboots.
+        val path = if (owner != null) PowerActions.Path.OWNER else PowerActions.Path.VENDOR
+        PowerActions.reboot(path, vendor = { call { sendSoftWareReboot() } }, root = { RootShell.exec(it) })
+    }
     /** Vendor factory reset (sendFactorySet, ordinal 76). ⚠ Destructive — confirm before calling. */
     fun factoryReset() { call { sendFactorySet() } }
 
