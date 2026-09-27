@@ -654,6 +654,11 @@ class MainActivity : ComponentActivity() {
         // which is exactly where the parked-only gate has to be right; the raw bus can, and is the
         // only speed verified against the car's own ECU. Throttled to BUS_SPEED_PUSH_MS because
         // the snapshot updates on every folded frame, far faster than a threshold comparison needs.
+        // The reverse window's dynamic guide lines follow the CAN box's steering angle.
+        lifecycleScope.launch {
+            CanCaptureService.vehicle().snapshot.collect { reverseWindow.steer(it.steeringDeg) }
+        }
+
         lifecycleScope.launch {
             var lastPushMs = 0L
             CanCaptureService.vehicle().snapshot.collect { snapshot ->
@@ -784,6 +789,7 @@ class MainActivity : ComponentActivity() {
                         showRadar = carSettingsController.getBoolean(SettingKeys.BACKCAR_DISPLAY_RADAR, true),
                         mirrored = carSettingsController.getBoolean(SettingKeys.BACKCAR_CAMERA_MIRRORING, false),
                         guideLines = settingsStore.settings.value.reverseGuideLines,
+                        dynamicGuides = carSettingsController.getInt(SettingKeys.TRACK_LINE_TYPE, 0) == TRACK_LINE_DYNAMIC,
                     )
                 }
             }
@@ -1549,6 +1555,9 @@ private const val STARTUP_TAG = "Startup"
 
 /** The reverse path logs under the camera screen's tag: `logcat -s ReverseCamera` is the whole story. */
 private const val REVERSE_TAG = "ReverseCamera"
+
+/** Reverse camera settings, "Dynamic trajectory": 0 off, 1 static, 2 dynamic (steering). */
+private const val TRACK_LINE_DYNAMIC = 2
 
 /** v2.6 — the vendor source changes only when the driver changes it; polling it is a courtesy. */
 private const val VENDOR_SOURCE_POLL_MS = 5_000L
