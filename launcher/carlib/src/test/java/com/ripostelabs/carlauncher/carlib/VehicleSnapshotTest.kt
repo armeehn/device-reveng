@@ -109,4 +109,27 @@ class VehicleSnapshotTest {
         assertTrue(s.hasAnySource(now = 1_000))
         assertFalse(s.hasAnySource(now = 1_000 + VehicleSnapshot.STALE_AFTER_MS + 1))
     }
+
+    /**
+     * RAV4-148: the CAN box's 0x11 angle is the OEM raw word / 14, the raw bus's is steering
+     * wheel degrees. Both feed STEERING_DEG, so the box's is scaled back to the raw word
+     * (about one count per wheel degree: the OEM saturates at 38 x 14 = 532, near full lock).
+     */
+    @Test
+    fun `can box steering reads in wheel degrees like the raw bus`() {
+        val sig = CanSignal.BasicStatus(
+            swcButtonId = 0,
+            swcPressed = false,
+            swcAction = HiworldCanDecoder.SwcAction.UNKNOWN,
+            doorBits = 0,
+            doorFrontLeftOpen = false,
+            doorFrontRightOpen = false,
+            doorRearRightOpen = false,
+            doorRearLeftOpen = false,
+            tailgateOpen = false,
+            hoodOpen = false,
+            steerAngleDeg = -270 / 14.0,
+        )
+        assertEquals(-270.0, empty.fold(sig, atMs = 1_000).steeringDeg!!, 1e-9)
+    }
 }

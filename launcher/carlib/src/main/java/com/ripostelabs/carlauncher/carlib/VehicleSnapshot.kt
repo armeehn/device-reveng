@@ -58,6 +58,14 @@ data class VehicleSnapshot(
     companion object {
         const val STALE_AFTER_MS = 10_000L
 
+        /**
+         * The CAN box's 0x11 angle is the OEM raw word / 14 (`HiworldCanDecoder`). Times this, it
+         * is the raw word again: about one count per steering-wheel degree (the OEM saturates at
+         * 38 x 14 = 532, near full lock), the same scale as the raw bus's 0x025. UNVERIFIED in the
+         * car: lock to lock should read about -540..540.
+         */
+        private const val BOX_STEER_TO_WHEEL_DEG = 14.0
+
         /** Fold one decoded signal into a snapshot. Unknown signals leave it untouched. */
         fun VehicleSnapshot.fold(sig: CanSignal, atMs: Long): VehicleSnapshot = when (sig) {
             is CanSignal.VehicleInfo -> put(atMs, Field.RPM to sig.rpm.toDouble())
@@ -75,7 +83,7 @@ data class VehicleSnapshot(
                 Field.TYRE_SPARE_KPA to sig.spareKpa)
 
             is CanSignal.BasicStatus -> put(atMs,
-                Field.STEERING_DEG to sig.steerAngleDeg,
+                Field.STEERING_DEG to sig.steerAngleDeg * BOX_STEER_TO_WHEEL_DEG,
                 Field.DOOR_BITS to sig.doorBits.toDouble())
 
             is CanSignal.SysEvent -> put(atMs, Field.REVERSE to if (sig.reverseRaw) 1.0 else 0.0)
