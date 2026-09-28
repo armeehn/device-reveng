@@ -32,5 +32,12 @@ case "$(getprop persist.camera.sensor360.resolution)" in
   *) setprop persist.camera.sensor360.resolution 0 ;;
 esac
 
+
+# Its sleep manager takes the Android 10 path on this build (its release check matches only 13)
+# and treats the display as on only while /sys/power/wake_lock names PowerManagerService.Display,
+# a lock Android 14 never writes. Held before the exec: the only opens that ever showed a picture
+# (bench and car, 2026-09-26) came from a server started with this lock held by hand.
+echo PowerManagerService.Display > "${RIPOSTE_WAKE_LOCK:-/sys/power/wake_lock}"
+
 export LD_LIBRARY_PATH=$AIS/lib:/apex/com.android.i18n/lib64
 exec "$AIS/bin/ais_server"
