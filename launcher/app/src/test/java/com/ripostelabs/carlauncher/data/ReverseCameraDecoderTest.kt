@@ -98,4 +98,25 @@ class ReverseCameraDecoderTest {
 
         assertEquals(listOf(ReverseCameraDecoder.modeCommand(3), ReverseCameraDecoder.command("v3")), ran)
     }
+
+    // The car service (API 4) sets the mode as system uid; the root shell is not asked.
+    @Test
+    fun theServiceIsAskedFirst() {
+        val ran = mutableListOf<String>()
+        val asked = mutableListOf<Int>()
+
+        ReverseCameraDecoder.apply(SettingKeys.BACKCAR_VIDEO_TYPE, "3", rootAvailable = true, service = { asked += it; true }) { ran += it; ok }
+
+        assertEquals(listOf(3), asked)
+        assertEquals(emptyList<String>(), ran)
+    }
+
+    @Test
+    fun aServiceThatCannotFallsBackToRoot() {
+        val ran = mutableListOf<String>()
+
+        ReverseCameraDecoder.apply(SettingKeys.BACKCAR_VIDEO_TYPE, "3", rootAvailable = true, service = { false }) { ran += it; ok }
+
+        assertEquals(listOf(ReverseCameraDecoder.modeCommand(3)), ran)
+    }
 }

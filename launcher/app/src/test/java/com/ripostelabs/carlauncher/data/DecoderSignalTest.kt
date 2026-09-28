@@ -1,5 +1,9 @@
 package com.ripostelabs.carlauncher.data
 
+import com.ripostelabs.car.ICarService
+import com.ripostelabs.carlauncher.carlib.CarDecoder
+import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -25,5 +29,37 @@ class DecoderSignalTest {
         assertFalse(DecoderSignal.isLocked("218"))
         assertFalse(DecoderSignal.isLocked(""))
         assertFalse(DecoderSignal.isLocked(null))
+    }
+
+    private class FakeDecoder(private val lock: Boolean?) : CarDecoder {
+        val signals = mutableListOf<Int>()
+        override fun setDecoderMode(mode: Int) = true
+        override fun decoderLocked() = lock
+        override fun decoderSignal(action: Int): Boolean { signals += action; return true }
+    }
+
+    @After
+    fun noService() {
+        DecoderSignal.service = null
+    }
+
+    // With the car service bound the warm-up reads and nudges the decoder through it.
+    @Test
+    fun theServiceAnswersTheWarmUp() {
+        val svc = FakeDecoder(lock = true)
+        DecoderSignal.service = svc
+
+        assertTrue(DecoderSignal.locked())
+        DecoderSignal.forceStreamable()
+        DecoderSignal.redetect()
+
+        assertEquals(listOf(ICarService.DECODER_FORCE_STREAMABLE, ICarService.DECODER_REDETECT), svc.signals)
+    }
+
+    @Test
+    fun anUnlockedServiceSaysSo() {
+        DecoderSignal.service = FakeDecoder(lock = false)
+
+        assertFalse(DecoderSignal.locked())
     }
 }

@@ -55,6 +55,7 @@ printf 'libandroid.so\nlibc.so\n' > "$W/sys/etc/public.libraries.txt"
 # The platform policy build.sh appends the AIS socket rules to (step 3d); the unit compiles it at boot.
 mkdir -p "$W/sys/etc/selinux"
 printf '(type su)\n' > "$W/sys/etc/selinux/plat_sepolicy.cil"
+printf 'sys.  u:object_r:system_prop:s0\n' > "$W/sys/etc/selinux/plat_property_contexts"
 # Phone-side Bluetooth roles as a stock or GSI build.prop carries them: tier2 must keep them
 # byte for byte, gsi must override them (init keeps the last value of a duplicated key).
 printf 'ro.build.version.release=13\nro.build.type=userdebug\nbluetooth.profile.a2dp.source.enabled=true\nbluetooth.profile.hfp.ag.enabled=true\n' > "$W/sys/build.prop"

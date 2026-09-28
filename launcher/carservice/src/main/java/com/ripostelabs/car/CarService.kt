@@ -20,7 +20,8 @@ import kotlinx.coroutines.launch
  * The always-on car service (os/CARHAL.md "The car service"). Binding needs CONTROL (manifest);
  * each call is checked again in [CarBinder]. Runs as android.uid.system, so REBOOT, MASTER_CLEAR
  * and RECOVERY are held.
- * Hosts the image's one MCU owner ([OwnerHost]) from onCreate: persistent, so from boot on.
+ * Hosts the image's one MCU owner ([OwnerHost]) from onCreate: persistent, so from boot on. The
+ * reverse line and the PR2000 decoder live here too ([SysfsDecoder]); the picture does not.
  */
 class CarService : Service() {
 
@@ -63,7 +64,7 @@ class CarService : Service() {
 
     private lateinit var host: OwnerHost
 
-    private val binder by lazy { CarBinder(Gate(::held), listeners, power, Process.myUid(), host) }
+    private val binder by lazy { CarBinder(Gate(::held), listeners, power, Process.myUid(), host, SysfsDecoder()) }
 
     override fun onCreate() {
         super.onCreate()

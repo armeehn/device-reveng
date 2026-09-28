@@ -1,10 +1,13 @@
 package com.ripostelabs.carlauncher.data
 
 import android.util.Log
+import com.ripostelabs.car.ICarService
+import com.ripostelabs.carlauncher.carlib.CarDecoder
 import com.ripostelabs.carlauncher.carlib.RootShell
 
 /**
- * The PR2000's signal lock through the root shell, for [AisCameraWorker]'s warm-up.
+ * The PR2000's signal lock for [AisCameraWorker]'s warm-up: through the car service when one
+ * is bound ([service], API 4), else through the root shell.
  *
  *     locked()          cat /sys/camera_status/camera_status ─▶ 1..13 (a libais_pr2000 size row)
  *     forceStreamable() c0 + v4 to /sys/pr2000/pr2000 ─▶ status 2 (720x576): a stream can start
@@ -25,19 +28,30 @@ object DecoderSignal : AisCameraWorker.Signal {
 
     private const val TAG = "DecoderSignal"
 
+    /** The car service's decoder once MainActivity binds it; null keeps the root shell. */
+    @Volatile
+    var service: CarDecoder? = null
+
     /** True for a status the AIS server can size a stream from. */
     fun isLocked(status: String?): Boolean = status?.trim()?.toIntOrNull() in SIZED_STATUS
 
     override fun locked(): Boolean {
+        service?.decoderLocked()?.let { return it }
         val result = RootShell.exec("cat $STATUS_NODE")
         return result.ok && isLocked(result.stdout)
     }
 
     override fun forceStreamable() {
+        if (service?.decoderSignal(ICarService.DECODER_FORCE_STREAMABLE) == true) {
+            return
+        }
         run("setprop $WRITABLE_PROP 1; echo c0 > $DECODER_NODE; echo v4 > $DECODER_NODE")
     }
 
     override fun redetect() {
+        if (service?.decoderSignal(ICarService.DECODER_REDETECT) == true) {
+            return
+        }
         run("printf r > $DECODER_NODE; sleep 0.05; printf c1 > $DECODER_NODE; printf v0 > $DECODER_NODE")
     }
 

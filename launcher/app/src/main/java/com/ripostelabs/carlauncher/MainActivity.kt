@@ -62,6 +62,7 @@ import com.ripostelabs.carlauncher.carlib.McuDiagnostics
 import com.ripostelabs.carlauncher.carlib.McuOwner
 import com.ripostelabs.carlauncher.carlib.McuPort
 import com.ripostelabs.carlauncher.carlib.RemoteMcuOwner
+import com.ripostelabs.carlauncher.carlib.CarDecoder
 import com.ripostelabs.carlauncher.carlib.ServiceCarBinding
 import com.ripostelabs.carlauncher.carlib.KeyAction
 import com.ripostelabs.carlauncher.carlib.KeyRouter
@@ -85,6 +86,7 @@ import com.ripostelabs.carlauncher.carlib.WheelKeySwallow
 import com.ripostelabs.carlauncher.carlib.WheelLearn
 import com.ripostelabs.carlauncher.carlib.Zlink // RAV4-52 CarPlay deep link
 import com.ripostelabs.carlauncher.data.CallPopupGuard
+import com.ripostelabs.carlauncher.data.DecoderSignal
 import com.ripostelabs.carlauncher.data.ReverseCameraDecoder
 import com.ripostelabs.carlauncher.data.SysVarLocalStore
 import com.ripostelabs.carlauncher.data.SysVarMirrorProvider // RAV4-98
@@ -434,6 +436,8 @@ class MainActivity : ComponentActivity() {
             }
             mcuOwner = port.also {
                 carService.attachOwner(it)
+                // The service's decoder (API 4) for the warm-up and the mode row; root otherwise.
+                DecoderSignal.service = it as? CarDecoder
                 it.start()
                 // The Settings choice reaches the box at once; McuOwner ignores an unchanged car.
                 val owner = it
@@ -533,7 +537,7 @@ class MainActivity : ComponentActivity() {
         val localRows = mcuOwner?.let {
             SysVarLocalStore(SysVarLocalStore.prefs(applicationContext)) { key, value ->
                 SysVarMirrorProvider.publish(applicationContext, key, value)
-                ReverseCameraDecoder.apply(key, value)
+                ReverseCameraDecoder.apply(key, value, service = { mode -> DecoderSignal.service?.setDecoderMode(mode) == true })
             }
         }
         localRows?.let { rows -> lifecycleScope.launch(Dispatchers.IO) { rows.republish() } }
