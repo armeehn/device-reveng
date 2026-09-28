@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.os.IBinder
 import android.os.PowerManager
 import android.os.Process
+import android.os.RecoverySystem
 import android.os.RemoteCallbackList
 import android.os.SystemClock
 import android.util.Log
@@ -17,7 +18,8 @@ import kotlinx.coroutines.launch
 
 /**
  * The always-on car service (os/CARHAL.md "The car service"). Binding needs CONTROL (manifest);
- * each call is checked again in [CarBinder]. Runs as android.uid.system, so REBOOT is held.
+ * each call is checked again in [CarBinder]. Runs as android.uid.system, so REBOOT, MASTER_CLEAR
+ * and RECOVERY are held.
  * Hosts the image's one MCU owner ([OwnerHost]) from onCreate: persistent, so from boot on.
  */
 class CarService : Service() {
@@ -48,8 +50,14 @@ class CarService : Service() {
         }
     }
 
-    // reboot(null): a plain restart, no recovery or bootloader reason.
-    private val power = Power { getSystemService(PowerManager::class.java).reboot(null) }
+    private val power = object : Power {
+        // reboot(null): a plain restart, no recovery or bootloader reason.
+        override fun reboot() = getSystemService(PowerManager::class.java).reboot(null)
+
+        // What Settings' own reset ends in (MasterClearReceiver): MASTER_CLEAR + RECOVERY, held
+        // as system uid. Blocks this binder thread until the reboot takes the process.
+        override fun wipeData() = RecoverySystem.rebootWipeUserData(this@CarService)
+    }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 

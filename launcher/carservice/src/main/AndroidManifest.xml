@@ -17,6 +17,10 @@
         android:protectionLevel="signature|privileged" />
 
     <uses-permission android:name="android.permission.REBOOT" />
+    <!-- factoryReset: RecoverySystem.rebootWipeUserData broadcasts under MASTER_CLEAR and writes
+         the recovery command under RECOVERY. -->
+    <uses-permission android:name="android.permission.MASTER_CLEAR" />
+    <uses-permission android:name="android.permission.RECOVERY" />
     <!-- The MCU link on 0.2 images is a loopback socket (riposte-mcubridge.sh); sockets need inet. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- carlib declares these for the launcher's receivers and GPS speed; the service uses neither. -->
@@ -34,7 +38,7 @@
             <!-- ICarService.apiVersion (CarBinder.API_VERSION), read by clients before binding. -->
             <meta-data
                 android:name="com.ripostelabs.car.API"
-                android:value="2" />
+                android:value="3" />
         </service>
     </application>
 </manifest>
