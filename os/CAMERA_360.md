@@ -61,3 +61,14 @@ To run a client on the bench, lift it from the stock system image to `/data/loca
 
     export LD_LIBRARY_PATH=/system/riposte/ais/lib:/apex/com.android.i18n/lib64
     (sleep 10; echo q) | ./fibo_carcam_360
+
+## The launcher's view
+
+Settings > Reverse camera > 360 cameras opens `SurroundCameraActivity`, a 2x2 grid of
+channels 0-3 through `AisCamera.openAll` on device 0. Tap a tile for full screen, tap it
+again for the grid. A tile shows "No signal" when its picture is flat (the decoder's
+no-video frame) or its frame count stops.
+
+The client library serves one device at a time. A second session closes the first before it
+opens (`AisCamera` keeps the process-wide holder), so reverse always gets the PR2000. The 360
+screen also leaves as soon as the car is in reverse.

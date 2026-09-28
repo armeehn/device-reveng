@@ -264,6 +264,17 @@
             android:theme="@style/Theme.CarLauncher" />
 
         <!--
+          The four 360 cameras (XS9922B channels 0-3) in a grid (Settings > Reverse camera).
+          Exported for `adb shell am start -n com.ripostelabs.carlauncher/.ui.SurroundCameraActivity`.
+        -->
+        <activity
+            android:name=".ui.SurroundCameraActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:screenOrientation="landscape"
+            android:theme="@style/Theme.CarLauncher" />
+
+        <!--
           A no-UI trampoline, deliberately NOT the launcher activity. USB_DEVICE_ATTACHED has to
           sit on an activity for Android to grant device permission, but putting it on the HOME
           activity would tie the launcher's own lifecycle to plugging in an adapter.

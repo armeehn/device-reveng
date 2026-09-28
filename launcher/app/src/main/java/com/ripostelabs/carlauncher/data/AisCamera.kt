@@ -22,6 +22,11 @@ import android.util.Log
  * ...) whose trampolines pass the JNI arguments through untouched (setSurface, .text 0x121c:
  * `br set_surface`), so [Backend] is that library's exported contract, not the shim's.
  *
+ * The 360 cameras take the same path on the other decoder: [openAll] opens device 0, the
+ * 4-channel XS9922B, and puts one surface on each channel's slot (os/CAMERA_360.md):
+ *
+ *     openAll([s0..s3], 0) ─▶ backend.open(0) ─▶ setSurface(s0, 0) .. setSurface(s3, 3) ─▶ Streaming
+ *
  * [S] is the surface handle: `android.view.Surface` in the app, anything on the JVM.
  */
 class AisCamera<S : Any>(private val backend: Backend<S>) {
@@ -62,12 +67,38 @@ class AisCamera<S : Any>(private val backend: Backend<S>) {
     /** True after a [Backend.open] call, whatever it returned: stock closes on that flag, not on success. */
     private var opened = false
 
-    private var attached: S? = null
+    /** The slots [openAll] drew into, deleted by [close]. */
+    private var attached: List<Int> = emptyList()
 
-    fun open(surface: S, cameraIndex: Int = REVERSE_CAMERA_INDEX): State {
+    fun open(surface: S, cameraIndex: Int = REVERSE_CAMERA_INDEX): State = openAll(listOf(surface), cameraIndex)
+
+    /** Opens [cameraIndex] and puts surface k on slot k: one slot per decoder channel. */
+    fun openAll(surfaces: List<S>, cameraIndex: Int): State {
         if (state == State.Streaming) {
             return state
         }
+
+        if (surfaces.isEmpty() || surfaces.size > MAX_SLOTS) {
+            return fail("${surfaces.size} surfaces: the client draws into 1..$MAX_SLOTS slots")
+        }
+
+        synchronized(CLIENT) {
+            return takeClient(surfaces, cameraIndex)
+        }
+    }
+
+    /**
+     * The client serves one device per process. A second session (reverse over the 360 view)
+     * first closes the one holding it, so reverse always gets the PR2000; the old session's
+     * own close then finds nothing open and leaves the new stream alone.
+     */
+    private fun takeClient(surfaces: List<S>, cameraIndex: Int): State {
+        val previous = holder
+        if (previous != null && previous !== this) {
+            Log.i(TAG, "another session holds the client: closing it first")
+            previous.close()
+        }
+        holder = this
 
         val loadError = backend.load()
         if (loadError != null) {
@@ -83,37 +114,41 @@ class AisCamera<S : Any>(private val backend: Backend<S>) {
             return fail("open_camera($cameraIndex) returned $result")
         }
 
-        backend.setSurface(surface, SURFACE_SLOT)
-        attached = surface
-        Log.i(TAG, "surface set on slot $SURFACE_SLOT")
+        surfaces.forEachIndexed { slot, surface -> backend.setSurface(surface, slot) }
+        attached = surfaces.indices.toList()
+        Log.i(TAG, "surfaces set on slots $attached")
 
         state = State.Streaming
         return state
     }
 
-    fun close() {
+    fun close() = synchronized(CLIENT) {
+        if (holder === this) {
+            holder = null
+        }
+
         if (opened) {
             backend.close()
             Log.i(TAG, "close_camera done")
         }
         opened = false
 
-        if (attached != null) {
-            backend.deleteSurface(SURFACE_SLOT)
-            Log.i(TAG, "surface slot $SURFACE_SLOT deleted")
+        attached.forEach { backend.deleteSurface(it) }
+        if (attached.isNotEmpty()) {
+            Log.i(TAG, "surface slots $attached deleted")
         }
-        attached = null
+        attached = emptyList()
 
         state = State.Idle
     }
 
     /** Frames drawn so far, null when nothing streams. Stock polls it for signal detection (CamerasSignalDetection.java:523). */
-    fun frames(): Int? {
+    fun frames(slot: Int = SURFACE_SLOT): Int? {
         if (state != State.Streaming) {
             return null
         }
 
-        return backend.frameCount(SURFACE_SLOT)
+        return backend.frameCount(slot)
     }
 
     private fun fail(reason: String): State {
@@ -124,11 +159,26 @@ class AisCamera<S : Any>(private val backend: Backend<S>) {
     companion object {
         private const val TAG = "AisCamera"
 
+        /** Guards [holder] and orders client calls made from different sessions' threads. */
+        private val CLIENT = Any()
+
+        /** The session whose device the client has open, if any. */
+        private var holder: AisCamera<*>? = null
+
         /** `CCAM_MIPI_DEV_PR2000` (CameraUtils.java:11), the index the gateway opens on this board (BackcarEvent.java:1309). */
         const val REVERSE_CAMERA_INDEX = 1
 
         /** The surface slot the gateway draws into on a PR2000 board (CameraManager.java:63, 75). */
         const val SURFACE_SLOT = 0
+
+        /** `CCAM_MIPI_DEV_XS9922B` (CameraUtils.java:11): the 4-channel decoder behind the 360 cameras. */
+        const val SURROUND_CAMERA_INDEX = 0
+
+        /** The XS9922B's channels, qcarcam inputs 0-3 (ais_camera_config.xml inputMapping). */
+        const val SURROUND_CHANNELS = 4
+
+        /** `set_surface` refuses an index of 5 or more (.text 0x2fe0). */
+        const val MAX_SLOTS = 5
 
         /** `open_camera` returns 0 when the stream is up, or was already (.text 0x2150, 0x2780). */
         const val OPEN_OK = 0

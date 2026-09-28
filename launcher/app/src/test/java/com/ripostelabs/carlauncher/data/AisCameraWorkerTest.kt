@@ -182,6 +182,37 @@ class AisCameraWorkerTest {
         assertEquals(listOf("open", "setSurface"), log.toList())
     }
 
+    /** Records the device and slots, so the 360 open can be checked end to end. */
+    private class Slots(private val log: MutableList<String>) : AisCamera.Backend<String> {
+        override fun load(): String? = null
+        override fun open(cameraIndex: Int): Int { log += "open($cameraIndex)"; return AisCamera.OPEN_OK }
+        override fun setSurface(surface: String, slot: Int) { log += "setSurface($surface,$slot)" }
+        override fun deleteSurface(slot: Int) { log += "deleteSurface($slot)" }
+        override fun close() { log += "close" }
+        override fun frameCount(slot: Int): Int = slot * 10
+    }
+
+    @Test
+    fun openAllOpensTheWorkersDeviceWithEverySurface() {
+        val log: MutableList<String> = Collections.synchronizedList(mutableListOf())
+        val subject = AisCameraWorker(
+            AisCamera(Slots(log)), worker, timer, post = { it() }, cameraIndex = AisCamera.SURROUND_CAMERA_INDEX,
+        )
+        val frames: MutableList<Int?> = Collections.synchronizedList(mutableListOf())
+
+        subject.openAll(listOf("c0", "c1", "c2", "c3")) { results += it }
+        waitFor { results.isNotEmpty() }
+        subject.frames(2) { frames += it }
+        waitFor { frames.isNotEmpty() }
+
+        assertEquals(listOf(AisCamera.State.Streaming), results.toList())
+        assertEquals(
+            listOf("open(0)", "setSurface(c0,0)", "setSurface(c1,1)", "setSurface(c2,2)", "setSurface(c3,3)"),
+            log.toList(),
+        )
+        assertEquals(listOf<Int?>(20), frames.toList())
+    }
+
     private fun waitFor(condition: () -> Boolean) {
         val until = System.currentTimeMillis() + WAIT_MS
         while (!condition()) {
