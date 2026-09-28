@@ -186,6 +186,18 @@ fun LauncherPrefsScreen(
             )
         }
 
+        // Riposte OS 0.2: CarPlay up → the iPhone's hotspot over Bluetooth (PhoneInternet).
+        SettingsSection(title = "Phone") {
+            ToggleSetting(
+                label = "Use phone's internet with CarPlay",
+                description = "When CarPlay connects, the unit joins the iPhone's Personal " +
+                    "Hotspot over Bluetooth. Wi-Fi stays first when it is there. The hotspot " +
+                    "must be on in the iPhone's settings.",
+                checked = settings.phoneInternetWithCarPlay,
+                onChange = settingsStore::setPhoneInternetWithCarPlay,
+            )
+        }
+
         // v0.4.2: text-to-speech. Off by default — a launcher that talks unasked is worse
         // than silent (LAUNCHER_DESIGN eyes-free posture; pairs with the car's own beep feedback).
         SettingsSection(title = "Read aloud") {

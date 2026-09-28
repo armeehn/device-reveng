@@ -33,8 +33,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import com.ripostelabs.carlauncher.carlib.AndroidPanLink
 import com.ripostelabs.carlauncher.carlib.BtCallMcu
 import com.ripostelabs.carlauncher.carlib.BtCarKit
+import com.ripostelabs.carlauncher.carlib.PhoneInternet
 import com.ripostelabs.carlauncher.carlib.CarEvents
 import com.ripostelabs.carlauncher.carlib.DozeGuard
 import com.ripostelabs.carlauncher.carlib.McuSetupProtocol
@@ -191,6 +193,9 @@ class MainActivity : ComponentActivity() {
     /** Riposte OS 0.2 only: the phone through the stock stack's car-kit profiles. */
     private var btCarKit: BtCarKit? = null
 
+    /** Riposte OS 0.2 only: the PAN proxy behind [PhoneInternet]. */
+    private var panLink: AndroidPanLink? = null
+
     /** Riposte OS 0.2 only: the resistive-wheel learn handshake, driven from Settings. */
     private var wheelLearn: WheelLearn? = null
 
@@ -342,13 +347,28 @@ class MainActivity : ComponentActivity() {
             }
             // A phone session coming up brings its screen forward, as the vendor gateway did
             // for the OEM app (ZlinkManage.startZlinkActivity); on 0.2 that screen is ours.
+            // The same edge asks the iPhone for its internet over Bluetooth PAN, off the main
+            // thread (binder calls), with its retries on IO too.
+            val pan = AndroidPanLink(applicationContext).also { it.start() }
+            panLink = pan
+            val phoneInternet = PhoneInternet(pan, schedule = { ms, task ->
+                lifecycleScope.launch(Dispatchers.IO) {
+                    delay(ms)
+                    task()
+                }
+            })
             lifecycleScope.launch {
                 carEvents.zlinkConnected.collect { up ->
-                    if (up) {
-                        Zlink.openAny(applicationContext)
-                        // The track for the media card rides the stack's AVRCP session, which
-                        // needs the phone as its A2DP device (BtCarKit.connectSink).
-                        btCarKit?.connectSink()
+                    if (!up) {
+                        withContext(Dispatchers.IO) { phoneInternet.onSessionDown() }
+                        return@collect
+                    }
+                    Zlink.openAny(applicationContext)
+                    // The track for the media card rides the stack's AVRCP session, which
+                    // needs the phone as its A2DP device (BtCarKit.connectSink).
+                    btCarKit?.connectSink()
+                    if (settingsStore.settings.value.phoneInternetWithCarPlay) {
+                        withContext(Dispatchers.IO) { phoneInternet.onSessionUp(address = null) }
                     }
                 }
             }
@@ -1513,6 +1533,7 @@ class MainActivity : ComponentActivity() {
         carCommandPort?.stop()
         ampVolumeKeys?.stop(applicationContext)
         btCarKit?.stop()
+        panLink?.stop()
         gatewayHandshake.unregister() // v3.0
         carEvents.unregister()
         mcuSleepWake?.stop()
