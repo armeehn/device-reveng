@@ -221,8 +221,8 @@ void onNavInteract();                         // a touch on the bar or one of it
 The launcher's overlay window cannot reserve insets, so apps laid out under it and its strip
 covered their bottom-edge buttons. The service draws the bar as a `TYPE_NAVIGATION_BAR_PANEL`
 window whose `providedInsets` declare `navigationBars` (hidden API, open to a platform-signed
-app), and the window manager shrinks every app above it: on the bench DAVx5's intro arrow moved
-from y 575-659 to 515-599 above the 96 px strip. Apps that hide the system bars themselves still
+app). The window manager then shrinks every app above it. On the bench DAVx5's intro arrow
+moved from y 575-659 to 515-599 above the 96 px strip. Apps that hide the system bars themselves still
 lay out full screen. The launcher keeps `NavBarPolicy` (hidden over projection, auto-fold) and
 sends the state; a touch comes back through `onNavInteract`. Without a service at 5 the launcher
 draws its own overlay as before.
