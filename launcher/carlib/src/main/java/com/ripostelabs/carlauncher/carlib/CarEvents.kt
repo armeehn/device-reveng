@@ -523,6 +523,13 @@ class CarEvents(private val appContext: Context) {
      */
     val climate: StateFlow<ClimateState?> = _climate.asStateFlow()
 
+    private val _carSettings = MutableStateFlow<CarSettingsState?>(null)
+    /**
+     * The car's customisations from the box's last 0x62 report ([CarSettings]), or null until
+     * one arrives. Fed by the owner's relay on 0.2+ and by `MCU_MSG_CAN_ALL_INFO` otherwise.
+     */
+    val carSettings: StateFlow<CarSettingsState?> = _carSettings.asStateFlow()
+
     // v0.7 --- Parking radar (CAR_API §1.3 MCU_CAR_CAN_RADAR_INFO) ------------
     private val _radar = MutableStateFlow<RadarState?>(null)
     /**
@@ -913,13 +920,18 @@ class CarEvents(private val appContext: Context) {
                 MCU_MSG_CAN_ALL_INFO -> {
                     val frame = CanFrame.from(intent, System.currentTimeMillis())
                     _canRaw.value = frame
+                    val signal = frame.bytes?.let { HiworldCanDecoder.decodeFrame(it) }
+
+                    // The box's settings report, answering the Car settings page's query.
+                    if (signal is CanSignal.CarSettings) {
+                        _carSettings.value = signal.state
+                        return
+                    }
 
                     // RAV4-38: the dashboard's steering is this frame's 0x11 decode, the one
                     // the capture screen already shows. Other opcodes leave it untouched.
                     // The same decode carries the wheel key byte the gesture engine reads.
-                    val basic = frame.bytes
-                        ?.let { HiworldCanDecoder.decodeFrame(it) as? CanSignal.BasicStatus }
-                        ?: return
+                    val basic = signal as? CanSignal.BasicStatus ?: return
                     _steeringAngle.value = SteeringReading(basic.steerAngleDeg, frame.atMs)
                     gestures.onSample(basic.swcButtonId, basic.swcPressed, SystemClock.elapsedRealtime())
                     scheduleGestureTick()
@@ -1132,6 +1144,7 @@ class CarEvents(private val appContext: Context) {
                 // 0.2 has no canbus2 to broadcast MCU_CAR_CAN_RADAR_INFO; the relayed 0x41
                 // frame is the only source for the reverse screen's radar overlay.
                 is CanSignal.ParkingRadar -> _radar.value = RadarState.fromParkingRadar(signal)
+                is CanSignal.CarSettings -> _carSettings.value = signal.state
                 is CanSignal.BasicStatus -> {
                     _doors.value = DoorState.from(signal, atMs)
                     // RAV4-53: the same frame carries the wheel key byte pair; on 0.2 this is the

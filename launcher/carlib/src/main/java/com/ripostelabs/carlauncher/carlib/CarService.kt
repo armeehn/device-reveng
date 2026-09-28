@@ -346,6 +346,39 @@ class CarService(private val appContext: Context) {
     fun sendRtc(now: LocalDateTime) {
         owner?.send(McuOwnerProtocol.rtc(now))
     }
+
+    /**
+     * Change one car customisation through the CAN box ([CarSettings]). One frame per call,
+     * never repeated; whether the car took it shows only in the next 0x62 report.
+     */
+    fun setCarSetting(setting: CarSetting, value: Int) {
+        Log.i(TAG, "car setting ${setting.name} = $value")
+        val o = owner
+        if (o == null) {
+            broadcastCanBox(CarSettings.setPayload(setting, value))
+            return
+        }
+
+        o.send(McuOwnerProtocol.carSetting(setting, value))
+    }
+
+    /** Ask the box for its settings report; the answer arrives as [CarEvents.carSettings]. */
+    fun requestCarSettings() {
+        val o = owner
+        if (o == null) {
+            broadcastCanBox(CarSettings.QUERY)
+            return
+        }
+
+        o.send(McuOwnerProtocol.carSettingsQuery())
+    }
+
+    /** Vendor path: the same `0D 08 5A A5 ...` broadcast canbus2 hands the port owner ([McuCommand]). */
+    private fun broadcastCanBox(payload: IntArray) {
+        val intent = Intent(McuCommand.ACTION).putExtra(McuCommand.EXTRA_DATA, McuCommand.framed(payload))
+        runCatching { appContext.sendBroadcast(intent) }
+            .onFailure { Log.w(TAG, "CAN box broadcast failed", it) }
+    }
     fun setMute(mute: Boolean) {
         owner?.let { it.send(McuOwnerProtocol.mute(mute)); return }
         call { sendMuteState(mute) }

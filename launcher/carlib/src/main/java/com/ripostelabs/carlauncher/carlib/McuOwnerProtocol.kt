@@ -432,6 +432,12 @@ object McuOwnerProtocol {
     /** `6A 05 01 id`: ask the box for data block [id] (sendQToCan, HiworldCanParseToyota.java:1774). */
     private fun canBoxQuery(id: Int): ByteArray = canBox(intArrayOf(0x03, BOX_QUERY, 0x05, 0x01, id))
 
+    /** `6A group key value`: change one car customisation ([CarSettings.setPayload]). */
+    fun carSetting(setting: CarSetting, value: Int): ByteArray = canBox(CarSettings.setPayload(setting, value))
+
+    /** `6A 05 01 62`: ask the box for its car settings report. */
+    fun carSettingsQuery(): ByteArray = canBox(CarSettings.QUERY)
+
     /**
      * A box frame on the owner's port. [McuCommand.framed] builds `0D 08 5A A5 payload CK`, the
      * checksum being SendUtil.java:60-85's; its first byte is the outer opcode and the rest the

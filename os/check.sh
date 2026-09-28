@@ -114,6 +114,10 @@ allowed_for() { # pkg
 # shellcheck disable=SC2034  # used inside the eval below
 HAVE=$(allowed_for "$LAUNCHER_PKG")
 check "[ \"\$WANT\" = \"\$HAVE\" ]" "allowlist == every permission the APK requests ($(wc -l <<<"$WANT") entries)"
+# PhoneInternet dials Bluetooth PAN with CarPlay: setConnectionPolicy needs both.
+for perm in BLUETOOTH_CONNECT BLUETOOTH_PRIVILEGED; do
+  check "grep -qx android.permission.$perm <<<\"\$HAVE\"" "allowlist grants the launcher $perm (phone internet)"
+done
 
 # The car service (build.sh step 3), when its APK was supplied: a system-uid priv-app.
 if [ "$CARSERVICE" = 1 ]; then
