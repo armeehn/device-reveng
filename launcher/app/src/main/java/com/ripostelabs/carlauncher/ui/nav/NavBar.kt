@@ -127,7 +127,7 @@ class NavBar(private val context: Context) {
         watch = ui.launch {
             while (isActive) {
                 val pkg = withContext(Dispatchers.IO) { foreground() }
-                apply(policy.onForeground(pkg))
+                policy.onPoll(pkg)?.let(::apply)
                 delay(policy.nextPollMs())
             }
         }
