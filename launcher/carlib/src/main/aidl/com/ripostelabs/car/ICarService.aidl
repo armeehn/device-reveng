@@ -32,4 +32,11 @@ interface ICarService {
     ReverseState reverseState();                // READ
     void setDecoderMode(int mode);              // 0 auto .. 8, persisted; CONTROL
     void decoderSignal(int action);             // DECODER_*; CONTROL
+
+    // 5: the nav bar as a system window that reserves the navigationBars inset, so apps lay
+    // out above it. The launcher's NavBarPolicy still decides the state.
+    const int NAV_HIDDEN = 0;
+    const int NAV_HANDLE = 1;                   // folded: a thin touch edge
+    const int NAV_EXPANDED = 2;                 // Back, Home, Apps
+    void setNavBar(int state, in int[] colors); // surface, onSurface, primary (ARGB); CONTROL
 }

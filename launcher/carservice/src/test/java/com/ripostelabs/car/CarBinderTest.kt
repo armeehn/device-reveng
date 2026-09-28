@@ -25,6 +25,8 @@ class CarBinderTest {
         val events = mutableListOf<McuEvent>()
         val reverse = mutableListOf<ReverseState>()
         override fun onReverse(state: ReverseState) { reverse += state }
+        var navTouches = 0
+        override fun onNavInteract() { navTouches++ }
         override fun onStatus(status: CarStatus) { seen += status }
         override fun onMcuEvent(event: McuEvent) {
             if (dead) {
@@ -68,17 +70,24 @@ class CarBinderTest {
         override fun redetect() { calls += "redetect" }
     }
 
+    /** The nav bar window: records what the launcher asked it to show. */
+    private class FakeNav : NavPanel {
+        val shown = mutableListOf<String>()
+        override fun show(state: Int, colors: IntArray) { shown += "$state ${colors.size}" }
+    }
+
+    private val nav = FakeNav()
     private val power = FakePower()
     private val decoder = FakeDecoder()
     private val listeners = FakeListeners()
     private val link = FakeLink()
 
     private fun binder(vararg held: String) =
-        CarBinder(Gate { it in held }, listeners, power, systemUid, link, decoder)
+        CarBinder(Gate { it in held }, listeners, power, systemUid, link, decoder, nav)
 
     @Test
-    fun apiVersionIsFour() {
-        assertEquals(4, binder().apiVersion())
+    fun apiVersionIsFive() {
+        assertEquals(5, binder().apiVersion())
     }
 
     @Test
@@ -295,5 +304,47 @@ class CarBinderTest {
         assertThrows(IllegalArgumentException::class.java) { b.decoderSignal(0) }
 
         assertTrue(decoder.calls.isEmpty())
+    }
+
+    // ---- nav bar (API 5) ----
+
+    private val colors = intArrayOf(0x111111, 0xEEEEEE, 0x3366FF)
+
+    @Test
+    fun navBarWithControlReachesTheWindow() {
+        val b = binder(CONTROL_PERMISSION)
+        b.setNavBar(ICarService.NAV_EXPANDED, colors)
+        b.setNavBar(ICarService.NAV_HIDDEN, colors)
+
+        assertEquals(listOf("${ICarService.NAV_EXPANDED} 3", "${ICarService.NAV_HIDDEN} 3"), nav.shown)
+    }
+
+    @Test
+    fun navBarWithReadOnlyIsRefused() {
+        assertThrows(SecurityException::class.java) { binder(READ_PERMISSION).setNavBar(ICarService.NAV_HANDLE, colors) }
+        assertTrue(nav.shown.isEmpty())
+    }
+
+    // Three colours (surface, on-surface, accent) and a known state, or nothing is drawn.
+    @Test
+    fun navBarWithABadStateOrColoursIsRefused() {
+        val b = binder(CONTROL_PERMISSION)
+        assertThrows(IllegalArgumentException::class.java) { b.setNavBar(7, colors) }
+        assertThrows(IllegalArgumentException::class.java) { b.setNavBar(ICarService.NAV_EXPANDED, intArrayOf(1)) }
+        assertThrows(IllegalArgumentException::class.java) { b.setNavBar(ICarService.NAV_EXPANDED, null) }
+
+        assertTrue(nav.shown.isEmpty())
+    }
+
+    // A touch on the bar goes to the launcher, whose NavBarPolicy decides what comes next.
+    @Test
+    fun navTouchReachesEveryListener() {
+        val b = binder(READ_PERMISSION)
+        val l = FakeListener()
+        b.registerListener(l)
+
+        b.navTouched()
+
+        assertEquals(1, l.navTouches)
     }
 }

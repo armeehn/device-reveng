@@ -8,4 +8,5 @@ oneway interface ICarListener {
     void onStatus(in CarStatus status);
     void onMcuEvent(in McuEvent event);
     void onReverse(in ReverseState state);      // 4: every edge of the line
+    void onNavInteract();                       // 5: a touch on the service's nav bar
 }

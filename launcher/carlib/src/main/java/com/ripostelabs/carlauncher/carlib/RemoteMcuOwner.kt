@@ -33,7 +33,7 @@ class RemoteMcuOwner(
     private val listener: McuOwner.Listener,
     /** The handshake frames the launcher's stores built (McuOwnerProtocol.startup). */
     private val startup: List<ByteArray>,
-) : McuPort, CarDecoder {
+) : McuPort, CarDecoder, CarNav {
 
     /** Which process owns the MCU link on this image. */
     enum class Owner { LOCAL, SERVICE }
@@ -75,6 +75,10 @@ class RemoteMcuOwner(
         // The same 71 arrives through onMcuEvent, and the launcher's ReverseTrigger adds the
         // speed gate on it; the service's line is for clients without a decoder of their own.
         override fun onReverse(state: ReverseState?) = Unit
+
+        override fun onNavInteract() {
+            navTouch?.invoke()
+        }
     }
 
     override val lastMode: McuOwnerProtocol.Mode?
@@ -138,6 +142,15 @@ class RemoteMcuOwner(
     }
 
     override fun decoderSignal(action: Int): Boolean = at(REVERSE_API) { it.decoderSignal(action) }
+
+    @Volatile
+    private var navTouch: (() -> Unit)? = null
+
+    override fun showNav(state: Int, colors: IntArray): Boolean = at(NAV_API) { it.setNavBar(state, colors) }
+
+    override fun onNavTouch(action: () -> Unit) {
+        navTouch = action
+    }
 
     /** [block] on a service at [level] or newer; false when older, down or dead mid-call. */
     private inline fun at(level: Int, block: (ICarService) -> Unit): Boolean {
@@ -230,6 +243,9 @@ class RemoteMcuOwner(
 
         /** ICarService.apiVersion that carries the reverse line and the decoder. */
         const val REVERSE_API = 4
+
+        /** ICarService.apiVersion that draws the nav bar as a system window. */
+        const val NAV_API = 5
 
         /** [McuOwner.Status.Failed] reason while the service is down (it restarts, we rebind). */
         const val SERVICE_GONE = "car service gone"
