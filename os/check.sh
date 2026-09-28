@@ -174,6 +174,9 @@ if [ "$PROFILE" = gsi ]; then
   check "[ \"\$(stat -c %a $S/bin/riposte-ais.sh)\" = 755 ]" "riposte-ais.sh executable (sets the lib path the secure exec drops)"
   check "grep -q '/apex/com.android.i18n/lib64' $S/bin/riposte-ais.sh" "ais_server's path reaches the i18n APEX (libxml2 needs libandroidicu.so)"
   check "grep -q 'setprop sys.acc.state 1' $S/bin/riposte-ais.sh" "ais_server sees ACC on (it serves no client while sys.acc.state is unset)"
+  # The 360 cameras: the XS9922B driver beside it, pinned to four channels (CAMERA_360.md).
+  check "[ -f $S/riposte/ais/lib/libais_xs9922b.so ]" "XS9922B driver lifted (qcarcam inputs 0-3, the 360 cameras)"
+  check "grep -q 'setprop persist.camera.sensorcfg.resolution TYP0_CID0_VCH1_RES0' $S/bin/riposte-ais.sh" "XS9922B pinned to its four-channel mode"
   check "grep -qx '(typetransition su socket_device sock_file riposte_ais_socket)' $S/etc/selinux/plat_sepolicy.cil" "AIS sockets get the MLS-trusted riposte_ais_socket type"
   check "grep -qx '(allow priv_app su (unix_stream_socket (connectto)))' $S/etc/selinux/plat_sepolicy.cil" "the launcher may connect to ais_server"
   # The launcher's dlopen of the AIS client (AisCameraNative): on the public list, deps beside it.

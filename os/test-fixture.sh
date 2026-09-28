@@ -42,11 +42,12 @@ mint_apk com.szchoiceway.providers.settings "$W/sys/priv-app/SysVarProvider/SysV
 mkdir -p "$W/sys/priv-app/zlink5/lib/arm"
 : > "$W/sys/priv-app/zlink5/lib/arm/libzjL10001.so"
 for b in z-link z-mdnsd z-usbmuxd; do printf '#!/system/bin/sh\n' > "$W/sys/bin/$b"; chmod 0755 "$W/sys/bin/$b"; done
-# The AIS camera server build.sh lifts on the gsi profile (step 3d): the daemon and one sensor
-# library from the stock system, the vendor library it links from a stand-in vendor.img.
+# The AIS camera server build.sh lifts on the gsi profile (step 3d): the daemon and two sensor
+# libraries from the stock system, the vendor library it links from a stand-in vendor.img.
 mkdir -p "$W/sys/lib64" "$W/vend/lib64"
 printf '#!/system/bin/sh\n' > "$W/sys/bin/ais_server"; chmod 0755 "$W/sys/bin/ais_server"
 : > "$W/sys/lib64/libais_pr2000.so"
+: > "$W/sys/lib64/libais_xs9922b.so"
 : > "$W/vend/lib64/libmmosal.so"
 # The client side the launcher dlopens (build.sh 3d): the lib, its deps, and the public list
 # every GSI ships that it is appended to.
