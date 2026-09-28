@@ -89,6 +89,35 @@ class RemoteMcuOwnerTest {
         assertEquals(RemoteMcuOwner.Owner.LOCAL, RemoteMcuOwner.choose(0))
     }
 
+    /**
+     * The bench, 2026-09-28: a car service installed after the launcher defined CONTROL too late
+     * for the launcher to hold it, bindService threw SecurityException and HOME crash-looped.
+     * Without the grant the launcher owns the port, as when there is no service.
+     */
+    @Test
+    fun aServiceTheLauncherMayNotBindFallsBackToLocal() {
+        assertEquals(RemoteMcuOwner.Owner.LOCAL, RemoteMcuOwner.choose(4, RemoteMcuOwner.BindAccess.REFUSED))
+        assertEquals(RemoteMcuOwner.Owner.SERVICE, RemoteMcuOwner.choose(4, RemoteMcuOwner.BindAccess.GRANTED))
+    }
+
+    // Any bind failure the check above did not foresee: logged and shown, never thrown.
+    @Test
+    fun aRefusedBindIsBlockedNotACrash() {
+        val refusing = object : CarBinding {
+            override fun bind(onUp: (ICarService) -> Unit, onDown: () -> Unit) {
+                throw SecurityException("Not allowed to bind to service")
+            }
+
+            override fun unbind() = Unit
+        }
+        val r = RemoteMcuOwner(refusing, recorder, startup)
+
+        r.start()
+
+        assertTrue(r.status.value is McuOwner.Status.Blocked)
+        assertFalse(r.setMode(McuOwnerProtocol.Mode.RADIO))
+    }
+
     @Test
     fun startBindsOnceAndConnectReplaysThenListens() {
         remote.start()

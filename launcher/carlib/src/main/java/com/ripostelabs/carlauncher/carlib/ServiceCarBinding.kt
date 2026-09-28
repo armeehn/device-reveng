@@ -70,6 +70,17 @@ class ServiceCarBinding(
 
         private val COMPONENT = ComponentName(PACKAGE, SERVICE)
 
+        /** The service's CONTROL permission, which bindService checks (manifest android:permission). */
+        private const val CONTROL = "com.ripostelabs.car.permission.CONTROL"
+
+        /** Whether bindService will let this app in: a grant, not just an installed service. */
+        fun access(context: Context): RemoteMcuOwner.BindAccess =
+            if (context.checkSelfPermission(CONTROL) == PackageManager.PERMISSION_GRANTED) {
+                RemoteMcuOwner.BindAccess.GRANTED
+            } else {
+                RemoteMcuOwner.BindAccess.REFUSED
+            }
+
         /** The installed car service's API level, or null on an image without it. */
         fun installedApi(context: Context): Int? = try {
             val flags = PackageManager.ComponentInfoFlags.of(PackageManager.GET_META_DATA.toLong())

@@ -439,7 +439,11 @@ class MainActivity : ComponentActivity() {
                 ),
             )
             // One owner (os/CARHAL.md): the car service when the image has one, else this process.
-            val port = when (RemoteMcuOwner.choose(ServiceCarBinding.installedApi(applicationContext))) {
+            val side = RemoteMcuOwner.choose(
+                ServiceCarBinding.installedApi(applicationContext),
+                ServiceCarBinding.access(applicationContext),
+            )
+            val port = when (side) {
                 RemoteMcuOwner.Owner.SERVICE -> RemoteMcuOwner(
                     ServiceCarBinding(applicationContext),
                     ownerListener,
