@@ -175,8 +175,9 @@ object McuOwnerProtocol {
 
     /** What the launcher must know at start; the vendor reads the same from SysVar. */
     data class StartupConfig(
-        val rds: Boolean = true,
-        val radioZone: Int = 0,
+        /** Off as on stock's first boot (SYS_RDS_OnOff "0", EventService.java:6620): TA and AF are European. */
+        val rds: Boolean = false,
+        val radioZone: Int = RadioZone.NORTH_AMERICA,
         /** `Set_Day_Light` / `Set_Night_Light` default rows (setRecordDefaultValue, :6502-6503). */
         val backlightDay: Int = 20,
         val backlightNight: Int = 8,
