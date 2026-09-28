@@ -126,6 +126,7 @@ done
 # ---- riposte-ais.sh --------------------------------------------------------------
 # A stub server under the test hook: it proves the exec happened and shows the lib path.
 export RIPOSTE_AIS="$T/ais"
+export RIPOSTE_WAKE_LOCK="$T/wake_lock"
 mkdir -p "$RIPOSTE_AIS/bin"
 printf '#!/usr/bin/env bash\necho "ais_server LD_LIBRARY_PATH=$LD_LIBRARY_PATH"\n' > "$RIPOSTE_AIS/bin/ais_server"
 chmod +x "$RIPOSTE_AIS/bin/ais_server"
@@ -139,6 +140,9 @@ run_ais || fail "ais wrapper exited $?: $(cat "$T/out")"
 [ "$(prop persist.camera.sensorcfg.resolution)" = TYP0_CID0_VCH1_RES0 ] || fail "sensorcfg '$(prop persist.camera.sensorcfg.resolution)'"
 [ "$(prop persist.camera.sensor360.resolution)" = 0 ] || fail "sensor360 '$(prop persist.camera.sensor360.resolution)'"
 grep -q "LD_LIBRARY_PATH=$RIPOSTE_AIS/lib:" "$T/out" || fail "server not exec'd with its lib path: $(cat "$T/out")"
+
+echo "== ais: the display wake lock is held before the server starts (its A10 sleep gate)"
+grep -qx "PowerManagerService.Display" "$RIPOSTE_WAKE_LOCK" || fail "no PowerManagerService.Display in the wake lock node"
 
 echo "== ais: stock's single-channel TYP1 value goes, a valid 720p30 choice stays"
 setprop persist.camera.sensorcfg.resolution TYP1_CID0_VCH1_RES0
@@ -157,8 +161,10 @@ done
 echo "== ais: nothing on a build that is not car-owner"
 setprop ro.riposte.os.car_owner 0
 setprop persist.camera.sensor360.resolution abc
+rm -f "$RIPOSTE_WAKE_LOCK"
 run_ais || fail "ais wrapper exited $? off car-owner"
 [ ! -s "$T/out" ] || fail "server ran off car-owner"
+[ ! -e "$RIPOSTE_WAKE_LOCK" ] || fail "wake lock taken off car-owner"
 [ "$(prop persist.camera.sensor360.resolution)" = abc ] || fail "props touched off car-owner"
 
 echo "ROOT-CAMERA PASS"
