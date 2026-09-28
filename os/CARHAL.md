@@ -126,7 +126,7 @@ interface ICarService {
 
     // Power
     void reboot();
-    void factoryReset(int scope);                       // scopes: an owner decision, still open
+    void factoryReset(int scope);                       // RESET_DATA_WIPE only, see "Power (apiVersion 3)"
 
     // Vendor settings rows (Sys_* keys, SysVarLocalStore)
     String getSetting(String key, String fallback);
@@ -171,6 +171,22 @@ owner runs, so one parcel serves every `McuOwner.Listener` call. `onStatus` carr
 state; frame counters go out at most once a second. The service keeps the last startup frames
 and car, so the boot handshake already has the launcher's volume and setup table.
 
+### Power (apiVersion 3)
+
+```aidl
+const int RESET_DATA_WIPE = 1;   // Android's own factory reset
+void factoryReset(int scope);    // CONTROL; any other scope throws IllegalArgumentException
+```
+
+`reboot` is `PowerManager.reboot(null)`. `factoryReset(RESET_DATA_WIPE)` is
+`RecoverySystem.rebootWipeUserData`, the call Settings' own reset ends in: `/data` is wiped in
+recovery, so every app, account and setting goes. The service holds `MASTER_CLEAR` and
+`RECOVERY` as system uid. Narrower scopes (launcher settings only, vendor rows) are an owner
+decision still open; each becomes a new constant.
+
+The launcher routes both through the service once it reports 3. Without it, reboot falls back to
+the root shell and factory reset logs and does nothing. Settings asks twice, parked only.
+
 ### The launcher's 30 vendor calls, mapped
 
 `owner today` says whether 0.2 already serves the call without `eventcenter`; the rows marked
@@ -184,7 +200,7 @@ and car, so the boot handshake already has the launcher's volume and setup table
 | `getValidModeTitleInfor` | yes | `currentSource` + title table in the client |
 | `getCanVer` | **no** | `status().canVersion` |
 | `sendSoftWareReboot` | yes (root shell, #301) | `reboot` |
-| `sendFactorySet` | **no** | `factoryReset(scope)` |
+| `sendFactorySet` | **no** (0.3: service, API 3) | `factoryReset(scope)` |
 | `sendMode` (×2) | yes | `setSource` |
 | `sendWheelKey` | **no** | `injectWheelKey` |
 | `sendMuteState` | yes | `setMute` |

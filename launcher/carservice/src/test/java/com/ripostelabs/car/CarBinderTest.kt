@@ -45,16 +45,24 @@ class CarBinderTest {
         override fun send(frame: ByteArray) { calls += "send ${frame.size}" }
     }
 
-    private var reboots = 0
+    /** Counts what reached the power side, so a refused call can be shown to have done nothing. */
+    private class FakePower : Power {
+        var reboots = 0
+        var wipes = 0
+        override fun reboot() { reboots++ }
+        override fun wipeData() { wipes++ }
+    }
+
+    private val power = FakePower()
     private val listeners = FakeListeners()
     private val link = FakeLink()
 
     private fun binder(vararg held: String) =
-        CarBinder(Gate { it in held }, listeners, { reboots++ }, systemUid, link)
+        CarBinder(Gate { it in held }, listeners, power, systemUid, link)
 
     @Test
-    fun apiVersionIsTwo() {
-        assertEquals(2, binder().apiVersion())
+    fun apiVersionIsThree() {
+        assertEquals(3, binder().apiVersion())
     }
 
     @Test
@@ -100,13 +108,34 @@ class CarBinderTest {
     @Test
     fun rebootWithControlReboots() {
         binder(CONTROL_PERMISSION).reboot()
-        assertEquals(1, reboots)
+        assertEquals(1, power.reboots)
     }
 
     @Test
     fun rebootWithReadOnlyIsRefusedBeforePower() {
         assertThrows(SecurityException::class.java) { binder(READ_PERMISSION).reboot() }
-        assertEquals(0, reboots)
+        assertEquals(0, power.reboots)
+    }
+
+    @Test
+    fun dataWipeWithControlWipes() {
+        binder(CONTROL_PERMISSION).factoryReset(ICarService.RESET_DATA_WIPE)
+        assertEquals(1, power.wipes)
+    }
+
+    @Test
+    fun factoryResetWithReadOnlyIsRefusedBeforePower() {
+        assertThrows(SecurityException::class.java) {
+            binder(READ_PERMISSION).factoryReset(ICarService.RESET_DATA_WIPE)
+        }
+        assertEquals(0, power.wipes)
+    }
+
+    // The owner has decided one scope so far; any other number wipes nothing.
+    @Test
+    fun unknownResetScopeIsRefused() {
+        assertThrows(IllegalArgumentException::class.java) { binder(CONTROL_PERMISSION).factoryReset(99) }
+        assertEquals(0, power.wipes)
     }
 
     @Test

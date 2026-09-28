@@ -19,4 +19,8 @@ interface ICarService {
     int currentSource();
     void selectCar(String carId);
     void sendMcuFrame(in byte[] frame);
+
+    // 3: power. factoryReset takes a RESET_* scope; the owner has decided only this one so far.
+    const int RESET_DATA_WIPE = 1;              // Android's own factory reset: /data wiped in recovery
+    void factoryReset(int scope);
 }

@@ -277,12 +277,30 @@ class CarService(private val appContext: Context) {
     fun getCanVersion(): String? = call { getCanVer() }
     /** Soft reboot the head unit (sendSoftWareReboot, ordinal 135). */
     fun reboot() {
-        // 0.2 has no eventcenter to ask: with our MCU owner live, the root shell reboots.
-        val path = if (owner != null) PowerActions.Path.OWNER else PowerActions.Path.VENDOR
-        PowerActions.reboot(path, vendor = { call { sendSoftWareReboot() } }, root = { RootShell.exec(it) })
+        // 0.3: the car service reboots as system uid. 0.2 has no eventcenter: the root shell does.
+        val remote = owner as? RemoteMcuOwner
+        PowerActions.reboot(
+            powerPath(),
+            vendor = { call { sendSoftWareReboot() } },
+            root = { RootShell.exec(it) },
+            service = { remote?.reboot() == true },
+        )
     }
-    /** Vendor factory reset (sendFactorySet, ordinal 76). ⚠ Destructive — confirm before calling. */
-    fun factoryReset() { call { sendFactorySet() } }
+    /** Factory reset: Android's own wipe via the car service; stock asks sendFactorySet. ⚠ Destructive. */
+    fun factoryReset() {
+        val remote = owner as? RemoteMcuOwner
+        PowerActions.factoryReset(
+            powerPath(),
+            vendor = { call { sendFactorySet() } },
+            service = { remote?.factoryReset() == true },
+        )
+    }
+
+    private fun powerPath() = when (owner) {
+        is RemoteMcuOwner -> PowerActions.Path.SERVICE
+        null -> PowerActions.Path.VENDOR
+        else -> PowerActions.Path.OWNER
+    }
 
     fun sendMode(mode: Int, flag: Boolean) {
         owner?.let { o -> McuOwnerProtocol.Mode.entries.firstOrNull { it.code == mode }?.let { o.setMode(it) }; return }

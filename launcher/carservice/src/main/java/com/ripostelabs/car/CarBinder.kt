@@ -12,9 +12,12 @@ interface ListenerSet {
     fun each(action: (ICarListener) -> Unit)
 }
 
-/** The power actions the service performs; PowerManager on the unit. */
-fun interface Power {
+/** The power actions the service performs; PowerManager and RecoverySystem on the unit. */
+interface Power {
     fun reboot()
+
+    /** Android's standard factory reset: wipe /data in recovery, then boot to setup. */
+    fun wipeData()
 }
 
 /** The MCU link as the binder drives it: [OwnerHost] around McuOwner on the unit, a fake in tests. */
@@ -82,6 +85,13 @@ class CarBinder(
         power.reboot()
     }
 
+    // Only DATA_WIPE exists yet; any other scope is refused before power hears it.
+    override fun factoryReset(scope: Int) {
+        gate.enforce(Access.CONTROL)
+        require(scope == ICarService.RESET_DATA_WIPE) { "unknown reset scope $scope" }
+        power.wipeData()
+    }
+
     override fun openLink() {
         gate.enforce(Access.CONTROL)
         link.open()
@@ -142,8 +152,8 @@ class CarBinder(
     private fun current() = CarStatus.of(uid, link.status())
 
     private companion object {
-        // 1 was the skeleton; 2 adds the MCU link calls. Additions to ICarService bump it.
-        // The manifest's com.ripostelabs.car.API meta-data must say the same.
-        const val API_VERSION = 2
+        // 1 was the skeleton; 2 adds the MCU link calls; 3 power (factoryReset). Additions to
+        // ICarService bump it. The manifest's com.ripostelabs.car.API meta-data must say the same.
+        const val API_VERSION = 3
     }
 }

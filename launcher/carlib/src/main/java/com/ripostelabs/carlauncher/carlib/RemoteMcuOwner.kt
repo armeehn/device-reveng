@@ -53,6 +53,10 @@ class RemoteMcuOwner(
     @Volatile
     private var car: CarProfile? = null
 
+    /** The bound service's apiVersion; 0 while unbound. */
+    @Volatile
+    private var api = 0
+
     private val decoder = McuDecoder(listener)
 
     private val callback = object : ICarListener.Stub() {
@@ -89,6 +93,7 @@ class RemoteMcuOwner(
     override fun release() {
         call { it.unregisterListener(callback) }
         service = null
+        api = 0
         if (bound) {
             bound = false
             binding.unbind()
@@ -105,6 +110,19 @@ class RemoteMcuOwner(
     override fun selectCar(profile: CarProfile) {
         car = profile
         call { it.selectCar(profile.id) }
+    }
+
+    /** ICarService.reboot; false when the service is down or older than [POWER_API]. */
+    fun reboot(): Boolean = power { it.reboot() }
+
+    /** Android's factory reset through the service; false as for [reboot]. */
+    fun factoryReset(): Boolean = power { it.factoryReset(ICarService.RESET_DATA_WIPE) }
+
+    private inline fun power(block: (ICarService) -> Unit): Boolean {
+        if (api < POWER_API) {
+            return false
+        }
+        return call { block(it); true } ?: false
     }
 
     /** One forwarded event into the launcher's listener, decoded as the owner decoded it. */
@@ -147,11 +165,13 @@ class RemoteMcuOwner(
         }
         // Last: registering pushes the current status at once.
         svc.registerListener(callback)
+        this.api = api
         return true
     }
 
     private fun onDown() {
         service = null
+        api = 0
         _status.value = McuOwner.Status.Failed(SERVICE_GONE)
     }
 
@@ -171,6 +191,9 @@ class RemoteMcuOwner(
 
         /** ICarService.apiVersion that carries the MCU link calls. */
         const val MIN_API = 2
+
+        /** ICarService.apiVersion that carries power: reboot and factoryReset. */
+        const val POWER_API = 3
 
         /** [McuOwner.Status.Failed] reason while the service is down (it restarts, we rebind). */
         const val SERVICE_GONE = "car service gone"
