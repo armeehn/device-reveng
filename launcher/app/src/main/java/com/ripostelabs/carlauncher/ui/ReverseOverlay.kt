@@ -171,33 +171,40 @@ private fun ParkingGuideLines(steeringDeg: Double?, mirrored: Boolean, modifier:
 }
 
 /**
- * The dynamic rails as polylines, and a band across them where each rail is a fixed share of
- * the way back: near = red, mid = amber, far = green, as on the static lines.
+ * The dynamic rails as the stock unit draws them: polylines coloured by distance (red, yellow,
+ * green) with an inward tick at each zone edge. The OEM box keeps its shape, fitted to the
+ * screen height and centred, as the stock layout places it.
  */
 private fun DrawScope.drawTrajectory(rails: GuideTrajectory.Rails, red: Color, amber: Color, green: Color) {
-    val w = size.width
     val h = size.height
-    val stroke = (w * STROKE_FRACTION).coerceAtLeast(MIN_STROKE_PX)
-    fun at(p: GuideTrajectory.Point) = Offset(p.x * w, p.y * h)
+    val boxW = h * GuideTrajectory.BOX_ASPECT
+    val left = (size.width - boxW) / 2
+    val rail = (h * OEM_RAIL_PX / OEM_BOX_PX).coerceAtLeast(MIN_STROKE_PX)
+    val tick = (h * OEM_TICK_PX / OEM_BOX_PX).coerceAtLeast(MIN_STROKE_PX)
+    fun at(p: GuideTrajectory.Point) = Offset(left + p.x * boxW, p.y * h)
+    fun colour(zone: GuideTrajectory.Zone) = when (zone) {
+        GuideTrajectory.Zone.NEAR -> red
+        GuideTrajectory.Zone.MID -> amber
+        GuideTrajectory.Zone.FAR -> green
+    }
 
-    for (rail in listOf(rails.left, rails.right)) {
-        for (i in 1 until rail.size) {
-            drawLine(green, at(rail[i - 1]), at(rail[i]), strokeWidth = stroke)
+    // Each segment takes the colour of its far end, as drawarcLine does.
+    for (points in listOf(rails.left, rails.right)) {
+        for (i in 1 until points.size) {
+            drawLine(colour(GuideTrajectory.zoneOf(i)), at(points[i - 1]), at(points[i]), strokeWidth = rail)
         }
     }
 
-    for ((share, color) in listOf(NEAR_BAND to red, MID_BAND to amber, FAR_BAND to green)) {
-        val i = (share * (rails.left.size - 1)).toInt()
-        drawLine(color, at(rails.left[i]), at(rails.right[i]), strokeWidth = stroke)
+    for (t in rails.ticks) {
+        drawLine(colour(t.zone), at(t.from), at(t.to), strokeWidth = tick)
     }
 }
 
-/** Band positions along the dynamic rails, as a share of their length. */
-private const val NEAR_BAND = 0.12f
-private const val MID_BAND = 0.45f
-private const val FAR_BAND = 0.85f
+/** Stock stroke widths (rail 6 px, tick 4 px) on its 720 px high box. */
+private const val OEM_RAIL_PX = 6f
+private const val OEM_TICK_PX = 4f
+private const val OEM_BOX_PX = 720f
 
-private const val STROKE_FRACTION = 0.006f
 private const val MIN_STROKE_PX = 3f
 
 /** Driving-relevant touch target (LAUNCHER_DESIGN §1.2) for the guide-line toggle. */
