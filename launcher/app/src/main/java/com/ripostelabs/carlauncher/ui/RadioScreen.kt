@@ -403,7 +403,7 @@ private fun StationName(name: String?) {
 
 /**
  * The tuner status flags. TA and AF are toggles (sendRadioKey 23 / 21, like the vendor radio's
- * buttons); RDS, TP and stereo only report.
+ * buttons); RDS, TP and stereo only report. [RadioTuning.flags] picks the ones the zone serves.
  */
 @Composable
 private fun IndicatorRow(tuner: TunerState, onToggleTa: () -> Unit, onToggleAf: () -> Unit) {
@@ -411,11 +411,15 @@ private fun IndicatorRow(tuner: TunerState, onToggleTa: () -> Unit, onToggleAf: 
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Indicator(label = "RDS", on = tuner.rds)
-        Indicator(label = "TA", on = tuner.ta, onToggle = onToggleTa)
-        Indicator(label = "AF", on = tuner.af, onToggle = onToggleAf)
-        Indicator(label = "TP", on = tuner.tp)
-        Indicator(label = "ST", on = tuner.stereo)
+        for (flag in RadioTuning.flags(tuner.zone, tuner.ta, tuner.af)) {
+            when (flag) {
+                RadioTuning.Flag.RDS -> Indicator(label = flag.label, on = tuner.rds)
+                RadioTuning.Flag.TA -> Indicator(label = flag.label, on = tuner.ta, onToggle = onToggleTa)
+                RadioTuning.Flag.AF -> Indicator(label = flag.label, on = tuner.af, onToggle = onToggleAf)
+                RadioTuning.Flag.TP -> Indicator(label = flag.label, on = tuner.tp)
+                RadioTuning.Flag.STEREO -> Indicator(label = flag.label, on = tuner.stereo)
+            }
+        }
     }
 }
 
@@ -667,6 +671,7 @@ private data class TunerState(
     val tp: Boolean? = null,
     val stereo: Boolean? = null,
     val stationName: String? = null,
+    val zone: Int? = null,
 ) {
     companion object {
         val UNKNOWN = TunerState(available = false, band = 0, freq = 0)
@@ -690,6 +695,7 @@ private fun readTuner(carService: CarService): TunerState {
             tp = carService.getRadioTp(),
             stereo = carService.getRadioStereo(),
             stationName = carService.getRadioStationName(),
+            zone = carService.getRadioZone(),
         )
     }.getOrDefault(TunerState.UNKNOWN)
 }

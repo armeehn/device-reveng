@@ -1,5 +1,7 @@
 package com.ripostelabs.carlauncher.ui
 
+import com.ripostelabs.carlauncher.carlib.RadioZone
+
 import com.ripostelabs.carlauncher.carlib.CarService
 import com.ripostelabs.carlauncher.data.RadioPreset
 import kotlin.math.roundToInt
@@ -15,6 +17,36 @@ import kotlinx.coroutines.delay
  * as freq (AM 8750 must not light while tuned FM 87.5).
  */
 internal object RadioTuning {
+
+    /**
+     * A tuner status chip on [RadioScreen], labelled in words. RDS is station data (name, genre);
+     * TA breaks in for traffic bulletins; AF follows a network to its next transmitter; TP says
+     * the station carries traffic. All four are European broadcast services.
+     */
+    enum class Flag(val label: String) {
+        RDS("RDS"),
+        TA("Traffic"),
+        AF("Alt freq"),
+        TP("Traffic station"),
+        STEREO("Stereo"),
+    }
+
+    /**
+     * The chips worth showing for [zone] (null: the gateway's tuner, zone unknown). North America
+     * has no TA, AF or TP service, and TA on made seek skip every station, so there only Stereo
+     * shows, plus TA or AF while on, so one tap switches it off.
+     */
+    fun flags(zone: Int?, ta: Boolean?, af: Boolean?): List<Flag> {
+        if (zone != RadioZone.NORTH_AMERICA) {
+            return Flag.entries
+        }
+
+        return listOfNotNull(
+            Flag.TA.takeIf { ta == true },
+            Flag.AF.takeIf { af == true },
+            Flag.STEREO,
+        )
+    }
 
     /** How many times a band key is sent before a tuner that never reports it is given up on. */
     const val MAX_BAND_ATTEMPTS = 4
