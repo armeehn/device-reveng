@@ -113,4 +113,37 @@ class NavBarPolicyTest {
         assertEquals(NavBarState.HIDDEN, p.state)
         assertEquals(NavBarState.EXPANDED, p.onForeground(MAPS))
     }
+
+    /**
+     * The unit, 2026-09-27: the strip was still up 12 s after an app launch in AUTO_HIDE. NavBar
+     * rendered on every 1.5 s foreground poll, and each render restarted the 3 s fold timer, so
+     * it never ran out. This plays NavBar's loop on a virtual clock: a render (re)arms the timer.
+     */
+    @Test
+    fun pollsOverTheSameAppLetTheBarFold() {
+        val p = NavBarPolicy(NavBarMode.AUTO_HIDE, SELF)
+        var now = 0L
+        var foldAt: Long? = null
+        val render = { _: NavBarState -> foldAt = if (p.armsTimer()) now + NavBarPolicy.AUTO_HIDE_MS else null }
+
+        p.onPoll(MAPS)?.let(render)
+        while (now < 12_000L) {
+            now += NavBarPolicy.FOREGROUND_POLL_MS
+            if (foldAt?.let { it <= now } == true) {
+                render(p.onTimeout())
+            }
+            p.onPoll(MAPS)?.let(render)
+        }
+
+        assertEquals(NavBarState.HANDLE, p.state)
+    }
+
+    @Test
+    fun aPollAsksForARenderOnlyOnAChange() {
+        val p = NavBarPolicy(NavBarMode.AUTO_HIDE, SELF)
+
+        assertEquals(NavBarState.EXPANDED, p.onPoll(MAPS))
+        assertEquals(null, p.onPoll(MAPS))
+        assertEquals(NavBarState.HIDDEN, p.onPoll(NavBarPolicy.PROJECTION_PACKAGE))
+    }
 }

@@ -47,6 +47,7 @@ object HiworldCanDecoder {
     private const val OP_RADAR = 0x41          // PDC ultrasonic front/rear
     private const val OP_TPMS = 0x48           // tyre pressures
     private const val OP_VERSION = 0xF0        // CANBOX firmware version ASCII
+    private const val OP_CAR_SET = CarSettings.REPORT_OPCODE // Toyota customisation report
 
     /**
      * 0x32 p[4:5] "speed" scale. **NOT ROAD SPEED.** The 2026-08-29 drive capture (0→54.8 km/h vs
@@ -164,6 +165,7 @@ object HiworldCanDecoder {
         OP_SPEED -> decodeSpeed(payload)
         OP_RPM_GEAR_MIRROR -> decodeRpmGearMirror(payload)
         OP_VERSION -> decodeVersion(payload)
+        OP_CAR_SET -> CanSignal.CarSettings(CarSettings.decode(payload))
         else -> CanSignal.Unknown(opcode, payload)
     }
 
@@ -922,6 +924,11 @@ sealed interface CanSignal {
     /** 0xF0 — CANBOX firmware version string (ASCII). */
     data class Version(
         val text: String,
+    ) : CanSignal
+
+    /** 0x62 — the car's customisation settings, as the box last read them ([CarSettings]). */
+    data class CarSettings(
+        val state: CarSettingsState,
     ) : CanSignal
 
     /** Fallback for an opcode we don't interpret yet; raw payload preserved. */

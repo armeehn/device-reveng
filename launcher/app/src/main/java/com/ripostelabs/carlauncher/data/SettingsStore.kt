@@ -138,6 +138,8 @@ data class LauncherSettings(
      * ([CallPopupGuard]). On by default: the status chip and the Phone screen carry the call.
      */
     val hideVendorCallPopup: Boolean = true,
+    /** Riposte OS 0.2: dial the CarPlay iPhone's internet over Bluetooth PAN ([PhoneInternet]). */
+    val phoneInternetWithCarPlay: Boolean = true,
     /** The car the CAN box is told it is in, by [com.ripostelabs.carlauncher.carlib.CarProfile.id]. */
     val canBoxCar: String = CarProfiles.DEFAULT.id,
 ) {
@@ -251,6 +253,7 @@ class SettingsStore(context: Context) {
                     hideReplacedOemApps = prefs[HIDE_REPLACED_OEM_KEY] ?: true,
                     hideOemSettings = prefs[HIDE_OEM_SETTINGS_KEY] ?: false,
                     hideVendorCallPopup = prefs[HIDE_VENDOR_CALL_POPUP_KEY] ?: true,
+                    phoneInternetWithCarPlay = prefs[PHONE_INTERNET_KEY] ?: true,
                     canBoxCar = prefs[CAN_BOX_CAR_KEY] ?: CarProfiles.DEFAULT.id,
                 )
             }
@@ -380,6 +383,11 @@ class SettingsStore(context: Context) {
         ds.edit { it[HIDE_VENDOR_CALL_POPUP_KEY] = enabled }
     }
 
+    /** Use the CarPlay iPhone's internet over Bluetooth, or leave PAN to Android Settings. */
+    fun setPhoneInternetWithCarPlay(enabled: Boolean) = scope.launch {
+        ds.edit { it[PHONE_INTERNET_KEY] = enabled }
+    }
+
     /** Pick the car the CAN box is told it is in; McuOwner re-sends the box startup on a change. */
     fun setCanBoxCar(id: String) = scope.launch {
         ds.edit { it[CAN_BOX_CAR_KEY] = id }
@@ -415,6 +423,7 @@ class SettingsStore(context: Context) {
         val HIDE_REPLACED_OEM_KEY = booleanPreferencesKey("hide_replaced_oem_apps") // OemApps shadow
         val HIDE_OEM_SETTINGS_KEY = booleanPreferencesKey("hide_oem_settings") // OemApps shadow
         val HIDE_VENDOR_CALL_POPUP_KEY = booleanPreferencesKey("hide_vendor_call_popup") // CallPopupGuard
+        val PHONE_INTERNET_KEY = booleanPreferencesKey("phone_internet_carplay") // PhoneInternet
         val CAN_BOX_CAR_KEY = stringPreferencesKey("can_box_car") // CarProfile.id
         val USB_ROLE_KEY = stringPreferencesKey("usb_role") // UsbRole.name, Riposte OS 0.2
     }

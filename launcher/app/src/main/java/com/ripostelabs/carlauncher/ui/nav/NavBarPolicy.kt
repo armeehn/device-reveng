@@ -52,6 +52,17 @@ class NavBarPolicy(private val mode: NavBarMode, private val selfPackage: String
         return state
     }
 
+    /**
+     * The window's foreground poll: the state to render, or null when nothing changed. A render
+     * restarts the fold timer, so a poll over the same app must not ask for one (the strip
+     * never folded on the unit while the 1.5 s poll kept re-rendering it).
+     */
+    fun onPoll(pkg: String?): NavBarState? {
+        val before = state
+        val next = onForeground(pkg)
+        return if (next == before) null else next
+    }
+
     /** A touch on the handle or a key: expand (again) for another [AUTO_HIDE_MS]. */
     fun onInteract(): NavBarState {
         if (overProjection) return state
