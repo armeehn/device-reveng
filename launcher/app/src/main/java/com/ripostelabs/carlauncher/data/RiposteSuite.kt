@@ -97,15 +97,14 @@ object RiposteSuite {
     /**
      * Suite members that bind the vendor gateway (`com.szchoiceway.eventcenter`'s AIDL) for
      * their whole job. On Riposte OS 0.2 the launcher's own [McuOwner] holds the MCU port and
-     * the gateway is gone, so each opens to a bind that never connects: Radio to a tuner it
-     * cannot reach (the launcher's tuner screen is the radio there), Bluetooth to a BT stack
-     * the gateway proxied. Hidden from the drawer while the owner is active; unchanged on a
-     * stock or 0.1 slot, where the gateway answers them.
+     * the gateway is gone, so Bluetooth opens to a BT stack the gateway proxied. Hidden from the
+     * drawer while the owner is active; unchanged on a stock or 0.1 slot. Radio left this set
+     * when it learned the launcher's ITuner (RAV4-97).
      */
     /** The suite Radio app: its media session speaks for the tuner when the MCU is silent. */
     const val RADIO_PACKAGE = "com.ripostelabs.radio"
 
-    val VENDOR_BOUND: Set<String> = setOf(RADIO_PACKAGE, "com.ripostelabs.bluetooth")
+    val VENDOR_BOUND: Set<String> = setOf("com.ripostelabs.bluetooth")
 
     /** The members to drop from the drawer: [VENDOR_BOUND] when the owner is active, else none. */
     fun hiddenOnOwner(ownerActive: Boolean): Set<String> =
