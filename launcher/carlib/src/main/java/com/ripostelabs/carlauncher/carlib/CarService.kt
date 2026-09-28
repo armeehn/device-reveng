@@ -617,6 +617,9 @@ class CarService(private val appContext: Context) {
      * stores the MCU's PS frame in `mRadioPSName` and returns it here). The genre is
      * `getRadioPTYNum()`, an index into the vendor's 32-entry PTY table. No radio text (RT) exists.
      */
+    /** The band plan the owner gave the MCU; null on the gateway path, which keeps it in SysVar. */
+    fun getRadioZone(): Int? = owner?.let { radioState.state.value.zone }
+
     fun getRadioStationName(): String? = tuner({ it.stationName }) { getRadioPTYName() }
 
     // ---- v1.5: Audio / EQ (CAR_API §3.2; ordinals confirmed in AIDL_ORDINALS.md) --------
