@@ -45,6 +45,7 @@ import com.ripostelabs.carlauncher.carlib.RadioMemory
 import com.ripostelabs.carlauncher.carlib.VolumeMemory
 import com.ripostelabs.carlauncher.carlib.AmpVolumeKeys
 import com.ripostelabs.carlauncher.carlib.DimKey
+import com.ripostelabs.carlauncher.data.RiposteSuite
 import com.ripostelabs.carlauncher.data.GpsClock
 import com.ripostelabs.carlauncher.data.McuClock
 import com.ripostelabs.carlauncher.data.AccessoryRuntime
@@ -754,7 +755,7 @@ class MainActivity : ComponentActivity() {
             radioPresets = radioPresetsStore,
             zlinkConnected = { carEvents.zlinkConnected.value },
             openMedia = { screenState.value = Screen.Media },
-            openRadio = { screenState.value = Screen.Radio },
+            openRadio = ::openRadio,
             openHome = { screenState.value = Screen.Home; launcherFocus.reset() },
         )
         keyActions = KeyActionDispatcher(
@@ -1066,7 +1067,7 @@ class MainActivity : ComponentActivity() {
                                     // v3.0: cockpit + profiles, two taps from Home.
                                     onOpenDashboard = { screen = Screen.Dashboard },
                                     onOpenProfiles = { screen = Screen.Profiles },
-                                    onOpenRadio = { screen = Screen.Radio },
+                                    onOpenRadio = ::openRadio,
                                     onOpenPhone = { screen = Screen.Phone },
                                     driverSide = driverSide, // v2.8 reachability mirror
                                     // v2.7 shelves
@@ -1393,6 +1394,21 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
+     * The Radio tile, wheel gesture and radio key. The suite Radio when installed: seek and step,
+     * scan and auto-store, stereo/mono, DX/LOC, the MCU's presets and internet radio. The
+     * launcher's tuner screen is the fallback (RAV4-147: the owner took it for a stub).
+     */
+    private fun openRadio() {
+        val suite = packageManager.getLaunchIntentForPackage(RiposteSuite.RADIO_PACKAGE)
+        if (suite == null) {
+            screenState.value = Screen.Radio
+            return
+        }
+
+        runCatching { startActivity(suite) }.onFailure { screenState.value = Screen.Radio }
+    }
+
+    /**
      * v2.8 — act on one paced press from [keyPump].
      *
      * Feedback fires only on a genuine first press: v2.5 §1.4 wants the driver to feel that a
@@ -1463,7 +1479,7 @@ class MainActivity : ComponentActivity() {
             }
             true
         }
-        NavKey.OPEN_RADIO -> { screenState.value = Screen.Radio; true }
+        NavKey.OPEN_RADIO -> { openRadio(); true }
         NavKey.OPEN_PHONE -> { screenState.value = Screen.Phone; true }
         NavKey.HOME -> {
             screenState.value = Screen.Home

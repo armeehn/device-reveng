@@ -26,11 +26,14 @@ class RiposteSuiteTest {
      * classify the launcher — and its `.debug` sibling — as one of its own apps. That would put
      * the launcher in its own suite folder and count it in the Setup Doctor's tally.
      */
-    /** Riposte OS 0.2: Radio and Bluetooth bind a gateway that is not there; nothing else hides. */
+    /**
+     * Riposte OS 0.2: Bluetooth binds a gateway that is not there; nothing else hides. Radio
+     * reaches the tuner through the launcher's ITuner since RAV4-97, so it stays (RAV4-147).
+     */
     @Test
     fun `owner active hides only the vendor-bound members`() {
         assertEquals(
-            setOf("com.ripostelabs.radio", "com.ripostelabs.bluetooth"),
+            setOf("com.ripostelabs.bluetooth"),
             RiposteSuite.hiddenOnOwner(ownerActive = true),
         )
         assertTrue(RiposteSuite.hiddenOnOwner(ownerActive = false).isEmpty())

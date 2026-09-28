@@ -264,13 +264,12 @@ private fun VendorAppsSection(report: OemApps.Report?, ownerActive: Boolean) {
             return@SettingsSection
         }
 
-        // Riposte OS 0.2: the suite's Radio and Bluetooth bind the gateway this slot has not got.
+        // Riposte OS 0.2: the suite's Bluetooth binds the gateway this slot has not got.
         if (ownerActive) {
             val bound = RiposteSuite.APPS.filter { it.packageName in RiposteSuite.VENDOR_BOUND }
             MutedText(
                 "Suite apps hidden on this slot: " + bound.joinToString { it.label } +
-                    ". They bind the vendor gateway, which the car owner replaces; " +
-                    "the launcher's tuner is the radio here.",
+                    ". It binds the vendor gateway, which the car owner replaces.",
             )
         }
 
