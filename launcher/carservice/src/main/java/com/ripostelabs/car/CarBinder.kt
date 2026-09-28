@@ -2,6 +2,7 @@ package com.ripostelabs.car
 
 import android.os.RemoteException
 import com.ripostelabs.carlauncher.carlib.McuOwner
+import com.ripostelabs.carlauncher.carlib.McuOwnerProtocol
 
 /** The listeners a client registered; RemoteCallbackList on the unit, a list in tests. */
 interface ListenerSet {
@@ -18,6 +19,18 @@ interface Power {
 
     /** Android's standard factory reset: wipe /data in recovery, then boot to setup. */
     fun wipeData()
+}
+
+/** The reverse camera's PR2000 decoder: sysfs and properties on the unit ([SysfsDecoder]), a fake in tests. */
+interface Decoder {
+    /** The persisted row, 0 auto .. 8. */
+    fun mode(): Int
+    fun setMode(mode: Int)
+
+    /** Raw camera_status, or [ReverseState.NO_SIGNAL] when unreadable. */
+    fun signal(): Int
+    fun forceStreamable()
+    fun redetect()
 }
 
 /** The MCU link as the binder drives it: [OwnerHost] around McuOwner on the unit, a fake in tests. */
@@ -48,7 +61,12 @@ class CarBinder(
     private val power: Power,
     private val uid: Int,
     private val link: Link,
+    private val decoder: Decoder,
 ) : ICarService.Stub() {
+
+    /** The `71` reverse bit while the link runs; only [publish] and [publishStatus] move it. */
+    @Volatile
+    private var line = false
 
     override fun apiVersion() = API_VERSION
 
@@ -92,6 +110,27 @@ class CarBinder(
         power.wipeData()
     }
 
+    override fun reverseState(): ReverseState {
+        gate.enforce(Access.READ)
+        return reverse()
+    }
+
+    // The vendor picker's nine rows; the node would take any digit, so the range is checked here.
+    override fun setDecoderMode(mode: Int) {
+        gate.enforce(Access.CONTROL)
+        require(mode in 0..DECODER_MODE_MAX) { "decoder mode $mode outside 0..$DECODER_MODE_MAX" }
+        decoder.setMode(mode)
+    }
+
+    override fun decoderSignal(action: Int) {
+        gate.enforce(Access.CONTROL)
+        when (action) {
+            DECODER_FORCE_STREAMABLE -> decoder.forceStreamable()
+            DECODER_REDETECT -> decoder.redetect()
+            else -> throw IllegalArgumentException("unknown decoder action $action")
+        }
+    }
+
     override fun openLink() {
         gate.enforce(Access.CONTROL)
         link.open()
@@ -127,14 +166,33 @@ class CarBinder(
         frame?.let(link::send)
     }
 
-    /** One MCU event to every client, in the order the owner saw them. */
-    fun publish(event: McuEvent) = broadcast { it.onMcuEvent(event) }
+    /** One MCU event to every client, in the order the owner saw them; a `71` also moves the line. */
+    fun publish(event: McuEvent) {
+        broadcast { it.onMcuEvent(event) }
+        val sys = event.command()?.let(McuOwnerProtocol::sysEvent) ?: return
+        moveLine(sys.reverse && link.status() is McuOwner.Status.Running)
+    }
 
-    /** The link's status to every client. */
+    /** The link's status to every client; a link that stops drops the line (no more `71`s). */
     fun publishStatus() {
         val status = current()
         broadcast { it.onStatus(status) }
+        if (!status.mcuLinkUp) {
+            moveLine(false)
+        }
     }
+
+    // Edges only: the MCU repeats its 71 on every bit change, most of them not the reverse bit.
+    private fun moveLine(next: Boolean) {
+        if (next == line) {
+            return
+        }
+        line = next
+        val state = reverse()
+        broadcast { it.onReverse(state) }
+    }
+
+    private fun reverse() = ReverseState(line, decoder.mode(), decoder.signal())
 
     // A dead client is dropped here; RemoteCallbackList also drops it on its binder death.
     private fun broadcast(action: (ICarListener) -> Unit) {
@@ -152,8 +210,12 @@ class CarBinder(
     private fun current() = CarStatus.of(uid, link.status())
 
     private companion object {
-        // 1 was the skeleton; 2 adds the MCU link calls; 3 power (factoryReset). Additions to
-        // ICarService bump it. The manifest's com.ripostelabs.car.API meta-data must say the same.
-        const val API_VERSION = 3
+        // 1 was the skeleton; 2 adds the MCU link calls; 3 power (factoryReset); 4 reverse and
+        // decoder. Additions to ICarService bump it. The manifest's com.ripostelabs.car.API
+        // meta-data must say the same.
+        const val API_VERSION = 4
+
+        /** CVBS PAL 60, the last of the vendor picker's rows (BackcarSignalTypeSet.java:99-100). */
+        const val DECODER_MODE_MAX = 8
     }
 }

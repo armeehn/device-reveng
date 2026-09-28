@@ -4,6 +4,7 @@ import com.ripostelabs.car.CarStatus
 import com.ripostelabs.car.ICarListener
 import com.ripostelabs.car.ICarService
 import com.ripostelabs.car.McuEvent
+import com.ripostelabs.car.ReverseState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -31,6 +32,10 @@ class RemoteMcuOwnerTest {
         override fun selectCar(carId: String?) { calls += "car $carId" }
         override fun sendMcuFrame(frame: ByteArray?) { calls += "send ${frame!!.size}" }
         override fun factoryReset(scope: Int) { calls += "reset $scope" }
+        var locked = 7
+        override fun reverseState() = ReverseState(trigger = false, decoderMode = 0, signal = locked)
+        override fun setDecoderMode(mode: Int) { calls += "decoder $mode" }
+        override fun decoderSignal(action: Int) { calls += "signal $action" }
     }
 
     /** bindService stand-in: the test decides when the service comes up or dies. */
@@ -161,6 +166,35 @@ class RemoteMcuOwnerTest {
         assertFalse(remote.reboot())
         assertFalse(remote.factoryReset())
         assertFalse("reboot" in svc.calls)
+    }
+
+    @Test
+    fun decoderGoesToAServiceWithTheReverseApi() {
+        remote.start()
+        val svc = FakeService(api = RemoteMcuOwner.REVERSE_API)
+        binding.connect(svc)
+
+        assertTrue(remote.setDecoderMode(3))
+        assertTrue(remote.decoderSignal(ICarService.DECODER_REDETECT))
+        assertEquals(true, remote.decoderLocked())
+        svc.locked = 0
+        assertEquals(false, remote.decoderLocked())
+        assertEquals(listOf("decoder 3", "signal ${ICarService.DECODER_REDETECT}"), svc.calls.takeLast(2))
+    }
+
+    // Below 4 the launcher keeps its root-shell decoder: every call says it could not.
+    @Test
+    fun decoderRefusesAnOlderServiceOrNone() {
+        assertFalse(remote.setDecoderMode(3))
+
+        remote.start()
+        val svc = FakeService(api = RemoteMcuOwner.POWER_API)
+        binding.connect(svc)
+
+        assertFalse(remote.setDecoderMode(3))
+        assertFalse(remote.decoderSignal(ICarService.DECODER_REDETECT))
+        assertNull(remote.decoderLocked())
+        assertFalse(svc.calls.any { it.startsWith("decoder") || it.startsWith("signal") })
     }
 
     @Test

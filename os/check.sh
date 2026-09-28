@@ -130,6 +130,9 @@ if [ "$CARSERVICE" = 1 ]; then
   # shellcheck disable=SC2034
   CS_HAVE=$(allowed_for "$CARSERVICE_PKG")
   check "[ -n \"\$CS_WANT\" ] && [ \"\$CS_WANT\" = \"\$CS_HAVE\" ]" "allowlist == every permission the car service requests"
+  check "grep -qx '(allow system_app riposte_pr2000_sysfs (file (read write open getattr)))' $S/etc/selinux/plat_sepolicy.cil" "the car service may drive the PR2000 nodes"
+  check "grep -qx '(genfscon sysfs \"/pr2000\" (u object_r riposte_pr2000_sysfs ((s0) (s0))))' $S/etc/selinux/plat_sepolicy.cil" "the PR2000 node gets its own sysfs type"
+  check "grep -qx 'persist.riposte.camera.mode u:object_r:system_prop:s0' $S/etc/selinux/plat_property_contexts" "the camera mode property is system_prop"
 fi
 
 echo "first boot"

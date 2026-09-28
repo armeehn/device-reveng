@@ -1,0 +1,17 @@
+; The car service's reach into the reverse camera's PR2000, appended to the GSI's plat_sepolicy.cil
+; by build.sh step 3 when the service goes in.
+;
+;   com.ripostelabs.car (system_app) ──read──▶ /sys/camera_status/camera_status  (the lock)
+;                                    ──write─▶ /sys/pr2000/pr2000                 (warm-up nudges)
+;
+; Both nodes are plain `sysfs`, which no app domain may open. The two genfscon lines give just
+; these trees their own type; nothing in the platform or vendor policy names either path, so no
+; other domain loses a rule. The mode itself stays with init (riposte-camera-mode.sh).
+(type riposte_pr2000_sysfs)
+(roletype object_r riposte_pr2000_sysfs)
+(typeattributeset fs_type (riposte_pr2000_sysfs))
+(typeattributeset sysfs_type (riposte_pr2000_sysfs))
+(genfscon sysfs "/pr2000" (u object_r riposte_pr2000_sysfs ((s0) (s0))))
+(genfscon sysfs "/camera_status" (u object_r riposte_pr2000_sysfs ((s0) (s0))))
+(allow system_app riposte_pr2000_sysfs (dir (search getattr)))
+(allow system_app riposte_pr2000_sysfs (file (read write open getattr)))

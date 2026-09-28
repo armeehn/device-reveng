@@ -187,6 +187,27 @@ decision still open; each becomes a new constant.
 The launcher routes both through the service once it reports 3. Without it, reboot falls back to
 the root shell and factory reset logs and does nothing. Settings asks twice, parked only.
 
+### Reverse camera (apiVersion 4)
+
+```aidl
+const int DECODER_FORCE_STREAMABLE = 1;  // c0 + v4: a fixed mode the AIS server can size
+const int DECODER_REDETECT = 2;          // r, c1, v0: reset and auto-detect
+ReverseState reverseState();             // READ: trigger, decoderMode, signal (camera_status)
+void setDecoderMode(int mode);           // CONTROL; 0..8, else IllegalArgumentException
+void decoderSignal(int action);          // CONTROL; the warm-up's two nudges
+
+// ICarListener
+void onReverse(in ReverseState state);   // every edge of the trigger
+```
+
+`trigger` is the `71` reverse bit while the MCU link runs, eventcenter's "awake"; a link that
+stops drops it. The speed gate (`ReverseTrigger`) stays in the launcher, which has the GPS
+speed. The service holds no root: `sepolicy/riposte_car.cil` gives `/sys/pr2000` and
+`/sys/camera_status` their own sysfs type that `system_app` may open, and `build.sh` labels
+`persist.riposte.camera.mode` `system_prop`, so the service sets it and init still writes the
+nodes. The launcher asks the service first for the mode row and the warm-up, and its root shell
+(`ReverseCameraDecoder`, `DecoderSignal`) is the fallback when no service answers.
+
 ### The launcher's 30 vendor calls, mapped
 
 `owner today` says whether 0.2 already serves the call without `eventcenter`; the rows marked
@@ -195,7 +216,7 @@ the root shell and factory reset logs and does nothing. Settings asks twice, par
 | `CarService` call (vendor `IEventService`) | owner today | 0.3 `ICarService` |
 |---|---|---|
 | `getValidMode` | yes | `currentSource` |
-| `IsBackCarConneted` | **no** | `reverseState().trigger` |
+| `IsBackCarConneted` | **no** (0.3: service, API 4) | `reverseState().trigger` |
 | `getMCUVer` (×2) | **no** (listener only) | `status().mcuVersion` |
 | `getValidModeTitleInfor` | yes | `currentSource` + title table in the client |
 | `getCanVer` | **no** | `status().canVersion` |

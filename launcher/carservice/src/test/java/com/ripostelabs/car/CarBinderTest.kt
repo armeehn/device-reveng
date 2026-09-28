@@ -4,6 +4,7 @@ import android.os.RemoteException
 import com.ripostelabs.carlauncher.carlib.McuOwner
 import com.ripostelabs.carlauncher.carlib.McuSerial
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -22,6 +23,8 @@ class CarBinderTest {
     private class FakeListener(private val dead: Boolean = false) : ICarListener.Stub() {
         val seen = mutableListOf<CarStatus>()
         val events = mutableListOf<McuEvent>()
+        val reverse = mutableListOf<ReverseState>()
+        override fun onReverse(state: ReverseState) { reverse += state }
         override fun onStatus(status: CarStatus) { seen += status }
         override fun onMcuEvent(event: McuEvent) {
             if (dead) {
@@ -53,16 +56,29 @@ class CarBinderTest {
         override fun wipeData() { wipes++ }
     }
 
+    /** The PR2000 as the binder drives it: records every write. */
+    private class FakeDecoder : Decoder {
+        var row = 0
+        var status = 0
+        val calls = mutableListOf<String>()
+        override fun mode() = row
+        override fun setMode(mode: Int) { calls += "mode $mode"; row = mode }
+        override fun signal() = status
+        override fun forceStreamable() { calls += "force" }
+        override fun redetect() { calls += "redetect" }
+    }
+
     private val power = FakePower()
+    private val decoder = FakeDecoder()
     private val listeners = FakeListeners()
     private val link = FakeLink()
 
     private fun binder(vararg held: String) =
-        CarBinder(Gate { it in held }, listeners, power, systemUid, link)
+        CarBinder(Gate { it in held }, listeners, power, systemUid, link, decoder)
 
     @Test
-    fun apiVersionIsThree() {
-        assertEquals(3, binder().apiVersion())
+    fun apiVersionIsFour() {
+        assertEquals(4, binder().apiVersion())
     }
 
     @Test
@@ -189,5 +205,95 @@ class CarBinderTest {
 
         assertEquals(listOf(event), live.events)
         assertEquals(listOf<ICarListener>(live), listeners.held)
+    }
+
+    // ---- reverse and decoder (API 4) ----
+
+    private fun sysEvent(reverse: Boolean) =
+        McuEvent.of(McuSerial.Command(0x71, byteArrayOf(if (reverse) 0x02 else 0x00, 0)))
+
+    private val running = McuOwner.Status.Running(acked = true, frames = 1, badChecksum = 0, skipped = 0)
+
+    @Test
+    fun reverseStateCarriesLineModeAndSignal() {
+        decoder.row = 7
+        decoder.status = 7
+        val s = binder(READ_PERMISSION).reverseState()
+
+        assertEquals(ReverseState(trigger = false, decoderMode = 7, signal = 7), s)
+        assertTrue(s.locked)
+    }
+
+    @Test
+    fun reverseStateNeedsRead() {
+        assertThrows(SecurityException::class.java) { binder().reverseState() }
+    }
+
+    // The line is the 71 bit while the link runs, the vendor's "awake"; each edge goes out once.
+    @Test
+    fun reverseEdgesReachListenersOnce() {
+        link.status = running
+        val b = binder(READ_PERMISSION)
+        val l = FakeListener()
+        b.registerListener(l)
+
+        b.publish(sysEvent(reverse = true))
+        b.publish(sysEvent(reverse = true))
+        b.publish(sysEvent(reverse = false))
+
+        assertEquals(listOf(true, false), l.reverse.map { it.trigger })
+        assertFalse(b.reverseState().trigger)
+    }
+
+    @Test
+    fun aLinkThatStopsDropsTheLine() {
+        link.status = running
+        val b = binder(READ_PERMISSION)
+        val l = FakeListener()
+        b.registerListener(l)
+        b.publish(sysEvent(reverse = true))
+
+        link.status = McuOwner.Status.Failed("gone")
+        b.publishStatus()
+
+        assertEquals(listOf(true, false), l.reverse.map { it.trigger })
+    }
+
+    @Test
+    fun aReverseBitWithoutARunningLinkIsNoLine() {
+        val b = binder(READ_PERMISSION)
+        b.publish(sysEvent(reverse = true))
+
+        assertFalse(b.reverseState().trigger)
+    }
+
+    @Test
+    fun decoderCallsWithControlReachTheDecoder() {
+        val b = binder(CONTROL_PERMISSION)
+        b.setDecoderMode(3)
+        b.decoderSignal(ICarService.DECODER_FORCE_STREAMABLE)
+        b.decoderSignal(ICarService.DECODER_REDETECT)
+
+        assertEquals(listOf("mode 3", "force", "redetect"), decoder.calls)
+    }
+
+    @Test
+    fun decoderCallsWithReadOnlyAreRefused() {
+        val b = binder(READ_PERMISSION)
+        assertThrows(SecurityException::class.java) { b.setDecoderMode(3) }
+        assertThrows(SecurityException::class.java) { b.decoderSignal(ICarService.DECODER_REDETECT) }
+
+        assertTrue(decoder.calls.isEmpty())
+    }
+
+    // 0 auto .. 8 PAL 60, the vendor picker's nine rows; anything else never reaches the node.
+    @Test
+    fun outOfRangeModeOrActionIsRefused() {
+        val b = binder(CONTROL_PERMISSION)
+        assertThrows(IllegalArgumentException::class.java) { b.setDecoderMode(9) }
+        assertThrows(IllegalArgumentException::class.java) { b.setDecoderMode(-1) }
+        assertThrows(IllegalArgumentException::class.java) { b.decoderSignal(0) }
+
+        assertTrue(decoder.calls.isEmpty())
     }
 }

@@ -6,6 +6,7 @@ import com.ripostelabs.car.CarStatus
 import com.ripostelabs.car.ICarListener
 import com.ripostelabs.car.ICarService
 import com.ripostelabs.car.McuEvent
+import com.ripostelabs.car.ReverseState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -32,7 +33,7 @@ class RemoteMcuOwner(
     private val listener: McuOwner.Listener,
     /** The handshake frames the launcher's stores built (McuOwnerProtocol.startup). */
     private val startup: List<ByteArray>,
-) : McuPort {
+) : McuPort, CarDecoder {
 
     /** Which process owns the MCU link on this image. */
     enum class Owner { LOCAL, SERVICE }
@@ -67,6 +68,10 @@ class RemoteMcuOwner(
         override fun onMcuEvent(event: McuEvent?) {
             event?.let(::deliver)
         }
+
+        // The same 71 arrives through onMcuEvent, and the launcher's ReverseTrigger adds the
+        // speed gate on it; the service's line is for clients without a decoder of their own.
+        override fun onReverse(state: ReverseState?) = Unit
     }
 
     override val lastMode: McuOwnerProtocol.Mode?
@@ -118,8 +123,22 @@ class RemoteMcuOwner(
     /** Android's factory reset through the service; false as for [reboot]. */
     fun factoryReset(): Boolean = power { it.factoryReset(ICarService.RESET_DATA_WIPE) }
 
-    private inline fun power(block: (ICarService) -> Unit): Boolean {
-        if (api < POWER_API) {
+    private inline fun power(block: (ICarService) -> Unit): Boolean = at(POWER_API, block)
+
+    override fun setDecoderMode(mode: Int): Boolean = at(REVERSE_API) { it.setDecoderMode(mode) }
+
+    override fun decoderLocked(): Boolean? {
+        if (api < REVERSE_API) {
+            return null
+        }
+        return call { it.reverseState().locked }
+    }
+
+    override fun decoderSignal(action: Int): Boolean = at(REVERSE_API) { it.decoderSignal(action) }
+
+    /** [block] on a service at [level] or newer; false when older, down or dead mid-call. */
+    private inline fun at(level: Int, block: (ICarService) -> Unit): Boolean {
+        if (api < level) {
             return false
         }
         return call { block(it); true } ?: false
@@ -194,6 +213,9 @@ class RemoteMcuOwner(
 
         /** ICarService.apiVersion that carries power: reboot and factoryReset. */
         const val POWER_API = 3
+
+        /** ICarService.apiVersion that carries the reverse line and the decoder. */
+        const val REVERSE_API = 4
 
         /** [McuOwner.Status.Failed] reason while the service is down (it restarts, we rebind). */
         const val SERVICE_GONE = "car service gone"

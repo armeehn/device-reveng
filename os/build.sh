@@ -34,11 +34,14 @@ readonly AIS_BIN=ais_server
 readonly AIS_VENDOR_LIBS="libmmosal.so"        # what it links from /vendor/lib64, off a /system daemon's path
 readonly AIS_CLIENT_LIB=libais_camera.so       # what the launcher dlopens, see step 3d
 readonly PLAT_SEPOLICY=etc/selinux/plat_sepolicy.cil   # compiled by init at every boot, see step 3d
+readonly PLAT_PROPERTY_CONTEXTS=etc/selinux/plat_property_contexts
 readonly AIS_CLIENT_DEPS="libais_fibo_carcam.so libais_core.so libais_client.so libais_base.so libais_log.so"
 readonly PUBLIC_LIBS=etc/public.libraries.txt   # the /system libs the linker lets an app dlopen
 readonly LAUNCHER_NAME=CarLauncher
 readonly CARSERVICE_PKG=com.ripostelabs.car     # the car service, see step 3 and CARHAL.md
 readonly CARSERVICE_NAME=RiposteCar
+# system_prop, so the service (system_app) may set it; init's trigger does the node writes.
+readonly CAMERA_MODE_PROP_CONTEXT="persist.riposte.camera.mode u:object_r:system_prop:s0"
 readonly SUITE_DIR=product/app
 readonly TOOLS_BIN=riposte/bin                 # the debug toolbelt, see step 3c
 readonly TOOLS_BB=riposte/bin/bb               # one symlink per busybox applet
@@ -165,6 +168,12 @@ else
   install_apk "$SYS" "$LAUNCHER_DIR" "$CARSERVICE_NAME" "$APPS/carservice.apk"
   CARSERVICE=1
   log "installed $CARSERVICE_NAME ($CARSERVICE_PKG)"
+  # The service drives the reverse decoder as system uid, no root shell: its two sysfs nodes
+  # (sepolicy/riposte_car.cil) and the mode property, which is default_prop unlabelled.
+  [ -f "$SYS/$PLAT_SEPOLICY" ] && [ -f "$SYS/$PLAT_PROPERTY_CONTEXTS" ] || die "the GSI carries no $PLAT_SEPOLICY or $PLAT_PROPERTY_CONTEXTS"
+  cat "$HERE/sepolicy/riposte_car.cil" >> "$SYS/$PLAT_SEPOLICY"
+  echo "$CAMERA_MODE_PROP_CONTEXT" >> "$SYS/$PLAT_PROPERTY_CONTEXTS"
+  log "car service policy appended: PR2000 nodes, $CAMERA_MODE_PROP_CONTEXT"
 fi
 # Where /product really is at runtime. A GSI ships its own /system/product and links /product
 # to it, so the super's product partition never mounts there (unit, 2026-09-19): the suite and

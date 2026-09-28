@@ -7,6 +7,7 @@ import com.ripostelabs.carlauncher.carlib.RootShell
  * Applies `Sys_backcar_Video_Type` to the reverse-camera decoder the way the vendor gateway did.
  *
  *     SysVarLocalStore ──onRow──▶ apply(key, value)
+ *                                   ├─ car service (API 4) took it ──▶ done, as system uid
  *                                   ├─ no root ──▶ log only; the row still persists
  *                                   ├─ setprop persist.riposte.camera.mode <n> ──▶ init trigger
  *                                   │      (riposte-camera-mode.sh: unlock, then v<n> to the nodes)
@@ -93,14 +94,23 @@ object ReverseCameraDecoder {
         return "(setprop $WRITABLE_PROP 1; for n in $nodes; do [ -e \"\$n\" ] || continue; $write; done)"
     }
 
-    /** Apply a row change; [run] returns the shell result, or null when it could not run. */
+    /**
+     * Apply a row change. [service] is the car service's setDecoderMode, false when it cannot;
+     * [run] returns the shell result, or null when it could not run.
+     */
     fun apply(
         key: String,
         value: String,
         rootAvailable: Boolean = RootShell.isRootAvailable(),
+        service: (Int) -> Boolean = { false },
         run: (String) -> RootShell.Result? = { RootShell.exec(it) },
     ) {
         val mode = mode(key, value) ?: return
+        if (service(mode)) {
+            Log.i(TAG, "decoder mode $mode via the car service")
+            return
+        }
+
         val viaProp = modeCommand(mode)
         val direct = command("v$mode")
 
