@@ -104,7 +104,8 @@ check "[ \"\$(getfattr --absolute-names -n security.selinux --only-values $S/$LA
 
 echo "privapp allowlist"
 check "python3 -c 'import xml.etree.ElementTree as E; t=E.parse(\"$S/$PRIVAPP_XML\"); assert t.find(\"privapp-permissions\").get(\"package\")==\"$LAUNCHER_PKG\"'" "allowlist parses and names the launcher"
-WANT=$("$AAPT2" dump permissions "$S/$LAUNCHER_APK" | sed -n "s/^uses-permission: name='\([^']*\)'.*/\1/p" | sort)
+# C order on both sides: allowed_for sorts by code point, a locale sort skips the dots.
+WANT=$("$AAPT2" dump permissions "$S/$LAUNCHER_APK" | sed -n "s/^uses-permission: name='\([^']*\)'.*/\1/p" | LC_ALL=C sort)
 # shellcheck disable=SC2034  # used inside the eval below
 # The permissions the allowlist grants one package (the file holds one block per priv-app).
 allowed_for() { # pkg
@@ -121,7 +122,7 @@ if [ "$CARSERVICE" = 1 ]; then
   check "[ \"\$(stat -c %U:%G:%a $S/$CARSERVICE_APK)\" = root:root:644 ]" "car service APK root:root 0644"
   check "[ \"\$(getfattr --absolute-names -n security.selinux --only-values $S/$CARSERVICE_APK 2>/dev/null)\" = $SELINUX_SYSTEM_FILE ]" "car service APK labelled system_file"
   # shellcheck disable=SC2034  # used inside the eval below
-  CS_WANT=$("$AAPT2" dump permissions "$S/$CARSERVICE_APK" | sed -n "s/^uses-permission: name='\([^']*\)'.*/\1/p" | sort)
+  CS_WANT=$("$AAPT2" dump permissions "$S/$CARSERVICE_APK" | sed -n "s/^uses-permission: name='\([^']*\)'.*/\1/p" | LC_ALL=C sort)
   # shellcheck disable=SC2034
   CS_HAVE=$(allowed_for "$CARSERVICE_PKG")
   check "[ -n \"\$CS_WANT\" ] && [ \"\$CS_WANT\" = \"\$CS_HAVE\" ]" "allowlist == every permission the car service requests"
