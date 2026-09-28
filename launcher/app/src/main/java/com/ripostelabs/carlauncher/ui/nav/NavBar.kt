@@ -43,6 +43,8 @@ import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.ripostelabs.carlauncher.MainActivity
+import com.ripostelabs.car.ICarService
+import com.ripostelabs.carlauncher.carlib.CarNav
 import com.ripostelabs.carlauncher.carlib.RootShell
 import com.ripostelabs.carlauncher.data.NavBarMode
 import com.ripostelabs.carlauncher.input.WheelGamepad
@@ -74,7 +76,8 @@ import kotlinx.coroutines.withContext
  * already use; Home is a plain launch of [MainActivity]. The window needs the "draw over other
  * apps" appop, which the launcher grants itself through root the first time it is missing.
  *
- * An overlay cannot reserve insets, so foreign apps lay out under the strip. [NavBarPolicy]
+ * An overlay cannot reserve insets, so foreign apps lay out under the strip. With the car service
+ * at API 5 ([service]) the bar is its system window instead, which does reserve them. [NavBarPolicy]
  * keeps it out of the way: hidden over the projection app (wireless CarPlay has its own Home),
  * and elsewhere folded to a thin edge handle after [NavBarPolicy.AUTO_HIDE_MS] unless the
  * driver picked [NavBarMode.ALWAYS_SHOWN]. The package in front comes from the same root
@@ -110,6 +113,14 @@ class NavBar(private val context: Context) {
     private var watch: Job? = null
     private var fold: Job? = null
 
+    /** The car service's bar once MainActivity binds one (API 5); null keeps the overlay. */
+    var service: CarNav? = null
+        set(value) {
+            field = value
+            // A touch on the service's bar arrives on a binder thread; the policy lives on main.
+            value?.onNavTouch { ui.launch { interact() } }
+        }
+
     /** Theme and whether the system bars are suppressed; only then is there a bar to replace. */
     fun update(colors: ThemeColors, enabled: Boolean, mode: NavBarMode) {
         this.colors = colors
@@ -121,7 +132,7 @@ class NavBar(private val context: Context) {
     /** A foreign app is in front: watch what it is and let the policy decide what to draw. */
     fun show() {
         if (!enabled || watch != null) return
-        if (!ensureOverlayAllowed()) return
+        if (service == null && !ensureOverlayAllowed()) return
 
         policy = NavBarPolicy(mode, context.packageName)
         watch = ui.launch {
@@ -150,21 +161,51 @@ class NavBar(private val context: Context) {
     private fun apply(next: NavBarState) {
         fold?.cancel()
         state = next
-        if (next == NavBarState.HIDDEN) {
-            removeWindow()
+        if (!drawInService(next) && !drawHere(next)) {
             return
         }
-
-        val heightDp = if (next == NavBarState.EXPANDED) HEIGHT_DP else HANDLE_TOUCH_DP
-        val v = view ?: addWindow(heightDp) ?: return
-        val params = (v.layoutParams as WindowManager.LayoutParams).apply { height = px(heightDp) }
-        runCatching { windowManager.updateViewLayout(v, params) }
 
         if (!policy.armsTimer()) return
         fold = ui.launch {
             delay(NavBarPolicy.AUTO_HIDE_MS)
             apply(policy.onTimeout())
         }
+    }
+
+    /** The overlay window; false when nothing is drawn (HIDDEN, or the window was refused). */
+    private fun drawHere(next: NavBarState): Boolean {
+        if (next == NavBarState.HIDDEN) {
+            removeWindow()
+            return false
+        }
+
+        val heightDp = if (next == NavBarState.EXPANDED) HEIGHT_DP else HANDLE_TOUCH_DP
+        val v = view ?: addWindow(heightDp) ?: return false
+        val params = (v.layoutParams as WindowManager.LayoutParams).apply { height = px(heightDp) }
+        runCatching { windowManager.updateViewLayout(v, params) }
+        return true
+    }
+
+    /**
+     * The car service's system window (API 5), which reserves the inset so apps lay out above
+     * it. False sends the bar to the overlay: no service, an older one, or a dead binder.
+     */
+    private fun drawInService(next: NavBarState): Boolean {
+        val remote = service ?: return false
+        val c = colors ?: return false
+        val argb = intArrayOf(c.surface.toInt(), c.onSurface.toInt(), c.primary.toInt())
+        if (!remote.showNav(serviceState(next), argb)) {
+            return false
+        }
+
+        removeWindow()
+        return next != NavBarState.HIDDEN
+    }
+
+    private fun serviceState(s: NavBarState): Int = when (s) {
+        NavBarState.HIDDEN -> ICarService.NAV_HIDDEN
+        NavBarState.HANDLE -> ICarService.NAV_HANDLE
+        NavBarState.EXPANDED -> ICarService.NAV_EXPANDED
     }
 
     private fun interact() = apply(policy.onInteract())

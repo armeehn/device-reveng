@@ -64,7 +64,9 @@ class CarService : Service() {
 
     private lateinit var host: OwnerHost
 
-    private val binder by lazy { CarBinder(Gate(::held), listeners, power, Process.myUid(), host, SysfsDecoder()) }
+    private val nav: NavPanel by lazy { NavWindow(this) { binder.navTouched() } }
+
+    private val binder: CarBinder by lazy { CarBinder(Gate(::held), listeners, power, Process.myUid(), host, SysfsDecoder(), nav) }
 
     override fun onCreate() {
         super.onCreate()
