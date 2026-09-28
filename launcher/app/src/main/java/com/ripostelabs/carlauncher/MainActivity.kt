@@ -65,6 +65,7 @@ import com.ripostelabs.carlauncher.carlib.McuOwner
 import com.ripostelabs.carlauncher.carlib.McuPort
 import com.ripostelabs.carlauncher.carlib.RemoteMcuOwner
 import com.ripostelabs.carlauncher.carlib.CarDecoder
+import com.ripostelabs.carlauncher.carlib.CarNav
 import com.ripostelabs.carlauncher.carlib.ServiceCarBinding
 import com.ripostelabs.carlauncher.carlib.KeyAction
 import com.ripostelabs.carlauncher.carlib.KeyRouter
@@ -527,7 +528,7 @@ class MainActivity : ComponentActivity() {
             lifecycleScope.launch { nowPlaying.sources.map { s -> s.isNotEmpty() }.distinctUntilChanged().collect(r::onMediaSessions) }
         }
         themeStore = ThemeStore(applicationContext)
-        navBar = NavBar(applicationContext)
+        navBar = NavBar(applicationContext).also { it.service = mcuOwner as? CarNav }
         reverseWindow = ReverseCameraWindow(applicationContext) { on -> settingsStore.setReverseGuideLines(on) }
 
         // v2.7: the notification shelf's mute filter. Constructed before the speech controller

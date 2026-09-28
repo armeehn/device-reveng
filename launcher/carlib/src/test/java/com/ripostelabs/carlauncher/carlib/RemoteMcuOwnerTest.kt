@@ -36,6 +36,7 @@ class RemoteMcuOwnerTest {
         override fun reverseState() = ReverseState(trigger = false, decoderMode = 0, signal = locked)
         override fun setDecoderMode(mode: Int) { calls += "decoder $mode" }
         override fun decoderSignal(action: Int) { calls += "signal $action" }
+        override fun setNavBar(state: Int, colors: IntArray?) { calls += "nav $state ${colors?.size}" }
     }
 
     /** bindService stand-in: the test decides when the service comes up or dies. */
@@ -224,6 +225,34 @@ class RemoteMcuOwnerTest {
         assertFalse(remote.decoderSignal(ICarService.DECODER_REDETECT))
         assertNull(remote.decoderLocked())
         assertFalse(svc.calls.any { it.startsWith("decoder") || it.startsWith("signal") })
+    }
+
+    @Test
+    fun navBarGoesToAServiceWithTheNavApi() {
+        remote.start()
+        val svc = FakeService(api = RemoteMcuOwner.NAV_API)
+        binding.connect(svc)
+        var touches = 0
+        remote.onNavTouch { touches++ }
+
+        assertTrue(remote.showNav(ICarService.NAV_EXPANDED, intArrayOf(1, 2, 3)))
+        svc.listener!!.onNavInteract()
+
+        assertEquals("nav ${ICarService.NAV_EXPANDED} 3", svc.calls.last())
+        assertEquals(1, touches)
+    }
+
+    // Below 5 the launcher keeps its overlay window.
+    @Test
+    fun navBarRefusesAnOlderServiceOrNone() {
+        assertFalse(remote.showNav(ICarService.NAV_EXPANDED, intArrayOf(1, 2, 3)))
+
+        remote.start()
+        val svc = FakeService(api = RemoteMcuOwner.REVERSE_API)
+        binding.connect(svc)
+
+        assertFalse(remote.showNav(ICarService.NAV_EXPANDED, intArrayOf(1, 2, 3)))
+        assertFalse(svc.calls.any { it.startsWith("nav") })
     }
 
     @Test

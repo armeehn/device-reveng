@@ -33,6 +33,26 @@ interface Decoder {
     fun redetect()
 }
 
+/** The nav bar window: [NavWindow] on the unit, a fake in tests. */
+interface NavPanel {
+    /** ICarService.NAV_* in [colors] (surface, onSurface, primary). */
+    fun show(state: Int, colors: IntArray)
+
+    companion object {
+        private const val EXPANDED_DP = 64
+
+        /** A finger needs more than the 6 dp line it can see. */
+        private const val HANDLE_TOUCH_DP = 12
+
+        /** The window height, which is also the inset the apps above it give up. */
+        fun heightDp(state: Int): Int = when (state) {
+            ICarService.NAV_EXPANDED -> EXPANDED_DP
+            ICarService.NAV_HANDLE -> HANDLE_TOUCH_DP
+            else -> 0
+        }
+    }
+}
+
 /** The MCU link as the binder drives it: [OwnerHost] around McuOwner on the unit, a fake in tests. */
 interface Link {
     fun status(): McuOwner.Status
@@ -62,6 +82,7 @@ class CarBinder(
     private val uid: Int,
     private val link: Link,
     private val decoder: Decoder,
+    private val nav: NavPanel,
 ) : ICarService.Stub() {
 
     /** The `71` reverse bit while the link runs; only [publish] and [publishStatus] move it. */
@@ -130,6 +151,16 @@ class CarBinder(
             else -> throw IllegalArgumentException("unknown decoder action $action")
         }
     }
+
+    override fun setNavBar(state: Int, colors: IntArray?) {
+        gate.enforce(Access.CONTROL)
+        require(state in ICarService.NAV_HIDDEN..ICarService.NAV_EXPANDED) { "unknown nav bar state $state" }
+        require(colors != null && colors.size == NAV_COLORS) { "nav bar needs $NAV_COLORS colours" }
+        nav.show(state, colors)
+    }
+
+    /** A touch on the bar, to every client: the launcher's NavBarPolicy answers with a state. */
+    fun navTouched() = broadcast { it.onNavInteract() }
 
     override fun openLink() {
         gate.enforce(Access.CONTROL)
@@ -211,9 +242,12 @@ class CarBinder(
 
     private companion object {
         // 1 was the skeleton; 2 adds the MCU link calls; 3 power (factoryReset); 4 reverse and
-        // decoder. Additions to ICarService bump it. The manifest's com.ripostelabs.car.API
+        // decoder; 5 the nav bar. Additions to ICarService bump it. The manifest's com.ripostelabs.car.API
         // meta-data must say the same.
-        const val API_VERSION = 4
+        const val API_VERSION = 5
+
+        /** surface, onSurface, primary. */
+        const val NAV_COLORS = 3
 
         /** CVBS PAL 60, the last of the vendor picker's rows (BackcarSignalTypeSet.java:99-100). */
         const val DECODER_MODE_MAX = 8
