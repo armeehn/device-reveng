@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# riposte-root.sh and riposte-camera-mode.sh against stubs: pm, log, getprop, setprop and a
+# riposte-root.sh, riposte-camera-mode.sh and riposte-ais.sh against stubs: pm, log, getprop, setprop and a
 # phh-su whose daemon side reads the same su.sqlite the script seeds. Runs anywhere with
 # bash, sqlite3 and timeout. What it cannot prove: sudaemon's real answer and the decoder's
 # reaction, both bench items (`adb logcat -s riposte-root riposte-camera`).
@@ -122,5 +122,43 @@ for bad in 9 -1 v3 "" abc; do
   [ "$(cat "$PR2000")" = v8 ] || fail "node changed on '$bad'"
   [ ! -e "$T/props/sys.pr2000.writable" ] || fail "unlock prop set on '$bad'"
 done
+
+# ---- riposte-ais.sh --------------------------------------------------------------
+# A stub server under the test hook: it proves the exec happened and shows the lib path.
+export RIPOSTE_AIS="$T/ais"
+mkdir -p "$RIPOSTE_AIS/bin"
+printf '#!/usr/bin/env bash\necho "ais_server LD_LIBRARY_PATH=$LD_LIBRARY_PATH"\n' > "$RIPOSTE_AIS/bin/ais_server"
+chmod +x "$RIPOSTE_AIS/bin/ais_server"
+setprop ro.riposte.os.car_owner 1
+run_ais() { bash "$BIN/riposte-ais.sh" > "$T/out" 2>&1; }
+prop() { cat "$T/props/$1" 2>/dev/null || true; }
+
+echo "== ais: a clean boot pins the XS9922B to four channels at 1080p, then execs the server"
+rm -f "$T/props/persist.camera.sensorcfg.resolution" "$T/props/persist.camera.sensor360.resolution"
+run_ais || fail "ais wrapper exited $?: $(cat "$T/out")"
+[ "$(prop persist.camera.sensorcfg.resolution)" = TYP0_CID0_VCH1_RES0 ] || fail "sensorcfg '$(prop persist.camera.sensorcfg.resolution)'"
+[ "$(prop persist.camera.sensor360.resolution)" = 0 ] || fail "sensor360 '$(prop persist.camera.sensor360.resolution)'"
+grep -q "LD_LIBRARY_PATH=$RIPOSTE_AIS/lib:" "$T/out" || fail "server not exec'd with its lib path: $(cat "$T/out")"
+
+echo "== ais: stock's single-channel TYP1 value goes, a valid 720p30 choice stays"
+setprop persist.camera.sensorcfg.resolution TYP1_CID0_VCH1_RES0
+setprop persist.camera.sensor360.resolution 2
+run_ais || fail "ais wrapper exited $?"
+[ "$(prop persist.camera.sensorcfg.resolution)" = TYP0_CID0_VCH1_RES0 ] || fail "TYP1 survived"
+[ "$(prop persist.camera.sensor360.resolution)" = 2 ] || fail "720p30 choice overwritten"
+
+echo "== ais: a junk format falls back to 1080p"
+for bad in 3 -1 abc; do
+  setprop persist.camera.sensor360.resolution "$bad"
+  run_ais || fail "ais wrapper exited $?"
+  [ "$(prop persist.camera.sensor360.resolution)" = 0 ] || fail "kept junk '$bad'"
+done
+
+echo "== ais: nothing on a build that is not car-owner"
+setprop ro.riposte.os.car_owner 0
+setprop persist.camera.sensor360.resolution abc
+run_ais || fail "ais wrapper exited $? off car-owner"
+[ ! -s "$T/out" ] || fail "server ran off car-owner"
+[ "$(prop persist.camera.sensor360.resolution)" = abc ] || fail "props touched off car-owner"
 
 echo "ROOT-CAMERA PASS"
