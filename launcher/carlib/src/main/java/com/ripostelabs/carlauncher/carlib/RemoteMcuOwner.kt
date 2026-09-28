@@ -37,6 +37,9 @@ class RemoteMcuOwner(
     /** Which process owns the MCU link on this image. */
     enum class Owner { LOCAL, SERVICE }
 
+    /** Whether this app holds the service's CONTROL permission, which binding needs. */
+    enum class BindAccess { GRANTED, REFUSED }
+
     private val _status = MutableStateFlow<McuOwner.Status>(McuOwner.Status.Idle)
     override val status: StateFlow<McuOwner.Status> = _status.asStateFlow()
 
@@ -79,7 +82,7 @@ class RemoteMcuOwner(
         open = true
         if (!bound) {
             bound = true
-            binding.bind(::onUp, ::onDown)
+            bindOrBlock()
         }
         call { it.openLink() }
     }
@@ -123,6 +126,17 @@ class RemoteMcuOwner(
             return false
         }
         return call { block(it); true } ?: false
+    }
+
+    // bindService throws SecurityException when CONTROL is not held; a crash here is a HOME
+    // crash loop, so the owner reports Blocked instead.
+    private fun bindOrBlock() {
+        try {
+            binding.bind(::onUp, ::onDown)
+        } catch (e: RuntimeException) {
+            Log.e(TAG, "cannot bind the car service", e)
+            _status.value = McuOwner.Status.Blocked("$BIND_REFUSED: ${e.message}")
+        }
     }
 
     /** One forwarded event into the launcher's listener, decoded as the owner decoded it. */
@@ -198,9 +212,16 @@ class RemoteMcuOwner(
         /** [McuOwner.Status.Failed] reason while the service is down (it restarts, we rebind). */
         const val SERVICE_GONE = "car service gone"
 
-        /** [installedApi] is the car service's, or null when the image has none. */
-        fun choose(installedApi: Int?): Owner {
-            if (installedApi == null || installedApi < MIN_API) {
+        /** [McuOwner.Status.Blocked] reason when bindService refused us. */
+        const val BIND_REFUSED = "car service bind refused"
+
+        /**
+         * [installedApi] is the car service's, or null when the image has none. [access] REFUSED
+         * (a service installed after the launcher, so CONTROL was never granted) keeps the port
+         * here, as when there is no service.
+         */
+        fun choose(installedApi: Int?, access: BindAccess = BindAccess.GRANTED): Owner {
+            if (installedApi == null || installedApi < MIN_API || access == BindAccess.REFUSED) {
                 return Owner.LOCAL
             }
             return Owner.SERVICE
