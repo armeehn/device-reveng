@@ -393,6 +393,7 @@ class MainActivity : ComponentActivity() {
                 mcuClock,
                 gpsClock!!,
                 carService.volumeState,
+                carService.ownerAudio,
                 McuStateExport().also { mcuStateExport = it; it.start() },
                 volumeMemory,
                 radioMemory,

@@ -4,7 +4,7 @@ package com.ripostelabs.carlauncher.carlib
  * McuSetupProtocol — the MCU setup frames eventcenter built from its SysVar rows, typed.
  *
  *     McuSetupStore ──▶ McuSetupProtocol.xxx(value) ──▶ McuOwner.send ──▶ /dev/ttyHS1
- *     McuOwner ──onOther(76/77/7A/7B)──▶ McuSetupProtocol.balance/eqMode/... ──▶ McuSetupStore
+ *     McuOwner ──onAudio(76/77/7A/7B)──▶ McuSetupStore, OwnerAudio
  *
  * Every frame is one vendor `send*` (EventService.java, line cited on each), wrapped by the
  * same writer as the rest of [McuOwnerProtocol] (`SendThread.sendData`, :10650). Values are
@@ -48,7 +48,7 @@ object McuSetupProtocol {
     private const val SECONDS_PER_MINUTE = 60
     private const val BYTE = 0xFF
     private const val BALANCE_PAYLOAD = 2
-    private const val TONE_PAYLOAD = 4
+    private const val TONE_PAYLOAD = 3
 
     /** `2F balance fader`, amp domain 0..14 with 7 at centre (sendBalFadValue, :9440). */
     fun balanceFader(balance: Int, fader: Int): ByteArray =
@@ -130,6 +130,27 @@ object McuSetupProtocol {
 
     data class Balance(val balance: Int, val fader: Int)
 
+    /** One `76`/`77`/`7A`/`7B` report, typed for [McuOwner.Listener.onAudio]. */
+    sealed interface AudioReport {
+        /** `76`: bass, mid and treble only; the frequency fields keep their defaults. */
+        data class Tone(val levels: McuSetup.Tone) : AudioReport
+
+        data class Eq(val mode: Int) : AudioReport
+
+        data class BalanceFader(val balance: Int, val fader: Int) : AudioReport
+
+        data class Loudness(val on: Boolean) : AudioReport
+    }
+
+    /** Any of the four audio reports, or null for another opcode or a short body. */
+    fun audioReport(command: McuSerial.Command): AudioReport? {
+        balance(command)?.let { return AudioReport.BalanceFader(it.balance, it.fader) }
+        eqMode(command)?.let { return AudioReport.Eq(it) }
+        loudness(command)?.let { return AudioReport.Loudness(it) }
+        tone(command)?.let { return AudioReport.Tone(it) }
+        return null
+    }
+
     /** `7A balance fader` (onCmdBalanceEvent, :2965). */
     fun balance(command: McuSerial.Command): Balance? {
         if (command.opcode != McuOpcode.BALANCE.code || command.payload.size < BALANCE_PAYLOAD) {
@@ -154,7 +175,10 @@ object McuSetupProtocol {
         return at(command, 0) != 0
     }
 
-    /** `76 bass mid treble x` (onCmdBMTVolEvent, :2880): the levels only, the frequencies stay. */
+    /**
+     * `76 bass mid treble` (onCmdBMTVolEvent, :2894): the levels only, the frequencies stay. The
+     * vendor's `length < 5` counts the opcode and CK, which [McuSerial.Command] strips.
+     */
     fun tone(command: McuSerial.Command): McuSetup.Tone? {
         if (command.opcode != McuOpcode.BMT_VOLUME.code || command.payload.size < TONE_PAYLOAD) {
             return null

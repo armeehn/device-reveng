@@ -10,7 +10,7 @@ import kotlinx.coroutines.flow.asStateFlow
  *
  *     Settings screen ──set*()──▶ store ──▶ prefs (SysVar row names)
  *                                      └──▶ McuSetupProtocol frame ──▶ send ──▶ MCU
- *     MCU ──76/77/7A/7B──▶ McuOwner.onOther ──▶ store (row only, nothing sent back)
+ *     MCU ──76/77/7A/7B──▶ McuOwner.onAudio ──▶ store (row only, nothing sent back)
  *
  * eventcenter did the same in two halves: `send*` wrote the row and the frame, and the
  * `onCmd*Event` handlers wrote the row the MCU reported (EventService.java:2880-2990). The
@@ -88,13 +88,16 @@ class McuSetupStore(
         send(McuSetupProtocol.beep())
     }
 
-    /** The `76`/`77`/`7A`/`7B` reports reach the owner's catch-all; fold them into the rows. */
-    override fun onOther(command: McuSerial.Command) {
-        McuSetupProtocol.balance(command)?.let { update { copy(balance = it.balance, fader = it.fader) }; return }
-        McuSetupProtocol.eqMode(command)?.let { update { copy(eqMode = it) }; return }
-        McuSetupProtocol.loudness(command)?.let { update { copy(loudness = it) }; return }
-        McuSetupProtocol.tone(command)?.let { reported ->
-            update { copy(tone = tone.copy(bass = reported.bass, mid = reported.mid, treble = reported.treble)) }
+    /** The `76`/`77`/`7A`/`7B` reports, decoded by the owner; fold them into the rows. */
+    override fun onAudio(report: McuSetupProtocol.AudioReport) {
+        when (report) {
+            is McuSetupProtocol.AudioReport.BalanceFader -> update { copy(balance = report.balance, fader = report.fader) }
+            is McuSetupProtocol.AudioReport.Eq -> update { copy(eqMode = report.mode) }
+            is McuSetupProtocol.AudioReport.Loudness -> update { copy(loudness = report.on) }
+            is McuSetupProtocol.AudioReport.Tone -> {
+                val reported = report.levels
+                update { copy(tone = tone.copy(bass = reported.bass, mid = reported.mid, treble = reported.treble)) }
+            }
         }
     }
 

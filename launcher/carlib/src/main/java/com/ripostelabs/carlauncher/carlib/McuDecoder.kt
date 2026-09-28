@@ -41,6 +41,7 @@ class McuDecoder(private val listener: McuOwner.Listener) {
         McuOwnerProtocol.radioEvent(command)?.let { listener.onRadio(it); return }
         McuOwnerProtocol.rtcTime(command)?.let { listener.onRtc(it); return }
         McuOwnerProtocol.mcuVersion(command)?.let { listener.onMcuVersion(it); return }
+        McuSetupProtocol.audioReport(command)?.let { listener.onAudio(it); return }
         if (McuOwnerProtocol.isWake(command)) {
             listener.onWake()
             return
