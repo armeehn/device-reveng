@@ -30,6 +30,7 @@ class RemoteMcuOwnerTest {
         override fun currentSource() = source
         override fun selectCar(carId: String?) { calls += "car $carId" }
         override fun sendMcuFrame(frame: ByteArray?) { calls += "send ${frame!!.size}" }
+        override fun factoryReset(scope: Int) { calls += "reset $scope" }
     }
 
     /** bindService stand-in: the test decides when the service comes up or dies. */
@@ -134,6 +135,32 @@ class RemoteMcuOwnerTest {
         assertTrue(remote.status.value is McuOwner.Status.Blocked)
         assertFalse(remote.setMode(McuOwnerProtocol.Mode.RADIO))
         assertTrue(old.calls.isEmpty())
+    }
+
+    @Test
+    fun powerGoesToAServiceWithThePowerApi() {
+        remote.start()
+        val svc = FakeService(api = RemoteMcuOwner.POWER_API)
+        binding.connect(svc)
+
+        assertTrue(remote.reboot())
+        assertTrue(remote.factoryReset())
+        assertEquals(listOf("reboot", "reset ${ICarService.RESET_DATA_WIPE}"), svc.calls.takeLast(2))
+    }
+
+    // The link-only service (2) rebooted through its skeleton call, untested on the unit, and has
+    // no factoryReset: the launcher keeps its own fallbacks.
+    @Test
+    fun powerRefusesALinkOnlyServiceOrNone() {
+        assertFalse(remote.reboot())
+
+        remote.start()
+        val svc = FakeService(api = RemoteMcuOwner.MIN_API)
+        binding.connect(svc)
+
+        assertFalse(remote.reboot())
+        assertFalse(remote.factoryReset())
+        assertFalse("reboot" in svc.calls)
     }
 
     @Test

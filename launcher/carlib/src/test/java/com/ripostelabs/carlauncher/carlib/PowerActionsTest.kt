@@ -44,4 +44,51 @@ class PowerActionsTest {
 
         assertFalse(ok)
     }
+
+    @Test
+    fun theServicePathRebootsWithoutRoot() {
+        val ok = PowerActions.reboot(PowerActions.Path.SERVICE, vendor = {}, root = root(0), service = { true })
+
+        assertTrue(ok)
+        assertEquals(emptyList<String>(), rootCommands)
+    }
+
+    // A service below API 3 or a dead binder answers false: root still reboots.
+    @Test
+    fun aServiceThatCannotRebootFallsBackToRoot() {
+        val ok = PowerActions.reboot(PowerActions.Path.SERVICE, vendor = {}, root = root(0), service = { false })
+
+        assertTrue(ok)
+        assertEquals(listOf(PowerActions.ROOT_REBOOT), rootCommands)
+    }
+
+    @Test
+    fun factoryResetGoesToTheService() {
+        var wipes = 0
+        val ok = PowerActions.factoryReset(PowerActions.Path.SERVICE, vendor = { vendorCalls += "reset" }, service = { wipes++; true })
+
+        assertTrue(ok)
+        assertEquals(1, wipes)
+        assertEquals(emptyList<String>(), vendorCalls)
+    }
+
+    // 0.2 without the service has no system uid to wipe with: nothing happens, and it says so.
+    @Test
+    fun factoryResetWithoutTheServiceDoesNothing() {
+        val owner = PowerActions.factoryReset(PowerActions.Path.OWNER, vendor = { vendorCalls += "reset" }, service = { true })
+        val oldService = PowerActions.factoryReset(PowerActions.Path.SERVICE, vendor = { vendorCalls += "reset" }, service = { false })
+
+        assertFalse(owner)
+        assertFalse(oldService)
+        assertEquals(emptyList<String>(), vendorCalls)
+        assertEquals(emptyList<String>(), rootCommands)
+    }
+
+    @Test
+    fun factoryResetOnStockAsksEventcenter() {
+        val ok = PowerActions.factoryReset(PowerActions.Path.VENDOR, vendor = { vendorCalls += "reset" }, service = { false })
+
+        assertTrue(ok)
+        assertEquals(listOf("reset"), vendorCalls)
+    }
 }

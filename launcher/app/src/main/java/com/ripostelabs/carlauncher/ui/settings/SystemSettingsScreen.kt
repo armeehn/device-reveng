@@ -45,6 +45,7 @@ fun SystemSettingsScreen(
     val canVer = canVerLive ?: controller.getString(SettingKeys.CANBOX_VERSION, "—").ifBlank { "—" }
 
     var confirmReset by remember { mutableStateOf(false) }
+    var confirmWipe by remember { mutableStateOf(false) }
     var confirmReboot by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
@@ -103,7 +104,7 @@ fun SystemSettingsScreen(
             )
             ActionRow(
                 label = "Factory reset",
-                description = "Restore vendor defaults — erases your settings",
+                description = "Return the head unit to its first boot",
                 onClick = { confirmReset = true },
                 destructive = true,
                 enabled = connected,
@@ -126,12 +127,24 @@ fun SystemSettingsScreen(
     if (confirmReset) {
         ConfirmDialog(
             title = "Factory reset?",
-            message = "This restores the vendor firmware defaults and erases your custom " +
-                "settings. This cannot be undone.",
-            confirmLabel = "Reset",
+            message = "The head unit returns to its first boot. This cannot be undone.",
+            confirmLabel = "Continue",
             destructive = true,
-            onConfirm = { confirmReset = false; power { carService.factoryReset() } },
+            onConfirm = { confirmReset = false; confirmWipe = true },
             onDismiss = { confirmReset = false },
         )
     }
+    // Second confirm: Android's own wipe, so say plainly what goes.
+    if (confirmWipe) {
+        ConfirmDialog(
+            title = "Erase everything?",
+            message = WIPE_MESSAGE,
+            confirmLabel = "Erase",
+            destructive = true,
+            onConfirm = { confirmWipe = false; power { carService.factoryReset() } },
+            onDismiss = { confirmWipe = false },
+        )
+    }
 }
+
+private const val WIPE_MESSAGE = "Erases all apps, accounts and settings on the head unit."
