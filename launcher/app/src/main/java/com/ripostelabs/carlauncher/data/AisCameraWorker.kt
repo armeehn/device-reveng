@@ -32,6 +32,7 @@ class AisCameraWorker<S : Any>(
     private val signal: Signal? = null,
     private val warmTimeoutMs: Long = WARM_TIMEOUT_MS,
     private val warmPollMs: Long = WARM_POLL_MS,
+    private val cameraIndex: Int = AisCamera.REVERSE_CAMERA_INDEX,
 ) {
     /**
      * The PR2000's signal lock, which the worker needs to see and nudge. On the bench it only
@@ -54,7 +55,10 @@ class AisCameraWorker<S : Any>(
     @Volatile
     private var generation = 0
 
-    fun open(surface: S, onResult: (AisCamera.State) -> Unit) {
+    fun open(surface: S, onResult: (AisCamera.State) -> Unit) = openAll(listOf(surface), onResult)
+
+    /** [open] for several surfaces on [cameraIndex], surface k on slot k (the 360 cameras). */
+    fun openAll(surfaces: List<S>, onResult: (AisCamera.State) -> Unit) {
         generation++
         val mine = generation
         val answered = AtomicBoolean(false)
@@ -80,10 +84,10 @@ class AisCameraWorker<S : Any>(
                 answered.set(true)
                 deadline.cancel(false)
                 deliver(AisCamera.State.Failed(WARMING_UP))
-                warmUp(surface, signal, mine)
+                warmUp(surfaces, signal, mine)
             }
 
-            var state = camera.open(surface)
+            var state = camera.openAll(surfaces, cameraIndex)
 
             // The first stream start after a server start can fail while the PR2000 relocks
             // (open_camera -> -8, bench 2026-09-25). Stock closes and reopens on a bad signal
@@ -94,7 +98,7 @@ class AisCameraWorker<S : Any>(
                 Log.i(TAG, "open failed (${state.reason}), retry $retries of $OPEN_RETRIES")
                 camera.close()
                 Thread.sleep(retryDelayMs)
-                state = camera.open(surface)
+                state = camera.openAll(surfaces, cameraIndex)
             }
 
             answered.set(true)
@@ -107,10 +111,10 @@ class AisCameraWorker<S : Any>(
      * The order that brought the picture on the bench, twice: a PAL stream (status 2, sized
      * 720x576), a redetect under it, a wait for the lock (AHD 720p30 came up as 7), a close.
      */
-    private fun warmUp(surface: S, signal: Signal, mine: Int) {
+    private fun warmUp(surfaces: List<S>, signal: Signal, mine: Int) {
         Log.i(TAG, "decoder has no lock: warming up under a fixed-mode stream")
         signal.forceStreamable()
-        camera.open(surface)
+        camera.openAll(surfaces, cameraIndex)
         signal.redetect()
 
         var waited = 0L
@@ -123,10 +127,10 @@ class AisCameraWorker<S : Any>(
     }
 
     /** Frames drawn so far (null when nothing streams), asked on the worker like every other call. */
-    fun frames(onFrames: (Int?) -> Unit) {
+    fun frames(slot: Int = AisCamera.SURFACE_SLOT, onFrames: (Int?) -> Unit) {
         val mine = generation
         worker.execute {
-            val count = camera.frames()
+            val count = camera.frames(slot)
             post {
                 if (generation == mine) {
                     onFrames(count)

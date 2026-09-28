@@ -9,6 +9,7 @@ import com.ripostelabs.carlauncher.data.CarSettingsController
 import com.ripostelabs.carlauncher.data.ReverseCameraDecoder
 import com.ripostelabs.carlauncher.data.SettingKeys
 import com.ripostelabs.carlauncher.ui.CameraTestActivity
+import com.ripostelabs.carlauncher.ui.SurroundCameraActivity
 
 /**
  * v1.3 — Reverse camera. Mirrors the vendor "Reversing/Backcar" settings page, reskinned.
@@ -54,6 +55,12 @@ fun ReverseCameraSettingsScreen(
                 label = "Test camera",
                 description = "Show the camera picture now, without reverse",
                 onClick = { context.startActivity(Intent(context, CameraTestActivity::class.java)) },
+            )
+            // The surround decoder's four channels, beside the reverse check (os/CAMERA_360.md).
+            ActionRow(
+                label = "360 cameras",
+                description = "Show the four surround cameras in a grid",
+                onClick = { context.startActivity(Intent(context, SurroundCameraActivity::class.java)) },
             )
         }
 

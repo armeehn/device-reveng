@@ -111,4 +111,78 @@ class AisCameraTest {
         assertEquals(12, camera.frames())
         assertEquals("frameCount(0)", fake.calls.last())
     }
+
+    @Test
+    fun openAllPutsEachSurfaceOnItsChannelsSlot() {
+        // Stock draws XS9922B channel 1 on slot 1 (CameraManager.java:63); the 360 view does
+        // the same for channels 0-3 of device 0.
+        val fake = Fake()
+        val camera = AisCamera(fake)
+
+        val state = camera.openAll(listOf("c0", "c1", "c2", "c3"), AisCamera.SURROUND_CAMERA_INDEX)
+
+        assertEquals(
+            listOf("load", "open(0)", "setSurface(c0,0)", "setSurface(c1,1)", "setSurface(c2,2)", "setSurface(c3,3)"),
+            fake.calls,
+        )
+        assertEquals(AisCamera.State.Streaming, state)
+    }
+
+    @Test
+    fun closeAfterOpenAllDeletesEverySlot() {
+        val fake = Fake()
+        val camera = AisCamera(fake)
+        camera.openAll(listOf("c0", "c1", "c2", "c3"), AisCamera.SURROUND_CAMERA_INDEX)
+        fake.calls.clear()
+
+        camera.close()
+
+        assertEquals(listOf("close", "deleteSurface(0)", "deleteSurface(1)", "deleteSurface(2)", "deleteSurface(3)"), fake.calls)
+    }
+
+    @Test
+    fun framesAreCountedPerSlot() {
+        val fake = Fake(frames = 42)
+        val camera = AisCamera(fake)
+        camera.openAll(listOf("c0", "c1"), AisCamera.SURROUND_CAMERA_INDEX)
+        fake.calls.clear()
+
+        assertEquals(42, camera.frames(1))
+        assertEquals(listOf("frameCount(1)"), fake.calls)
+    }
+
+    @Test
+    fun moreSurfacesThanSlotsFailWithoutTouchingTheClient() {
+        val fake = Fake()
+        val camera = AisCamera(fake)
+
+        val state = camera.openAll(List(AisCamera.MAX_SLOTS + 1) { "s$it" }, AisCamera.SURROUND_CAMERA_INDEX)
+
+        assertTrue(state is AisCamera.State.Failed)
+        assertEquals(emptyList<String>(), fake.calls)
+    }
+
+    @Test
+    fun aSecondSessionClosesTheFirstBeforeOpeningItsDevice() {
+        // Reverse over the 360 view: the client serves one device, reverse must get the PR2000.
+        val fake = Fake()
+        val surround = AisCamera(fake)
+        val reverse = AisCamera(fake)
+        surround.openAll(listOf("c0", "c1", "c2", "c3"), AisCamera.SURROUND_CAMERA_INDEX)
+        fake.calls.clear()
+
+        reverse.open("tex")
+        surround.close()
+
+        assertEquals(
+            listOf(
+                "close", "deleteSurface(0)", "deleteSurface(1)", "deleteSurface(2)", "deleteSurface(3)",
+                "load", "open(1)", "setSurface(tex,0)",
+            ),
+            fake.calls,
+        )
+        assertEquals(AisCamera.State.Idle, surround.state)
+        assertEquals(AisCamera.State.Streaming, reverse.state)
+        reverse.close()
+    }
 }
