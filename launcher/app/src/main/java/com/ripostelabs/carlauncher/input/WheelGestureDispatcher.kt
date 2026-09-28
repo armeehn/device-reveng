@@ -49,8 +49,9 @@ class WheelGestureDispatcher(
             WheelGestureAction.RADIO_SEEK_UP -> carService.radioSeekUp()
             WheelGestureAction.RADIO_SEEK_DOWN -> carService.radioSeekDown()
             WheelGestureAction.RADIO_NEXT_PRESET -> nextPreset()
-            WheelGestureAction.CLAIM_RADIO -> carService.claimRadio()
-            WheelGestureAction.RELEASE_SOURCE -> carService.releaseRadio()
+            // Both wait for the MCU's MODE_ACK (up to 1.5 s): never on the main thread.
+            WheelGestureAction.CLAIM_RADIO -> scope.launch(Dispatchers.IO) { carService.claimRadio() }
+            WheelGestureAction.RELEASE_SOURCE -> scope.launch(Dispatchers.IO) { carService.releaseRadio() }
             WheelGestureAction.SIRI -> Zlink.request(Zlink.Feature.SIRI).broadcast(context)
             WheelGestureAction.NAV -> nav()
             WheelGestureAction.MUTE_TOGGLE -> toggleMute()
