@@ -546,18 +546,17 @@ class CarService(private val appContext: Context) {
     // permanent loss (another media app started) hands the MCU source back too.
     private var radioFocus: AudioFocusRequest? = null
 
-    private val radioFocusListener = AudioManager.OnAudioFocusChangeListener { change ->
-        when (change) {
-            AudioManager.AUDIOFOCUS_LOSS -> {
-                Log.i(TAG, "radio: audio focus lost, releasing the source")
-                releaseRadio()
-            }
-            // The vendor radio's AudioManagerUtils (AudioManagerUtils.java:61-88): a transient
-            // loss ducks the tuner with `42 01`, a gain re-sends the mode and clears it.
-            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> radioSource.duck(true)
-            AudioManager.AUDIOFOCUS_GAIN -> if (radioSource.held) radioSource.claim()
-        }
-    }
+    // The mode sends wait for a MODE_ACK; focus callbacks come on the main looper (RadioFocusChange).
+    private val radioFocusChange = RadioFocusChange(
+        radioSource,
+        release = {
+            Log.i(TAG, "radio: audio focus lost, releasing the source")
+            releaseRadio()
+        },
+        run = Executors.newSingleThreadExecutor { r -> Thread(r, "car-radio-focus") },
+    )
+
+    private val radioFocusListener = AudioManager.OnAudioFocusChangeListener { radioFocusChange.on(it) }
 
     private fun takeRadioFocus() {
         val audio = appContext.getSystemService(AudioManager::class.java) ?: return
