@@ -30,8 +30,10 @@ enum class WheelGestureAction(val label: String) {
 }
 
 /**
- * The per-key gesture map: one action for a hold, one for a double press, plus the master
- * switch. Immutable; [SettingsStore] rebuilds it from DataStore on every change.
+ * The per-key gesture map: one action for a plain press, a hold and a double press, plus the
+ * master switch. A plain press bound to [WheelGestureAction.NONE] keeps the stock action
+ * ([com.ripostelabs.carlauncher.carlib.KeyActions.forCan]); it is the only way to remap a CAN
+ * wheel key, since the Steering wheel page learns resistive wheels only. Immutable; [SettingsStore] rebuilds it from DataStore on every change.
  *
  * Defaults: holds carry the useful secondary actions; every double press is [WheelGestureAction.NONE].
  * That asymmetry is the collateral rule. The vendor reports a wheel key on its release, so by
@@ -45,15 +47,22 @@ data class WheelGestureBindings(
     val enabled: Boolean = true,
     val long: Map<WheelKey, WheelGestureAction> = DEFAULT_LONG,
     val double: Map<WheelKey, WheelGestureAction> = emptyMap(),
+    val press: Map<WheelKey, WheelGestureAction> = emptyMap(),
 ) {
 
-    /** The bound action for [gesture]; a plain press is the vendor's, so always [NONE]. */
-    fun actionFor(gesture: WheelGesture): WheelGestureAction = when (gesture) {
-        is WheelGesture.LongPress -> longOf(gesture.key)
-        is WheelGesture.DoublePress -> doubleOf(gesture.key)
-        is WheelGesture.Press -> WheelGestureAction.NONE
+    /** The bound action for [gesture]; [NONE] when unbound or when the layer is off. */
+    fun actionFor(gesture: WheelGesture): WheelGestureAction {
+        if (!enabled) {
+            return WheelGestureAction.NONE
+        }
+        return when (gesture) {
+            is WheelGesture.LongPress -> longOf(gesture.key)
+            is WheelGesture.DoublePress -> doubleOf(gesture.key)
+            is WheelGesture.Press -> pressOf(gesture.key)
+        }
     }
 
+    fun pressOf(key: WheelKey): WheelGestureAction = press[key] ?: WheelGestureAction.NONE
     fun longOf(key: WheelKey): WheelGestureAction = long[key] ?: WheelGestureAction.NONE
     fun doubleOf(key: WheelKey): WheelGestureAction = double[key] ?: WheelGestureAction.NONE
 

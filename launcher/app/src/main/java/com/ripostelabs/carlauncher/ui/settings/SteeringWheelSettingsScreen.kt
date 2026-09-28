@@ -88,7 +88,8 @@ fun SteeringWheelSettingsScreen(
             if (log.isEmpty()) {
                 Text(
                     text = "Press a wheel button to see it here. If nothing appears, the wheel " +
-                        "events are protected and need a privileged install.",
+                        "events are protected and need a privileged install. CAN-box wheels " +
+                        "(RAV4) do not show here; remap them under Wheel gestures.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

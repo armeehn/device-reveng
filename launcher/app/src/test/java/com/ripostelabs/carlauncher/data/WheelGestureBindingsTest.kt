@@ -45,6 +45,24 @@ class WheelGestureBindingsTest {
         )
     }
 
+    /** RAV4-143: a CAN wheel's only customisation is here, so a plain press must be rebindable. */
+    @Test
+    fun pressBindingReplacesTheStockPress() {
+        val b = WheelGestureBindings(press = mapOf(WheelKey.NEXT to WheelGestureAction.OPEN_RADIO))
+        assertEquals(WheelGestureAction.OPEN_RADIO, b.actionFor(WheelGesture.Press(WheelKey.NEXT)))
+        assertEquals(WheelGestureAction.NONE, b.actionFor(WheelGesture.Press(WheelKey.PREV)))
+    }
+
+    @Test
+    fun disabledLayerMapsNothing() {
+        val b = WheelGestureBindings(
+            enabled = false,
+            press = mapOf(WheelKey.NEXT to WheelGestureAction.OPEN_RADIO),
+        )
+        assertEquals(WheelGestureAction.NONE, b.actionFor(WheelGesture.Press(WheelKey.NEXT)))
+        assertEquals(WheelGestureAction.NONE, b.actionFor(WheelGesture.LongPress(WheelKey.NEXT)))
+    }
+
     @Test
     fun codecRoundTripsAndDropsNone() {
         val map = mapOf(
