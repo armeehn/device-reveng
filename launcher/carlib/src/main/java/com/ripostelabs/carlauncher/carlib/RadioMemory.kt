@@ -16,7 +16,7 @@ class RadioMemory(context: Context) : McuOwner.Listener {
 
     private val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-    /** `KEY_RADIO_ZONE_SETTINGS`: 0 (Europe) until Settings says otherwise, as on the vendor's SysVar. */
+    /** `KEY_RADIO_ZONE_SETTINGS`: North America (the car is in Canada) until Settings says otherwise. */
     fun zone(): Int = prefs.getInt(KEY_ZONE, DEFAULT_ZONE)
 
     /** What to show before the MCU speaks: the remembered station, or the zone's defaults. */
@@ -49,7 +49,7 @@ class RadioMemory(context: Context) : McuOwner.Listener {
         private const val KEY_BAND = "band"
         private const val KEY_FREQ = "freq"
         private const val KEY_STATIONS = "stations"
-        private const val DEFAULT_ZONE = 0
+        private const val DEFAULT_ZONE = RadioZone.NORTH_AMERICA
         private const val SEPARATOR = ","
 
         /** One string, 42 numbers: what fits a preference without a schema. */

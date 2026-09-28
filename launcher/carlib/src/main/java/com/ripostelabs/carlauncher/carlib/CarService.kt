@@ -98,6 +98,21 @@ class CarService(private val appContext: Context) {
          */
         const val MAX_VOLUME = 40
 
+        private val SEEK_KEYS = setOf(RADIO_KEY_SEEK_UP, RADIO_KEY_SEEK_DOWN)
+
+        /**
+         * The keys a radio [key] becomes. With TA on an RDS tuner stops only on stations that
+         * flag traffic (TP), and North America has none, so a seek ran through every station
+         * (RAV4-147). There a seek clears TA first, e.g. seek up with TA on → `02 17`, `02 11`.
+         */
+        fun seekKeys(key: Int, state: RadioState): List<Int> {
+            if (key !in SEEK_KEYS || !state.ta || state.zone != RadioZone.NORTH_AMERICA) {
+                return listOf(key)
+            }
+
+            return listOf(RADIO_KEY_TA, key)
+        }
+
         /** Radio band ordinal → true when it's an AM band: `mRadioBndNum > 2 ? "AM" : "FM"` (RadioUIControllerRotate.java:923). */
         fun isAmBand(band: Int): Boolean = band >= 3
     }
@@ -408,7 +423,10 @@ class CarService(private val appContext: Context) {
 
     // ---- Radio control (CAR_API §3.2). All guarded. ---------------------------
     fun sendRadioKey(key: Int) {
-        owner?.let { it.send(McuOwnerProtocol.radioKey(key)); return }
+        owner?.let { o ->
+            seekKeys(key, radioState.state.value).forEach { o.send(McuOwnerProtocol.radioKey(it)) }
+            return
+        }
         call { sendRadioKey(key) }
     }
 

@@ -48,6 +48,9 @@ class RadioZone private constructor(
         private const val FM_BANKS = 3
         private const val EMPTY_TAIL = McuOwnerProtocol.RADIO_FREQ_LIST_SIZE - 5 * McuOwnerProtocol.RADIO_PRESET_COUNT
 
+        /** `KEY_RADIO_ZONE_SETTINGS` 1: FM 87.5-107.9 on 200 kHz, AM 530-1710 on 10 kHz. */
+        const val NORTH_AMERICA = 1
+
         /** The first AM slot: `i += 18` when `mRadioBndNum > 2` (MainActivity.java:170-175, FreqView.java:163-165). */
         const val AM_SLOT_OFFSET = FM_BANKS * McuOwnerProtocol.RADIO_PRESET_COUNT
 
