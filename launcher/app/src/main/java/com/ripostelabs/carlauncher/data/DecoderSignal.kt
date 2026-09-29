@@ -1,7 +1,6 @@
 package com.ripostelabs.carlauncher.data
 
 import android.util.Log
-import com.ripostelabs.car.ICarService
 import com.ripostelabs.carlauncher.carlib.CarDecoder
 import com.ripostelabs.carlauncher.carlib.RootShell
 
@@ -10,12 +9,14 @@ import com.ripostelabs.carlauncher.carlib.RootShell
  * is bound ([service], API 4), else through the root shell.
  *
  *     locked()          cat /sys/camera_status/camera_status ─▶ 1..13 (a libais_pr2000 size row)
- *     forceStreamable() c0 + v4 to /sys/pr2000/pr2000 ─▶ status 2 (720x576): a stream can start
- *     redetect()        r, c1, v0 (stock's reset + default channel + auto, BackcarEvent.java:1431-1433)
+ *     forceStreamable() c1 + v7 to /sys/pr2000/pr2000 ─▶ status 7 at once (AHD 720p30)
+ *     redetect()        the same: the lock is the only nudge that works on this kernel
  *
- * The node parses the two characters after the letter as a number, so a newline counts:
- * `echo v4` stores 4 x 10 + ('\n' - '0') = 2. That is the write that gave the stream on the bench
- * twice; the one-digit `printf` forms are the redetect that followed it. Both kept byte for byte.
+ * Stock's redetect (r, c1, v0; BackcarEvent.java:1431-1433) leaves camera_status at 0 here: the
+ * reset drops the channel and auto never fills it. Channel 1, then the camera's own format, set it
+ * to 7 at once, and the picture came (car, 2026-09-28). One-digit `printf`: the node reads the two
+ * characters after the letter, so `echo v7` would store 7 x 10 + ('\n' - '0').
+ * Root, not the car service: the service's copy of the sequence is stock's.
  */
 object DecoderSignal : AisCameraWorker.Signal {
 
@@ -27,6 +28,22 @@ object DecoderSignal : AisCameraWorker.Signal {
     private val SIZED_STATUS = 1..13
 
     private const val TAG = "DecoderSignal"
+
+    /** The reverse input: stock's default channel. */
+    private const val REVERSE_CHANNEL = "c1"
+
+    /** The owner's camera, AHD 720p30: libais_pr2000.so's row 7, 1280x720. */
+    private const val CAMERA_FORMAT = "v7"
+
+    /** Runs one root command and logs its exit code. */
+    val ROOT: (String) -> Unit = { command ->
+        val result = RootShell.exec(command)
+        Log.i(TAG, "$command -> ${result.code}")
+    }
+
+    /** Where the lock's writes go: [ROOT] on the unit, a recorder in tests. */
+    @Volatile
+    var shell: (String) -> Unit = ROOT
 
     /** The car service's decoder once MainActivity binds it; null keeps the root shell. */
     @Volatile
@@ -41,22 +58,11 @@ object DecoderSignal : AisCameraWorker.Signal {
         return result.ok && isLocked(result.stdout)
     }
 
-    override fun forceStreamable() {
-        if (service?.decoderSignal(ICarService.DECODER_FORCE_STREAMABLE) == true) {
-            return
-        }
-        run("setprop $WRITABLE_PROP 1; echo c0 > $DECODER_NODE; echo v4 > $DECODER_NODE")
-    }
+    override fun forceStreamable() = lock()
 
-    override fun redetect() {
-        if (service?.decoderSignal(ICarService.DECODER_REDETECT) == true) {
-            return
-        }
-        run("printf r > $DECODER_NODE; sleep 0.05; printf c1 > $DECODER_NODE; printf v0 > $DECODER_NODE")
-    }
+    override fun redetect() = lock()
 
-    private fun run(command: String) {
-        val result = RootShell.exec(command)
-        Log.i(TAG, "$command -> ${result.code}")
+    private fun lock() {
+        shell("setprop $WRITABLE_PROP 1; printf $REVERSE_CHANNEL > $DECODER_NODE; printf $CAMERA_FORMAT > $DECODER_NODE")
     }
 }

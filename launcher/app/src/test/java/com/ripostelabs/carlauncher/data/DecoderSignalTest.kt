@@ -41,19 +41,29 @@ class DecoderSignalTest {
     @After
     fun noService() {
         DecoderSignal.service = null
+        DecoderSignal.shell = DecoderSignal.ROOT
     }
 
-    // With the car service bound the warm-up reads and nudges the decoder through it.
+    // The lock goes through root even with the service bound: its sequence is stock's r, c1, v0,
+    // and on this kernel a reset drops the channel and auto never fills camera_status (car,
+    // 2026-09-28). c1 then a one-digit v7 gave status 7 at once and the picture.
     @Test
-    fun theServiceAnswersTheWarmUp() {
+    fun theWarmUpLocksChannelOneAt720p() {
         val svc = FakeDecoder(lock = true)
         DecoderSignal.service = svc
+        val ran = mutableListOf<String>()
+        DecoderSignal.shell = { ran += it }
 
         assertTrue(DecoderSignal.locked())
         DecoderSignal.forceStreamable()
         DecoderSignal.redetect()
 
-        assertEquals(listOf(ICarService.DECODER_FORCE_STREAMABLE, ICarService.DECODER_REDETECT), svc.signals)
+        assertEquals(emptyList<Int>(), svc.signals)
+        assertEquals(2, ran.size)
+        for (command in ran) {
+            val writes = Regex("printf (\\w+) > /sys/pr2000/pr2000").findAll(command).map { it.groupValues[1] }.toList()
+            assertEquals(listOf("c1", "v7"), writes)
+        }
     }
 
     @Test
