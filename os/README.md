@@ -206,6 +206,9 @@ Internet over Bluetooth: with Personal Hotspot on, pair the phone, then Settings
 Connected devices > the phone > "Internet access" connects PAN. `bt-pan` gets an address
 from the phone and becomes the default network while no Wi-Fi station is up (in the car
 Wi-Fi is the CarPlay access point, not an uplink).
+The switch is stored per phone and survives a reboot. AOSP never redials PAN at boot, and
+Settings shows the live link, so it reads "off". The launcher's `PhoneInternet` keep-up
+redials it: 10 s after start, then every minute while the link is down.
 
 ## Overlay
 

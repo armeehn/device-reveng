@@ -5,7 +5,10 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** CarPlay up → ask the iPhone for its internet over PAN, with backoff while the hotspot is off. */
+/**
+ * CarPlay up → ask the iPhone for its internet over PAN, with backoff while the hotspot is off.
+ * Keep-up → redial a phone whose "Internet access" is on after every reboot, CarPlay or not.
+ */
 class PhoneInternetTest {
 
     private companion object {
@@ -15,10 +18,16 @@ class PhoneInternetTest {
     }
 
     /** A PAN stack that goes CONNECTED after [acceptAfter] connect calls; never, when null. */
-    private class FakePan(val peers: List<BtPeer>, val acceptAfter: Int? = 1) : PanLink {
+    private class FakePan(
+        val peers: List<BtPeer>,
+        val acceptAfter: Int? = 1,
+        val allowedSet: Set<String> = emptySet(),
+    ) : PanLink {
         val connects = mutableListOf<String>()
 
         override fun bonded() = peers
+
+        override fun allowed(address: String) = address in allowedSet
 
         override fun state(address: String): PanState {
             val done = acceptAfter != null && connects.count { it == address } >= acceptAfter
@@ -40,6 +49,17 @@ class PhoneInternetTest {
     private fun drain(): List<Long> {
         val waited = mutableListOf<Long>()
         while (pending.isNotEmpty()) {
+            val (ms, task) = pending.removeFirst()
+            waited += ms
+            task()
+        }
+        return waited
+    }
+
+    /** Run the first [n] queued tasks; the keep-up loop reschedules itself forever. */
+    private fun step(n: Int): List<Long> {
+        val waited = mutableListOf<Long>()
+        repeat(n) {
             val (ms, task) = pending.removeFirst()
             waited += ms
             task()
@@ -128,6 +148,7 @@ class PhoneInternetTest {
         val pan = object : PanLink {
             override fun bonded() = listOf(iphone())
             override fun state(address: String) = PanState.CONNECTED
+            override fun allowed(address: String) = true
             override fun connect(address: String): Boolean = error("must not dial")
         }
         internet(pan).onSessionUp(null)
@@ -150,5 +171,46 @@ class PhoneInternetTest {
         assertEquals(PanState.CONNECTED, PanState.of(2))
         assertEquals(PanState.CONNECTING, PanState.of(1))
         assertEquals(PanState.DISCONNECTED, PanState.of(3))
+    }
+
+    @Test
+    fun keepUpRedialsAllowedPhoneAfterBoot() {
+        val pan = FakePan(listOf(iphone()), acceptAfter = null, allowedSet = setOf(IPHONE))
+        internet(pan).keepUp()
+
+        val waited = step(3)
+
+        assertEquals(listOf(10_000L, 60_000L, 60_000L), waited)
+        assertEquals(listOf(IPHONE, IPHONE, IPHONE), pan.connects)
+    }
+
+    @Test
+    fun keepUpLeavesSwitchedOffPhonesAlone() {
+        val pan = FakePan(listOf(iphone(), pixel), acceptAfter = null)
+        internet(pan).keepUp()
+
+        step(3)
+
+        assertTrue(pan.connects.isEmpty())
+    }
+
+    @Test
+    fun keepUpIdlesWhileLinked() {
+        val pan = FakePan(listOf(iphone()), allowedSet = setOf(IPHONE))
+        internet(pan).keepUp()
+
+        step(4)
+
+        assertEquals(listOf(IPHONE), pan.connects)
+    }
+
+    @Test
+    fun keepUpTakesAllowedPhonesInTurn() {
+        val pan = FakePan(listOf(iphone(), iphone(IPHONE_2)), acceptAfter = null, allowedSet = setOf(IPHONE, IPHONE_2))
+        internet(pan).keepUp()
+
+        step(3)
+
+        assertEquals(listOf(IPHONE, IPHONE_2, IPHONE), pan.connects)
     }
 }
