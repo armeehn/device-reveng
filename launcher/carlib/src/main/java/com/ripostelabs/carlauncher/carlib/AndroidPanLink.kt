@@ -60,6 +60,14 @@ class AndroidPanLink(context: Context) : PanLink {
         return runCatching { PanState.of(proxy.getConnectionState(device)) }.getOrDefault(PanState.DISCONNECTED)
     }
 
+    override fun allowed(address: String): Boolean {
+        val proxy = pan ?: return false
+        val device = device(address) ?: return false
+        return runCatching {
+            proxy.method("getConnectionPolicy", BluetoothDevice::class.java).invoke(proxy, device) as Int
+        }.getOrNull() == CONNECTION_POLICY_ALLOWED
+    }
+
     override fun connect(address: String): Boolean {
         val proxy = pan ?: return false
         val device = device(address) ?: return false

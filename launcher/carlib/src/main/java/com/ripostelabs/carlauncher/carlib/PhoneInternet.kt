@@ -17,6 +17,11 @@ import android.util.Log
  *        (checked after 5 / 10 / 20 / 40 s; still down after the last = hotspot off)
  * ```
  *
+ * The switch is kept in the Bluetooth database across reboots, but nothing dials from it:
+ * AOSP's PhonePolicy only connects PAN when another profile (HFP, A2DP) of that phone comes
+ * up, and Settings draws the switch from the live link, so it reads "off" after every boot.
+ * [keepUp] closes that gap: every minute it redials a switched-on phone whose PAN is down.
+ *
  * Routing is left alone: Android's network ranking keeps Wi-Fi (the car router) ahead of
  * the Bluetooth network. A session ending only stops the retries; the PAN link stays until
  * the phone drops it. iOS cannot be told to turn its hotspot on, so "hotspot off" is logged.
@@ -32,6 +37,30 @@ class PhoneInternet(
 
     /** Target of the live session; null when none. */
     private var target: String? = null
+
+    /** Keep-up rounds so far; picks which switched-on phone the next round dials. */
+    private var round = 0
+
+    /**
+     * Redial, CarPlay or not, the phone whose "Internet access" switch is on: 10 s after the
+     * launcher starts (the PAN proxy binds meanwhile), then every minute while PAN is down.
+     * A phone out of range costs one failed page per minute.
+     */
+    fun keepUp() {
+        schedule(PhoneInternetRules.KEEP_FIRST_MS) { sweep() }
+    }
+
+    /** One keep-up round; reschedules itself. */
+    @Synchronized
+    private fun sweep() {
+        val allowed = link.bonded().map { it.address }.filter(link::allowed)
+        val pick = PhoneInternetRules.redial(allowed.associateWith(link::state), round++)
+        if (pick != null) {
+            val asked = link.connect(pick)
+            log("keep-up: PAN connect $pick ${if (asked) "requested" else "refused by the stack"}")
+        }
+        schedule(PhoneInternetRules.KEEP_MS) { sweep() }
+    }
 
     /** A CarPlay session came up; [address] is the phone's, when the projection app names it. */
     @Synchronized
@@ -114,6 +143,8 @@ enum class PanState {
 interface PanLink {
     fun bonded(): List<BtPeer>
     fun state(address: String): PanState
+    /** True when PAN's connection policy for [address] is ALLOWED: the "Internet access" switch. */
+    fun allowed(address: String): Boolean
     /** Allow PAN for [address] and dial it. False when the stack refused the request. */
     fun connect(address: String): Boolean
 }
@@ -124,11 +155,30 @@ object PhoneInternetRules {
     /** Checks after each connect: 5, 10, 20, 40 s, then give up. */
     private val BACKOFF_MS = longArrayOf(5_000L, 10_000L, 20_000L, 40_000L)
 
+    /** First keep-up round after start, then the gap between rounds. */
+    internal const val KEEP_FIRST_MS = 10_000L
+    internal const val KEEP_MS = 60_000L
+
     /** Bonded names iOS gives out, e.g. "Sasha's iPhone", "iPhone 15". */
     private const val IPHONE_MARK = "iphone"
 
     /** The delay before the check after try [n] (0-based); null once the tries are spent. */
     fun backoffMs(n: Int): Long? = BACKOFF_MS.getOrNull(n)
+
+    /**
+     * The switched-on phone to redial from [states] (address → PAN state), taking turns by
+     * [round] when several are down. Null while any PAN link is up or coming up: PANU holds one.
+     */
+    fun redial(states: Map<String, PanState>, round: Int): String? {
+        if (states.values.any { it != PanState.DISCONNECTED }) {
+            return null
+        }
+        val down = states.keys.toList()
+        if (down.isEmpty()) {
+            return null
+        }
+        return down[round % down.size]
+    }
 
     /**
      * The phone to ask: CarPlay's [address] when it is bonded; else the one bonded iPhone;

@@ -361,6 +361,8 @@ class MainActivity : ComponentActivity() {
                     task()
                 }
             })
+            // The owner's "Internet access" switch outlives a reboot; the link does not.
+            phoneInternet.keepUp()
             lifecycleScope.launch {
                 carEvents.zlinkConnected.collect { up ->
                     if (!up) {
