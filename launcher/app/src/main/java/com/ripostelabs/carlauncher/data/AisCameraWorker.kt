@@ -4,7 +4,9 @@ import android.util.Log
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * AisCameraWorker — [AisCamera] off the caller's thread, with a deadline on open.
@@ -49,6 +51,9 @@ class AisCameraWorker<S : Any>(
 
         /** Reset and auto-detect on the reverse input, as stock does after a bad signal. */
         fun redetect()
+
+        /** The size row the chip reports now (1..13), or null; drives [watchFormat]. */
+        fun status(): Int? = null
     }
 
     /** Bumped by every open and close: an answer tagged with an older value is stale. */
@@ -104,7 +109,42 @@ class AisCameraWorker<S : Any>(
             answered.set(true)
             deadline.cancel(false)
             deliver(state)
+            if (state !is AisCamera.State.Failed && signal != null) {
+                watchFormat(surfaces, signal, mine, deliver)
+            }
         }
+    }
+
+    /**
+     * Stock closes and reopens whenever the chip's row changes while the camera is up
+     * (BackcarEvent.java:1545-1560): a stream sized for the first row stays grey or dark after
+     * the chip settles on another (TVI 11, then AHD 7; car, 2026-09-29). Stops with the next
+     * open or close.
+     */
+    private fun watchFormat(surfaces: List<S>, signal: Signal, mine: Int, deliver: (AisCamera.State) -> Unit) {
+        var opened = signal.status()
+        val watch = AtomicReference<ScheduledFuture<*>?>()
+        watch.set(timer.scheduleWithFixedDelay({
+            val now = signal.status()
+            if (generation != mine) {
+                watch.get()?.cancel(false)
+                return@scheduleWithFixedDelay
+            }
+            if (now == null || now == opened) {
+                return@scheduleWithFixedDelay
+            }
+
+            opened = now
+            worker.execute {
+                if (generation != mine) {
+                    return@execute
+                }
+                Log.i(TAG, "decoder moved to row $now: reopening")
+                camera.close()
+                Thread.sleep(REOPEN_DELAY_MS)
+                deliver(camera.openAll(surfaces, cameraIndex))
+            }
+        }, warmPollMs, warmPollMs, TimeUnit.MILLISECONDS))
     }
 
     /**
@@ -161,6 +201,9 @@ class AisCameraWorker<S : Any>(
         /** Detection reported ~15 s after the redetect on the bench; 20 s leaves room. */
         private const val WARM_TIMEOUT_MS = 20_000L
         private const val WARM_POLL_MS = 500L
+
+        /** Stock's pause between the close and the reopen on a row change. */
+        private const val REOPEN_DELAY_MS = 150L
 
         const val WARMING_UP = "Finding the camera signal"
 
