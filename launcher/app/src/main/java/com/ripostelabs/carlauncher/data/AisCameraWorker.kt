@@ -106,11 +106,14 @@ class AisCameraWorker<S : Any>(
                 state = camera.openAll(surfaces, cameraIndex)
             }
 
+            // The row the stream was opened at, read before anyone hears of the open: a change
+            // that lands after the answer must count as a change, not as the starting row.
+            val openedRow = signal?.status()
             answered.set(true)
             deadline.cancel(false)
             deliver(state)
             if (state !is AisCamera.State.Failed && signal != null) {
-                watchFormat(surfaces, signal, mine, deliver)
+                watchFormat(surfaces, signal, openedRow, mine, deliver)
             }
         }
     }
@@ -121,8 +124,14 @@ class AisCameraWorker<S : Any>(
      * the chip settles on another (TVI 11, then AHD 7; car, 2026-09-29). Stops with the next
      * open or close.
      */
-    private fun watchFormat(surfaces: List<S>, signal: Signal, mine: Int, deliver: (AisCamera.State) -> Unit) {
-        var opened = signal.status()
+    private fun watchFormat(
+        surfaces: List<S>,
+        signal: Signal,
+        openedRow: Int?,
+        mine: Int,
+        deliver: (AisCamera.State) -> Unit,
+    ) {
+        var opened = openedRow
         val watch = AtomicReference<ScheduledFuture<*>?>()
         watch.set(timer.scheduleWithFixedDelay({
             val now = signal.status()
