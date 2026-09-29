@@ -15,15 +15,14 @@ import org.junit.Test
  */
 class DecoderSignalTest {
 
-    // Only the camera's own format is a lock. After a restart the chip sits at 11: a valid row,
-    // so the old 1..13 test skipped the warm-up, and the stream came up grey and late (car,
-    // 2026-09-29). The warm-up's c1 + v7 is what sets 7.
+    // Stock opens at whatever row the chip settles on (BackcarEvent.java:1514-1540): 7 is AHD
+    // 720p30, 11 is TVI 720p30, and this camera has come up as both (car, 2026-09-28/29).
     @Test
-    fun onlyTheCameraFormatIsALock() {
+    fun anyReportedFormatIsALock() {
         assertTrue(DecoderSignal.isLocked("7"))
-        assertTrue(DecoderSignal.isLocked("7\n"))
-        assertFalse(DecoderSignal.isLocked("11"))
-        assertFalse(DecoderSignal.isLocked("1"))
+        assertTrue(DecoderSignal.isLocked("11\n"))
+        assertTrue(DecoderSignal.isLocked("1"))
+        assertTrue(DecoderSignal.isLocked("13"))
     }
 
     @Test
@@ -35,11 +34,11 @@ class DecoderSignalTest {
         assertFalse(DecoderSignal.isLocked(null))
     }
 
-    // The service calls any row a lock, so its answer cannot decide the warm-up.
+    // The lock is read from the node, not asked of the service.
     @Test
     fun theServiceDoesNotDecideTheLock() {
         DecoderSignal.service = FakeDecoder(lock = true)
-        DecoderSignal.status = { "11" }
+        DecoderSignal.statusRead = { "0" }
 
         assertFalse(DecoderSignal.locked())
     }
@@ -55,19 +54,19 @@ class DecoderSignalTest {
     fun noService() {
         DecoderSignal.service = null
         DecoderSignal.shell = DecoderSignal.ROOT
-        DecoderSignal.status = DecoderSignal.ROOT_STATUS
+        DecoderSignal.statusRead = DecoderSignal.ROOT_STATUS
     }
 
-    // The lock goes through root even with the service bound: its sequence is stock's r, c1, v0,
-    // and on this kernel a reset drops the channel and auto never fills camera_status (car,
-    // 2026-09-28). c1 then a one-digit v7 gave status 7 at once and the picture.
+    // Stock's nudge minus its reset: on this kernel `r` drops the channel and leaves 0, while
+    // c1 + v0 ran check_pr2000_signal and the row came within a second (car, 2026-09-29).
+    // A forced v7 only re-triggers the check, and a stream opened under it stayed dark.
     @Test
-    fun theWarmUpLocksChannelOneAt720p() {
+    fun theNudgeIsAutoOnChannelOne() {
         val svc = FakeDecoder(lock = true)
         DecoderSignal.service = svc
         val ran = mutableListOf<String>()
         DecoderSignal.shell = { ran += it }
-        DecoderSignal.status = { "7" }
+        DecoderSignal.statusRead = { "7" }
 
         assertTrue(DecoderSignal.locked())
         DecoderSignal.forceStreamable()
@@ -77,7 +76,7 @@ class DecoderSignalTest {
         assertEquals(2, ran.size)
         for (command in ran) {
             val writes = Regex("printf (\\w+) > /sys/pr2000/pr2000").findAll(command).map { it.groupValues[1] }.toList()
-            assertEquals(listOf("c1", "v7"), writes)
+            assertEquals(listOf("c1", "v0"), writes)
         }
     }
 }

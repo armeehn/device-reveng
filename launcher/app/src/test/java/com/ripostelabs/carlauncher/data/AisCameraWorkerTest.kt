@@ -141,6 +141,9 @@ class AisCameraWorkerTest {
     /** The PR2000 as the bench showed it: no lock until a redetect runs under a live stream. */
     private class Decoder(private val log: MutableList<String>, locked: Boolean) : AisCameraWorker.Signal {
         @Volatile var locked = locked
+        @Volatile var format: Int? = null
+
+        override fun status(): Int? = format
 
         override fun locked(): Boolean = locked
         override fun forceStreamable() { log += "forceStreamable" }
@@ -180,6 +183,45 @@ class AisCameraWorkerTest {
         waitFor { results.isNotEmpty() }
         assertEquals(listOf(AisCamera.State.Streaming), results.toList())
         assertEquals(listOf("open", "setSurface"), log.toList())
+    }
+
+    // The chip can report TVI 720p (11) at power-on and settle on AHD 720p (7) once a stream
+    // runs; a stream left at the first format stays grey (car, 2026-09-29). Stock closes and
+    // reopens on every change (BackcarEvent.java:1545-1560).
+    @Test
+    fun aFormatChangeWhileOpenReopens() {
+        val log: MutableList<String> = Collections.synchronizedList(mutableListOf())
+        val decoder = Decoder(log, locked = true).also { it.format = 11 }
+        val subject = AisCameraWorker(
+            AisCamera(Opens(log)), worker, timer, post = { it() }, signal = decoder, warmPollMs = 1L,
+        )
+
+        subject.open("tex") { results += it }
+        waitFor { results.size == 1 }
+        decoder.format = 7
+
+        waitFor { results.size == 2 }
+        assertEquals(listOf(AisCamera.State.Streaming, AisCamera.State.Streaming), results.toList())
+        assertEquals(listOf("open", "setSurface", "close", "deleteSurface", "open", "setSurface"), log.toList())
+    }
+
+    @Test
+    fun noReopenAfterClose() {
+        val log: MutableList<String> = Collections.synchronizedList(mutableListOf())
+        val decoder = Decoder(log, locked = true).also { it.format = 11 }
+        val subject = AisCameraWorker(
+            AisCamera(Opens(log)), worker, timer, post = { it() }, signal = decoder, warmPollMs = 1L,
+        )
+
+        subject.open("tex") { results += it }
+        waitFor { results.size == 1 }
+        var released = false
+        subject.close { released = true }
+        waitFor { released }
+        decoder.format = 7
+        Thread.sleep(50)
+
+        assertEquals(listOf("open", "setSurface", "close", "deleteSurface"), log.toList())
     }
 
     /** Records the device and slots, so the 360 open can be checked end to end. */

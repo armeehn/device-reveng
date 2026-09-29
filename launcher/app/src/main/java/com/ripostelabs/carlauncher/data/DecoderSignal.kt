@@ -5,18 +5,20 @@ import com.ripostelabs.carlauncher.carlib.CarDecoder
 import com.ripostelabs.carlauncher.carlib.RootShell
 
 /**
- * The PR2000's signal lock for [AisCameraWorker]'s warm-up, read and written through the root
- * shell.
+ * The PR2000's signal lock for [AisCameraWorker]'s warm-up, read and nudged through the root
+ * shell, the way stock's BackcarEvent does it.
  *
- *     locked()          cat /sys/camera_status/camera_status ─▶ 7, the camera's own format
- *     forceStreamable() c1 + v7 to /sys/pr2000/pr2000 ─▶ status 7 at once (AHD 720p30)
- *     redetect()        the same: the lock is the only nudge that works on this kernel
+ *     locked()          cat /sys/camera_status/camera_status ─▶ 1..13 (a libais_pr2000 size row)
+ *     forceStreamable() c1 + v0 to /sys/pr2000/pr2000 ─▶ check_pr2000_signal finds the format
+ *     redetect()        the same
  *
- * Stock's redetect (r, c1, v0; BackcarEvent.java:1431-1433) leaves camera_status at 0 here: the
- * reset drops the channel and auto never fills it. Channel 1, then the camera's own format, set it
- * to 7 at once, and the picture came (car, 2026-09-28). One-digit `printf`: the node reads the two
- * characters after the letter, so `echo v7` would store 7 x 10 + ('\n' - '0').
- * Root, not the car service: the service's copy of the sequence is stock's.
+ * Stock's redetect is r, c1, v0 (BackcarEvent.java:1431-1433). The reset drops the channel on
+ * this kernel and leaves 0, so it goes; c1 + v0 alone ran the check and the row came within a
+ * second (car, 2026-09-29). A forced format (v7) only re-triggers the check. This camera has come
+ * up as 7 (AHD 720p30) and 11 (TVI 720p30); [AisCameraWorker] reopens when the row changes.
+ * One-digit `printf`: the node reads the two characters after the letter, so `echo v0` would
+ * store 0 x 10 + ('\n' - '0'). Root, not the car service: the service's copy is stock's with
+ * the reset.
  */
 object DecoderSignal : AisCameraWorker.Signal {
 
@@ -24,19 +26,16 @@ object DecoderSignal : AisCameraWorker.Signal {
     private const val DECODER_NODE = ReverseCameraDecoder.PR2000_NODE
     private const val WRITABLE_PROP = "sys.pr2000.writable"
 
-    /**
-     * The status [CAMERA_FORMAT] sets: libais_pr2000.so's row 7, 1280x720. Any other row sizes a
-     * stream too, but the wrong one: the chip boots at 11 and the picture came up grey.
-     */
-    private const val CAMERA_STATUS = 7
+    /** libais_pr2000.so accepts status - 1 in 0..12 (`cmp w8, #0xc`), else 0 x 0. */
+    private val SIZED_STATUS = 1..13
 
     private const val TAG = "DecoderSignal"
 
     /** The reverse input: stock's default channel. */
     private const val REVERSE_CHANNEL = "c1"
 
-    /** The owner's camera, AHD 720p30: libais_pr2000.so's row 7, 1280x720. */
-    private const val CAMERA_FORMAT = "v7"
+    /** Auto: the chip's check_pr2000_signal picks the format. */
+    private const val AUTO_FORMAT = "v0"
 
     /** Runs one root command and logs its exit code. */
     val ROOT: (String) -> Unit = { command ->
@@ -56,23 +55,24 @@ object DecoderSignal : AisCameraWorker.Signal {
 
     /** Where [locked] reads the status: [ROOT_STATUS] on the unit, a stub in tests. */
     @Volatile
-    var status: () -> String? = ROOT_STATUS
+    var statusRead: () -> String? = ROOT_STATUS
 
     /** The car service's decoder once MainActivity binds it; null keeps the root shell. */
     @Volatile
     var service: CarDecoder? = null
 
-    /** True only for the camera's own format; see [CAMERA_STATUS]. */
-    fun isLocked(status: String?): Boolean = status?.trim()?.toIntOrNull() == CAMERA_STATUS
+    /** True for a status the AIS server can size a stream from. */
+    fun isLocked(status: String?): Boolean = status?.trim()?.toIntOrNull() in SIZED_STATUS
 
-    // Not through the service: it calls any sized row a lock, 11 included.
-    override fun locked(): Boolean = isLocked(status())
+    override fun locked(): Boolean = isLocked(statusRead())
+
+    override fun status(): Int? = statusRead()?.trim()?.toIntOrNull()?.takeIf { it in SIZED_STATUS }
 
     override fun forceStreamable() = lock()
 
     override fun redetect() = lock()
 
     private fun lock() {
-        shell("setprop $WRITABLE_PROP 1; printf $REVERSE_CHANNEL > $DECODER_NODE; printf $CAMERA_FORMAT > $DECODER_NODE")
+        shell("setprop $WRITABLE_PROP 1; printf $REVERSE_CHANNEL > $DECODER_NODE; printf $AUTO_FORMAT > $DECODER_NODE")
     }
 }
