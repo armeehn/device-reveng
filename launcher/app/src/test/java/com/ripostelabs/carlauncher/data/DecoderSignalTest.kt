@@ -25,6 +25,14 @@ class DecoderSignalTest {
         assertTrue(DecoderSignal.isLocked("13"))
     }
 
+    // The driver detects only inside pr2000_show (its one call to check_pr2000_signal, 0xb4cd5c):
+    // reading camera_status never looks at the chip, so a launcher polling it waited forever on
+    // a cold boot while every manual `cat /sys/pr2000/pr2000` found the camera (2026-09-29).
+    @Test
+    fun theLockIsReadWhereTheDriverDetects() {
+        assertEquals("cat /sys/pr2000/pr2000", DecoderSignal.STATUS_COMMAND)
+    }
+
     @Test
     fun noSignalOrJunkIsNot() {
         assertFalse(DecoderSignal.isLocked("0"))

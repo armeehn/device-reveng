@@ -8,7 +8,7 @@ import com.ripostelabs.carlauncher.carlib.RootShell
  * The PR2000's signal lock for [AisCameraWorker]'s warm-up, read and nudged through the root
  * shell, the way stock's BackcarEvent does it.
  *
- *     locked()          cat /sys/camera_status/camera_status ─▶ 1..13 (a libais_pr2000 size row)
+ *     locked()          cat /sys/pr2000/pr2000 ─▶ runs the chip's detection ─▶ 1..13 (a size row)
  *     forceStreamable() c1 + v0 to /sys/pr2000/pr2000 ─▶ check_pr2000_signal finds the format
  *     redetect()        the same
  *
@@ -16,14 +16,18 @@ import com.ripostelabs.carlauncher.carlib.RootShell
  * this kernel and leaves 0, so it goes; c1 + v0 alone ran the check and the row came within a
  * second (car, 2026-09-29). A forced format (v7) only re-triggers the check. This camera has come
  * up as 7 (AHD 720p30) and 11 (TVI 720p30); [AisCameraWorker] reopens when the row changes.
+ * The read is the detection: the driver checks the chip only inside pr2000_show, so polling
+ * camera_status (the same value, never refreshed) waited forever on a cold boot.
  * One-digit `printf`: the node reads the two characters after the letter, so `echo v0` would
  * store 0 x 10 + ('\n' - '0'). Root, not the car service: the service's copy is stock's with
  * the reset.
  */
 object DecoderSignal : AisCameraWorker.Signal {
 
-    private const val STATUS_NODE = "/sys/camera_status/camera_status"
     private const val DECODER_NODE = ReverseCameraDecoder.PR2000_NODE
+
+    /** Reading the decoder node runs check_pr2000_signal and prints the detected size row. */
+    const val STATUS_COMMAND = "cat $DECODER_NODE"
     private const val WRITABLE_PROP = "sys.pr2000.writable"
 
     /** libais_pr2000.so accepts status - 1 in 0..12 (`cmp w8, #0xc`), else 0 x 0. */
@@ -47,9 +51,9 @@ object DecoderSignal : AisCameraWorker.Signal {
     @Volatile
     var shell: (String) -> Unit = ROOT
 
-    /** Reads camera_status through root; null when the read fails. */
+    /** Detects and reads the size row through root; null when the read fails. */
     val ROOT_STATUS: () -> String? = {
-        val result = RootShell.exec("cat $STATUS_NODE")
+        val result = RootShell.exec(STATUS_COMMAND)
         if (result.ok) result.stdout else null
     }
 
