@@ -40,12 +40,12 @@ import com.ripostelabs.carlauncher.ui.theme.proximityRamp
  *     • NO focus grab — no dialogs, no `focusable()`, no modal scrim. Stealing window focus
  *       could interfere with the vendor view's own touch/close handling.
  *   Instead we render a fully-transparent, minimal, non-intrusive overlay that YIELDS the
- *   center to the vendor camera and only decorates the edges: optional static parking-guide
+ *   center to the vendor camera and only decorates the edges: optional parking-guide
  *   lines and the live [RadarState] bars + a short guidance line at the bottom. Because the
  *   vendor window composites above us, these extras are only visible in the (assumed) margins
  *   the vendor view doesn't cover — which is exactly the non-intrusive behavior we want.
  *
- * The static guide lines are toggleable via a small corner chip. v0.4.7.1: the choice is
+ * The guide lines are toggleable via a small corner chip. v0.4.7.1: the choice is
  * hoisted — held in `remember` inside the AnimatedVisibility content, it was forgotten on
  * every reversal. The caller persists it (SettingsStore.reverseGuideLines).
  */
@@ -68,7 +68,7 @@ fun ReverseOverlay(
         // NOTE: intentionally NO .background(...) here — the overlay is transparent so the
         // vendor reverse window (above us) is never occluded. See KDoc coexistence rationale.
         Box(modifier = Modifier.fillMaxSize()) {
-            // Optional static parking-guide lines (fixed trajectory, not steering-linked).
+            // Optional parking-guide lines, steering-linked (straight without a reading).
             if (guideLines) {
                 ParkingGuideLines(steeringDeg = steeringDeg, mirrored = mirrored, modifier = Modifier.fillMaxSize())
             }
@@ -125,10 +125,9 @@ fun ReverseOverlay(
 }
 
 /**
- * Parking-guide lines: two side rails plus three distance bands (red/yellow/green), drawn
- * semi-transparent so they read over the camera feed. With a steering angle ([steeringDeg],
- * the CAN box's `0x11` reading) the rails are the rear corners' path at that angle
- * ([GuideTrajectory]); without one they are the fixed static rails below.
+ * Parking-guide lines: the stock rails coloured by distance (red/yellow/green), drawn
+ * semi-transparent so they read over the camera feed. The rails are the rear corners' path at
+ * the steering angle ([steeringDeg], the CAN box's `0x11` reading; see [guideRails]).
  */
 @Composable
 private fun ParkingGuideLines(steeringDeg: Double?, mirrored: Boolean, modifier: Modifier = Modifier) {
@@ -139,34 +138,7 @@ private fun ParkingGuideLines(steeringDeg: Double?, mirrored: Boolean, modifier:
     val amber = ramp.near.copy(alpha = BAND_ALPHA)
     val green = ramp.clear.copy(alpha = BAND_ALPHA)
     Canvas(modifier = modifier) {
-        val w = size.width
-        val h = size.height
-        if (steeringDeg != null) {
-            drawTrajectory(GuideTrajectory.rails(steeringDeg, mirrored), red, amber, green)
-            return@Canvas
-        }
-
-        // Guides occupy the lower ~55% of the screen (near field behind the car).
-        val top = h * 0.45f
-        val bottom = h * 0.98f
-        // Rails: wider at the bottom (near bumper), converging toward the top.
-        val bottomInset = w * 0.22f
-        val topInset = w * 0.36f
-        val stroke = (w * 0.006f).coerceAtLeast(3f)
-
-        // Left + right rails.
-        drawLine(green, Offset(bottomInset, bottom), Offset(topInset, top), strokeWidth = stroke)
-        drawLine(green, Offset(w - bottomInset, bottom), Offset(w - topInset, top), strokeWidth = stroke)
-
-        // Distance bands across the rails (near=red, mid=amber, far=green).
-        fun bandAt(t: Float, color: Color) {
-            val y = bottom + (top - bottom) * t
-            val inset = bottomInset + (topInset - bottomInset) * t
-            drawLine(color, Offset(inset, y), Offset(w - inset, y), strokeWidth = stroke)
-        }
-        bandAt(0.12f, red)
-        bandAt(0.45f, amber)
-        bandAt(0.85f, green)
+        drawTrajectory(guideRails(steeringDeg, mirrored), red, amber, green)
     }
 }
 
@@ -200,12 +172,23 @@ private fun DrawScope.drawTrajectory(rails: GuideTrajectory.Rails, red: Color, a
     }
 }
 
+/**
+ * The one guide-line shape: the stock port at [steeringDeg], held straight (0) when there is no
+ * reading or the dynamic lines are off. A second, static drawing for the null case alternated
+ * with this one whenever the CAN reading came and went (Test camera, 2026-09-29).
+ */
+internal fun guideRails(steeringDeg: Double?, mirrored: Boolean): GuideTrajectory.Rails =
+    GuideTrajectory.rails(steeringDeg ?: STRAIGHT_DEG, mirrored)
+
 /** Stock stroke widths (rail 6 px, tick 4 px) on its 720 px high box. */
 private const val OEM_RAIL_PX = 6f
 private const val OEM_TICK_PX = 4f
 private const val OEM_BOX_PX = 720f
 
 private const val MIN_STROKE_PX = 3f
+
+/** Wheel centred: the lines run straight back. */
+private const val STRAIGHT_DEG = 0.0
 
 /** Driving-relevant touch target (LAUNCHER_DESIGN §1.2) for the guide-line toggle. */
 private const val TOGGLE_TARGET_DP = 76
