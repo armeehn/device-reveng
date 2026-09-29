@@ -34,6 +34,7 @@ class AisCameraWorker<S : Any>(
     private val signal: Signal? = null,
     private val warmTimeoutMs: Long = WARM_TIMEOUT_MS,
     private val warmPollMs: Long = WARM_POLL_MS,
+    private val noFramesMs: Long = NO_FRAMES_MS,
     private val cameraIndex: Int = AisCamera.REVERSE_CAMERA_INDEX,
 ) {
     /**
@@ -114,6 +115,7 @@ class AisCameraWorker<S : Any>(
             deliver(state)
             if (state !is AisCamera.State.Failed && signal != null) {
                 watchFormat(surfaces, signal, openedRow, mine, deliver)
+                checkFrames(surfaces, signal, mine, deliver, NO_FRAME_REOPENS)
             }
         }
     }
@@ -175,6 +177,37 @@ class AisCameraWorker<S : Any>(
         camera.close()
     }
 
+    /**
+     * A stream that draws nothing [noFramesMs] after the open is closed, nudged and reopened, up
+     * to [left] more times. One cold boot in three opened on a row read while the chip was still
+     * locking: no frame came, and the row never changed for [watchFormat] to catch (car,
+     * 2026-09-29). Stock waits for five equal reads before its open; this also covers any other
+     * dead start.
+     */
+    private fun checkFrames(surfaces: List<S>, signal: Signal, mine: Int, deliver: (AisCamera.State) -> Unit, left: Int) {
+        if (left == 0) {
+            return
+        }
+
+        timer.schedule({
+            worker.execute {
+                if (generation != mine || camera.frames(AisCamera.SURFACE_SLOT) != 0) {
+                    return@execute
+                }
+
+                Log.i(TAG, "no frames after $noFramesMs ms: reopening")
+                camera.close()
+                signal.redetect()
+                Thread.sleep(REOPEN_DELAY_MS)
+                val state = camera.openAll(surfaces, cameraIndex)
+                deliver(state)
+                if (state !is AisCamera.State.Failed) {
+                    checkFrames(surfaces, signal, mine, deliver, left - 1)
+                }
+            }
+        }, noFramesMs, TimeUnit.MILLISECONDS)
+    }
+
     /** Frames drawn so far (null when nothing streams), asked on the worker like every other call. */
     fun frames(slot: Int = AisCamera.SURFACE_SLOT, onFrames: (Int?) -> Unit) {
         val mine = generation
@@ -210,6 +243,12 @@ class AisCameraWorker<S : Any>(
         /** Detection reported ~15 s after the redetect on the bench; 20 s leaves room. */
         private const val WARM_TIMEOUT_MS = 20_000L
         private const val WARM_POLL_MS = 500L
+
+        /** How long a fresh stream may draw nothing before [checkFrames] reopens it. */
+        private const val NO_FRAMES_MS = 1_500L
+
+        /** Reopens for a stream with no frames before the picture is left as it is. */
+        private const val NO_FRAME_REOPENS = 2
 
         /** Stock's pause between the close and the reopen on a row change. */
         private const val REOPEN_DELAY_MS = 150L
