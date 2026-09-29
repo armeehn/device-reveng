@@ -74,6 +74,18 @@ class McuStateExportTest {
     }
 
     @Test
+    fun carSettingsMapIsAnObjectByName() {
+        // The box's 0x62 report carries a Map; walked by reflection, a LinkedHashMap's nodes point
+        // at each other and the export recursed until the launcher died (car, 2026-09-28).
+        val state = CarSettingsState(linkedMapOf(CarSetting.AUTO_LOCK_SPEED to 1, CarSetting.SMART_DOOR_UNLOCK to 0))
+        export.onCanSignal(CanSignal.CarSettings(state), atMs = 5L)
+
+        val values = JSONObject(client().readLine()).getJSONObject("state").getJSONObject("values")
+        assertEquals(1, values.getInt("AUTO_LOCK_SPEED"))
+        assertEquals(0, values.getInt("SMART_DOOR_UNLOCK"))
+    }
+
+    @Test
     fun takenPortLeavesTheLauncherStanding() {
         // MainActivity.onCreate calls start(); an unguarded bind took the whole launcher down
         // when a second build held the port (farm, 2026-09-22).

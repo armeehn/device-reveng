@@ -126,7 +126,7 @@ class McuStateExport(
         .put(AT_MS, now())
 
     private fun publishFields(event: String, value: Any, key: String = event) {
-        publish(key, fields(value, envelope(event)))
+        guarded(event) { publish(key, fields(value, envelope(event))) }
     }
 
     override fun onSysEvent(event: McuOwnerProtocol.SysEvent) = publishFields("sysEvent", event)
@@ -152,7 +152,19 @@ class McuStateExport(
     /** Sealed-type events: the subclass name is the [TYPE] and part of the replay key. */
     private fun publishTyped(event: String, value: Any) {
         val type = value.javaClass.simpleName
-        publish("$event/$type", fields(value, envelope(event).put(TYPE, type)))
+        guarded("$event/$type") { publish("$event/$type", fields(value, envelope(event).put(TYPE, type))) }
+    }
+
+    /**
+     * The export is a diagnostic on the MCU callback thread: a value it cannot walk loses its
+     * line, never the launcher. StackOverflowError is an Error, hence Throwable, not Exception.
+     */
+    private inline fun guarded(key: String, block: () -> Unit) {
+        try {
+            block()
+        } catch (t: Throwable) {
+            Log.w(TAG, "state export dropped $key: $t")
+        }
     }
 
     /**
@@ -172,11 +184,15 @@ class McuStateExport(
         return into
     }
 
+    private fun jsonKey(k: Any?): String = if (k is Enum<*>) k.name else k.toString()
+
     private fun jsonValue(v: Any?): Any = when (v) {
         null -> JSONObject.NULL
         is Boolean, is Number, is String -> v
         is Enum<*> -> v.name
         is Collection<*> -> JSONArray(v.map(::jsonValue))
+        // By key name: walked by reflection, a LinkedHashMap's nodes point at each other.
+        is Map<*, *> -> JSONObject().also { o -> v.forEach { (k, value) -> o.put(jsonKey(k), jsonValue(value)) } }
         else -> fields(v, JSONObject())
     }
 }
