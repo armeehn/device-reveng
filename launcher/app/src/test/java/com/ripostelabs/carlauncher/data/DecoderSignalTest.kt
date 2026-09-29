@@ -15,11 +15,15 @@ import org.junit.Test
  */
 class DecoderSignalTest {
 
+    // Only the camera's own format is a lock. After a restart the chip sits at 11: a valid row,
+    // so the old 1..13 test skipped the warm-up, and the stream came up grey and late (car,
+    // 2026-09-29). The warm-up's c1 + v7 is what sets 7.
     @Test
-    fun aTableRowIsALock() {
+    fun onlyTheCameraFormatIsALock() {
         assertTrue(DecoderSignal.isLocked("7"))
-        assertTrue(DecoderSignal.isLocked("1\n"))
-        assertTrue(DecoderSignal.isLocked("13"))
+        assertTrue(DecoderSignal.isLocked("7\n"))
+        assertFalse(DecoderSignal.isLocked("11"))
+        assertFalse(DecoderSignal.isLocked("1"))
     }
 
     @Test
@@ -29,6 +33,15 @@ class DecoderSignalTest {
         assertFalse(DecoderSignal.isLocked("218"))
         assertFalse(DecoderSignal.isLocked(""))
         assertFalse(DecoderSignal.isLocked(null))
+    }
+
+    // The service calls any row a lock, so its answer cannot decide the warm-up.
+    @Test
+    fun theServiceDoesNotDecideTheLock() {
+        DecoderSignal.service = FakeDecoder(lock = true)
+        DecoderSignal.status = { "11" }
+
+        assertFalse(DecoderSignal.locked())
     }
 
     private class FakeDecoder(private val lock: Boolean?) : CarDecoder {
@@ -42,6 +55,7 @@ class DecoderSignalTest {
     fun noService() {
         DecoderSignal.service = null
         DecoderSignal.shell = DecoderSignal.ROOT
+        DecoderSignal.status = DecoderSignal.ROOT_STATUS
     }
 
     // The lock goes through root even with the service bound: its sequence is stock's r, c1, v0,
@@ -53,6 +67,7 @@ class DecoderSignalTest {
         DecoderSignal.service = svc
         val ran = mutableListOf<String>()
         DecoderSignal.shell = { ran += it }
+        DecoderSignal.status = { "7" }
 
         assertTrue(DecoderSignal.locked())
         DecoderSignal.forceStreamable()
@@ -64,12 +79,5 @@ class DecoderSignalTest {
             val writes = Regex("printf (\\w+) > /sys/pr2000/pr2000").findAll(command).map { it.groupValues[1] }.toList()
             assertEquals(listOf("c1", "v7"), writes)
         }
-    }
-
-    @Test
-    fun anUnlockedServiceSaysSo() {
-        DecoderSignal.service = FakeDecoder(lock = false)
-
-        assertFalse(DecoderSignal.locked())
     }
 }
