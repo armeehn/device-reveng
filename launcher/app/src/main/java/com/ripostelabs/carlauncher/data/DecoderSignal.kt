@@ -5,10 +5,10 @@ import com.ripostelabs.carlauncher.carlib.CarDecoder
 import com.ripostelabs.carlauncher.carlib.RootShell
 
 /**
- * The PR2000's signal lock for [AisCameraWorker]'s warm-up: through the car service when one
- * is bound ([service], API 4), else through the root shell.
+ * The PR2000's signal lock for [AisCameraWorker]'s warm-up, read and written through the root
+ * shell.
  *
- *     locked()          cat /sys/camera_status/camera_status ─▶ 1..13 (a libais_pr2000 size row)
+ *     locked()          cat /sys/camera_status/camera_status ─▶ 7, the camera's own format
  *     forceStreamable() c1 + v7 to /sys/pr2000/pr2000 ─▶ status 7 at once (AHD 720p30)
  *     redetect()        the same: the lock is the only nudge that works on this kernel
  *
@@ -24,8 +24,11 @@ object DecoderSignal : AisCameraWorker.Signal {
     private const val DECODER_NODE = ReverseCameraDecoder.PR2000_NODE
     private const val WRITABLE_PROP = "sys.pr2000.writable"
 
-    /** libais_pr2000.so accepts status - 1 in 0..12 (`cmp w8, #0xc`), else 0 x 0. */
-    private val SIZED_STATUS = 1..13
+    /**
+     * The status [CAMERA_FORMAT] sets: libais_pr2000.so's row 7, 1280x720. Any other row sizes a
+     * stream too, but the wrong one: the chip boots at 11 and the picture came up grey.
+     */
+    private const val CAMERA_STATUS = 7
 
     private const val TAG = "DecoderSignal"
 
@@ -45,18 +48,25 @@ object DecoderSignal : AisCameraWorker.Signal {
     @Volatile
     var shell: (String) -> Unit = ROOT
 
+    /** Reads camera_status through root; null when the read fails. */
+    val ROOT_STATUS: () -> String? = {
+        val result = RootShell.exec("cat $STATUS_NODE")
+        if (result.ok) result.stdout else null
+    }
+
+    /** Where [locked] reads the status: [ROOT_STATUS] on the unit, a stub in tests. */
+    @Volatile
+    var status: () -> String? = ROOT_STATUS
+
     /** The car service's decoder once MainActivity binds it; null keeps the root shell. */
     @Volatile
     var service: CarDecoder? = null
 
-    /** True for a status the AIS server can size a stream from. */
-    fun isLocked(status: String?): Boolean = status?.trim()?.toIntOrNull() in SIZED_STATUS
+    /** True only for the camera's own format; see [CAMERA_STATUS]. */
+    fun isLocked(status: String?): Boolean = status?.trim()?.toIntOrNull() == CAMERA_STATUS
 
-    override fun locked(): Boolean {
-        service?.decoderLocked()?.let { return it }
-        val result = RootShell.exec("cat $STATUS_NODE")
-        return result.ok && isLocked(result.stdout)
-    }
+    // Not through the service: it calls any sized row a lock, 11 included.
+    override fun locked(): Boolean = isLocked(status())
 
     override fun forceStreamable() = lock()
 
