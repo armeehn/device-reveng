@@ -205,6 +205,38 @@ class AisCameraWorkerTest {
         assertEquals(listOf("open", "setSurface", "close", "deleteSurface", "open", "setSurface"), log.toList())
     }
 
+    /** Draws nothing on its first open and 29 frames once reopened, like the car's first cold open. */
+    private class BlankFirst(private val log: MutableList<String>) : AisCamera.Backend<String> {
+        @Volatile private var opens = 0
+
+        override fun load(): String? = null
+        override fun open(cameraIndex: Int): Int { opens++; log += "open"; return AisCamera.OPEN_OK }
+        override fun setSurface(surface: String, slot: Int) { log += "setSurface" }
+        override fun deleteSurface(slot: Int) { log += "deleteSurface" }
+        override fun close() { log += "close" }
+        override fun frameCount(slot: Int): Int = if (opens > 1) 29 else 0
+    }
+
+    // One cold boot in three opened on a row read while the chip was still locking: the stream
+    // ran, no frame ever came, and the row never changed to trigger a reopen (car, 2026-09-29).
+    @Test
+    fun aStreamWithNoFramesIsReopened() {
+        val log: MutableList<String> = Collections.synchronizedList(mutableListOf())
+        val decoder = Decoder(log, locked = true).also { it.format = 7 }
+        val subject = AisCameraWorker(
+            AisCamera(BlankFirst(log)), worker, timer, post = { it() }, signal = decoder,
+            warmPollMs = 1L, noFramesMs = 20L,
+        )
+
+        subject.open("tex") { results += it }
+
+        waitFor { results.size == 2 }
+        assertEquals(
+            listOf("open", "setSurface", "close", "deleteSurface", "redetect", "open", "setSurface"),
+            log.toList(),
+        )
+    }
+
     @Test
     fun noReopenAfterClose() {
         val log: MutableList<String> = Collections.synchronizedList(mutableListOf())
