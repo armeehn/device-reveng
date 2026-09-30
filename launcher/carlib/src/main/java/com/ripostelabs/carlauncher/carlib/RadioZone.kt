@@ -65,6 +65,7 @@ class RadioZone private constructor(
 
     companion object {
         private const val FM_BANKS = 3
+        private const val FIRST_AM_BAND = 3
         private const val EMPTY_TAIL = McuOwnerProtocol.RADIO_FREQ_LIST_SIZE - 5 * McuOwnerProtocol.RADIO_PRESET_COUNT
 
         /** `KEY_RADIO_ZONE_SETTINGS` 1: FM 87.5-107.9 on 200 kHz, AM 530-1710 on 10 kHz. */
@@ -120,8 +121,16 @@ class RadioZone private constructor(
         /** The zone for a `KEY_RADIO_ZONE_SETTINGS` value; anything off the table reads as 0, the vendor default. */
         fun of(id: Int): RadioZone = ZONES.getOrElse(id) { ZONES[0] }
 
-        /** Slot in the 42-entry list for [position] within [band]'s bank list, the vendor's `+ 18` for AM. */
-        fun stationSlot(band: Int, position: Int): Int =
-            if (CarService.isAmBand(band)) AM_SLOT_OFFSET + position else position
+        /**
+         * Slot in the 42-entry list for [position] within [band]'s bank: bank x 6 + position, as
+         * stock's full grid counts it (FreqView.java:163-186). FM1 0-5, FM2 6-11, FM3 12-17,
+         * AM1 18-23, AM2 24-29.
+         */
+        fun stationSlot(band: Int, position: Int): Int {
+            if (CarService.isAmBand(band)) {
+                return AM_SLOT_OFFSET + (band - FIRST_AM_BAND) * McuOwnerProtocol.RADIO_PRESET_COUNT + position
+            }
+            return maxOf(0, band) * McuOwnerProtocol.RADIO_PRESET_COUNT + position
+        }
     }
 }
