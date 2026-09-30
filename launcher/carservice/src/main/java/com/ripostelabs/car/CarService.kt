@@ -68,12 +68,19 @@ class CarService : Service() {
 
     private val binder: CarBinder by lazy { CarBinder(Gate(::held), listeners, power, Process.myUid(), host, SysfsDecoder(), nav) }
 
+    // The vendor IEventService subset over the same owner, served by EventCompatService.
+    private val events: EventCalls by lazy { EventCalls(Gate(::held), host, power, binder::reversing) { Log.w(TAG, it) } }
+
     override fun onCreate() {
         super.onCreate()
         Log.i(TAG, "up as uid ${Process.myUid()}")
 
-        host = OwnerHost(this) { binder.publish(it) }
+        host = OwnerHost(this) {
+            binder.publish(it)
+            events.observe(it)
+        }
         host.open()
+        EventHub.calls = events
 
         // Clients hear state changes at once and the frame counters about once a second.
         val pacer = StatusPacer()
@@ -89,6 +96,7 @@ class CarService : Service() {
     override fun onBind(intent: Intent?): IBinder = binder
 
     override fun onDestroy() {
+        EventHub.calls = null
         scope.cancel()
         host.close()
         callbacks.kill()

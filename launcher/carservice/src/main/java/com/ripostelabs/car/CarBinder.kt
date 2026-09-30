@@ -225,6 +225,9 @@ class CarBinder(
 
     private fun reverse() = ReverseState(line, decoder.mode(), decoder.signal())
 
+    /** The reverse line for the vendor subset ([EventCalls]), which answers callers without READ. */
+    internal fun reversing() = line
+
     // A dead client is dropped here; RemoteCallbackList also drops it on its binder death.
     private fun broadcast(action: (ICarListener) -> Unit) {
         val dead = mutableListOf<ICarListener>()
