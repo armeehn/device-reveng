@@ -9,7 +9,12 @@ import android.util.Log
  *               sys.acc.state 0 (EventService.java:437-443): ais_server's sleep gate closes
  *               wake_unlock PowerManagerService.Display: riposte-ais.sh took it for ais_server,
  *               and while it is held the kernel never suspends (car, 2026-09-26 05:19:10)
- *     leave()   the camera gates first, then [decoder], then Utils.accOn (:165-175): airplane
+ *               USB: a peripheral port turns host (stock's port is always host), then
+ *               sys.usb_power 1 (EventService.java:3556, vendor init: /sys/touch_type/usb_power)
+ *               A peripheral dwc3 facing zero's adb holds the `4e00000.ssusb` wakeup source,
+ *               so the kernel never suspended and the MCU cold-booted the unit (car,
+ *               2026-09-30 10:46:12). The stored role (persist.riposte.usb.role) is untouched.
+ *     leave()   sys.usb_power 0 (:3470) and the peripheral role back, then the camera gates, then [decoder], then Utils.accOn (:165-175): airplane
  *               off, location on, BT on; wifi only if it was on (setAccWakeUp, :3456-3460)
  *     darken()  a sleep key: PowerManager.goToSleep, a no-op on a dark panel
  *
@@ -24,13 +29,19 @@ class AccStandby(
     @Volatile
     private var wifiWasOn = true
 
+    /** The port's role before [enter]; [leave] puts PERIPHERAL back once. */
+    @Volatile
+    private var usbWas = UsbRole.UNKNOWN
+
     override fun enter() {
         wifiWasOn = shell(WIFI_STATE).out.firstOrNull()?.trim() != WIFI_OFF
         run(RADIOS_OFF)
         run(CAMERA_OFF)
+        usbSleep()
     }
 
     override fun leave() {
+        usbWake()
         run(CAMERA_ON)
         decoder()
         run(RADIOS_ON)
@@ -40,6 +51,27 @@ class AccStandby(
     }
 
     override fun darken() = run(DARKEN)
+
+    /** The port faces host with its power cut, so its wakeup source lets go. */
+    private fun usbSleep() {
+        usbWas = UsbRole.read(shell)
+        if (usbWas == UsbRole.PERIPHERAL) {
+            run(USB_HOST)
+        }
+
+        run(USB_POWER_OFF)
+    }
+
+    /** Power first, then the role the port had: zero's adb on a bench image. */
+    private fun usbWake() {
+        run(USB_POWER_ON)
+        if (usbWas != UsbRole.PERIPHERAL) {
+            return
+        }
+
+        usbWas = UsbRole.UNKNOWN
+        run(USB_PERIPHERAL)
+    }
 
     private fun run(command: String) {
         val result = shell(command)
@@ -63,5 +95,13 @@ class AccStandby(
             "settings put secure location_mode 3; svc bluetooth enable"
         const val WIFI_ON = "svc wifi enable"
         const val DARKEN = "input keyevent KEYCODE_SLEEP"
+
+        /** Stock's sleep and wake values (EventService.java:3556, :3470). */
+        const val USB_POWER_OFF = "setprop sys.usb_power 1"
+        const val USB_POWER_ON = "setprop sys.usb_power 0"
+
+        /** The node only, never [UsbRole.ROLE_PROP]: init would replay a standby role at boot. */
+        const val USB_HOST = "printf host > ${UsbRole.MODE_NODE}"
+        const val USB_PERIPHERAL = "setprop sys.usb.config adb; printf peripheral > ${UsbRole.MODE_NODE}"
     }
 }
