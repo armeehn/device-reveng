@@ -17,6 +17,9 @@ import android.util.Log
  *  BtCarKit ─ hfp() ─▶ onHfp ──▶ 0B n           (on change; held while a CarPlay call is up)
  *           ─ answer ─▶ beforeAnswer ─▶ 4C 0A ─▶ acceptCall
  *           ─ hangUp ─▶ beforeHangUp ─▶ 4C 14 ─ 300 ms ─▶ rejectCall / terminateCall
+ *           ─ mic    ─▶ beforeMicMute ─▶ 4C 14 ─▶ setMicrophoneMute          (RAV4-164)
+ *           ─ audio  ─▶ beforeAudioSwitch ─▶ 4C 1E ─▶ connect/disconnectAudio
+ *           ─ tick   ─▶ onTick ─▶ 3D mm ss         (each second of an active call)
  * ```
  *
  * eventcenter also sets `sys.zxw.bt.call` and lifts standby / black screen on >= 4
@@ -35,6 +38,9 @@ class BtCallMcu(
 
     /** The last HFP code the MCU got; null until the first send. */
     private var lastSent: Int? = null
+
+    /** The last speaking second the MCU got; null between calls. */
+    private var lastTick: Int? = null
 
     /**
      * The HFP state as [BtCarKitMap.hfp] numbers it. A repeat sends nothing; a CarPlay call
@@ -59,6 +65,29 @@ class BtCallMcu(
     fun beforeHangUp() {
         mcu.send(McuOwnerProtocol.btMute(McuOwnerProtocol.BT_MUTE_HANG_UP))
         sleep(HANG_UP_SETTLE_MS)
+    }
+
+    /** RAV4-164: `onSendMuteToMcu(20)` then `muteOrUnmuteMic()` (EventHandle.java:41-43). */
+    fun beforeMicMute() {
+        mcu.send(McuOwnerProtocol.btMute(McuOwnerProtocol.BT_MUTE_MIC))
+    }
+
+    /** RAV4-164: `onSendMuteToMcu(30)` then `switchSoundCarOrPhone()` (EventHandle.java:37-38). */
+    fun beforeAudioSwitch() {
+        mcu.send(McuOwnerProtocol.btMute(McuOwnerProtocol.BT_MUTE_AUDIO_SWITCH))
+    }
+
+    /**
+     * RAV4-164: the speaking timer, `3D mm ss` (BTService.java:177), each new second of an active
+     * call. null = no call up, which re-arms the next call's first second.
+     */
+    fun onTick(speakingSec: Int?) {
+        if (speakingSec == lastTick) {
+            return
+        }
+        lastTick = speakingSec
+        speakingSec ?: return
+        mcu.send(McuOwnerProtocol.speakingTimer(speakingSec))
     }
 
     companion object {

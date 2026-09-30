@@ -9,9 +9,11 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.SharedPreferences
+import android.media.AudioManager
 import android.util.Log
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -58,6 +60,8 @@ class BtCarKit(
     context: Context,
     private val callMcu: BtCallMcu? = null,
     private val carPlay: () -> CarPlayState = { CarPlayState() },
+    // RAV4-164: the driver's auto-answer choice, read at each ring.
+    private val autoAnswer: () -> AutoAnswer = { AutoAnswer.OFF },
 ) {
 
     private val appContext = context.applicationContext
@@ -78,6 +82,10 @@ class BtCarKit(
     private var hfAudio = HfAudio.OFF
 
     private val autoConnect = BtAutoConnect()
+    private val audio: AudioManager? = appContext.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+
+    /** RAV4-164: ticks the speaking timer (screen and MCU) once a second while a call is active. */
+    private var ticker: ScheduledFuture<*>? = null
     private val prefs: SharedPreferences = appContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
     private val worker: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor { r ->
@@ -234,6 +242,32 @@ class BtCarKit(
         hf.method("dial", BluetoothDevice::class.java, String::class.java).invoke(hf, device, number)
     }
 
+    /** RAV4-164: the phone's last number again. A null number is AOSP's redial (`AT+BLDN`). */
+    fun redial() = hfCall { hf, device ->
+        hf.method("dial", BluetoothDevice::class.java, String::class.java).invoke(hf, device, null)
+    }
+
+    /** RAV4-164: mute or open the car's mic on the SCO path, the amp muted first as stock does. */
+    fun mic(state: Mic) {
+        worker.execute {
+            callMcu?.beforeMicMute()
+            setMic(state)
+        }
+    }
+
+    /** RAV4-164: move the call's audio to the handset (SCO down) or back to the car (SCO up). */
+    fun audioTo(target: CallAudio) = hfCall { hf, device ->
+        callMcu?.beforeAudioSwitch()
+        val verb = if (target == CallAudio.CAR) "connectAudio" else "disconnectAudio"
+        hf.method(verb, BluetoothDevice::class.java).invoke(hf, device)
+    }
+
+    private fun setMic(state: Mic) {
+        val muted = state == Mic.MUTED
+        runCatching { audio?.isMicrophoneMute = muted }.onFailure { Log.w(TAG, "mic mute failed", it) }
+        _snapshot.value = _snapshot.value.copy(micMuted = muted)
+    }
+
     /** RAV4-159: one touch tone of the active call ([Dtmf]). */
     fun dtmf(key: Char) = hfCall { hf, device ->
         Dtmf.send(hf, device, key)
@@ -287,9 +321,54 @@ class BtCarKit(
 
         val hfp = BtCarKitMap.hfp(next)
         callMcu?.onHfp(hfp, carPlay().inCall)
+        armAutoAnswer(BtCarKitMap.leadCall(prev.calls)?.state, BtCarKitMap.leadCall(calls)?.state)
+        followTimer(next)
         if (autoConnect.onState(hfp)) {
             connectLastPhone()
         }
+    }
+
+    /** RAV4-164: a fresh ring arms the driver's auto-answer delay ([AutoAnswer]). */
+    private fun armAutoAnswer(prev: Int?, lead: Int?) {
+        val delay = autoAnswer().arm(prev, lead) ?: return
+        Log.i(TAG, "auto-answer in $delay ms")
+        worker.schedule({ answerIfRinging() }, delay, TimeUnit.MILLISECONDS)
+    }
+
+    /** Re-read first: the driver may have answered or rejected on the phone in the meantime. */
+    private fun answerIfRinging() {
+        refresh()
+        if (!AutoAnswer.due(BtCarKitMap.leadCall(_snapshot.value.calls)?.state, carPlay().inCall)) {
+            return
+        }
+        answer()
+    }
+
+    /**
+     * RAV4-164: while a call is active, re-publish the view once a second so the screen's timer
+     * runs, and send the MCU its `3D mm ss`. A call's end stops it and opens the mic again, so
+     * the next call does not start muted.
+     */
+    private fun followTimer(s: BtCarKitSnapshot) {
+        if (s.activeSinceMs != null) {
+            if (ticker == null) {
+                ticker = worker.scheduleAtFixedRate({ tick() }, TICK_MS, TICK_MS, TimeUnit.MILLISECONDS)
+            }
+            callMcu?.onTick(_vendorView.value.speakingSec)
+            return
+        }
+        ticker?.cancel(false)
+        ticker = null
+        callMcu?.onTick(null)
+        if (s.micMuted && s.calls.isEmpty()) {
+            setMic(Mic.OPEN)
+        }
+    }
+
+    private fun tick() {
+        val view = BtCarKitMap.vendorView(_snapshot.value, System.currentTimeMillis())
+        _vendorView.value = view
+        callMcu?.onTick(view.speakingSec)
     }
 
     private fun connectedDevice(proxy: BluetoothProfile): BluetoothDevice? =
@@ -329,6 +408,9 @@ class BtCarKit(
         /** `BluetoothHeadsetClient.CALL_ACCEPT_NONE` (`:719`). */
         private const val CALL_ACCEPT_NONE = 0
         private const val CALL_CLASS = "android.bluetooth.BluetoothHeadsetClientCall"
+
+        /** The speaking timer's period: one second, as btsuite's own timer (BTService.java:177). */
+        private const val TICK_MS = 1_000L
 
         /** A proxy that has not bound by then is a profile the stack does not run. */
         const val BIND_SETTLE_MS = 5_000L

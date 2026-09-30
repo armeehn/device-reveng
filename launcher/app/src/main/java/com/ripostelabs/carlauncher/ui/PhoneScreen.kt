@@ -29,6 +29,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -48,6 +49,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.ripostelabs.carlauncher.carlib.BtCarKit
+import com.ripostelabs.carlauncher.carlib.BtCarKitSnapshot
+import com.ripostelabs.carlauncher.carlib.CallAudio
+import com.ripostelabs.carlauncher.carlib.HfAudio
+import com.ripostelabs.carlauncher.carlib.Mic
 import com.ripostelabs.carlauncher.carlib.CarEvents
 import com.ripostelabs.carlauncher.carlib.HfpState
 import com.ripostelabs.carlauncher.carlib.IntentSpec
@@ -58,6 +63,7 @@ import com.ripostelabs.carlauncher.carlib.VendorCallLog
 import com.ripostelabs.carlauncher.ui.theme.DISABLED_ALPHA
 import com.ripostelabs.carlauncher.ui.theme.carShape
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.withContext
 
 /**
@@ -137,6 +143,12 @@ fun PhoneScreen(
         if (carKit != null) { feedback?.tap(); carKit.dial(number) } else send(VendorBt.dial(number))
     // RAV4-159: in a call the pad sends tones. 0.2 only: btsuite's own call window has its pad.
     fun tone(key: Char) = carKit?.dtmf(key)
+    // RAV4-164: redial, mic mute and the car / phone audio switch. 0.2 only, like the tones.
+    fun redial() { feedback?.tap(); carKit?.redial() }
+    fun mic(state: Mic) { feedback?.tap(); carKit?.mic(state) }
+    fun audioTo(target: CallAudio) { feedback?.tap(); carKit?.audioTo(target) }
+    val kitFlow = remember(carKit) { carKit?.snapshot ?: MutableStateFlow(BtCarKitSnapshot()) }
+    val kit by kitFlow.collectAsState()
 
     // Seed the device name: btsuite only re-sends it on request (control key 8).
     LaunchedEffect(Unit) {
@@ -177,13 +189,18 @@ fun PhoneScreen(
                     onAnswer = ::answer,
                     onHangUp = ::hangUp,
                 )
+                if (carKit != null && vendor.hfp == HfpState.ACTIVE_CALL) {
+                    InCallControls(kit = kit, onMic = ::mic, onAudio = ::audioTo)
+                }
                 ParkedOnly(
                     feature = "The dial pad",
                     modifier = Modifier.weight(1f),
                 ) {
                     DialPad(
                         state = vendor.hfp,
+                        redial = if (carKit != null) PhoneLogic.Redial.SUPPORTED else PhoneLogic.Redial.UNSUPPORTED,
                         onCall = ::dial,
+                        onRedial = ::redial,
                         onTone = ::tone,
                         modifier = Modifier.weight(1f),
                     )
@@ -332,11 +349,43 @@ private fun CallButtons(
     }
 }
 
+/**
+ * RAV4-164: Mute and the car / phone audio switch during an active call (0.2). Each label says
+ * what a press does next: "Unmute" while muted, "Use phone" while the car carries the call.
+ */
+@Composable
+private fun InCallControls(kit: BtCarKitSnapshot, onMic: (Mic) -> Unit, onAudio: (CallAudio) -> Unit) {
+    val inCar = kit.hfAudio == HfAudio.ON
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(IN_CALL_BUTTON_HEIGHT_DP.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        BigButton(
+            label = if (kit.micMuted) "Unmute" else "Mute",
+            enabled = true,
+            color = MaterialTheme.colorScheme.secondary,
+            onClick = { onMic(if (kit.micMuted) Mic.OPEN else Mic.MUTED) },
+            modifier = Modifier.weight(1f),
+        )
+        BigButton(
+            label = if (inCar) "Use phone" else "Use car",
+            enabled = true,
+            color = MaterialTheme.colorScheme.secondary,
+            onClick = { onAudio(if (inCar) CallAudio.PHONE else CallAudio.CAR) },
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
 /** Number field with Call beside it, then 3x4 keys. The pad types without a phone; only Call is gated. */
 @Composable
 private fun DialPad(
     state: HfpState?,
+    redial: PhoneLogic.Redial,
     onCall: (String) -> Unit,
+    onRedial: () -> Unit,
     onTone: (Char) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -373,11 +422,12 @@ private fun DialPad(
                     .weight(1f)
                     .fillMaxHeight(),
             )
+            val key = PhoneLogic.callKey(state, number, redial)
             BigButton(
-                label = "Call",
-                enabled = PhoneLogic.canDial(state, number),
+                label = key.label,
+                enabled = PhoneLogic.callEnabled(state, number, key),
                 color = MaterialTheme.colorScheme.primary,
-                onClick = { onCall(number) },
+                onClick = { if (key == PhoneLogic.CallKey.REDIAL) onRedial() else onCall(number) },
                 modifier = Modifier
                     .width(CALL_KEY_WIDTH_DP.dp)
                     .fillMaxHeight(),
@@ -698,3 +748,4 @@ private const val CALL_BUTTON_HEIGHT_DP = 72
 private const val NUMBER_ROW_HEIGHT_DP = 56   // number field + Call: one tap-height row, not two
 private const val CALL_KEY_WIDTH_DP = 160
 private const val VENDOR_BUTTON_HEIGHT_DP = 56
+private const val IN_CALL_BUTTON_HEIGHT_DP = 56   // one row under Hang up; the pad is only tones by then

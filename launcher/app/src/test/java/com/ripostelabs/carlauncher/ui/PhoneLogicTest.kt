@@ -127,4 +127,22 @@ class PhoneLogicTest {
         assertNull(PhoneLogic.telNumber("ext"))
         assertNull(PhoneLogic.telNumber("1-800-FLOWERS"))   // letters: not dialable, never half-dialled
     }
+
+    @Test
+    fun `an empty number turns Call into Redial where the car kit can redial`() {
+        assertEquals(PhoneLogic.CallKey.REDIAL, PhoneLogic.callKey(HfpState.CONNECTED, "", PhoneLogic.Redial.SUPPORTED))
+        assertEquals(PhoneLogic.CallKey.CALL, PhoneLogic.callKey(HfpState.CONNECTED, "", PhoneLogic.Redial.UNSUPPORTED))
+        assertEquals(PhoneLogic.CallKey.CALL, PhoneLogic.callKey(HfpState.CONNECTED, "911", PhoneLogic.Redial.SUPPORTED))
+        assertEquals("Redial", PhoneLogic.CallKey.REDIAL.label)
+        assertEquals("Call", PhoneLogic.CallKey.CALL.label)
+    }
+
+    @Test
+    fun `redial needs a connected idle phone, call a dialable number too`() {
+        assertTrue(PhoneLogic.callEnabled(HfpState.CONNECTED, "", PhoneLogic.CallKey.REDIAL))
+        assertFalse(PhoneLogic.callEnabled(HfpState.READY, "", PhoneLogic.CallKey.REDIAL))
+        assertFalse(PhoneLogic.callEnabled(HfpState.ACTIVE_CALL, "", PhoneLogic.CallKey.REDIAL))
+        assertFalse(PhoneLogic.callEnabled(HfpState.CONNECTED, "", PhoneLogic.CallKey.CALL))
+        assertTrue(PhoneLogic.callEnabled(HfpState.CONNECTED, "911", PhoneLogic.CallKey.CALL))
+    }
 }

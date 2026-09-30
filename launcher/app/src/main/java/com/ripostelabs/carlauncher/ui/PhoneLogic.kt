@@ -116,6 +116,24 @@ internal object PhoneLogic {
         return "$head · $party"
     }
 
+    /** RAV4-164: whether this slot's stack can redial (the car kit's HF `dial(null)`; btsuite's has no broadcast for it). */
+    enum class Redial { SUPPORTED, UNSUPPORTED }
+
+    /** RAV4-164: what the pad's Call key does. With nothing typed it redials, as stock's `DH` (EventHandle.java:61-63). */
+    enum class CallKey(val label: String) {
+        CALL("Call"),
+        REDIAL("Redial"),
+    }
+
+    fun callKey(state: HfpState?, number: String, redial: Redial): CallKey =
+        if (number.isEmpty() && redial == Redial.SUPPORTED && padMode(state) == PadMode.DIAL) CallKey.REDIAL else CallKey.CALL
+
+    /** Redial needs only a connected idle phone; Call also needs a dialable number. */
+    fun callEnabled(state: HfpState?, number: String, key: CallKey): Boolean = when (key) {
+        CallKey.REDIAL -> state == HfpState.CONNECTED
+        CallKey.CALL -> canDial(state, number)
+    }
+
     /** RAV4-162: the call list's tabs, as stock's history page has them (all / missed / dialled). */
     enum class CallTab(val label: String, val type: VendorCallLog.CallType?) {
         ALL("All", null),

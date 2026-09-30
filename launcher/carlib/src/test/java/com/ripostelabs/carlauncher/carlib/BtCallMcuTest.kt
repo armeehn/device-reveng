@@ -59,4 +59,42 @@ class BtCallMcuTest {
         assertEquals(frame(0x0D, 0x0A, 0x03, 0x4C, 0x14, 0x9C, 0x00), sent[1])
         assertEquals(listOf(BtCallMcu.HANG_UP_SETTLE_MS), naps)
     }
+
+    /** RAV4-164, EventHandle.java:37-43: mic mute sends `4C 14`, the car / phone switch `4C 1E`. */
+    @Test
+    fun micMuteAndAudioSwitchMuteTheAmpFirst() {
+        mcu.beforeMicMute()
+        mcu.beforeAudioSwitch()
+        assertEquals(
+            listOf(frame(0x0D, 0x0A, 0x03, 0x4C, 0x14, 0x9C, 0x00), frame(0x0D, 0x0A, 0x03, 0x4C, 0x1E, 0x92, 0x00)),
+            sent,
+        )
+        assertTrue(naps.isEmpty())
+    }
+
+    /**
+     * RAV4-164: the speaking timer as `3D mm ss` (BTService.java:1661-1662), once per new second.
+     * 75 s = `3D 01 0F` (04 + 3D + 01 + 0F = 0x51, ~ = 0xAE). Minutes wrap at the hour as stock's
+     * `% 60` does: 3725 s = `3D 02 05`.
+     */
+    @Test
+    fun speakingTimerGoesOutOncePerSecond() {
+        mcu.onTick(75)
+        mcu.onTick(75)
+        mcu.onTick(null)
+        mcu.onTick(3725)
+        assertEquals(
+            listOf(frame(0x0D, 0x0A, 0x04, 0x3D, 0x01, 0x0F, 0xAE, 0x00), frame(0x0D, 0x0A, 0x04, 0x3D, 0x02, 0x05, 0xB7, 0x00)),
+            sent,
+        )
+    }
+
+    /** A new call starts its timer at zero again, and zero is sent even though the last call ended on it. */
+    @Test
+    fun aNewCallSendsItsFirstSecond() {
+        mcu.onTick(0)
+        mcu.onTick(null)
+        mcu.onTick(0)
+        assertEquals(2, sent.size)
+    }
 }
