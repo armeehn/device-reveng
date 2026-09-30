@@ -83,12 +83,12 @@ class VehicleStateTest {
     }
 
     @Test
-    fun `speed is never folded in`() {
+    fun `the 0x17 fuel chart is not read as speed`() {
         val state = VehicleState()
 
-        state.onSignal(CanSignal.SpeedCandidate(source = "0x17", raw = 880, kmh = 88.0), t0)
+        state.onSignal(CanSignal.FuelChart(bars = listOf(88.0), unit = CanSignal.FuelUnit.L_PER_100KM), t0)
 
-        // A real drive proved 0x32 is not road speed. It must not reach a screen as fact.
+        // 0x17 was once read as speed. Stock says fuel chart; it must not reach a tile as speed.
         assertFalse(state.hasData(t0))
         assertTrue(state.tiles(t0).isEmpty())
     }
