@@ -1,6 +1,9 @@
 package com.ripostelabs.carlauncher
 
 import android.Manifest // v2.5
+import android.content.IntentFilter
+import android.content.Context
+import android.content.BroadcastReceiver
 import android.content.Intent
 import android.media.AudioManager
 import android.content.pm.PackageManager // v2.5
@@ -87,6 +90,7 @@ import com.ripostelabs.carlauncher.carlib.Gear
 import com.ripostelabs.carlauncher.carlib.PowerKeyMode
 import com.ripostelabs.carlauncher.carlib.SysVar // v0.4.9 vendor hidden-apps list
 import com.ripostelabs.carlauncher.carlib.VendorBt
+import com.ripostelabs.carlauncher.carlib.BtDeviceCommand
 import com.ripostelabs.carlauncher.carlib.VendorBtService
 import com.ripostelabs.carlauncher.carlib.VendorBtState
 import com.ripostelabs.carlauncher.carlib.WheelGesture
@@ -214,6 +218,17 @@ class MainActivity : ComponentActivity() {
 
     /** Riposte OS 0.2 only: the phone through the stock stack's car-kit profiles. */
     private var btCarKit: BtCarKit? = null
+
+    /** RAV4-178: the suite Bluetooth app's connect / disconnect / forget, run on the car kit. */
+    private val btDeviceReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val command = BtDeviceCommand.parse(
+                intent.getStringExtra(BtDeviceCommand.EXTRA_OP),
+                intent.getStringExtra(BtDeviceCommand.EXTRA_ADDRESS),
+            ) ?: return
+            btCarKit?.device(command)
+        }
+    }
 
     /** Riposte OS 0.2 only: the PAN proxy behind [PhoneInternet]. */
     private var panLink: AndroidPanLink? = null
@@ -546,8 +561,17 @@ class MainActivity : ComponentActivity() {
                 callMcu = mcuOwner?.let(BtCallMcu::forOwner),
                 carPlay = { carEvents.carplayState.value },
                 autoAnswer = { settingsStore.autoAnswer.value },
+                reconnect = { settingsStore.reconnect.value },
             ).also { kit ->
                 kit.start()
+                // Only an app the driver let near Bluetooth (BLUETOOTH_CONNECT) may send it.
+                registerReceiver(
+                    btDeviceReceiver,
+                    IntentFilter(BtDeviceCommand.ACTION),
+                    Manifest.permission.BLUETOOTH_CONNECT,
+                    null,
+                    Context.RECEIVER_EXPORTED,
+                )
                 // RAV4-152: the Phone screen and the chip name the caller from the phonebook.
                 lifecycleScope.launch {
                     kit.vendorView.collect { v ->
@@ -1702,6 +1726,7 @@ class MainActivity : ComponentActivity() {
         mcuStateExport?.stop()
         carCommandPort?.stop()
         ampVolumeKeys?.stop(applicationContext)
+        btCarKit?.let { runCatching { unregisterReceiver(btDeviceReceiver) } }
         btCarKit?.stop()
         panLink?.stop()
         gatewayHandshake.unregister() // v3.0

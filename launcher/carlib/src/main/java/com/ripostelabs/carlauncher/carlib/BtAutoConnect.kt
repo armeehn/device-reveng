@@ -23,10 +23,14 @@ class BtAutoConnect {
     private var connecting = false
     private var attemptsLeft = 0
 
-    /** The 2 s mark: true = send the first connect. [state] null = nothing known yet. */
-    fun arm(state: HfpState?, carPlay: Boolean): Boolean {
+    /**
+     * The 2 s mark: true = send the first connect. [state] null = nothing known yet.
+     * RAV4-178: [Reconnect.OFF] is stock's "refuse reconnect" (DataManage.java:749): a second
+     * driver's phone left bonded is never reached for.
+     */
+    fun arm(state: HfpState?, carPlay: Boolean, reconnect: Reconnect = Reconnect.LAST_PHONE): Boolean {
         val phoneOn = state != null && state.code >= HfpState.CONNECTED.code
-        if (carPlay || phoneOn) {
+        if (carPlay || phoneOn || reconnect == Reconnect.OFF) {
             return false
         }
         armed = true
@@ -69,5 +73,16 @@ class BtAutoConnect {
 
         /** `postDelayed(autoConnectBT, 2000L)` after the service came up (BTService.java:981-987). */
         const val START_DELAY_MS = 2_000L
+    }
+}
+
+/** RAV4-178: whether the car goes to the last phone at start (Settings > Phone). */
+enum class Reconnect {
+    LAST_PHONE,
+    OFF;
+
+    companion object {
+        /** A stored name; anything unknown keeps stock's behaviour, reconnecting. */
+        fun of(name: String?): Reconnect = entries.firstOrNull { it.name == name } ?: LAST_PHONE
     }
 }

@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ripostelabs.carlauncher.carlib.AutoAnswer
+import com.ripostelabs.carlauncher.carlib.Reconnect
 import com.ripostelabs.carlauncher.data.SettingsStore
 
 /**
@@ -16,10 +17,11 @@ fun PhoneSettingsScreen(
     onBack: () -> Unit,
 ) {
     val autoAnswer by settingsStore.autoAnswer.collectAsStateWithLifecycle()
+    val reconnect by settingsStore.reconnect.collectAsStateWithLifecycle()
 
     SettingsScaffold(
         title = "Phone",
-        subtitle = "How the car answers the paired phone",
+        subtitle = "How the car answers and finds the paired phone",
         onBack = onBack,
     ) {
         SettingsSection(title = "Calls") {
@@ -29,6 +31,15 @@ fun PhoneSettingsScreen(
                 options = AUTO_ANSWER_OPTIONS,
                 onSelect = { mode -> settingsStore.setAutoAnswer(mode) },
                 description = "Answers a ringing phone on its own. Answering or rejecting first cancels it.",
+            )
+        }
+        // RAV4-178: stock's "refuse reconnect", so a second driver's bonded phone does not grab the car.
+        SettingsSection(title = "Connection") {
+            ToggleSetting(
+                label = "Reconnect to the last phone",
+                checked = reconnect == Reconnect.LAST_PHONE,
+                onChange = { on -> settingsStore.setReconnect(if (on) Reconnect.LAST_PHONE else Reconnect.OFF) },
+                description = "At start the car calls the phone it last had. Off: it waits for a phone to connect.",
             )
         }
     }
