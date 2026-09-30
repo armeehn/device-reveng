@@ -107,6 +107,8 @@ object SettingKeys {
     const val SLEEP_TIME = "SYS_SLEEP_TIME"
     /** 0/1 factory flag "ACC off delay", bit1 of factory MCU byte 8. */
     const val POWER_OFF_DELAY = "Sys_Power_Off_Delay"
+    /** 0/1: a short POWER press blacks the screen (0) or enters standby (1, our default). */
+    const val POWER_KEY_SET = "Sys_Power_key_set"
     /** 0/1, default 1: blank the screen when ACC changes. */
     const val SCREEN_OFF_WHEN_ACC_CHANGE = "Sys_Screen_Off_When_Acc_Change"
     /** Seconds in {0, 60, 300, 600, 1800}; 0 = never. */

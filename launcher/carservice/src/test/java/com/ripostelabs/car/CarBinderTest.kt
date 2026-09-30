@@ -48,6 +48,7 @@ class CarBinderTest {
         override fun currentSource() = 7
         override fun selectCar(id: String) { calls += "car $id" }
         override fun send(frame: ByteArray) { calls += "send ${frame.size}" }
+        override fun setPowerKey(mode: Int) { calls += "power key $mode" }
     }
 
     /** Counts what reached the power side, so a refused call can be shown to have done nothing. */
@@ -86,8 +87,8 @@ class CarBinderTest {
         CarBinder(Gate { it in held }, listeners, power, systemUid, link, decoder, nav)
 
     @Test
-    fun apiVersionIsFive() {
-        assertEquals(5, binder().apiVersion())
+    fun apiVersionIsSix() {
+        assertEquals(6, binder().apiVersion())
     }
 
     @Test
@@ -323,6 +324,22 @@ class CarBinderTest {
     fun navBarWithReadOnlyIsRefused() {
         assertThrows(SecurityException::class.java) { binder(READ_PERMISSION).setNavBar(ICarService.NAV_HANDLE, colors) }
         assertTrue(nav.shown.isEmpty())
+    }
+
+    // RAV4-156: the POWER key choice reaches the owner, which then skips its power-off burst.
+    @Test
+    fun powerKeyWithControlReachesTheLink() {
+        binder(CONTROL_PERMISSION).setPowerKey(ICarService.POWER_KEY_SCREEN_OFF)
+
+        assertEquals(listOf("power key ${ICarService.POWER_KEY_SCREEN_OFF}"), link.calls)
+    }
+
+    @Test
+    fun powerKeyWithReadOnlyOrAnUnknownModeIsRefused() {
+        assertThrows(SecurityException::class.java) { binder(READ_PERMISSION).setPowerKey(ICarService.POWER_KEY_STANDBY) }
+        assertThrows(IllegalArgumentException::class.java) { binder(CONTROL_PERMISSION).setPowerKey(9) }
+
+        assertTrue(link.calls.isEmpty())
     }
 
     // Three colours (surface, on-surface, accent) and a known state, or nothing is drawn.

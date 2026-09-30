@@ -103,6 +103,17 @@ fun PowerSettingsScreen(
             }
         }
 
+        SettingsSection(title = "Power key") {
+            OptionSetting(
+                controller = controller,
+                label = "Short press",
+                description = "Screen off keeps the unit running; a touch or any key lights it",
+                key = SettingKeys.POWER_KEY_SET,
+                default = PowerOptions.POWER_KEY_DEFAULT,
+                options = PowerOptions.POWER_KEY,
+            )
+        }
+
         SettingsSection(title = "Screen timeouts") {
             OptionSetting(
                 controller = controller,

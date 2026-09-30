@@ -37,6 +37,7 @@ class RemoteMcuOwnerTest {
         override fun setDecoderMode(mode: Int) { calls += "decoder $mode" }
         override fun decoderSignal(action: Int) { calls += "signal $action" }
         override fun setNavBar(state: Int, colors: IntArray?) { calls += "nav $state ${colors?.size}" }
+        override fun setPowerKey(mode: Int) { calls += "power key $mode" }
     }
 
     /** bindService stand-in: the test decides when the service comes up or dies. */
@@ -129,6 +130,22 @@ class RemoteMcuOwnerTest {
 
         assertEquals(1, binding.binds)
         assertEquals(listOf("startup 2", "car ${CarProfiles.DEFAULT.id}", "open", "register"), svc.calls)
+    }
+
+    // RAV4-156: a choice made before the service is up reaches it on connect; an older service
+    // (no setPowerKey) is never asked, so its owner keeps the power-off burst.
+    @Test
+    fun powerKeyReplaysOnConnectOnlyToANewEnoughService() {
+        remote.start()
+        remote.setPowerKey(PowerKeyMode.SCREEN_OFF)
+        val svc = FakeService(api = RemoteMcuOwner.POWER_KEY_API)
+        binding.connect(svc)
+        binding.die()
+        val old = FakeService(api = RemoteMcuOwner.NAV_API)
+        binding.connect(old)
+
+        assertTrue("power key ${PowerKeyMode.SCREEN_OFF.raw}" in svc.calls)
+        assertTrue(old.calls.none { it.startsWith("power key") })
     }
 
     // The service died and came back (binderDied, then the system reconnects): everything replays.

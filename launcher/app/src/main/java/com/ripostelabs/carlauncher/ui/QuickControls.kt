@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.BrightnessMedium
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Icon
@@ -150,6 +151,7 @@ fun QuickControlsPanel(
     carService: CarService,
     settingsStore: SettingsStore,
     modifier: Modifier = Modifier,
+    onScreenOff: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val settings by settingsStore.settings.collectAsStateSafe(initial = LauncherSettings())
@@ -186,6 +188,16 @@ fun QuickControlsPanel(
                     label = "Bluetooth",
                     modifier = Modifier.weight(1f),
                     onClick = { launchSettings(context, Settings.ACTION_BLUETOOTH_SETTINGS) },
+                )
+            }
+
+            // RAV4-156: stock's pull-down BtnBlackScreen. A touch or any key lights it again.
+            if (onScreenOff != null) {
+                ShortcutChip(
+                    icon = Icons.Filled.PowerSettingsNew,
+                    label = "Screen off",
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = onScreenOff,
                 )
             }
         }

@@ -60,6 +60,7 @@ fun ShadeOverlay(
     settingsStore: SettingsStore,
     enabled: Boolean,
     modifier: Modifier = Modifier,
+    onScreenOff: (() -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
     var open by remember { mutableStateOf(false) }
@@ -154,6 +155,8 @@ fun ShadeOverlay(
                         carService = carService,
                         settingsStore = settingsStore,
                         modifier = Modifier.padding(20.dp),
+                        // The shade closes first, so the next touch wakes the panel, not the shade.
+                        onScreenOff = onScreenOff?.let { off -> { open = false; off() } },
                     )
                     // A visible grab handle telegraphing the drag-up-to-close affordance.
                     Box(

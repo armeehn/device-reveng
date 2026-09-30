@@ -148,6 +148,15 @@ class RemoteMcuOwner(
 
     override fun showNav(state: Int, colors: IntArray): Boolean = at(NAV_API) { it.setNavBar(state, colors) }
 
+    /** Kept for [replay]: the service forgets it when it restarts. */
+    @Volatile
+    private var powerKey: PowerKeyMode? = null
+
+    override fun setPowerKey(mode: PowerKeyMode): Boolean {
+        powerKey = mode
+        return at(POWER_KEY_API) { it.setPowerKey(mode.raw) }
+    }
+
     override fun onNavTouch(action: () -> Unit) {
         navTouch = action
     }
@@ -204,6 +213,9 @@ class RemoteMcuOwner(
         decoder.reset()
         svc.setStartup(FramePack.pack(startup))
         car?.let { svc.selectCar(it.id) }
+        if (api >= POWER_KEY_API) {
+            powerKey?.let { svc.setPowerKey(it.raw) }
+        }
         if (open) {
             svc.openLink()
         } else {
@@ -246,6 +258,9 @@ class RemoteMcuOwner(
 
         /** ICarService.apiVersion that draws the nav bar as a system window. */
         const val NAV_API = 5
+
+        /** ICarService.apiVersion that takes the POWER key choice (RAV4-156). */
+        const val POWER_KEY_API = 6
 
         /** [McuOwner.Status.Failed] reason while the service is down (it restarts, we rebind). */
         const val SERVICE_GONE = "car service gone"

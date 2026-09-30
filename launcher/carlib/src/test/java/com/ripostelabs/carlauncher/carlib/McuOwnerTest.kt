@@ -332,6 +332,27 @@ class McuOwnerTest {
         assertEquals(McuOwnerProtocol.Key.POWER, recorder.panel.single().code)
     }
 
+    /**
+     * RAV4-156: with the black screen chosen, POWER sends no SRC_POWEROFF burst, so the MCU keeps
+     * its source and the amp. The key still reaches the listener, which darkens the panel.
+     */
+    @Test
+    fun powerKeyInScreenOffModeSendsNoPowerOff() {
+        val link = FakeLink(ackNull = true)
+        val recorder = Recorder()
+        val (owner, handshake) = runningOwner(link, recorder, sleep = { })
+        assertTrue(owner.setPowerKey(PowerKeyMode.SCREEN_OFF))
+
+        link.feed(McuSerial.encode(McuOpcode.KEY_EVENT.code, bytes(McuOwnerProtocol.Key.POWER, 0x00)))
+        // VOL+ after it is echoed as `08 00`: once that is written, POWER had its turn.
+        link.feed(McuSerial.encode(McuOpcode.KEY_EVENT.code, bytes(McuOwnerProtocol.Key.VOLUME_UP, 0x00)))
+        waitFor("echo written") { link.written.getOrNull(handshake) }
+        owner.stop()
+
+        assertEquals("only the VOL+ echo went out", handshake + 1, link.written.size)
+        assertEquals(McuOwnerProtocol.Key.POWER, recorder.panel.first().code)
+    }
+
     /** With the camera up (71 reverse bit) MODE is dropped and VOL- still passes, as in onCmdKeyEvent. */
     @Test
     fun reverseDropsAllButAudioAndTrackKeys() {

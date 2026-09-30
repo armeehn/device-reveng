@@ -227,6 +227,21 @@ lay out full screen. The launcher keeps `NavBarPolicy` (hidden over projection, 
 sends the state; a touch comes back through `onNavInteract`. Without a service at 5 the launcher
 draws its own overlay as before.
 
+### POWER key (apiVersion 6)
+
+```aidl
+const int POWER_KEY_SCREEN_OFF = 0;  const int POWER_KEY_STANDBY = 1;
+void setPowerKey(int mode);  // CONTROL; Sys_Power_key_set, standby by default
+```
+
+Stock's hard POWER key always runs `powerOff`, the SRC_POWEROFF burst before standby
+(`EventService.java:2695-2698`). `Sys_Power_key_set` steers its soft Power button: 0 blacks
+the screen, 1 enters standby (`onPowerClicked`, `:13824-13880`). Ours applies the setting to
+the hard key. With SCREEN_OFF the owner skips the burst, so the MCU keeps its source and the
+amp. The launcher then sends `1F 00 01` and draws a black window that a touch or any key
+lifts. The service does not persist the mode. The launcher re-sends it on every bind, and
+standby is the default until then.
+
 ### IEventService compatibility (no apiVersion change)
 
 `EventCompatService` in `com.ripostelabs.car` answers the vendor's `IEventService` binder

@@ -82,6 +82,7 @@ import com.ripostelabs.carlauncher.carlib.McuSleepWake
 import com.ripostelabs.carlauncher.carlib.PlaybackWatch
 import com.ripostelabs.carlauncher.carlib.GatewayHandshake // v3.0
 import com.ripostelabs.carlauncher.carlib.Gear
+import com.ripostelabs.carlauncher.carlib.PowerKeyMode
 import com.ripostelabs.carlauncher.carlib.SysVar // v0.4.9 vendor hidden-apps list
 import com.ripostelabs.carlauncher.carlib.VendorBtService
 import com.ripostelabs.carlauncher.carlib.VendorBtState
@@ -116,12 +117,14 @@ import com.ripostelabs.carlauncher.data.SettingKeys // v2.5 touch beep
 import com.ripostelabs.carlauncher.data.SettingsStore // v0.6
 import com.ripostelabs.carlauncher.data.SystemChrome // v2.5
 import com.ripostelabs.carlauncher.ui.nav.NavBar
+import com.ripostelabs.carlauncher.ui.nav.ScreenOffWindow
 import com.ripostelabs.carlauncher.ui.nav.VolumePopup
 import com.ripostelabs.carlauncher.ui.nav.VolumePopupPolicy
 import com.ripostelabs.carlauncher.data.ThemeSnapshotStore
 import com.ripostelabs.carlauncher.data.ThemeStore
 import com.ripostelabs.carlauncher.data.UpdateController // v0.7 auto-updater
 import com.ripostelabs.carlauncher.input.KeyActionDispatcher
+import com.ripostelabs.carlauncher.input.PowerKeyRouter
 import com.ripostelabs.carlauncher.input.KeyBridge // v2.8
 import com.ripostelabs.carlauncher.input.KeyPump // v2.8
 import com.ripostelabs.carlauncher.data.WatchHistoryStore // v2.7
@@ -250,6 +253,10 @@ class MainActivity : ComponentActivity() {
     private lateinit var speechController: com.ripostelabs.carlauncher.media.SpeechController // v0.4.2 TTS
     private lateinit var radioPresetsStore: RadioPresetsStore // v0.9
     private lateinit var carSettingsController: CarSettingsController // v1.1 settings suite
+
+    // RAV4-156: the black screen, from the POWER key and the shade. Lazy: the owner's key
+    // listener is built before the rest of onCreate runs.
+    private val screenOff by lazy { ScreenOffWindow(applicationContext) { carService.sendBlackScreen(it) } }
 
     // What each learned wheel slot means, from SysVar `wheel_key_learn_custom`. Held as a
     // field because the SWC collector runs per press and must not re-parse JSON each time.
@@ -438,7 +445,7 @@ class MainActivity : ComponentActivity() {
                 volumeMemory,
                 radioMemory,
                 volumeKeys,
-                McuSleepWake.PowerKeyListener { mcuSleepWake },
+                PowerKeyRouter(::powerKeyChoice, McuSleepWake.PowerKeyListener { mcuSleepWake }, screenOff),
                 carAcc,
                 setupStore,
                 // Backlight: the headlamp bit picks the side a level lands on; the DIM key steps it.
@@ -609,6 +616,15 @@ class MainActivity : ComponentActivity() {
         }
         localRows?.let { rows -> lifecycleScope.launch(Dispatchers.IO) { rows.republish() } }
         carSettingsController = CarSettingsController(applicationContext, lifecycleScope, carService, localStore = localRows) // v1.1
+
+        // RAV4-156: the owner skips its power-off burst when the POWER key blacks the screen.
+        mcuOwner?.let { owner ->
+            lifecycleScope.launch {
+                carSettingsController.snapshot.map { rows -> PowerKeyMode.of(rows[SettingKeys.POWER_KEY_SET]) }
+                    .distinctUntilChanged()
+                    .collect { mode -> owner.setPowerKey(mode) }
+            }
+        }
         rootTierController = RootTierController(applicationContext, lifecycleScope, carService) // v2.9
 
         // v0.7: auto-updater. The launch check self-gates (toggle, token, once a day), so on
@@ -863,6 +879,23 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        // RAV4-156: reverse and a wake from ACC standby always find the panel lit. ACC off is
+        // left alone: lighting it there would flash the panel before standby darkens it.
+        lifecycleScope.launch {
+            carEvents.reverse.collect { engaged ->
+                if (engaged) {
+                    screenOff.light()
+                }
+            }
+        }
+        lifecycleScope.launch {
+            carEvents.accOn.collect { on ->
+                if (on) {
+                    screenOff.light()
+                }
+            }
+        }
+
         // Riposte OS 0.2: the vendor camera app is gone, so the launcher shows the feed itself, in
         // an overlay window (ReverseCameraWindow) so it also covers CarPlay while this activity is
         // stopped. Driven here and not from the composition, which does not run while stopped.
@@ -1096,6 +1129,7 @@ class MainActivity : ComponentActivity() {
                                 carService = carService,
                                 settingsStore = settingsStore,
                                 enabled = settings.shadeEnabled, // v2.5 shade
+                                onScreenOff = screenOff::darken,
                             ) {
                                 // v0.4.9: the vendor hidden-apps list, read (never written)
                                 // out of the SysVar snapshot the settings suite already keeps
@@ -1522,6 +1556,15 @@ class MainActivity : ComponentActivity() {
     }
 
     /** Riposte OS 0.2: one key from [keyRouter], on the main thread. */
+    /** `Sys_Power_key_set`, read per press so a change in Settings applies at once. */
+    private fun powerKeyChoice(): PowerKeyMode {
+        if (!::carSettingsController.isInitialized) {
+            return PowerKeyMode.of(raw = null)
+        }
+
+        return PowerKeyMode.of(carSettingsController.getString(SettingKeys.POWER_KEY_SET))
+    }
+
     private fun dispatchKey(action: KeyAction) {
         if (!::keyActions.isInitialized) {
             return
