@@ -1,5 +1,8 @@
 package com.ripostelabs.carlauncher.ui.settings
 
+import android.content.res.Resources
+import com.ripostelabs.carlauncher.data.SystemControl
+import com.ripostelabs.carlauncher.ui.LocalSystemControl
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -9,7 +12,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ripostelabs.carlauncher.BuildConfig
 import com.ripostelabs.carlauncher.carlib.CarService
+import com.ripostelabs.carlauncher.carlib.McuDiagnostics
 import com.ripostelabs.carlauncher.data.CarSettingsController
 import com.ripostelabs.carlauncher.data.SettingKeys
 import com.ripostelabs.carlauncher.data.SystemTime
@@ -25,13 +30,16 @@ import kotlinx.coroutines.withContext
  * firmware versions, car/customer profile, panel geometry and bus link speeds (read-only),
  * and the power actions (reboot / factory reset) behind a confirm dialog.
  *
- * Versions come live from the AIDL where available (getMCUVer/getCanVer); the rest is SysVar.
+ * Versions come first from the owner's own frames ([McuDiagnostics]: the SRC_MCU_VERSION ack and
+ * the box's `0xF0`), which is the only source on Riposte OS 0.2; then the AIDL
+ * (getMCUVer/getCanVer) on a stock image; then the SysVar mirror.
  */
 @Composable
 fun SystemSettingsScreen(
     controller: CarSettingsController,
     carService: CarService,
     onBack: () -> Unit,
+    diagnostics: McuDiagnostics? = null,
 ) {
     val snap by controller.snapshot.collectAsStateWithLifecycle()
     snap
@@ -46,8 +54,23 @@ fun SystemSettingsScreen(
     val canVerLive by produceState<String?>(null, connected) {
         value = if (connected) withContext(Dispatchers.IO) { carService.getCanVersion() } else null
     }
-    val mcuVer = mcuVerLive ?: controller.getString(SettingKeys.MCU_VERSION, "—").ifBlank { "—" }
-    val canVer = canVerLive ?: controller.getString(SettingKeys.CANBOX_VERSION, "—").ifBlank { "—" }
+    // RAV4-193: the owner's frames first, see the class note.
+    val owned by (diagnostics?.snapshot ?: EMPTY_DIAGNOSTICS).collectAsStateWithLifecycle()
+    val mcuVer = SoftwareInfo.firstKnown(
+        owned.mcuVersion, mcuVerLive, controller.getString(SettingKeys.MCU_VERSION, ""),
+    )
+    val canVer = SoftwareInfo.firstKnown(
+        owned.canVersion, canVerLive, controller.getString(SettingKeys.CANBOX_VERSION, ""),
+    )
+
+    // RAV4-193: the rest of stock's software version page, read once off the main thread.
+    val context = LocalContext.current
+    val ram by produceState(SoftwareInfo.UNKNOWN) {
+        value = withContext(Dispatchers.IO) { SoftwareInfo.ram(context) }
+    }
+    val storage by produceState(SoftwareInfo.UNKNOWN) {
+        value = withContext(Dispatchers.IO) { SoftwareInfo.storage() }
+    }
 
     var confirmReset by remember { mutableStateOf(false) }
     var confirmWipe by remember { mutableStateOf(false) }
@@ -64,6 +87,16 @@ fun SystemSettingsScreen(
         SettingsSection(title = "Firmware") {
             InfoRow("MCU version", mcuVer)
             InfoRow("CANBOX version", canVer)
+        }
+
+        SettingsSection(title = "Software") {
+            InfoRow("Model", SoftwareInfo.model())
+            InfoRow("Android", SoftwareInfo.android())
+            InfoRow("Build", SoftwareInfo.build())
+            InfoRow("Launcher", "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+            InfoRow("RAM", ram)
+            InfoRow("Storage", storage)
+            InfoRow("Serial", SoftwareInfo.serial())
         }
 
         SettingsSection(title = "Vehicle profile") {
@@ -153,6 +186,9 @@ fun SystemSettingsScreen(
     }
 }
 
+/** Stands in for the diagnostics when the owner has not started, so the rows fall through. */
+private val EMPTY_DIAGNOSTICS = kotlinx.coroutines.flow.MutableStateFlow(McuDiagnostics.Snapshot())
+
 private const val WIPE_MESSAGE = "Erases all apps, accounts and settings on the head unit."
 
 /**
@@ -208,9 +244,42 @@ private fun TimeRows() {
         SystemTime.Dst.NEVER -> "Not used in this zone"
     }
     InfoRow("Daylight saving", dst)
-    ActionRow(
+    LanguageRow()
+}
+
+/**
+ * RAV4-216: the unit's languages, set in place through the car service. An image without one
+ * opens Android's language page, as before.
+ */
+@Composable
+private fun LanguageRow() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val system = LocalSystemControl.current?.takeIf { it.routed }
+    if (system == null) {
+        ActionRow(
+            label = "Language",
+            description = Locale.getDefault().displayName,
+            onClick = { SystemTime.openLanguages(context) },
+        )
+        return
+    }
+
+    var language by remember { mutableStateOf(Locale.getDefault().toLanguageTag()) }
+    // The unit's own language may be one its assets leave out: listed anyway, like the zone.
+    val options = remember(language) {
+        SystemControl.languages(arrayOf(language) + Resources.getSystem().assets.locales, Locale.getDefault())
+    }
+    PickerSetting(
         label = "Language",
-        description = Locale.getDefault().displayName,
-        onClick = { SystemTime.openLanguages(context) },
+        current = language,
+        options = options,
+        onSelect = { tag ->
+            scope.launch {
+                if (withContext(Dispatchers.IO) { system.setLanguage(tag) }) {
+                    language = tag
+                }
+            }
+        },
     )
 }

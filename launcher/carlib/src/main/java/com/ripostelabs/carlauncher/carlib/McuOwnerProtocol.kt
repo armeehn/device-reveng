@@ -478,6 +478,9 @@ object McuOwnerProtocol {
     /** `6A 05 01 48`: ask the box for its TPMS report, as the stock tyre page does on open. */
     fun tpmsQuery(): ByteArray = canBox(TpmsAlert.QUERY)
 
+    /** RAV4-182: one cluster line (station, track text, phone, clock) through the box; see [ClusterText]. */
+    fun cluster(frame: ClusterFrame): ByteArray = canBox(frame.payload)
+
     /** `6A 05 01 62`: ask the box for its car settings report. */
     fun carSettingsQuery(): ByteArray = canBox(CarSettings.QUERY)
 

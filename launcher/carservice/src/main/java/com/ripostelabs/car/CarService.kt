@@ -66,7 +66,7 @@ class CarService : Service() {
 
     private val nav: NavPanel by lazy { NavWindow(this) { binder.navTouched() } }
 
-    private val binder: CarBinder by lazy { CarBinder(Gate(::held), listeners, power, Process.myUid(), host, SysfsDecoder(), nav, SystemUiMode(this)) }
+    private val binder: CarBinder by lazy { CarBinder(Gate(::held), listeners, power, Process.myUid(), host, SysfsDecoder(), nav, SystemUiMode(this), SystemControls(this)) }
 
     // The vendor IEventService subset over the same owner, served by EventCompatService.
     private val events: EventCalls by lazy { EventCalls(Gate(::held), host, power, binder::reversing) { Log.w(TAG, it) } }

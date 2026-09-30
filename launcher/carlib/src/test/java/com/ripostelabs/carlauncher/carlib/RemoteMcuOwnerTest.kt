@@ -41,6 +41,10 @@ class RemoteMcuOwnerTest {
         var saved = McuOwnerProtocol.Mode.MUSIC.code
         override fun lastSource() = saved
         override fun setNightMode(mode: Int) { calls += "night $mode" }
+        var held = ICarService.HOTSPOT_OFF
+        override fun setHotspot(state: Int) { calls += "hotspot $state"; held = state }
+        override fun hotspotState() = held
+        override fun setLanguage(tag: String?) { calls += "language $tag" }
     }
 
     /** bindService stand-in: the test decides when the service comes up or dies. */
@@ -170,6 +174,33 @@ class RemoteMcuOwnerTest {
             svc.calls.filter { it.startsWith("night") },
         )
         assertTrue(old.calls.none { it.startsWith("night") })
+    }
+
+    // RAV4-216: hotspot and language reach a service at 9. Before it is up, or on an older one,
+    // nothing is sent and the launcher opens Android's pages instead.
+    @Test
+    fun systemCallsReachOnlyANewEnoughService() {
+        remote.start()
+        assertFalse(remote.controlsSystem)
+        assertFalse(remote.setHotspot(Hotspot.ON))
+
+        val svc = FakeService(api = RemoteMcuOwner.SYSTEM_API)
+        binding.connect(svc)
+        assertTrue(remote.controlsSystem)
+        assertTrue(remote.setHotspot(Hotspot.ON))
+        assertEquals(Hotspot.ON, remote.hotspot())
+        assertTrue(remote.setLanguage("fr-CA"))
+        binding.die()
+        val old = FakeService(api = RemoteMcuOwner.NIGHT_API)
+        binding.connect(old)
+
+        assertFalse(remote.controlsSystem)
+        assertFalse(remote.setHotspot(Hotspot.OFF))
+        assertNull(remote.hotspot())
+        assertFalse(remote.setLanguage("en-US"))
+        val system = { call: String -> call.startsWith("hotspot") || call.startsWith("language") }
+        assertEquals(listOf("hotspot ${ICarService.HOTSPOT_ON}", "language fr-CA"), svc.calls.filter(system))
+        assertTrue(old.calls.none(system))
     }
 
     // RAV4-170: the source kept across boots comes from a service that stores it; an older one

@@ -1,5 +1,7 @@
 package com.ripostelabs.carlauncher
 
+import com.ripostelabs.carlauncher.data.SystemControl
+import com.ripostelabs.carlauncher.ui.LocalSystemControl
 import android.Manifest // v2.5
 import android.content.IntentFilter
 import android.content.Context
@@ -41,6 +43,8 @@ import com.ripostelabs.carlauncher.carlib.BtCallMcu
 import com.ripostelabs.carlauncher.carlib.BtCarKit
 import com.ripostelabs.carlauncher.carlib.PhoneInternet
 import com.ripostelabs.carlauncher.carlib.CarEvents
+import com.ripostelabs.carlauncher.carlib.ClusterFeed
+import com.ripostelabs.carlauncher.carlib.ClusterText
 import com.ripostelabs.carlauncher.carlib.DozeGuard
 import com.ripostelabs.carlauncher.carlib.McuFactorySet
 import com.ripostelabs.carlauncher.carlib.McuSetupProtocol
@@ -133,6 +137,7 @@ import com.ripostelabs.carlauncher.ui.nav.VolumePopup
 import com.ripostelabs.carlauncher.ui.nav.VolumePopupPolicy
 import com.ripostelabs.carlauncher.data.ThemeSnapshotStore
 import com.ripostelabs.carlauncher.data.ThemeStore
+import com.ripostelabs.carlauncher.data.WallpaperStore
 import com.ripostelabs.carlauncher.data.UpdateController // v0.7 auto-updater
 import com.ripostelabs.carlauncher.input.KeyActionDispatcher
 import com.ripostelabs.carlauncher.input.PowerKeyRouter
@@ -207,6 +212,9 @@ class MainActivity : ComponentActivity() {
 
     /** Riposte OS 0.2 only: our MCU port owner. Null on a stock or 0.1 slot. */
     private var mcuOwner: McuPort? = null
+
+    /** RAV4-216: hotspot and language through [mcuOwner]'s car service. */
+    private val systemControl = SystemControl { mcuOwner }
     private var mcuSetupStore: McuSetupStore? = null
 
     /** Riposte OS 0.2 only: the decoded MCU events on 127.0.0.1:5589 for Helm, the car computer. */
@@ -221,6 +229,14 @@ class MainActivity : ComponentActivity() {
 
     /** Riposte OS 0.2 only: the phone through the stock stack's car-kit profiles. */
     private var btCarKit: BtCarKit? = null
+
+    /** RAV4-182, Riposte OS 0.2 only: now playing, station, caller and clock to the cluster. */
+    private var clusterFeed: ClusterFeed? = null
+
+    /** The clock moved (set, new day, new zone): stock re-sends it (CanDataParseBase.java:658-671). */
+    private val clusterClockReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) = sendClusterClock()
+    }
 
     /** RAV4-178: the suite Bluetooth app's connect / disconnect / forget, run on the car kit. */
     private val btDeviceReceiver = object : BroadcastReceiver() {
@@ -266,6 +282,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var appRepository: AppRepository
     private lateinit var nowPlaying: NowPlayingRepository
     private lateinit var themeStore: ThemeStore
+    private lateinit var wallpaperStore: WallpaperStore // RAV4-196
     /** The launcher-drawn Back/Home/Apps strip that stands in for the suppressed system bar. */
     private lateinit var navBar: NavBar
     private lateinit var volumePopup: VolumePopup
@@ -437,7 +454,10 @@ class MainActivity : ComponentActivity() {
             }
             // Offline the MCU RTC drifts (a day behind, 2026-09-22); the first GPS fix of each
             // wake corrects the clock and hands it on to the MCU, as the vendor gateway did.
-            gpsClock = GpsClock(applicationContext, onClockSet = mcuClock::onGpsClock).also { it.start() }
+            gpsClock = GpsClock(
+                applicationContext,
+                onClockSet = { mcuClock.onGpsClock(); sendClusterClock() },
+            ).also { it.start() }
             val volumeMemory = VolumeMemory(applicationContext)
             val radioMemory = RadioMemory(applicationContext)
             carService.radioState.seed(radioMemory.restore())
@@ -604,11 +624,13 @@ class MainActivity : ComponentActivity() {
         TunerHub.attach(CarTunerPort(carService), lifecycleScope)
         appRepository = AppRepository(this, ownerActive = mcuOwner != null)
         nowPlaying = NowPlayingRepository(applicationContext).also { it.start(lifecycleScope) }
+        mcuOwner?.let { owner -> startCluster(ClusterFeed { owner.send(McuOwnerProtocol.cluster(it)) }) }
         // No media session left is the vendor players' activity destroy: exitCurMode.
         armAudioRoute?.let { r ->
             lifecycleScope.launch { nowPlaying.sources.map { s -> s.isNotEmpty() }.distinctUntilChanged().collect(r::onMediaSessions) }
         }
         themeStore = ThemeStore(applicationContext)
+        wallpaperStore = WallpaperStore(applicationContext)
         navBar = NavBar(applicationContext).also { it.service = mcuOwner as? CarNav }
         // RAV4-158: every nav route (card, NAV key, gesture) reads the pick through NavRepository.
         lifecycleScope.launch {
@@ -1176,6 +1198,7 @@ class MainActivity : ComponentActivity() {
               CompositionLocalProvider(
                   LocalLauncherFocus provides launcherFocus,
                   LocalCarFeedback provides carFeedback, // v2.5
+                  LocalSystemControl provides systemControl, // RAV4-216
               ) {
                ProvideParkedOnlyLock(locked = parkedOnlyLock) { // v2.5
                 Surface(
@@ -1261,6 +1284,9 @@ class MainActivity : ComponentActivity() {
                                     onOpenNotifications = { screen = Screen.Notifications },
                                     onOpenContinueWatching = { screen = Screen.ContinueWatching },
                                     miniScreen = miniScreen, // v4.1 video mini screen
+                                    wallpaperStore = wallpaperStore, // RAV4-196
+                                    themeId = activeTheme.id,
+                                    night = night,
                                 )
                             }
 
@@ -1371,6 +1397,7 @@ class MainActivity : ComponentActivity() {
                                 themes = allThemes,
                                 activeId = activeTheme.id,
                                 night = night,
+                                wallpaperStore = wallpaperStore, // RAV4-196
                                 onSetActive = { themeStore.setActive(it.id) },
                                 onDuplicate = { themeStore.duplicate(it) },
                                 onEdit = { screen = Screen.Editor(it) },
@@ -1657,6 +1684,39 @@ class MainActivity : ComponentActivity() {
         return PowerKeyMode.of(carSettingsController.getString(SettingKeys.POWER_KEY_SET))
     }
 
+    /**
+     * RAV4-182: what stock canbus2 sent the cluster from its broadcasts (CanDataParseBase
+     * SysInforModule, :553-671), fed from this launcher's own sources on 0.2.
+     */
+    private fun startCluster(feed: ClusterFeed) {
+        clusterFeed = feed
+        lifecycleScope.launch {
+            nowPlaying.state.filterNotNull().map { it.title to it.artist }.distinctUntilChanged()
+                .collect { (title, artist) -> feed.onMedia(title, artist) }
+        }
+        lifecycleScope.launch { carService.radioState.state.collect(feed::onRadio) }
+        lifecycleScope.launch {
+            carEvents.vendorBt.collect { v -> feed.onCall(v.hshf, v.callerNumber, v.callerName) }
+        }
+
+        val clockMoves = IntentFilter().apply {
+            addAction(Intent.ACTION_TIME_CHANGED)
+            addAction(Intent.ACTION_DATE_CHANGED)
+            addAction(Intent.ACTION_TIMEZONE_CHANGED)
+        }
+        registerReceiver(clusterClockReceiver, clockMoves, Context.RECEIVER_NOT_EXPORTED)
+        sendClusterClock()
+    }
+
+    private fun sendClusterClock() {
+        val format = if (android.text.format.DateFormat.is24HourFormat(this)) {
+            ClusterText.HourFormat.H24
+        } else {
+            ClusterText.HourFormat.H12
+        }
+        clusterFeed?.onClock(java.time.LocalDateTime.now(), format)
+    }
+
     private fun dispatchKey(action: KeyAction) {
         if (!::keyActions.isInitialized) {
             return
@@ -1762,6 +1822,7 @@ class MainActivity : ComponentActivity() {
         carCommandPort?.stop()
         ampVolumeKeys?.stop(applicationContext)
         btCarKit?.let { runCatching { unregisterReceiver(btDeviceReceiver) } }
+        clusterFeed?.let { runCatching { unregisterReceiver(clusterClockReceiver) } }
         btCarKit?.stop()
         panLink?.stop()
         gatewayHandshake.unregister() // v3.0

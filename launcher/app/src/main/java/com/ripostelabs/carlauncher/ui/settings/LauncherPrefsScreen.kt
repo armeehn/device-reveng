@@ -35,6 +35,7 @@ import com.ripostelabs.carlauncher.carlib.CarEvents // v2.5
 import com.ripostelabs.carlauncher.carlib.GpsSpeedSource // v2.5
 import com.ripostelabs.carlauncher.carlib.RootShell // v2.5 shade
 import com.ripostelabs.carlauncher.data.CarSettingsController // v2.8
+import com.ripostelabs.carlauncher.data.ClockStyle
 import com.ripostelabs.carlauncher.data.DayNightMode
 import com.ripostelabs.carlauncher.data.DriverSideMode // v2.8
 import com.ripostelabs.carlauncher.data.LauncherSettings
@@ -143,6 +144,23 @@ fun LauncherPrefsScreen(
             ToggleSetting("Radio card", settings.showRadio, settingsStore::setShowRadio)
             ToggleSetting("Climate readout", settings.showClimate, settingsStore::setShowClimate)
             ToggleSetting("Navigation", settings.showNav, settingsStore::setShowNav)
+            // RAV4-196: the clock and weather card at the top of the glance column.
+            PickerSetting(
+                label = "Clock",
+                current = settings.homeClock,
+                options = listOf(
+                    ClockStyle.DIGITAL to "Digital",
+                    ClockStyle.ANALOG to "Analog",
+                    ClockStyle.OFF to "Off",
+                ),
+                onSelect = settingsStore::setHomeClock,
+            )
+            ToggleSetting(
+                label = "Weather",
+                description = "The Weather app's last reading, beside the clock.",
+                checked = settings.showWeather,
+                onChange = settingsStore::setShowWeather,
+            )
             ToggleSetting(
                 label = "Video mini screen",
                 description = if (rootAvailable)

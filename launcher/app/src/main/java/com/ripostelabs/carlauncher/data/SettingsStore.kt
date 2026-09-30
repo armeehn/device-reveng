@@ -45,6 +45,9 @@ import kotlinx.coroutines.launch
  */
 enum class DayNightMode { AUTO, FORCE_DAY, FORCE_NIGHT, CLOCK }
 
+/** RAV4-196: the home clock card's face. Persisted by name. */
+enum class ClockStyle { OFF, DIGITAL, ANALOG }
+
 /** The launcher's own Back/Home/Apps bar over other apps (only with [LauncherSettings.replaceSystemBars]). */
 enum class NavBarMode { AUTO_HIDE, ALWAYS_SHOWN, OFF }
 
@@ -55,6 +58,10 @@ data class LauncherSettings(
     val showRadio: Boolean = true,
     val showClimate: Boolean = true,
     val showNav: Boolean = true,
+    /** RAV4-196: the clock on the home clock card; OFF leaves the weather alone on it. */
+    val homeClock: ClockStyle = ClockStyle.DIGITAL,
+    /** RAV4-196: the suite weather app's last reading on the home clock card. */
+    val showWeather: Boolean = true,
     /**
      * v4.1 — float a playing video app as a freeform mini window over the home media card.
      * On by default: it is inert until a video session exists, parked-only via the motion
@@ -245,6 +252,10 @@ class SettingsStore(context: Context) {
                     showRadio = prefs[SHOW_RADIO_KEY] ?: true,
                     showClimate = prefs[SHOW_CLIMATE_KEY] ?: true,
                     showNav = prefs[SHOW_NAV_KEY] ?: true,
+                    homeClock = runCatching {
+                        ClockStyle.valueOf(prefs[HOME_CLOCK_KEY] ?: ClockStyle.DIGITAL.name)
+                    }.getOrDefault(ClockStyle.DIGITAL),
+                    showWeather = prefs[SHOW_WEATHER_KEY] ?: true,
                     videoMiniScreen = prefs[VIDEO_MINI_KEY] ?: true, // v4.1
                     dayNightMode = runCatching {
                         DayNightMode.valueOf(prefs[DAY_NIGHT_MODE_KEY] ?: DayNightMode.AUTO.name)
@@ -305,6 +316,8 @@ class SettingsStore(context: Context) {
     fun setShowRadio(show: Boolean) = scope.launch { ds.edit { it[SHOW_RADIO_KEY] = show } }
     fun setShowClimate(show: Boolean) = scope.launch { ds.edit { it[SHOW_CLIMATE_KEY] = show } }
     fun setShowNav(show: Boolean) = scope.launch { ds.edit { it[SHOW_NAV_KEY] = show } }
+    fun setHomeClock(style: ClockStyle) = scope.launch { ds.edit { it[HOME_CLOCK_KEY] = style.name } }
+    fun setShowWeather(show: Boolean) = scope.launch { ds.edit { it[SHOW_WEATHER_KEY] = show } }
 
     /** v4.1 — the video mini screen on Home. */
     fun setVideoMiniScreen(enabled: Boolean) = scope.launch {
@@ -464,6 +477,8 @@ class SettingsStore(context: Context) {
         val SHOW_RADIO_KEY = booleanPreferencesKey("show_radio")
         val SHOW_CLIMATE_KEY = booleanPreferencesKey("show_climate")
         val SHOW_NAV_KEY = booleanPreferencesKey("show_nav")
+        val HOME_CLOCK_KEY = stringPreferencesKey("home_clock") // ClockStyle.name, RAV4-196
+        val SHOW_WEATHER_KEY = booleanPreferencesKey("show_weather") // RAV4-196
         val VIDEO_MINI_KEY = booleanPreferencesKey("video_mini_screen") // v4.1
         val DAY_NIGHT_MODE_KEY = stringPreferencesKey("day_night_mode")
         val FIRST_RUN_KEY = booleanPreferencesKey("first_run") // v1.0 onboarding gate
