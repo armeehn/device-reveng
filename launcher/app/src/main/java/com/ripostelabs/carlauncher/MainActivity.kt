@@ -53,7 +53,8 @@ import com.ripostelabs.carlauncher.carlib.ReverseTrigger
 import com.ripostelabs.carlauncher.carlib.RootShell
 import com.ripostelabs.carlauncher.input.WheelGamepad
 import com.ripostelabs.carlauncher.service.CanCaptureService
-import com.ripostelabs.carlauncher.carlib.AndroidAccSource
+import com.ripostelabs.carlauncher.carlib.AccStandby
+import com.ripostelabs.carlauncher.carlib.CarAcc
 import com.ripostelabs.carlauncher.carlib.AndroidOwnerGate
 import com.ripostelabs.carlauncher.carlib.CarService
 import com.ripostelabs.carlauncher.tuner.CarTunerPort
@@ -215,6 +216,7 @@ class MainActivity : ComponentActivity() {
     /** Riposte OS 0.2 only: ACC sleep and wake for [mcuOwner], polled like the vendor's AccObserver. */
     private var mcuSleepWake: McuSleepWake? = null
     private var dozeGuard: DozeGuard? = null
+    private val carAcc = CarAcc()
 
     /** Riposte OS 0.2 only: Android playback for [ArmAudioRoute]. */
     private var playbackWatch: PlaybackWatch? = null
@@ -425,6 +427,7 @@ class MainActivity : ComponentActivity() {
                 radioMemory,
                 volumeKeys,
                 McuSleepWake.PowerKeyListener { mcuSleepWake },
+                carAcc,
                 setupStore,
                 // Backlight: the headlamp bit picks the side a level lands on; the DIM key steps it.
                 carService.backlight,
@@ -475,10 +478,14 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 carCommandPort = CarCommandPort(carService.asCommandTarget()).also { port -> port.start() }
-                mcuSleepWake = McuSleepWake.forOwner(it, AndroidAccSource(), startupConfig).also { sw -> sw.start() }
+                // ACC from the MCU line; standby is stock's accOff/accOn plus a PR2000 re-arm, so
+                // the first reverse after a suspend opens at once (AccStandby).
+                carAcc.start(applicationContext)
+                val standby = AccStandby(decoder = { DecoderSignal.redetect(); DecoderSignal.locked() })
+                mcuSleepWake = McuSleepWake.forOwner(it, carAcc, startupConfig, standby).also { sw -> sw.start() }
                 // The GSI dozes the panel on its own (README "Doze and dreams"); wake it unless
                 // the machine above, or ACC, asked for the dark.
-                dozeGuard = DozeGuard({ mcuSleepWake }, AndroidAccSource()).also { g -> g.start(applicationContext) }
+                dozeGuard = DozeGuard({ mcuSleepWake }, carAcc).also { g -> g.start(applicationContext) }
                 ampVolumeKeys = volumeKeys.also { keys -> keys.start(applicationContext) }
 
                 // Android sound, media players, BT audio and CarPlay reach the amp only once the
@@ -1566,6 +1573,7 @@ class MainActivity : ComponentActivity() {
         carEvents.unregister()
         mcuSleepWake?.stop()
         dozeGuard?.stop(applicationContext)
+        carAcc.stop(applicationContext)
         playbackWatch?.stop()
         carService.unbind()
         vendorBtService.unbind()

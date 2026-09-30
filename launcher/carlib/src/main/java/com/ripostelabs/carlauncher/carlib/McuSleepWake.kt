@@ -15,6 +15,9 @@ import android.util.Log
  * `sys.gotoSleep.state` once a second (AccObserver.java:19-45): "1" means ACC off, any other
  * non-empty value means on, and an empty read is not an event. Who writes the property is not
  * visible in the decompile; only the vendor's readers are (EventService.java:3412 and here).
+ * The writer is stock's own services.jar: PowerManagerService.updateGlobalWakefulnessLocked sets
+ * "1" on "Going to sleep" and "0" on "Waking up". The GSI's AOSP copy never writes it, so on
+ * Riposte OS the source is [CarAcc] (the MCU's SYS_EVENT line), not [AndroidAccSource].
  *
  * ── ACC off (setAccSleep, EventService.java:3522-3587) ──────────────────────────────────────────
  * No mode byte is sent. The only frame is BT state 0, `0B 00` (:3559 → sendBTState :4336-4342),
@@ -40,7 +43,14 @@ import android.util.Log
  *
  * ── Screen ──────────────────────────────────────────────────────────────────────────────────────
  * `onAccGotoSleepState` (:3411-3425) sends KEYCODE_POWER to blank the screen, but nothing posts
- * its runnable (`mRunnableAccSleep`, :447, no other reference), so the screen is left alone here.
+ * its runnable (`mRunnableAccSleep`, :447, no other reference). The MCU presses the SoC's POWER
+ * line itself about 3 s after ACC off (car, 2026-09-28 10:55:00 → 10:55:03). That press toggles:
+ * with the panel already dark it lights it (2026-09-24 16:47:05). [Standby.darken] runs once,
+ * [DARKEN_DELAY_MS] after the sleep and past that press, and is a sleep key, never a toggle.
+ *
+ * ── Standby ─────────────────────────────────────────────────────────────────────────────────────
+ * [Standby.enter] is the Android half of setAccSleep (Utils.accOff, :3533; sys.acc.state 0,
+ * :437-443), [Standby.leave] the half of setAccWakeUp (AccRev.doAcc(1) → Utils.accOn, :3466).
  *
  * ── Threads ─────────────────────────────────────────────────────────────────────────────────────
  * [poll] is the whole machine and takes the clock as an argument, so tests drive it with a fake
@@ -51,9 +61,29 @@ class McuSleepWake(
     private val acc: AccSource,
     private val config: McuOwnerProtocol.StartupConfig = McuOwnerProtocol.StartupConfig(),
     private val clock: () -> Long = { System.nanoTime() / NANOS_PER_MS },
+    private val standby: Standby = Standby.NONE,
 ) {
 
     enum class Acc { ON, OFF }
+
+    /** The unit around the MCU: radios, the camera gates, the panel. [AccStandby] is the real one. */
+    interface Standby {
+        fun enter()
+
+        fun leave()
+
+        fun darken()
+
+        companion object {
+            val NONE = object : Standby {
+                override fun enter() {}
+
+                override fun leave() {}
+
+                override fun darken() {}
+            }
+        }
+    }
 
     /** Where ACC comes from. `null` means unreadable: hold the current state. */
     interface AccSource {
@@ -80,6 +110,7 @@ class McuSleepWake(
     private var closeAtMs = 0L
     private var reloadAtMs = 0L
     private var guardUntilMs = 0L
+    private var darkenAtMs = Long.MAX_VALUE
     private var accSeenOff = false
     private var worker: Thread? = null
 
@@ -150,6 +181,7 @@ class McuSleepWake(
 
             State.ASLEEP -> {
                 if (!accOn) {
+                    darkenOnce(nowMs)
                     return
                 }
                 wake(nowMs)
@@ -178,13 +210,29 @@ class McuSleepWake(
         keySleepAtMs = Long.MAX_VALUE
         port.send(McuOwnerProtocol.btState(McuOwnerProtocol.BT_DISCONNECTED))
         closeAtMs = nowMs + PORT_CLOSE_DELAY_MS
+        darkenAtMs = nowMs + DARKEN_DELAY_MS
         state = State.SLEEPING
+        standby.enter()
+    }
+
+    /** The panel goes dark once, after the MCU's own POWER press has come and gone. */
+    private fun darkenOnce(nowMs: Long) {
+        if (nowMs < darkenAtMs) {
+            return
+        }
+
+        darkenAtMs = Long.MAX_VALUE
+        standby.darken()
     }
 
     private fun wake(nowMs: Long) {
         Log.i(LOG_TAG, "ACC on: reopen, reload in $RELOAD_DELAY_MS ms")
         accSeenOff = false
+        // The MCU's POWER key after ACC off must not sleep the next drive (car, 2026-09-28 10:55:10).
+        keySleepAtMs = Long.MAX_VALUE
+        darkenAtMs = Long.MAX_VALUE
         port.open()
+        standby.leave()
         reloadAtMs = nowMs + RELOAD_DELAY_MS
         guardUntilMs = nowMs + WAKE_GUARD_MS
         state = State.WAKING
@@ -244,10 +292,14 @@ class McuSleepWake(
         /** powerOff → msg 289 → setAccSleep (EventService.java:2704-2708, CustomStatusbar.java:21). */
         const val POWER_KEY_SLEEP_DELAY_MS = 6_000L
 
+        /** Past the MCU's POWER press, 2.9-3.1 s after ACC off on the car, with margin. */
+        const val DARKEN_DELAY_MS = 10_000L
+
         fun forOwner(
             owner: McuPort,
             acc: AccSource,
             config: McuOwnerProtocol.StartupConfig = McuOwnerProtocol.StartupConfig(),
-        ): McuSleepWake = McuSleepWake(OwnerPort(owner), acc, config)
+            standby: Standby = Standby.NONE,
+        ): McuSleepWake = McuSleepWake(OwnerPort(owner), acc, config, standby = standby)
     }
 }
