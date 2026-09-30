@@ -41,6 +41,8 @@ import com.ripostelabs.carlauncher.carlib.BtCallMcu
 import com.ripostelabs.carlauncher.carlib.BtCarKit
 import com.ripostelabs.carlauncher.carlib.PhoneInternet
 import com.ripostelabs.carlauncher.carlib.CarEvents
+import com.ripostelabs.carlauncher.carlib.ClusterFeed
+import com.ripostelabs.carlauncher.carlib.ClusterText
 import com.ripostelabs.carlauncher.carlib.DozeGuard
 import com.ripostelabs.carlauncher.carlib.McuFactorySet
 import com.ripostelabs.carlauncher.carlib.McuSetupProtocol
@@ -220,6 +222,14 @@ class MainActivity : ComponentActivity() {
 
     /** Riposte OS 0.2 only: the phone through the stock stack's car-kit profiles. */
     private var btCarKit: BtCarKit? = null
+
+    /** RAV4-182, Riposte OS 0.2 only: now playing, station, caller and clock to the cluster. */
+    private var clusterFeed: ClusterFeed? = null
+
+    /** The clock moved (set, new day, new zone): stock re-sends it (CanDataParseBase.java:658-671). */
+    private val clusterClockReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) = sendClusterClock()
+    }
 
     /** RAV4-178: the suite Bluetooth app's connect / disconnect / forget, run on the car kit. */
     private val btDeviceReceiver = object : BroadcastReceiver() {
@@ -432,7 +442,10 @@ class MainActivity : ComponentActivity() {
             }
             // Offline the MCU RTC drifts (a day behind, 2026-09-22); the first GPS fix of each
             // wake corrects the clock and hands it on to the MCU, as the vendor gateway did.
-            gpsClock = GpsClock(applicationContext, onClockSet = mcuClock::onGpsClock).also { it.start() }
+            gpsClock = GpsClock(
+                applicationContext,
+                onClockSet = { mcuClock.onGpsClock(); sendClusterClock() },
+            ).also { it.start() }
             val volumeMemory = VolumeMemory(applicationContext)
             val radioMemory = RadioMemory(applicationContext)
             carService.radioState.seed(radioMemory.restore())
@@ -598,6 +611,7 @@ class MainActivity : ComponentActivity() {
         TunerHub.attach(CarTunerPort(carService), lifecycleScope)
         appRepository = AppRepository(this, ownerActive = mcuOwner != null)
         nowPlaying = NowPlayingRepository(applicationContext).also { it.start(lifecycleScope) }
+        mcuOwner?.let { owner -> startCluster(ClusterFeed { owner.send(McuOwnerProtocol.cluster(it)) }) }
         // No media session left is the vendor players' activity destroy: exitCurMode.
         armAudioRoute?.let { r ->
             lifecycleScope.launch { nowPlaying.sources.map { s -> s.isNotEmpty() }.distinctUntilChanged().collect(r::onMediaSessions) }
@@ -1644,6 +1658,39 @@ class MainActivity : ComponentActivity() {
         return PowerKeyMode.of(carSettingsController.getString(SettingKeys.POWER_KEY_SET))
     }
 
+    /**
+     * RAV4-182: what stock canbus2 sent the cluster from its broadcasts (CanDataParseBase
+     * SysInforModule, :553-671), fed from this launcher's own sources on 0.2.
+     */
+    private fun startCluster(feed: ClusterFeed) {
+        clusterFeed = feed
+        lifecycleScope.launch {
+            nowPlaying.state.filterNotNull().map { it.title to it.artist }.distinctUntilChanged()
+                .collect { (title, artist) -> feed.onMedia(title, artist) }
+        }
+        lifecycleScope.launch { carService.radioState.state.collect(feed::onRadio) }
+        lifecycleScope.launch {
+            carEvents.vendorBt.collect { v -> feed.onCall(v.hshf, v.callerNumber, v.callerName) }
+        }
+
+        val clockMoves = IntentFilter().apply {
+            addAction(Intent.ACTION_TIME_CHANGED)
+            addAction(Intent.ACTION_DATE_CHANGED)
+            addAction(Intent.ACTION_TIMEZONE_CHANGED)
+        }
+        registerReceiver(clusterClockReceiver, clockMoves, Context.RECEIVER_NOT_EXPORTED)
+        sendClusterClock()
+    }
+
+    private fun sendClusterClock() {
+        val format = if (android.text.format.DateFormat.is24HourFormat(this)) {
+            ClusterText.HourFormat.H24
+        } else {
+            ClusterText.HourFormat.H12
+        }
+        clusterFeed?.onClock(java.time.LocalDateTime.now(), format)
+    }
+
     private fun dispatchKey(action: KeyAction) {
         if (!::keyActions.isInitialized) {
             return
@@ -1749,6 +1796,7 @@ class MainActivity : ComponentActivity() {
         carCommandPort?.stop()
         ampVolumeKeys?.stop(applicationContext)
         btCarKit?.let { runCatching { unregisterReceiver(btDeviceReceiver) } }
+        clusterFeed?.let { runCatching { unregisterReceiver(clusterClockReceiver) } }
         btCarKit?.stop()
         panLink?.stop()
         gatewayHandshake.unregister() // v3.0
