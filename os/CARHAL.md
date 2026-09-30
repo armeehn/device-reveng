@@ -227,6 +227,47 @@ lay out full screen. The launcher keeps `NavBarPolicy` (hidden over projection, 
 sends the state; a touch comes back through `onNavInteract`. Without a service at 5 the launcher
 draws its own overlay as before.
 
+### IEventService compatibility (no apiVersion change)
+
+`EventCompatService` in `com.ripostelabs.car` answers the vendor's `IEventService` binder
+(descriptor `com.szchoiceway.eventcenter.IEventService`, intent action
+`com.szchoiceway.eventcenter.EventService`) over the same owner as `ICarService`. `EventBinder`
+serves 16 of the 144 calls. Every other code gets a zero reply of its declared shape (`void`,
+`0`, `false`, `null` string, `null` array or binder), read off the AIDL-generated stub
+(`EventTable`), and is logged once per call name. A stock app neither crashes on a short reply
+nor waits on a dead binder. Reads answer any caller; changes need CONTROL and a refused one is
+dropped and logged once, never thrown.
+
+| Vendor call (code) | Answer |
+|---|---|
+| `sendMode` (1) | `setSource(mode)`; the second argument is not read |
+| `sendRadioKey` (2) | `McuOwnerProtocol.radioKey` frame |
+| `sendUserFreq` (6) | `McuOwnerProtocol.userFreq` frame |
+| `sendMuteState` (8) | `McuOwnerProtocol.mute` frame |
+| `getMCUVer` (32) | the `SRC_MCU_VERSION` ack's text, `""` before it |
+| `getSetting{Boolean,Float,Int,Long,String}` (40-44) | the caller's fallback: Sys_* rows live in the launcher |
+| `getValidMode` (46) | `currentSource()`, 0 (NONE) before the first source |
+| `sendBacklight` (60) | `McuOwnerProtocol.backlight` frame |
+| `IsBackCarConneted` (88) | the `71` reverse line, as `reverseState().trigger` |
+| `getMainVolval` (103) | the last `79` main volume level |
+| `IsMuteOn` (104) | the last `78` mute bit |
+| `sendSoftWareReboot` (135) | `reboot()` |
+
+Why this subset: no OEM app ships in the 0.2 image (`overlay/keep.gsi` is empty), and the suite
+radio binds the vendor only on stock and 0.1 (`TunerBackend.choose`). The calls above are the
+ones every decompiled vendor app makes on start-up (their shared `zxwlib`: mode, reverse, MCU
+version, mute, settings reads) plus the launcher's own mapped rows that the service can answer
+without new MCU frames. Radio getters, EQ, CAN upgrade and camera stay unserved.
+
+**Reach.** Every stock client binds by explicit component or package
+`com.szchoiceway.eventcenter` (`ApkInstallApp.java:58`, `CanbusApp.java:65-67`,
+`NaviApp.java:137`), never by action alone. So the service, whatever its intent-filter, is
+reached only by a client that names `com.ripostelabs.car`. Serving an unmodified stock APK needs a
+package called `com.szchoiceway.eventcenter` that hands out this binder. Its presence is the
+signal three readers take as "the vendor owns the MCU": `AndroidOwnerGate.eventcenterPresent`
+would stop McuOwner, the suite radio would switch to `VendorTuner`, and the launcher's
+`CarService` would bind it. That shim and the three readers are a separate change, not built yet.
+
 ### The launcher's 30 vendor calls, mapped
 
 `owner today` says whether 0.2 already serves the call without `eventcenter`; the rows marked

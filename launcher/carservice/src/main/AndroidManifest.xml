@@ -40,5 +40,17 @@
                 android:name="com.ripostelabs.car.API"
                 android:value="5" />
         </service>
+
+        <!-- The vendor IEventService subset for stock-built apps (os/CARHAL.md "IEventService
+             compatibility"). No bind permission: reads answer anyone, changes check CONTROL per
+             call. Stock apps bind by component in com.szchoiceway.eventcenter, so this action
+             alone does not reach them. -->
+        <service
+            android:name=".EventCompatService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.szchoiceway.eventcenter.EventService" />
+            </intent-filter>
+        </service>
     </application>
 </manifest>
