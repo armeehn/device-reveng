@@ -3,7 +3,6 @@ package com.ripostelabs.carlauncher.carlib
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -34,9 +33,26 @@ class CarSettingsTest {
             CarSetting.LIGHT_SENSOR to (0x03 to 0x01),
             CarSetting.INTERIOR_LIGHT_OFF to (0x03 to 0x02),
             CarSetting.HEADLIGHT_OFF to (0x03 to 0x03),
+            CarSetting.CLIMATE_AUTO_LINK to (0x01 to 0x06),
+            CarSetting.RECIRC_AUTO_LINK to (0x01 to 0x07),
+            CarSetting.RADAR_DISPLAY to (0x01 to 0x08),
+            CarSetting.RADAR_VOLUME to (0x01 to 0x09),
+            CarSetting.LEFT_SEAT_AUTO_TEMP to (0x01 to 0x0C),
+            CarSetting.RIGHT_SEAT_AUTO_TEMP to (0x01 to 0x0D),
+            CarSetting.SMOKE_SENSOR to (0x01 to 0x0E),
+            CarSetting.STEERING_EXIT_MOVE to (0x01 to 0x0F),
+            CarSetting.SEAT_EXIT_MOVE to (0x01 to 0x10),
+            CarSetting.ACC_CUSTOM to (0x01 to 0x11),
+            CarSetting.RECOMMENDATIONS to (0x01 to 0x12),
+            CarSetting.DRIVE_SIDE to (0x01 to 0x13),
+            CarSetting.FUEL_UNIT to (0x01 to 0x14),
+            CarSetting.TEMP_UNIT to (0x01 to 0x15),
+            CarSetting.SMART_LOCK to (0x02 to 0x02),
+            CarSetting.KEY_TWICE_UNLOCK to (0x02 to 0x03),
         )
+        val special = setOf(CarSetting.FRONT_RADAR_RANGE, CarSetting.REAR_RADAR_RANGE, CarSetting.LANGUAGE)
 
-        assertEquals(table.keys, CarSetting.entries.toSet())
+        assertEquals(table.keys + special, CarSetting.entries.toSet())
         table.forEach { (setting, groupKey) ->
             val (group, key) = groupKey
             val payload = CarSettings.setPayload(setting, setting.values.first)
@@ -72,13 +88,69 @@ class CarSettingsTest {
         CarSettings.setPayload(CarSetting.INTERIOR_LIGHT_OFF, 4)
     }
 
-    /** Excluded on purpose: no power column or seat memory on this car, and the unlikely items. */
+    /**
+     * Stock sends a fixed value for the radar ranges, whatever is picked: key 0x0A value 1 for
+     * the front, 2 for the rear (`HiworldToyotaSetConfig.java:46-47`, `CarSetAdapter.java:515-517`).
+     */
     @Test
-    fun `the catalogue leaves out seat, column, climate and dealer items`() {
-        val keys = CarSetting.entries.map { it.group.code to it.key }.toSet()
+    fun `the radar ranges send stock's fixed toggle value`() {
+        assertArrayEquals(intArrayOf(0x03, 0x6A, 0x01, 0x0A, 0x01), CarSettings.setPayload(CarSetting.FRONT_RADAR_RANGE, 2))
+        assertArrayEquals(intArrayOf(0x03, 0x6A, 0x01, 0x0A, 0x02), CarSettings.setPayload(CarSetting.REAR_RADAR_RANGE, 1))
+    }
 
-        listOf(0x01 to 0x0F, 0x01 to 0x10, 0x01 to 0x06, 0x01 to 0x07, 0x01 to 0x08, 0x02 to 0x02, 0x02 to 0x03)
-            .forEach { assertTrue("$it", it !in keys) }
+    /** Language is its own command, `getSendToCanByteArray4`: `02 9A 01 value` (`:27`, `:67`). */
+    @Test
+    fun `language is the stock 02 9A frame`() {
+        assertArrayEquals(intArrayOf(0x02, 0x9A, 0x01, 0x05), CarSettings.setPayload(CarSetting.LANGUAGE, 5))
+        assertEquals("0D 08 5A A5 02 9A 01 05 A1", hex(McuCommand.framed(CarSettings.setPayload(CarSetting.LANGUAGE, 5))))
+    }
+
+    /** The 0x62 report carries no fuel unit, temperature unit or language. */
+    @Test
+    fun `units and language are never read from the report`() {
+        val state = CarSettings.decode(ByteArray(8) { 0xFF.toByte() })
+
+        assertNull(state[CarSetting.FUEL_UNIT])
+        assertNull(state[CarSetting.TEMP_UNIT])
+        assertNull(state[CarSetting.LANGUAGE])
+    }
+
+    /**
+     * The rest of `OnHandleCarSetInfoCmd` (`HiworldCanParseToyota.java:644-674`):
+     *   bArr[2] = p[0] 0x9A: b7 radar display 1, b4..6 radar volume 1, b2..3 front range 2, b0..1 rear range 2
+     *   bArr[3] = p[1] 0x02: b1 climate link 1, b0 recirc link 0
+     *   bArr[4] = p[2] 0x2C: b5 smart lock 1, b4 key twice 0, b1..3 smoke 6
+     *   bArr[6] = p[4] 0x8B: b5..7 left seat 4, b2..4 right seat 2, b0..1 steering 3
+     *   bArr[8] = p[6] 0xAC: b6..7 seat exit 2, b4..5 recommendations 2, b3 ACC 1, b2 drive side 1
+     */
+    @Test
+    fun `the 0x62 report decodes the stock-only fields`() {
+        val p = bytes(0x9A, 0x02, 0x2C, 0x00, 0x8B, 0x00, 0xAC)
+
+        val state = (HiworldCanDecoder.decodePayload(0x62, p) as CanSignal.CarSettings).state
+
+        assertEquals(1, state[CarSetting.RADAR_DISPLAY])
+        assertEquals(1, state[CarSetting.RADAR_VOLUME])
+        assertEquals(2, state[CarSetting.FRONT_RADAR_RANGE])
+        assertEquals(2, state[CarSetting.REAR_RADAR_RANGE])
+        assertEquals(1, state[CarSetting.CLIMATE_AUTO_LINK])
+        assertEquals(0, state[CarSetting.RECIRC_AUTO_LINK])
+        assertEquals(1, state[CarSetting.SMART_LOCK])
+        assertEquals(0, state[CarSetting.KEY_TWICE_UNLOCK])
+        assertEquals(6, state[CarSetting.SMOKE_SENSOR])
+        assertEquals(4, state[CarSetting.LEFT_SEAT_AUTO_TEMP])
+        assertEquals(2, state[CarSetting.RIGHT_SEAT_AUTO_TEMP])
+        assertEquals(3, state[CarSetting.STEERING_EXIT_MOVE])
+        assertEquals(2, state[CarSetting.SEAT_EXIT_MOVE])
+        assertEquals(2, state[CarSetting.RECOMMENDATIONS])
+        assertEquals(1, state[CarSetting.ACC_CUSTOM])
+        assertEquals(1, state[CarSetting.DRIVE_SIDE])
+    }
+
+    /** Radar volume 0 is outside stock's 1..5, so it reads as unknown, not as a value. */
+    @Test
+    fun `an out-of-set radar volume is unknown`() {
+        assertNull(CarSettings.decode(bytes(0x00))[CarSetting.RADAR_VOLUME])
     }
 
     /**
