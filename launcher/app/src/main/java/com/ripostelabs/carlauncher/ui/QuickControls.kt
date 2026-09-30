@@ -1,11 +1,10 @@
 package com.ripostelabs.carlauncher.ui
 
 import com.ripostelabs.carlauncher.ui.theme.carCard
-import android.content.Context
-import android.content.Intent
-import android.provider.Settings
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -25,6 +24,7 @@ import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material.icons.filled.WifiTethering
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
@@ -52,6 +52,7 @@ import com.ripostelabs.carlauncher.carlib.RootShell
 import com.ripostelabs.carlauncher.data.BrightnessController
 import com.ripostelabs.carlauncher.data.DayNightMode
 import com.ripostelabs.carlauncher.data.LauncherSettings
+import com.ripostelabs.carlauncher.data.Radios
 import com.ripostelabs.carlauncher.data.SettingsStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
@@ -175,19 +176,16 @@ fun QuickControlsPanel(
                 onSelect = settingsStore::setDayNightMode,
             )
 
-            // ---- Wi-Fi / Bluetooth system-panel shortcuts (Intents) -------------
+            // RAV4-174: Wi-Fi and Bluetooth toggle on a tap and open Android's page on a long
+            // press. Hotspot opens the tether page: starting tethering needs the platform key.
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                RadioChip(Radios.Radio.WIFI, Icons.Filled.Wifi, "Wi-Fi", Modifier.weight(1f))
+                RadioChip(Radios.Radio.BLUETOOTH, Icons.Filled.Bluetooth, "Bluetooth", Modifier.weight(1f))
                 ShortcutChip(
-                    icon = Icons.Filled.Wifi,
-                    label = "Wi-Fi",
+                    icon = Icons.Filled.WifiTethering,
+                    label = "Hotspot",
                     modifier = Modifier.weight(1f),
-                    onClick = { launchSettings(context, Settings.ACTION_WIFI_SETTINGS) },
-                )
-                ShortcutChip(
-                    icon = Icons.Filled.Bluetooth,
-                    label = "Bluetooth",
-                    modifier = Modifier.weight(1f),
-                    onClick = { launchSettings(context, Settings.ACTION_BLUETOOTH_SETTINGS) },
+                    onClick = { Radios.open(context, Radios.Page.HOTSPOT) },
                 )
             }
 
@@ -456,6 +454,43 @@ private fun ShortcutChip(
     }
 }
 
+/** A radio's on/off tile: the accent fill is the live state, a long press opens its page. */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun RadioChip(radio: Radios.Radio, icon: ImageVector, label: String, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val on by remember(radio) { Radios.state(context, radio) }.collectAsStateSafe(initial = null)
+    val page = Radios.page(radio)
+
+    // Unknown state reads as off: a tap then asks for on, the useful direction in a car.
+    val toggle = withTapFeedback {
+        val next = if (on == true) Radios.Power.OFF else Radios.Power.ON
+        scope.launch {
+            val switched = withContext(Dispatchers.IO) { Radios.switch(radio, next) }
+            if (!switched) {
+                Radios.open(context, page)
+            }
+        }
+    }
+
+    val bg = if (on == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+    val fg = if (on == true) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+    Row(
+        modifier = modifier
+            .clip(carShape(14.dp))
+            .background(bg)
+            .combinedClickable(onClick = toggle, onLongClick = { Radios.open(context, page) })
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
+    ) {
+        Icon(imageVector = icon, contentDescription = label, tint = fg, modifier = Modifier.size(22.dp))
+        Spacer(Modifier.width(10.dp))
+        AutoSizeText(text = label, style = MaterialTheme.typography.titleMedium, color = fg)
+    }
+}
+
 @Composable
 private fun SegmentChip(
     label: String,
@@ -490,12 +525,6 @@ private fun accentSliderColors() = SliderDefaults.colors(
     activeTrackColor = MaterialTheme.colorScheme.primary,
     inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant,
 )
-
-private fun launchSettings(context: Context, action: String) {
-    runCatching {
-        context.startActivity(Intent(action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-    }
-}
 
 /**
  * Tap-target geometry. §1.2's 48 dp floor applies to the glyph's *box*, not to the glyph: each
