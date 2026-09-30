@@ -143,6 +143,8 @@ object KeyActions {
 class KeyRouter(
     private val map: () -> WheelKeyMap,
     private val emit: (KeyAction) -> Unit,
+    /** RAV4-192: stock's CAN-channel swaps, for the box keys and wheel volume. */
+    private val swap: () -> KeySwap = { KeySwap.NONE },
 ) : McuOwner.Listener {
 
     private var heldFrames = 0
@@ -170,7 +172,7 @@ class KeyRouter(
 
     override fun onCanSignal(signal: CanSignal, atMs: Long) {
         // RAV4-168: the box's panel, knob, voice and mode keys.
-        boxKeys.onSignal(signal).forEach(emit)
+        boxKeys.onSignal(signal).forEach { emit(swap().action(it)) }
 
         if (signal !is CanSignal.BasicStatus) {
             return
@@ -178,7 +180,7 @@ class KeyRouter(
         onVolumeSample(signal.swcButtonId, signal.swcPressed)
     }
 
-    /** A plain CAN wheel press, as [WheelGestures] reports it on release. */
+    /** A plain CAN wheel press, as [WheelGestures] reports it on release, already through [KeySwap.gesture]. */
     fun onCanPress(key: WheelKey) {
         emit(KeyActions.forCan(key))
     }
@@ -208,8 +210,8 @@ class KeyRouter(
     }
 
     private fun volumeAction(id: Int): KeyAction? = when (id) {
-        CAN_VOLUME_UP -> KeyAction.VOLUME_UP
-        CAN_VOLUME_DOWN -> KeyAction.VOLUME_DOWN
+        CAN_VOLUME_UP -> swap().action(KeyAction.VOLUME_UP)
+        CAN_VOLUME_DOWN -> swap().action(KeyAction.VOLUME_DOWN)
         else -> null
     }
 

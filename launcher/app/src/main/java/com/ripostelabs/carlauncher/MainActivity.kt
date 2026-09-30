@@ -458,6 +458,7 @@ class MainActivity : ComponentActivity() {
             val router = KeyRouter(
                 map = { learn.state.value.map },
                 emit = { action -> runOnUiThread { dispatchKey(action) } },
+                swap = { settingsStore.settings.value.keySwap },
             ).also { keyRouter = it }
             val ownerListener = McuOwner.FanOut(
                 carEvents.ownerListener(CanCaptureService.vehicle(), carService.radioState),
@@ -901,7 +902,9 @@ class MainActivity : ComponentActivity() {
             mediaAction = { nowPlaying.customAction(it) },
         )
         lifecycleScope.launch {
-            carEvents.wheelGestures.collect { gesture ->
+            carEvents.wheelGestures.collect { raw ->
+                // RAV4-192: the prev/next swap moves the whole key, hold and double press too.
+                val gesture = settingsStore.settings.value.keySwap.gesture(raw)
                 val action = settingsStore.settings.value.wheelGestures.actionFor(gesture)
 
                 // Riposte OS 0.2: no vendor acts on the plain press, so the router does,
