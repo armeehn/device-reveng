@@ -34,13 +34,13 @@ class OwnerAudioTest {
         assertEquals(0, audio.state.value.eqMode)
     }
 
-    /** 04+2F+0E+00 = 0x41, ~ = 0xBE. */
+    /** DSP domain 0..20 (EasyFieldFragment_two_2.java:180). 04+2F+14+00 = 0x47, ~ = 0xB8. */
     @Test
     fun balanceFaderClampsToAmpDomain() {
-        audio.setBalanceFader(20, -3)
+        audio.setBalanceFader(25, -3)
 
-        assertArrayEquals(bytes(0x0D, 0x0A, 0x04, 0x2F, 0x0E, 0x00, 0xBE, 0x00), sent.single())
-        assertEquals(14, audio.state.value.balance)
+        assertArrayEquals(bytes(0x0D, 0x0A, 0x04, 0x2F, 0x14, 0x00, 0xB8, 0x00), sent.single())
+        assertEquals(20, audio.state.value.balance)
         assertEquals(0, audio.state.value.fader)
     }
 

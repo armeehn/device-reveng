@@ -50,7 +50,7 @@ object McuSetupProtocol {
     private const val BALANCE_PAYLOAD = 2
     private const val TONE_PAYLOAD = 3
 
-    /** `2F balance fader`, amp domain 0..14 with 7 at centre (sendBalFadValue, :9440). */
+    /** `2F balance fader`, 0..20 with 10 at centre (DSP BalanceModel_two :56-69; sendBalFadValue :9440). */
     fun balanceFader(balance: Int, fader: Int): ByteArray =
         McuSerial.encode(OP_BALANCE_FADER, bytes(balance, fader))
 

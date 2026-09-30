@@ -17,10 +17,18 @@ class McuSetupProtocolTest {
 
     private fun command(opcode: Int, vararg payload: Int) = McuSerial.Command(opcode, bytes(*payload))
 
-    /** sendBalFadValue (:9440): `2F bal fad`, amp domain 0..14, centre 7. 04+2F+07+07 = 0x41. */
+    /**
+     * The DSP app's `2F lr fr` (BalanceModel_two.sendChannelGains, :56-69; MCU_KEY_GOTO = 47),
+     * 0..20 with centre 10. Vectors are its corner presets (EasyFieldFragment_two_2.java:
+     * 186-202): all seats 10/10 (04+2F+0A+0A = 0x47), driver 5/5 (0x3D), passenger lr 15
+     * fr 5 (0x47), rear lr 10 fr 15 (0x4C).
+     */
     @Test
     fun balanceFaderIsTwoF() {
-        assertArrayEquals(bytes(0x0D, 0x0A, 0x04, 0x2F, 0x07, 0x07, 0xBE, 0x00), McuSetupProtocol.balanceFader(7, 7))
+        assertArrayEquals(bytes(0x0D, 0x0A, 0x04, 0x2F, 0x0A, 0x0A, 0xB8, 0x00), McuSetupProtocol.balanceFader(10, 10))
+        assertArrayEquals(bytes(0x0D, 0x0A, 0x04, 0x2F, 0x05, 0x05, 0xC2, 0x00), McuSetupProtocol.balanceFader(5, 5))
+        assertArrayEquals(bytes(0x0D, 0x0A, 0x04, 0x2F, 0x0F, 0x05, 0xB8, 0x00), McuSetupProtocol.balanceFader(15, 5))
+        assertArrayEquals(bytes(0x0D, 0x0A, 0x04, 0x2F, 0x0A, 0x0F, 0xB3, 0x00), McuSetupProtocol.balanceFader(10, 15))
     }
 
     /** sendEQMode (:4291): `09 mode`. 03+09+03 = 0x0F. */

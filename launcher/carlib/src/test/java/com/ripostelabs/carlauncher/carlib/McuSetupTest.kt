@@ -10,8 +10,9 @@ class McuSetupTest {
     fun defaultRowsAreTheVendorDefaults() {
         val rows = McuSetup().toRows()
 
-        assertEquals("7", rows["Set_BalanaceLR"])
-        assertEquals("7", rows["Set_BalanaceFA"])
+        // The DSP path's centre, not eventcenter's 7 (BalanceModel_two, Constants.java:200-201).
+        assertEquals("10", rows["Set_BalanaceLR"])
+        assertEquals("10", rows["Set_BalanaceFA"])
         assertEquals("7", rows["Set_Bass_Val"])
         assertEquals("0", rows["Set_Eq_Mode"])
         assertEquals("0", rows["Set_Loudness"])

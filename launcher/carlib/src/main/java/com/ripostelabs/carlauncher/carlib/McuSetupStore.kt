@@ -32,8 +32,8 @@ class McuSetupStore(
     val setup: StateFlow<McuSetup> = _setup.asStateFlow()
 
     fun setBalanceFader(balance: Int, fader: Int) {
-        val b = balance.coerceIn(0, McuSetup.LEVEL_MAX)
-        val f = fader.coerceIn(0, McuSetup.LEVEL_MAX)
+        val b = balance.coerceIn(0, BAL_FAD_MAX)
+        val f = fader.coerceIn(0, BAL_FAD_MAX)
         update { copy(balance = b, fader = f) }
         send(McuSetupProtocol.balanceFader(b, f))
     }
