@@ -430,6 +430,10 @@ class MainActivity : ComponentActivity() {
                     delay(RTC_PUSH_POLL_MS)
                 }
             }
+            // RAV4-175: a new zone moves the local time the RTC holds.
+            lifecycleScope.launch {
+                McuClock.zoneChanges(applicationContext).collect { mcuClock.onZoneChanged() }
+            }
             // Offline the MCU RTC drifts (a day behind, 2026-09-22); the first GPS fix of each
             // wake corrects the clock and hands it on to the MCU, as the vendor gateway did.
             gpsClock = GpsClock(applicationContext, onClockSet = mcuClock::onGpsClock).also { it.start() }

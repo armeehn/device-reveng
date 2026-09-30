@@ -1,13 +1,19 @@
 package com.ripostelabs.carlauncher.data
 
 import android.app.AlarmManager
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.util.Log
 import com.ripostelabs.carlauncher.carlib.McuOwner
 import java.time.LocalDateTime
 import java.time.ZoneId
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlin.math.abs
 
 /**
@@ -71,6 +77,20 @@ class McuClock(
         Log.i(TAG, "MCU RTC set to $now")
     }
 
+    /**
+     * RAV4-175: the zone changed, so the local time the MCU RTC holds is off by the new offset.
+     * The instant did not move, so any live clock is pushed again, online or not; left stale,
+     * the next offline boot would read it back an offset away.
+     */
+    fun onZoneChanged(now: LocalDateTime = LocalDateTime.now()) {
+        if (!shouldPushZone(now.year)) {
+            return
+        }
+
+        sendRtc?.invoke(now) ?: return
+        Log.i(TAG, "zone changed: MCU RTC set to $now")
+    }
+
     private fun online(): Boolean {
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         val caps = cm.activeNetwork?.let { cm.getNetworkCapabilities(it) } ?: return false
@@ -85,6 +105,19 @@ class McuClock(
 
         /** A clock this build could not have made up: NTP or GPS has run, so the year is current. */
         const val TRUSTWORTHY_YEAR = 2025
+
+        fun shouldPushZone(year: Int): Boolean = year >= TRUSTWORTHY_YEAR
+
+        /** ACTION_TIMEZONE_CHANGED as a flow, for [onZoneChanged]. */
+        fun zoneChanges(context: Context): Flow<Unit> = callbackFlow {
+            val receiver = object : BroadcastReceiver() {
+                override fun onReceive(context: Context, intent: Intent) {
+                    trySend(Unit)
+                }
+            }
+            context.registerReceiver(receiver, IntentFilter(Intent.ACTION_TIMEZONE_CHANGED), Context.RECEIVER_NOT_EXPORTED)
+            awaitClose { context.unregisterReceiver(receiver) }
+        }
 
         /** Push once per boot, only with a network or a GPS fix to have set the clock, only with a live year. */
         fun shouldPush(online: Boolean, gpsSet: Boolean, year: Int, alreadyPushed: Boolean): Boolean {

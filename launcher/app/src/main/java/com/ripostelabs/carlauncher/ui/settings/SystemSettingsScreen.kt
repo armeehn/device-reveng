@@ -7,10 +7,15 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ripostelabs.carlauncher.carlib.CarService
 import com.ripostelabs.carlauncher.data.CarSettingsController
 import com.ripostelabs.carlauncher.data.SettingKeys
+import com.ripostelabs.carlauncher.data.SystemTime
+import java.time.Instant
+import java.time.ZoneId
+import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -75,6 +80,7 @@ fun SystemSettingsScreen(
                 options = listOf(0 to "24-hour", 1 to "12-hour"),
                 onSelect = { controller.setInt(SettingKeys.TIME_FORMAT, it) },
             )
+            TimeRows()
             InfoRow("App version", controller.getString(SettingKeys.APP_VERSION, "—").ifBlank { "—" })
             InfoRow("System version", controller.getString(SettingKeys.SYSTEM_VERSION, "—").ifBlank { "—" })
         }
@@ -148,3 +154,63 @@ fun SystemSettingsScreen(
 }
 
 private const val WIPE_MESSAGE = "Erases all apps, accounts and settings on the head unit."
+
+/**
+ * RAV4-175: automatic time and zone, the zone, daylight saving and the language. Each switch
+ * shows what the system holds after the root write, so a refused write leaves it unchanged.
+ */
+@Composable
+private fun TimeRows() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var autoTime by remember { mutableStateOf(SystemTime.isAuto(context, SystemTime.Auto.TIME)) }
+    var autoZone by remember { mutableStateOf(SystemTime.isAuto(context, SystemTime.Auto.ZONE)) }
+    var zone by remember { mutableStateOf(ZoneId.systemDefault().id) }
+
+    fun setAuto(auto: SystemTime.Auto, on: Boolean) {
+        val switch = if (on) SystemTime.Switch.ON else SystemTime.Switch.OFF
+        scope.launch {
+            withContext(Dispatchers.IO) { SystemTime.setAuto(auto, switch) }
+            autoTime = SystemTime.isAuto(context, SystemTime.Auto.TIME)
+            autoZone = SystemTime.isAuto(context, SystemTime.Auto.ZONE)
+        }
+    }
+
+    ToggleSetting(
+        label = "Automatic time",
+        checked = autoTime,
+        onChange = { setAuto(SystemTime.Auto.TIME, it) },
+        description = "From the network, or GPS when offline",
+    )
+    ToggleSetting(
+        label = "Automatic time zone",
+        checked = autoZone,
+        onChange = { setAuto(SystemTime.Auto.ZONE, it) },
+        description = "From the network",
+    )
+    PickerSetting(
+        label = "Time zone",
+        current = zone,
+        // The unit's own zone may be one the list leaves out (UTC on a fresh image): show it anyway.
+        options = (listOf(zone) + SystemTime.zones()).distinct().map { it to it.replace('_', ' ') },
+        onSelect = { id ->
+            scope.launch {
+                withContext(Dispatchers.IO) { SystemTime.setZone(id) }
+                zone = ZoneId.systemDefault().id
+            }
+        },
+        description = if (autoZone) "Turn off automatic time zone to pick one" else null,
+        enabled = !autoZone,
+    )
+    val dst = when (SystemTime.dst(ZoneId.of(zone), Instant.now())) {
+        SystemTime.Dst.IN_EFFECT -> "In effect now, set by the zone"
+        SystemTime.Dst.NOT_NOW -> "Not in effect now, set by the zone"
+        SystemTime.Dst.NEVER -> "Not used in this zone"
+    }
+    InfoRow("Daylight saving", dst)
+    ActionRow(
+        label = "Language",
+        description = Locale.getDefault().displayName,
+        onClick = { SystemTime.openLanguages(context) },
+    )
+}
