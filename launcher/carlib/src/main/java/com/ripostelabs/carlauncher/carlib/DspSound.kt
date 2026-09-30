@@ -4,9 +4,9 @@ package com.ripostelabs.carlauncher.carlib
  * DspSound — the stock DSP app's sound blocks beyond the EQ (`com.choiceway.dsp`, chip 0, the
  * GT6 sound path). Each block is one `4F` sub-id frame and a few of the app's own rows.
  *
- *     McuSetupStore.setDspSub / setDspBass / setDspField
- *         ──▶ McuSetupProtocol.dspSub / dspBass / dspDelay + dspChannelGain
- *         ──▶ `4F 15 …` / `4F 16 …` / `4F 12 …` + `4F 13 …` ──▶ MCU
+ *     McuSetupStore.setDspSub / setDspBass / setDspField / setDspCrossover / setDspSurround
+ *         ──▶ McuSetupProtocol.dspSub / dspBass / dspDelay + dspChannelGain / dspCrossover / dspSurround
+ *         ──▶ `4F 15 …` / `4F 16 …` / `4F 12 …` + `4F 13 …` / `4F 14 …` / `4F 0F …` ──▶ MCU
  *     boot and wake ──▶ McuOwnerProtocol.configBlocks re-sends the saved blocks
  *
  * Ranges are the stock controls'; paths are under the app's `model/` and `fragment/`.
@@ -127,6 +127,54 @@ object DspSound {
             return copy(gains = next)
         }
     }
+
+    /** Low-pass 3000..20000 Hz, high-pass 20..250 Hz (SubWoofModel_Two.java:176-183, 300-305). */
+    const val LP_MIN = 3000
+    const val LP_MAX = 20000
+    const val HP_MIN = 20
+    const val HP_MAX = 250
+
+    /** A filter's slope, stock's `LPMODE` / `HPMODE`: 0 "Bessel", 1 "Butterworth" (strings.xml:81-82). */
+    enum class Slope(val label: String) {
+        BESSEL("Bessel"),
+        BUTTERWORTH("Butterworth"),
+    }
+
+    /**
+     * The crossover, `4F 14 fLP fHP rLP rHP lpSlope hpSlope` with each frequency big-endian
+     * (sendFilter, :428-450). Defaults pass everything: LP 20000 Hz, HP 20 Hz, Bessel.
+     */
+    data class Crossover(
+        val frontLp: Int = LP_MAX,
+        val frontHp: Int = HP_MIN,
+        val rearLp: Int = LP_MAX,
+        val rearHp: Int = HP_MIN,
+        val lpSlope: Slope = Slope.BESSEL,
+        val hpSlope: Slope = Slope.BESSEL,
+    ) {
+        fun clamped(): Crossover = copy(
+            frontLp = frontLp.coerceIn(LP_MIN, LP_MAX),
+            frontHp = frontHp.coerceIn(HP_MIN, HP_MAX),
+            rearLp = rearLp.coerceIn(LP_MIN, LP_MAX),
+            rearHp = rearHp.coerceIn(HP_MIN, HP_MAX),
+        )
+    }
+
+    /** Surround modes and their wire numbers (SoundFragment_Two.java:163-200); labels are stock's. */
+    enum class SurroundMode(val wire: Int, val label: String) {
+        MUSIC(0, "Music"),
+        CINEMA(1, "Cinema"),
+        SPECIAL(2, "Special"),
+        MONO(3, "Mono"),
+        LCRS(4, "LCRS"),
+    }
+
+    /** Surround, `4F 0F (on + 2 * centre) mode` (SoundModel_Two.sendSound, :33-50). */
+    data class Surround(
+        val on: Boolean = false,
+        val centre: Boolean = false,
+        val mode: SurroundMode = SurroundMode.MUSIC,
+    )
 
     private val SPEAKERS = Speaker.values().size
     private const val HALF_CM = DELAY_MAX_CM / 2

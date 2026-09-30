@@ -47,7 +47,6 @@ object McuOwnerProtocol {
     private const val OP_BACKLIGHT = 0x2E     // sendBacklight, :9639-9659
     private const val OP_SOUND_STATE = 0x3F   // sendNavStateToMcu, :8076-8083: nav byte, system byte
     private const val OP_TIMED_MUTE = 0x4C    // onSendMuteToMcu, MusicPlayerService.java:1120: units
-    private const val OP_CONFIG = 0x4F        // sendFactoryMcuSet and the other 4F sub-id blocks
     private const val OP_SYS_CONFIG = 0x49    // sendSleepTime :9361, sendVolumeGain :9662: `49 sub-id ...`
     private const val CFG_SLEEP_TIME = 0x05   // sendSleepTime's sub-id (:9370)
     private const val BT_STATE_ON = 1         // sendBTState(1), sent after the config blocks
@@ -372,18 +371,19 @@ object McuOwnerProtocol {
     /**
      * The `4F` blocks alone: `reloadParam` re-sends these without the BT state (:3622-3632).
      * They are the DSP app's boot burst (DspService.java:64-83). The EQ (`4F 10`), loudness
-     * (`4F 0E`), subwoofer (`4F 15`), listening position (`4F 12`, `4F 13`) and bass boost
-     * (`4F 16`) carry the saved sound; with no table they are the flat defaults stock shipped.
+     * (`4F 0E`), crossover (`4F 14`), subwoofer (`4F 15`), listening position (`4F 12`, `4F 13`),
+     * bass boost (`4F 16`) and surround (`4F 0F`) carry the saved sound: every block is the
+     * user's. With no table they are the flat defaults stock shipped.
      */
     private fun configBlocks(setup: McuSetup?): List<ByteArray> = listOf(
         McuSetupProtocol.dspEq(setup?.dspEq ?: DspEq.FLAT),
         McuSetupProtocol.dspLoud(setup?.dspLoud ?: false),
-        McuSerial.encode(OP_CONFIG, bytes(0x14, 0x4e, 0x20, 0x00, 0x14, 0x4e, 0x20, 0x00, 0x14, 0x00, 0x00)),
+        McuSetupProtocol.dspCrossover(setup?.dspCrossover ?: DspSound.Crossover()),
         McuSetupProtocol.dspSub(setup?.dspSub ?: DspSound.Sub()),
         McuSetupProtocol.dspDelay(setup?.dspField ?: DspSound.Field()),
         McuSetupProtocol.dspChannelGain(setup?.dspField ?: DspSound.Field()),
         McuSetupProtocol.dspBass(setup?.dspBass ?: DspSound.Bass()),
-        McuSerial.encode(OP_CONFIG, bytes(0x0f, 0x00, 0x00)),
+        McuSetupProtocol.dspSurround(setup?.dspSurround ?: DspSound.Surround()),
     )
 
     /**

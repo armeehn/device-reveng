@@ -111,6 +111,12 @@ fun McuAudioSettingsScreen(
             DspFieldRows(setup.dspField, editSpeakers, { editSpeakers = it }, store::setDspField)
         }
 
+        // The DSP app's crossover (`4F 14`) and Surround tab (`4F 0F`), re-sent at boot (RAV4-190).
+        SettingsSection(title = "Crossover & surround") {
+            DspCrossoverRows(setup.dspCrossover, store::setDspCrossover)
+            DspSurroundRows(setup.dspSurround, store::setDspSurround)
+        }
+
         SettingsSection(title = "Amp equalizer") {
             PickerSetting(
                 label = "EQ preset",
@@ -335,6 +341,58 @@ private fun DspFieldRows(
     )
 }
 
+/** Front and rear high- and low-pass, the two slopes, and a pass-everything default. */
+@Composable
+private fun DspCrossoverRows(crossover: DspSound.Crossover, onChange: (DspSound.Crossover) -> Unit) {
+    HzSlider("Front high-pass", crossover.frontHp, HP_RANGE, HP_STEP) { onChange(crossover.copy(frontHp = it)) }
+    HzSlider("Front low-pass", crossover.frontLp, LP_RANGE, LP_STEP) { onChange(crossover.copy(frontLp = it)) }
+    HzSlider("Rear high-pass", crossover.rearHp, HP_RANGE, HP_STEP) { onChange(crossover.copy(rearHp = it)) }
+    HzSlider("Rear low-pass", crossover.rearLp, LP_RANGE, LP_STEP) { onChange(crossover.copy(rearLp = it)) }
+    PickerSetting(
+        label = "High-pass slope",
+        current = crossover.hpSlope,
+        options = SLOPE_OPTIONS,
+        onSelect = { onChange(crossover.copy(hpSlope = it)) },
+    )
+    PickerSetting(
+        label = "Low-pass slope",
+        current = crossover.lpSlope,
+        options = SLOPE_OPTIONS,
+        onSelect = { onChange(crossover.copy(lpSlope = it)) },
+    )
+    ActionRow(
+        label = "Default crossover",
+        description = "High-pass 20 Hz, low-pass 20 kHz: every speaker gets the full range",
+        onClick = { onChange(DspSound.Crossover()) },
+    )
+}
+
+@Composable
+private fun HzSlider(label: String, value: Int, range: IntRange, step: Int, onChange: (Int) -> Unit) {
+    SliderSetting(label = label, value = value, range = range, onChange = onChange, step = step, format = { "$it Hz" })
+}
+
+/** Surround on, the centre speaker, and stock's five modes. */
+@Composable
+private fun DspSurroundRows(surround: DspSound.Surround, onChange: (DspSound.Surround) -> Unit) {
+    ToggleSetting(
+        label = "Surround",
+        checked = surround.on,
+        onChange = { onChange(surround.copy(on = it)) },
+    )
+    ToggleSetting(
+        label = "Centre speaker",
+        checked = surround.centre,
+        onChange = { onChange(surround.copy(centre = it)) },
+    )
+    PickerSetting(
+        label = "Surround mode",
+        current = surround.mode,
+        options = SURROUND_OPTIONS,
+        onSelect = { onChange(surround.copy(mode = it)) },
+    )
+}
+
 @Composable
 private fun ToneSlider(label: String, value: Int, onChange: (Int) -> Unit) {
     SliderSetting(
@@ -383,6 +441,18 @@ private val SUB_GAIN_RANGE = -DspSound.SUB_GAIN_FLAT..(DspSound.SUB_GAIN_MAX - D
 private val BASS_LEVEL_RANGE = 0..DspSound.BASS_LEVEL_MAX
 
 private val DELAY_RANGE = 0..DspSound.DELAY_MAX_CM
+
+private val HP_RANGE = DspSound.HP_MIN..DspSound.HP_MAX
+private val LP_RANGE = DspSound.LP_MIN..DspSound.LP_MAX
+
+/** 10 Hz and 500 Hz notches: both ranges' ends sit on one (20..250, 3000..20000). */
+private const val HP_STEP = 10
+private const val LP_STEP = 500
+
+private val SLOPE_OPTIONS: List<Pair<DspSound.Slope, String>> = DspSound.Slope.values().map { it to it.label }
+
+private val SURROUND_OPTIONS: List<Pair<DspSound.SurroundMode, String>> =
+    DspSound.SurroundMode.values().map { it to it.label }
 
 /** 4 cm notches (about 0.12 ms); the stock seats' 136 and 272 cm both sit on one. */
 private const val DELAY_STEP = 4
