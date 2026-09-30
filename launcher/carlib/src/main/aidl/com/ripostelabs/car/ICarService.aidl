@@ -49,4 +49,9 @@ interface ICarService {
     // 7: the last playable source (radio, music, BT music, video), kept across boots so the
     // launcher can reopen its app after a cold boot. A Mode code, or -1 when none was set.
     int lastSource();                           // READ
+
+    // 8: the system night mode (UiModeManager), so every app follows the launcher's day/night.
+    const int NIGHT_MODE_DAY = 1;               // UiModeManager.MODE_NIGHT_NO
+    const int NIGHT_MODE_NIGHT = 2;             // UiModeManager.MODE_NIGHT_YES
+    void setNightMode(int mode);                // CONTROL
 }

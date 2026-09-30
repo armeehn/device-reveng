@@ -88,6 +88,7 @@ import com.ripostelabs.carlauncher.carlib.PlaybackWatch
 import com.ripostelabs.carlauncher.carlib.GatewayHandshake // v3.0
 import com.ripostelabs.carlauncher.carlib.Gear
 import com.ripostelabs.carlauncher.carlib.PowerKeyMode
+import com.ripostelabs.carlauncher.carlib.SystemNight
 import com.ripostelabs.carlauncher.carlib.SysVar // v0.4.9 vendor hidden-apps list
 import com.ripostelabs.carlauncher.carlib.VendorBt
 import com.ripostelabs.carlauncher.carlib.BtDeviceCommand
@@ -1056,9 +1057,14 @@ class MainActivity : ComponentActivity() {
                 )
             }
 
+            // RAV4-169: the car service sets it as system uid, so every app and CarPlay's night
+            // map follow; the root shell stays for images without a service at 8.
             LaunchedEffect(night) {
                 withContext(Dispatchers.IO) {
-                    RootShell.exec("cmd uimode night " + if (night) "yes" else "no")
+                    val mode = if (night) SystemNight.NIGHT else SystemNight.DAY
+                    if (mcuOwner?.setNightMode(mode) != true) {
+                        RootShell.exec("cmd uimode night " + if (night) "yes" else "no")
+                    }
                 }
             }
 

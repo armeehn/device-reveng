@@ -166,6 +166,15 @@ class RemoteMcuOwner(
         return at(POWER_KEY_API) { it.setPowerKey(mode.raw) }
     }
 
+    /** Kept for [replay]: a choice made before the service is up. */
+    @Volatile
+    private var night: SystemNight? = null
+
+    override fun setNightMode(mode: SystemNight): Boolean {
+        night = mode
+        return at(NIGHT_API) { it.setNightMode(mode.code) }
+    }
+
     override fun onNavTouch(action: () -> Unit) {
         navTouch = action
     }
@@ -225,6 +234,9 @@ class RemoteMcuOwner(
         if (api >= POWER_KEY_API) {
             powerKey?.let { svc.setPowerKey(it.raw) }
         }
+        if (api >= NIGHT_API) {
+            night?.let { svc.setNightMode(it.code) }
+        }
         if (open) {
             svc.openLink()
         } else {
@@ -273,6 +285,9 @@ class RemoteMcuOwner(
 
         /** ICarService.apiVersion that keeps the last source across boots (RAV4-170). */
         const val RESUME_API = 7
+
+        /** ICarService.apiVersion that sets the system night mode (RAV4-169). */
+        const val NIGHT_API = 8
 
         /** [McuOwner.Status.Failed] reason while the service is down (it restarts, we rebind). */
         const val SERVICE_GONE = "car service gone"

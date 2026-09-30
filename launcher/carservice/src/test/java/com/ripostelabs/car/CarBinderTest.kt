@@ -78,18 +78,25 @@ class CarBinderTest {
         override fun show(state: Int, colors: IntArray) { shown += "$state ${colors.size}" }
     }
 
+    /** The system night mode: records what the launcher asked for. */
+    private class FakeUiMode : UiMode {
+        val modes = mutableListOf<Int>()
+        override fun setNightMode(mode: Int) { modes += mode }
+    }
+
     private val nav = FakeNav()
+    private val uiMode = FakeUiMode()
     private val power = FakePower()
     private val decoder = FakeDecoder()
     private val listeners = FakeListeners()
     private val link = FakeLink()
 
     private fun binder(vararg held: String) =
-        CarBinder(Gate { it in held }, listeners, power, systemUid, link, decoder, nav)
+        CarBinder(Gate { it in held }, listeners, power, systemUid, link, decoder, nav, uiMode)
 
     @Test
-    fun apiVersionIsSeven() {
-        assertEquals(7, binder().apiVersion())
+    fun apiVersionIsEight() {
+        assertEquals(8, binder().apiVersion())
     }
 
     @Test
@@ -201,6 +208,18 @@ class CarBinderTest {
     fun currentSourceNeedsOnlyRead() {
         assertEquals(7, binder(READ_PERMISSION).currentSource())
         assertThrows(SecurityException::class.java) { binder().currentSource() }
+    }
+
+    // RAV4-169: the system night mode is a change, so CONTROL; only the two modes pass.
+    @Test
+    fun nightModeNeedsControlAndAKnownMode() {
+        binder(CONTROL_PERMISSION).setNightMode(ICarService.NIGHT_MODE_NIGHT)
+        binder(CONTROL_PERMISSION).setNightMode(ICarService.NIGHT_MODE_DAY)
+
+        assertEquals(listOf(ICarService.NIGHT_MODE_NIGHT, ICarService.NIGHT_MODE_DAY), uiMode.modes)
+        assertThrows(SecurityException::class.java) { binder(READ_PERMISSION).setNightMode(ICarService.NIGHT_MODE_DAY) }
+        assertThrows(IllegalArgumentException::class.java) { binder(CONTROL_PERMISSION).setNightMode(0) }
+        assertEquals(2, uiMode.modes.size)
     }
 
     // RAV4-170: the source kept across boots is a read, like the live one.

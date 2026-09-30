@@ -61,6 +61,12 @@ interface NavPanel {
 }
 
 /** The MCU link as the binder drives it: [OwnerHost] around McuOwner on the unit, a fake in tests. */
+/** The system night mode: UiModeManager on the unit ([SystemUiMode]), a fake in tests. */
+interface UiMode {
+    /** ICarService.NIGHT_MODE_* */
+    fun setNightMode(mode: Int)
+}
+
 interface Link {
     fun status(): McuOwner.Status
     fun open()
@@ -96,6 +102,7 @@ class CarBinder(
     private val link: Link,
     private val decoder: Decoder,
     private val nav: NavPanel,
+    private val uiMode: UiMode,
 ) : ICarService.Stub() {
 
     /** The `71` reverse bit while the link runs; only [publish] and [publishStatus] move it. */
@@ -200,6 +207,12 @@ class CarBinder(
         return link.currentSource()
     }
 
+    override fun setNightMode(mode: Int) {
+        gate.enforce(Access.CONTROL)
+        require(mode == ICarService.NIGHT_MODE_DAY || mode == ICarService.NIGHT_MODE_NIGHT) { "unknown night mode $mode" }
+        uiMode.setNightMode(mode)
+    }
+
     override fun lastSource(): Int {
         gate.enforce(Access.READ)
         return link.lastSource()
@@ -271,7 +284,7 @@ class CarBinder(
         // 1 was the skeleton; 2 adds the MCU link calls; 3 power (factoryReset); 4 reverse and
         // decoder; 5 the nav bar; 6 the POWER key choice. Additions to ICarService bump it. The manifest's com.ripostelabs.car.API
         // meta-data must say the same.
-        const val API_VERSION = 7
+        const val API_VERSION = 8
 
         /** surface, onSurface, primary. */
         const val NAV_COLORS = 3

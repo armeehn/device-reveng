@@ -35,6 +35,9 @@ interface McuPort {
     val resumeMode: McuOwnerProtocol.Mode?
         get() = null
 
+    /** RAV4-169: the system night mode for every app. False where the owner cannot set it. */
+    fun setNightMode(mode: SystemNight): Boolean = false
+
     /** RAV4-156: whether POWER runs the power-off burst. False where the owner cannot take it. */
     fun setPowerKey(mode: PowerKeyMode): Boolean = false
 }

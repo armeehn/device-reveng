@@ -352,7 +352,8 @@ fun LauncherPrefsScreen(
                 checked = settings.clockFallback,
                 onChange = settingsStore::setClockFallback,
                 description = "Only applies in Auto, and only until an illumination broadcast " +
-                    "arrives. \"Clock\" mode above always uses these hours.",
+                    "arrives. \"Clock\" follows sunrise and sunset at the last GPS fix, and " +
+                    "these hours before the first fix.",
             )
             SliderSetting(
                 label = "Night starts",
