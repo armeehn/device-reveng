@@ -168,7 +168,7 @@ fun HomeClockCard(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
     ) {
         Row(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 12.dp),
+            modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
@@ -184,7 +184,9 @@ fun HomeClockCard(
 
 @Composable
 private fun ClockBlock(style: ClockStyle, now: Calendar) {
-    val date = SimpleDateFormat("EEE d MMM", Locale.getDefault()).format(now.time)
+    // Two short lines, so the weather beside it keeps its width.
+    val day = SimpleDateFormat("EEE", Locale.getDefault()).format(now.time)
+    val date = SimpleDateFormat("d MMM", Locale.getDefault()).format(now.time)
 
     // Analog: dial, then the digits small beside it. Digital: the digits are the face.
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -198,8 +200,15 @@ private fun ClockBlock(style: ClockStyle, now: Calendar) {
                     color = MaterialTheme.colorScheme.onSurface,
                 )
             }
+            if (style == ClockStyle.DIGITAL) {
+                Text(
+                    text = day,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             Text(
-                text = date,
+                text = if (style == ClockStyle.DIGITAL) date else "$day $date",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -225,7 +234,8 @@ private fun WeatherBlock(w: WeatherNow, onOpen: () -> Unit) {
         Column {
             Text(
                 text = WeatherFeed.degrees(w.temp) + w.unit.code,
-                fontSize = 26.sp,
+                fontSize = 24.sp,
+                lineHeight = 26.sp,
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurface,
             )
@@ -234,12 +244,20 @@ private fun WeatherBlock(w: WeatherNow, onOpen: () -> Unit) {
             } else {
                 w.place
             }
-            val aqi = w.aqi?.let { "  AQI $it" }.orEmpty()
             Text(
-                text = hiLo + aqi,
+                text = hiLo,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
             )
+            w.aqi?.let {
+                Text(
+                    text = "AQI $it",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                )
+            }
         }
     }
 }
