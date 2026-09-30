@@ -58,4 +58,11 @@ class BtAutoConnectTest {
         assertFalse(policy.onState(HfpState.CONNECTING))
         assertFalse(policy.onState(HfpState.READY))
     }
+
+    /** RAV4-178: "refuse reconnect" (stock DataManage.java:749): the car never reaches for a phone. */
+    @Test
+    fun neverArmsWhenReconnectIsOff() {
+        assertFalse(BtAutoConnect().arm(HfpState.READY, carPlay = false, reconnect = Reconnect.OFF))
+        assertTrue(BtAutoConnect().arm(HfpState.READY, carPlay = false, reconnect = Reconnect.LAST_PHONE))
+    }
 }

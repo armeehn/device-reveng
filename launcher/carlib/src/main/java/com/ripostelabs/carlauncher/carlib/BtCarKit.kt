@@ -62,6 +62,8 @@ class BtCarKit(
     private val carPlay: () -> CarPlayState = { CarPlayState() },
     // RAV4-164: the driver's auto-answer choice, read at each ring.
     private val autoAnswer: () -> AutoAnswer = { AutoAnswer.OFF },
+    // RAV4-178: the driver's reconnect choice, read at the start-up campaign.
+    private val reconnect: () -> Reconnect = { Reconnect.LAST_PHONE },
 ) {
 
     private val appContext = context.applicationContext
@@ -195,7 +197,7 @@ class BtCarKit(
      * or CarPlay holds it. Retries ride [refresh] as the HF link reports back.
      */
     private fun armAutoConnect() {
-        if (!autoConnect.arm(BtCarKitMap.hfp(_snapshot.value), carPlay().connected)) {
+        if (!autoConnect.arm(BtCarKitMap.hfp(_snapshot.value), carPlay().connected, reconnect())) {
             return
         }
         connectLastPhone()
@@ -214,6 +216,35 @@ class BtCarKit(
             runCatching { proxy.method("connect", BluetoothDevice::class.java).invoke(proxy, phone) }
                 .onSuccess { Log.i(TAG, "auto-connect $id ${phone.address}: $it") }
                 .onFailure { Log.w(TAG, "auto-connect $id ${phone.address} failed", it) }
+        }
+    }
+
+    /**
+     * RAV4-178: connect, disconnect or forget one bonded phone for the suite Bluetooth app.
+     * Connect and disconnect go to the HF client and the A2DP sink, as [connectLastPhone] does;
+     * forget is the hidden `removeBond`. All three need BLUETOOTH_PRIVILEGED, which the launcher
+     * holds as a priv-app on the image.
+     */
+    fun device(command: BtDeviceCommand) {
+        worker.execute {
+            val bonded = runCatching { adapter?.bondedDevices?.toList() }.getOrNull().orEmpty()
+            val phone = bonded.firstOrNull { it.address == command.address } ?: run {
+                Log.w(TAG, "${command.op}: ${command.address} is not bonded")
+                return@execute
+            }
+            if (command.op == BtDeviceCommand.Op.FORGET) {
+                runCatching { phone.method("removeBond").invoke(phone) }
+                    .onSuccess { Log.i(TAG, "forget ${phone.address}: $it") }
+                    .onFailure { Log.w(TAG, "forget ${phone.address} failed", it) }
+                return@execute
+            }
+            val verb = if (command.op == BtDeviceCommand.Op.CONNECT) "connect" else "disconnect"
+            for (id in listOf(PROFILE_HEADSET_CLIENT, PROFILE_A2DP_SINK)) {
+                val proxy = proxies[id] ?: continue
+                runCatching { proxy.method(verb, BluetoothDevice::class.java).invoke(proxy, phone) }
+                    .onSuccess { Log.i(TAG, "$verb $id ${phone.address}: $it") }
+                    .onFailure { Log.w(TAG, "$verb $id ${phone.address} failed", it) }
+            }
         }
     }
 

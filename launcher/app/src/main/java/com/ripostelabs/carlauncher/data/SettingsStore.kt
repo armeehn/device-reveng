@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.ripostelabs.carlauncher.carlib.AutoAnswer
+import com.ripostelabs.carlauncher.carlib.Reconnect
 import com.ripostelabs.carlauncher.carlib.CarProfiles
 import com.ripostelabs.carlauncher.carlib.UsbRole
 import com.ripostelabs.carlauncher.carlib.WheelKey
@@ -211,6 +212,16 @@ class SettingsStore(context: Context) {
 
     fun setAutoAnswer(mode: AutoAnswer) = scope.launch {
         ds.edit { it[AUTO_ANSWER_KEY] = mode.name }
+    }
+
+    /** RAV4-178: whether the car goes to the last phone at start ([Reconnect]); on when never set. */
+    val reconnect: StateFlow<Reconnect> =
+        ds.data
+            .map { prefs -> Reconnect.of(prefs[RECONNECT_KEY]) }
+            .stateIn(scope, SharingStarted.Eagerly, Reconnect.LAST_PHONE)
+
+    fun setReconnect(mode: Reconnect) = scope.launch {
+        ds.edit { it[RECONNECT_KEY] = mode.name }
     }
 
     /** Mark onboarding as done so it never shows again (called on Finish or Skip). */
@@ -445,5 +456,6 @@ class SettingsStore(context: Context) {
         val CAN_BOX_CAR_KEY = stringPreferencesKey("can_box_car") // CarProfile.id
         val USB_ROLE_KEY = stringPreferencesKey("usb_role") // UsbRole.name, Riposte OS 0.2
         val AUTO_ANSWER_KEY = stringPreferencesKey("auto_answer") // AutoAnswer.name, RAV4-164
+        val RECONNECT_KEY = stringPreferencesKey("bt_reconnect") // Reconnect.name, RAV4-178
     }
 }
