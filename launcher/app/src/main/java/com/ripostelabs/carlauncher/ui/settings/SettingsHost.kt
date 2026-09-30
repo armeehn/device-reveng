@@ -306,6 +306,7 @@ fun SettingsHost(
                 controller = controller,
                 carService = carService,
                 onBack = ::pop,
+                diagnostics = mcuDiagnostics,
             )
 
             // v2.5 §1.4: the raw SysVar browser is 455 keys of free-text editing over live
