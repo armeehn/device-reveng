@@ -530,6 +530,15 @@ class CarEvents(private val appContext: Context) {
      */
     val carSettings: StateFlow<CarSettingsState?> = _carSettings.asStateFlow()
 
+    private val canGearWatch = CanGearWatch()
+    private val _canGear = MutableStateFlow<Gear?>(null)
+    /**
+     * The CAN box's gear (0x1A p[5]) while fresh, else null ([CanGearWatch]). Feeds the reverse
+     * line only when the driver picks [ReverseSource.WIRE_OR_CAN].
+     */
+    val canGear: StateFlow<Gear?> = _canGear.asStateFlow()
+    private val expireCanGear = Runnable { _canGear.value = canGearWatch.gear(System.currentTimeMillis()) }
+
     // v0.7 --- Parking radar (CAR_API §1.3 MCU_CAR_CAN_RADAR_INFO) ------------
     private val _radar = MutableStateFlow<RadarState?>(null)
     /**
@@ -1021,6 +1030,14 @@ class CarEvents(private val appContext: Context) {
         }
     }
 
+    /** One 0x1A gear; it lapses to null [CanGearWatch.STALE_MS] after the last one. */
+    private fun onCanGear(gear: Gear, atMs: Long) {
+        canGearWatch.onGear(gear, atMs)
+        _canGear.value = gear
+        handler.removeCallbacks(expireCanGear)
+        handler.postDelayed(expireCanGear, CanGearWatch.STALE_MS)
+    }
+
     /** Re-arm the one gesture timer for the engine's next deadline, or clear it when idle. */
     private fun scheduleGestureTick() {
         handler.removeCallbacks(gestureTick)
@@ -1145,6 +1162,7 @@ class CarEvents(private val appContext: Context) {
                 // frame is the only source for the reverse screen's radar overlay.
                 is CanSignal.ParkingRadar -> _radar.value = RadarState.fromParkingRadar(signal)
                 is CanSignal.CarSettings -> _carSettings.value = signal.state
+                is CanSignal.RpmGearMirror -> onCanGear(signal.gear, atMs)
                 is CanSignal.BasicStatus -> {
                     _doors.value = DoorState.from(signal, atMs)
                     // RAV4-53: the same frame carries the wheel key byte pair; on 0.2 this is the

@@ -45,6 +45,8 @@ object SettingKeys {
     const val BACKCAR_DISPLAY_RADAR = "Sys_BackCar_Display_Radar_Key"
     const val REVERSE_ASSIST_LINE = "Sys_Reverse_Assist_Line_Key"
     const val TRACK_LINE_TYPE = "Sys_TrackLineType"
+    /** Launcher-only: 0 wire (stock), 1 wire or CAN gear ([com.ripostelabs.carlauncher.carlib.ReverseSource]). */
+    const val REVERSE_SOURCE = "RL_Reverse_Source"
 
     // ---- Parking radar -----------------------------------------------------
     const val RADAR_TYPE_ENABLE = "Sys_RadarTypeEnable"
