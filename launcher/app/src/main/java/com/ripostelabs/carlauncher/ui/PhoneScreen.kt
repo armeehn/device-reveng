@@ -126,6 +126,8 @@ fun PhoneScreen(
     fun hangUp() = if (carKit != null) { feedback?.tap(); carKit.hangUp() } else send(VendorBt.hangUp())
     fun dial(number: String) =
         if (carKit != null) { feedback?.tap(); carKit.dial(number) } else send(VendorBt.dial(number))
+    // RAV4-159: in a call the pad sends tones. 0.2 only: btsuite's own call window has its pad.
+    fun tone(key: Char) = carKit?.dtmf(key)
 
     // Seed the device name: btsuite only re-sends it on request (control key 8).
     LaunchedEffect(Unit) {
@@ -169,6 +171,7 @@ fun PhoneScreen(
                     DialPad(
                         state = vendor.hfp,
                         onCall = ::dial,
+                        onTone = ::tone,
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -314,9 +317,22 @@ private fun CallButtons(
 private fun DialPad(
     state: HfpState?,
     onCall: (String) -> Unit,
+    onTone: (Char) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var number by remember { mutableStateOf("") }
+    // The tones sent in this call, shown in the field; a new call starts them empty.
+    val mode = PhoneLogic.padMode(state)
+    var tones by remember(mode) { mutableStateOf("") }
+
+    fun press(key: Char) {
+        if (mode == PhoneLogic.PadMode.DIAL) {
+            number = PhoneLogic.append(number, key)
+            return
+        }
+        onTone(key)
+        tones = PhoneLogic.append(tones, key)
+    }
 
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -331,8 +347,8 @@ private fun DialPad(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             NumberField(
-                number = number,
-                onChange = { number = it },
+                number = if (mode == PhoneLogic.PadMode.TONES) tones else number,
+                onChange = { if (mode == PhoneLogic.PadMode.DIAL) number = it },
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight(),
@@ -358,7 +374,7 @@ private fun DialPad(
                 for (key in rowKeys) {
                     DialKey(
                         key = key,
-                        onPress = { number = PhoneLogic.append(number, key) },
+                        onPress = { press(key) },
                         modifier = Modifier.weight(1f),
                     )
                 }

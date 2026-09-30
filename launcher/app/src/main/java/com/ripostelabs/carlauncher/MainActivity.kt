@@ -151,6 +151,10 @@ import com.ripostelabs.carlauncher.ui.RadarSideStrip // v2.8
 import com.ripostelabs.carlauncher.ui.ReverseCameraGate
 import com.ripostelabs.carlauncher.ui.ReverseCameraWindow
 import com.ripostelabs.carlauncher.ui.settings.TyreWarningPopup
+import com.ripostelabs.carlauncher.ui.IncomingCalls
+import com.ripostelabs.carlauncher.data.CallerNames
+import com.ripostelabs.carlauncher.carlib.LauncherFront
+import androidx.compose.runtime.snapshotFlow
 import com.ripostelabs.carlauncher.ui.PhoneScreen // RAV4-50
 import com.ripostelabs.carlauncher.ui.RadioScreen // v2.6
 import com.ripostelabs.carlauncher.ui.rememberClockNight // v2.7
@@ -240,6 +244,8 @@ class MainActivity : ComponentActivity() {
     private lateinit var navBar: NavBar
     private lateinit var volumePopup: VolumePopup
     private lateinit var reverseWindow: ReverseCameraWindow // Riposte OS 0.2
+    private lateinit var incomingCalls: IncomingCalls // RAV4-152, Riposte OS 0.2
+    private val callerNames by lazy { CallerNames(applicationContext) }
     private lateinit var settingsStore: SettingsStore // v0.6
     private lateinit var speechController: com.ripostelabs.carlauncher.media.SpeechController // v0.4.2 TTS
     private lateinit var radioPresetsStore: RadioPresetsStore // v0.9
@@ -529,7 +535,13 @@ class MainActivity : ComponentActivity() {
                 carPlay = { carEvents.carplayState.value },
             ).also { kit ->
                 kit.start()
-                lifecycleScope.launch { kit.vendorView.collect(carEvents::feedVendorBt) }
+                // RAV4-152: the Phone screen and the chip name the caller from the phonebook.
+                lifecycleScope.launch {
+                    kit.vendorView.collect { v ->
+                        val name = withContext(Dispatchers.IO) { callerNames.lookup(v.callerNumber) }
+                        carEvents.feedVendorBt(v.copy(callerName = name))
+                    }
+                }
                 // The A2DP stream is SRC_BTMUSIC, as btsuite selected it.
                 armAudioRoute?.let { r ->
                     lifecycleScope.launch { kit.snapshot.map { s -> s.audioPlaying }.distinctUntilChanged().collect(r::onBtAudio) }
@@ -549,6 +561,12 @@ class MainActivity : ComponentActivity() {
         navBar = NavBar(applicationContext).also { it.service = mcuOwner as? CarNav }
         volumePopup = VolumePopup(applicationContext)
         reverseWindow = ReverseCameraWindow(applicationContext) { on -> settingsStore.setReverseGuideLines(on) }
+        // RAV4-152: the ringing window over any app; the Phone screen carries its own buttons.
+        incomingCalls = IncomingCalls(applicationContext, btCarKit, callerNames)
+        val front = combine(lifecycle.currentStateFlow, snapshotFlow { screenState.value }) { st, sc ->
+            if (st.isAtLeast(Lifecycle.State.RESUMED) && sc == Screen.Phone) LauncherFront.PHONE_SCREEN else LauncherFront.ELSEWHERE
+        }
+        incomingCalls.start(lifecycleScope, carEvents.carplayState, front)
 
         // v2.7: the notification shelf's mute filter. Constructed before the speech controller
         // below, which shares it.
@@ -946,6 +964,7 @@ class MainActivity : ComponentActivity() {
                 navBar.update(if (night) activeTheme.night else activeTheme.day, settings.replaceSystemBars, settings.navBarMode)
                 volumePopup.update(if (night) activeTheme.night else activeTheme.day)
                 reverseWindow.update(activeTheme, night)
+                incomingCalls.update(activeTheme, night)
             }
 
             var screen by screenState // v0.8: hoisted to a field (Back/Home keys)
@@ -1596,6 +1615,7 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
         navBar.hide()
         reverseWindow.hide()
+        incomingCalls.stop()
         TunerHub.detach()
         keyPump.cancel() // v2.8: drop any held key and its repeat timer
         // Release the carriers: a virtio port admits one opener, so a recreated activity that

@@ -35,7 +35,7 @@ import kotlinx.coroutines.flow.asStateFlow
  *    │   AG_CALL_CHANGED broadcasts             ▼
  *    ▼                                     audio HAL · NowPlayingRepository (unchanged)
  *  BtCarKit ─▶ BtCarKitSnapshot ─▶ BtCarKitMap.vendorView ─▶ CarEvents.feedVendorBt
- *           ◀─ answer / hangUp / dial  (BluetoothHeadsetClient, reflection)
+ *           ◀─ answer / hangUp / dial / dtmf  (BluetoothHeadsetClient, reflection)
  * ```
  *
  * The three proxies are `@SystemApi` (`BluetoothA2dpSink`, `BluetoothHeadsetClient`,
@@ -73,6 +73,10 @@ class BtCarKit(
     @Volatile
     private var hfLink = HfLink.DISCONNECTED
 
+    /** The HF client's last AUDIO_STATE_CHANGED extra: an in-band ring silences the local one. */
+    @Volatile
+    private var hfAudio = HfAudio.OFF
+
     private val autoConnect = BtAutoConnect()
     private val prefs: SharedPreferences = appContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
@@ -107,6 +111,9 @@ class BtCarKit(
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.action == HF_CONNECTION_STATE) {
                 hfLink = intent.getIntExtra(BluetoothProfile.EXTRA_STATE, HfLink.DISCONNECTED)
+            }
+            if (intent.action == HF_AUDIO_STATE) {
+                hfAudio = HfAudio.of(intent.getIntExtra(BluetoothProfile.EXTRA_STATE, 0))
             }
             worker.execute { refresh() }
         }
@@ -227,6 +234,11 @@ class BtCarKit(
         hf.method("dial", BluetoothDevice::class.java, String::class.java).invoke(hf, device, number)
     }
 
+    /** RAV4-159: one touch tone of the active call ([Dtmf]). */
+    fun dtmf(key: Char) = hfCall { hf, device ->
+        Dtmf.send(hf, device, key)
+    }
+
     /** Run [block] on the worker against the HF proxy and its connected phone, if any. */
     private fun hfCall(block: (BluetoothProfile, BluetoothDevice) -> Unit) {
         worker.execute {
@@ -260,6 +272,7 @@ class BtCarKit(
             phoneName = (hfDevice ?: sinkDevice)?.let(::deviceName),
             hfConnected = hfDevice != null,
             hfLink = hfLink,
+            hfAudio = if (hfDevice != null) hfAudio else HfAudio.OFF,
             sinkConnected = sinkDevice != null,
             avrcpConnected = avrcp?.let(::connectedDevice) != null,
             calls = calls,
@@ -323,10 +336,11 @@ class BtCarKit(
         /** `BluetoothHeadsetClient.ACTION_*`, `BluetoothA2dpSink` / `BluetoothAvrcpController`. */
         private const val HF_PREFIX = "android.bluetooth.headsetclient.profile.action."
         private const val HF_CONNECTION_STATE = HF_PREFIX + "CONNECTION_STATE_CHANGED"
+        private const val HF_AUDIO_STATE = HF_PREFIX + "AUDIO_STATE_CHANGED"
         val ACTIONS = listOf(
             HF_CONNECTION_STATE,
             HF_PREFIX + "AG_CALL_CHANGED",
-            HF_PREFIX + "AUDIO_STATE_CHANGED",
+            HF_AUDIO_STATE,
             "android.bluetooth.a2dp-sink.profile.action.CONNECTION_STATE_CHANGED",
             "android.bluetooth.avrcp-controller.profile.action.CONNECTION_STATE_CHANGED",
             BluetoothAdapter.ACTION_STATE_CHANGED,
