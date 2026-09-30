@@ -1,5 +1,7 @@
 package com.ripostelabs.carlauncher.ui.settings
 
+import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material.icons.Icons
@@ -52,6 +54,7 @@ fun SettingsHub(
     controller: CarSettingsController,
     onOpen: (SettingsRoute) -> Unit,
     onBack: () -> Unit,
+    scrollState: ScrollState = rememberScrollState(),
 ) {
     val context = LocalContext.current
     val root by controller.rootAvailable.collectAsStateWithLifecycle()
@@ -60,7 +63,7 @@ fun SettingsHub(
         else -> "Car & launcher configuration"
     }
 
-    SettingsScaffold(title = "Settings", onBack = onBack, subtitle = subtitle) {
+    SettingsScaffold(title = "Settings", onBack = onBack, subtitle = subtitle, scrollState = scrollState) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             SettingsCategoryCard(
                 icon = Icons.Filled.Widgets,

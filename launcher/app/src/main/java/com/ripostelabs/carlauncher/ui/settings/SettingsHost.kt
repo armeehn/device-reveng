@@ -6,6 +6,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -95,6 +96,10 @@ fun SettingsHost(
 
     val current = backStack.last()
 
+    // The hub's scroll lives out here, not in the hub: AnimatedContent drops the hub while a
+    // page is open, so Back used to return to the top and a low row meant scrolling again.
+    val hubScroll = rememberScrollState()
+
     // v0.4.7.1: the one collector of the controller's write results. A failed SysVar persist
     // rolls the control back (CarSettingsController) — without this, that snap-back had no
     // explanation anywhere on screen.
@@ -126,6 +131,7 @@ fun SettingsHost(
                 controller = controller,
                 onOpen = ::push,
                 onBack = onExit,
+                scrollState = hubScroll,
             )
 
             SettingsRoute.LauncherPrefs -> LauncherPrefsScreen(
