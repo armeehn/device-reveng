@@ -37,7 +37,15 @@ data class BtCarKitSnapshot(
     val activeSinceMs: Long? = null,
     /** The HF client's SCO link, from its last `AUDIO_STATE_CHANGED` ([IncomingCallGate]). */
     val hfAudio: HfAudio = HfAudio.OFF,
+    /** RAV4-164: the car's mic is muted for this call ([BtCarKit.mic]); opened again when it ends. */
+    val micMuted: Boolean = false,
 )
+
+/** RAV4-164: the car's microphone during a call. */
+enum class Mic { OPEN, MUTED }
+
+/** RAV4-164: where the call's audio plays: the car (SCO up) or the handset. */
+enum class CallAudio { CAR, PHONE }
 
 /** One call as the HF client reports it (`BluetoothHeadsetClientCall`). */
 data class HfCall(

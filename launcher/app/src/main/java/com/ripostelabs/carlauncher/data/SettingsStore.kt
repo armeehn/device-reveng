@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.ripostelabs.carlauncher.carlib.AutoAnswer
 import com.ripostelabs.carlauncher.carlib.CarProfiles
 import com.ripostelabs.carlauncher.carlib.UsbRole
 import com.ripostelabs.carlauncher.carlib.WheelKey
@@ -200,6 +201,16 @@ class SettingsStore(context: Context) {
     /** Face the one USB controller to the car (host) or to the pigtail (peripheral). */
     fun setUsbRole(role: UsbRole) = scope.launch {
         ds.edit { it[USB_ROLE_KEY] = role.name }
+    }
+
+    /** RAV4-164: answer a ringing phone on its own after a delay ([AutoAnswer]); OFF when never set. */
+    val autoAnswer: StateFlow<AutoAnswer> =
+        ds.data
+            .map { prefs -> AutoAnswer.of(prefs[AUTO_ANSWER_KEY]) }
+            .stateIn(scope, SharingStarted.Eagerly, AutoAnswer.OFF)
+
+    fun setAutoAnswer(mode: AutoAnswer) = scope.launch {
+        ds.edit { it[AUTO_ANSWER_KEY] = mode.name }
     }
 
     /** Mark onboarding as done so it never shows again (called on Finish or Skip). */
@@ -433,5 +444,6 @@ class SettingsStore(context: Context) {
         val PHONE_INTERNET_KEY = booleanPreferencesKey("phone_internet_carplay") // PhoneInternet
         val CAN_BOX_CAR_KEY = stringPreferencesKey("can_box_car") // CarProfile.id
         val USB_ROLE_KEY = stringPreferencesKey("usb_role") // UsbRole.name, Riposte OS 0.2
+        val AUTO_ANSWER_KEY = stringPreferencesKey("auto_answer") // AutoAnswer.name, RAV4-164
     }
 }

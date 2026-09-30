@@ -39,6 +39,9 @@ object McuOwnerProtocol {
     private const val OP_MUTE = 0x0A          // sendMuteState, :4319
     private const val OP_BT_STATE = 0x0B      // sendBTState, :4336-4342
     private const val OP_BT_MUTE = 0x4C       // sendMuteToMcu, :14691-14693: `{76, n}`
+    private const val OP_SPEAKING_TIMER = 0x3D // btsuite sendSpeakingTimer2Mcu, BTService.java:1661-1662
+    private const val SECONDS_PER_MINUTE = 60
+    private const val MINUTES_PER_HOUR = 60
     private const val OP_USER_FREQ = 0x0C     // sendUserFreq, :4300
     private const val OP_RTC = 0x13           // sendRTCTimer, :9469
     private const val OP_PLAY_STATE = 0x19    // sendPlayState, :4327-4328: 1 = paused
@@ -64,6 +67,8 @@ object McuOwnerProtocol {
     const val BT_MUTE_ANSWER = 10
     const val BT_MUTE_HANG_UP = 20
     const val BT_MUTE_AUDIO_SWITCH = 30
+    /** RAV4-164: the mic mute sends the hang-up length too (EventHandle.java:41-43). */
+    const val BT_MUTE_MIC = 20
 
     private const val SETUP_RDS = 0x00
     private const val SETUP_ZONE = 0x01
@@ -407,6 +412,15 @@ object McuOwnerProtocol {
 
     /** `4C n`: a short amp mute around a call action (sendMuteToMcu, EventService.java:14691-14693). */
     fun btMute(units: Int): ByteArray = McuSerial.encode(OP_BT_MUTE, bytes(units))
+
+    /**
+     * RAV4-164: `3D mm ss`, the call's speaking time (BTService.java:170-177,1661-1662). Minutes
+     * wrap at the hour, as stock's `% 60` does; some canboxes show it on the cluster.
+     */
+    fun speakingTimer(seconds: Int): ByteArray {
+        val minutes = (seconds / SECONDS_PER_MINUTE) % MINUTES_PER_HOUR
+        return McuSerial.encode(OP_SPEAKING_TIMER, bytes(minutes, seconds % SECONDS_PER_MINUTE))
+    }
 
     /**
      * What ACC_CHANGE_EVENT sends 3 s after wake (EventService.java:465-471): `reloadParam`

@@ -9,6 +9,7 @@ import androidx.compose.material.icons.filled.DataObject
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.Usb
+import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.GridView
@@ -174,6 +175,12 @@ fun SettingsHub(
                 title = "CAN box",
                 subtitle = "Which car the CAN box is told it is in",
                 onClick = { onOpen(SettingsRoute.CanBox) },
+            )
+            SettingsCategoryCard(
+                icon = Icons.Filled.Phone,
+                title = "Phone",
+                subtitle = "Auto-answer for the paired phone",
+                onClick = { onOpen(SettingsRoute.Phone) },
             )
             SettingsCategoryCard(
                 icon = Icons.Filled.Usb,

@@ -194,6 +194,11 @@ fun SettingsHost(
                 onBack = ::pop,
             )
 
+            SettingsRoute.Phone -> PhoneSettingsScreen(
+                settingsStore = settingsStore,
+                onBack = ::pop,
+            )
+
             SettingsRoute.Diagnostics -> DiagnosticsScreen(
                 diagnostics = mcuDiagnostics,
                 mcuStatus = mcuStatus,
@@ -377,6 +382,7 @@ sealed interface SettingsRoute {
     data object Accessories : SettingsRoute
     data object CanBox : SettingsRoute
     data object UsbPort : SettingsRoute // Riposte OS 0.2
+    data object Phone : SettingsRoute // RAV4-164, Riposte OS 0.2
     data object Diagnostics : SettingsRoute
     data object CanCapture : SettingsRoute // v0.4.3
     data object GuidedTests : SettingsRoute

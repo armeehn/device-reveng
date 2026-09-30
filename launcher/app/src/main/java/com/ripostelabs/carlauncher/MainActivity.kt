@@ -544,6 +544,7 @@ class MainActivity : ComponentActivity() {
                 applicationContext,
                 callMcu = mcuOwner?.let(BtCallMcu::forOwner),
                 carPlay = { carEvents.carplayState.value },
+                autoAnswer = { settingsStore.autoAnswer.value },
             ).also { kit ->
                 kit.start()
                 // RAV4-152: the Phone screen and the chip name the caller from the phonebook.
