@@ -89,4 +89,16 @@ class RadioZoneTest {
         assertEquals(2, RadioZone.stationSlot(band = 0, position = 2))
         assertEquals(20, RadioZone.stationSlot(band = 3, position = 2))
     }
+
+    /**
+     * Stock's full grid is bank x 6 + position (FreqView.java:163-186, "FM%d  %02d" at
+     * radio/MainActivity.java:642-660): FM2 01 is slot 6, not FM1 01's slot 0.
+     */
+    @Test
+    fun stationSlotFollowsTheBank() {
+        assertEquals(6, RadioZone.stationSlot(band = 1, position = 0))
+        assertEquals(17, RadioZone.stationSlot(band = 2, position = 5))
+        assertEquals(18, RadioZone.stationSlot(band = 3, position = 0))
+        assertEquals(29, RadioZone.stationSlot(band = 4, position = 5))
+    }
 }
