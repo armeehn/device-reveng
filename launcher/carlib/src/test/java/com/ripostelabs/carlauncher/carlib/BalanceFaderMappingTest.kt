@@ -4,33 +4,36 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 /**
- * The amp balance/fader domain is 0..14 with centre 7 (verified in the vendor EventService:
- * mBALVal/mFADVal default to 7 and boot ships {0x2F,7,7}). The launcher shows a centred -7..7
- * slider, so "Centre" (0) must map to amp 7 — not amp 0, which is full left/front and was the
- * 2026-08-30 "centre is L only" bug. Regression pins the mapping and its clamping.
+ * The balance/fader domain is 0..20 with centre 10: the stock DSP app sends `2F lr fr` in that
+ * range (BalanceModel_two.java:56-69, Constants.java:200-201 default 10, EasyFieldFragment_two_2
+ * clamps at 20). eventcenter's 7 default belongs to the other sound chip. The launcher shows a
+ * centred -10..10 slider, so "Centre" (0) must map to 10: amp 7 was 3 steps left and front
+ * (RAV4-163), and amp 0 was the 2026-08-30 "centre is L only" bug.
  */
 class BalanceFaderMappingTest {
-    @Test fun centreMapsToSeven() {
-        assertEquals(7, displayToAmp(0))     // Centre -> amp centre, NOT amp 0
-        assertEquals(0, ampToDisplay(7))
+    @Test fun centreMapsToTen() {
+        assertEquals(10, displayToAmp(0))    // Centre -> DSP centre, NOT 7 and NOT 0
+        assertEquals(0, ampToDisplay(10))
     }
 
-    @Test fun extremesMapToZeroAndFourteen() {
-        assertEquals(0, displayToAmp(-7))    // full left / front
-        assertEquals(14, displayToAmp(7))    // full right / rear
-        assertEquals(-7, ampToDisplay(0))
-        assertEquals(7, ampToDisplay(14))
+    @Test fun extremesMapToZeroAndTwenty() {
+        assertEquals(0, displayToAmp(-10))   // full left / front
+        assertEquals(20, displayToAmp(10))   // full right / rear
+        assertEquals(-10, ampToDisplay(0))
+        assertEquals(10, ampToDisplay(20))
     }
 
     @Test fun roundTripIsIdentityAcrossTheDomain() {
-        for (amp in 0..14) assertEquals(amp, displayToAmp(ampToDisplay(amp)))
+        for (amp in 0..20) {
+            assertEquals(amp, displayToAmp(ampToDisplay(amp)))
+        }
     }
 
     @Test fun outOfRangeInputsClampInsteadOfWrapping() {
         assertEquals(0, displayToAmp(-99))
-        assertEquals(14, displayToAmp(99))
+        assertEquals(20, displayToAmp(99))
         // Stale/garbage reads (e.g. an old signed -8 or its 248 echo) clamp to an endpoint.
-        assertEquals(-7, ampToDisplay(-8))
-        assertEquals(7, ampToDisplay(248))
+        assertEquals(-10, ampToDisplay(-8))
+        assertEquals(10, ampToDisplay(248))
     }
 }

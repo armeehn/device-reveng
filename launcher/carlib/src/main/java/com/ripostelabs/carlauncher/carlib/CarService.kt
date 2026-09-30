@@ -635,9 +635,10 @@ class CarService(private val appContext: Context) {
      * Raw amp balance/fader as `[balance, fader]` (getBALFADValue ordinal 54 / sendBalFadValue
      * ordinal 51). Contract verified against the vendor EventService (2026-08-30 decompile):
      *
-     *  - Amp domain is **0..14, centre 7**: `mBALVal`/`mFADVal` default to 7, boot-restore falls
-     *    back to 7, factory reset writes 7, and boot ships `{0x2F, 7, 7}` = centre. 0 = full left /
-     *    full front, 14 = full right / full rear. Order is balance-then-fader (confirmed).
+     *  - Domain is **0..20, centre 10** (RAV4-163): the GT6 sound chain is the DSP (chip 0), whose
+     *    app sends `2F lr fr` in 0..20 around 10 (BalanceModel_two.java:56-69). eventcenter's
+     *    7 default belongs to the other chip. 0 = full left / full front, 20 = full right / full
+     *    rear. Order is balance-then-fader (confirmed).
      *  - No vendor clamp, and 0 is a valid extreme, NOT the centre — the launcher's old signed
      *    -8..8/centre-0 model made Centre play hard left. Callers map the centred display domain
      *    via [ampToDisplay]/[displayToAmp]; see AudioSettingsScreen.
@@ -645,7 +646,7 @@ class CarService(private val appContext: Context) {
     fun getBalanceFader(): IntArray? = audio({ s -> s.balance?.let { b -> s.fader?.let { intArrayOf(b, it) } } }) {
         getBALFADValue()
     }
-    /** Set raw amp balance (0..14) and fader (0..14); centre is 7. */
+    /** Set raw amp balance (0..20) and fader (0..20); centre is 10. */
     fun setBalanceFader(balance: Int, fader: Int) {
         owner?.let { ownerAudio.setBalanceFader(balance, fader); return }
         call { sendBalFadValue(balance, fader) }
@@ -730,12 +731,16 @@ class CarService(private val appContext: Context) {
 }
 
 
-/** Vendor amp balance/fader domain: 0..14 with centre 7 (see [CarService.getBalanceFader]). */
-const val BAL_FAD_CENTRE = 7
-const val BAL_FAD_HALF = 7
+/**
+ * Balance/fader domain: 0..20 with centre 10, the stock DSP app's `2F lr fr`
+ * (BalanceModel_two.java:56-69, Constants.java:200-201). See [CarService.getBalanceFader].
+ */
+const val BAL_FAD_CENTRE = 10
+const val BAL_FAD_HALF = 10
+const val BAL_FAD_MAX = 2 * BAL_FAD_HALF
 
-/** Map a raw amp value (0..14, centre 7) to the centred display domain (-7..7, centre 0). */
-fun ampToDisplay(raw: Int): Int = raw.coerceIn(0, 2 * BAL_FAD_HALF) - BAL_FAD_CENTRE
+/** Map a raw amp value (0..20, centre 10) to the centred display domain (-10..10, centre 0). */
+fun ampToDisplay(raw: Int): Int = raw.coerceIn(0, BAL_FAD_MAX) - BAL_FAD_CENTRE
 
-/** Map a centred display value (-7..7) back to the raw amp domain (0..14, centre 7). */
-fun displayToAmp(display: Int): Int = (display + BAL_FAD_CENTRE).coerceIn(0, 2 * BAL_FAD_HALF)
+/** Map a centred display value (-10..10) back to the raw amp domain (0..20, centre 10). */
+fun displayToAmp(display: Int): Int = (display + BAL_FAD_CENTRE).coerceIn(0, BAL_FAD_MAX)

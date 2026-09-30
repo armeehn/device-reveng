@@ -38,10 +38,10 @@ class OwnerAudio(private val send: (ByteArray) -> Unit) : McuOwner.Listener {
         send(McuSetupProtocol.eqMode(clamped))
     }
 
-    /** `2F balance fader`, each clamped to the amp domain 0..14 (centre 7). */
+    /** `2F balance fader`, each clamped to the DSP domain 0..20 (centre 10). */
     fun setBalanceFader(balance: Int, fader: Int) {
-        val b = balance.coerceIn(0, McuSetup.LEVEL_MAX)
-        val f = fader.coerceIn(0, McuSetup.LEVEL_MAX)
+        val b = balance.coerceIn(0, BAL_FAD_MAX)
+        val f = fader.coerceIn(0, BAL_FAD_MAX)
         _state.update { it.copy(balance = b, fader = f) }
         send(McuSetupProtocol.balanceFader(b, f))
     }

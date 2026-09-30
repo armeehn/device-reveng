@@ -23,6 +23,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ripostelabs.carlauncher.carlib.CarService
+import com.ripostelabs.carlauncher.carlib.BAL_FAD_HALF
 import com.ripostelabs.carlauncher.carlib.ampToDisplay
 import com.ripostelabs.carlauncher.carlib.displayToAmp
 import com.ripostelabs.carlauncher.data.CarSettingsController
@@ -38,10 +39,9 @@ import kotlinx.coroutines.withContext
  * when the bind is live and update our local echo as the user moves controls; speed-linked
  * volume + speed unit are SysVar-backed.
  *
- * Balance/fader contract VERIFIED against the vendor EventService (2026-08-30 decompile): the amp
- * domain is 0..14 with CENTRE 7 (mBALVal/mFADVal default to 7; boot ships {0x2F,7,7}). The sliders
- * below run a centred -7..7 display and convert with ampToDisplay/displayToAmp, so "Centre" (0)
- * now maps to amp 7 instead of the old amp 0 = full left. Order is balance-then-fader (confirmed).
+ * Balance/fader domain is 0..20 with CENTRE 10, the stock DSP app's `2F` (RAV4-163,
+ * BalanceModel_two.java:56-69). The sliders below run a centred -10..10 display and convert with
+ * ampToDisplay/displayToAmp, so "Centre" (0) maps to 10. Order is balance-then-fader (confirmed).
  * Fader direction (front=low) is assumed symmetric; flip the sign in displayToAmp if the car
  * disagrees. EQ preset indices remain vendor-defined/inferred. Control side-effects "work best as a
  * system app" (CAR_API §3.1).
@@ -115,7 +115,7 @@ fun AudioSettingsScreen(
                 label = "Balance",
                 description = "Left ↔ right",
                 value = balance,
-                range = -7..7,
+                range = -BAL_FAD_HALF..BAL_FAD_HALF,
                 onChange = { balance = it; control { carService.setBalanceFader(displayToAmp(it), displayToAmp(fader)) } },
                 enabled = connected,
                 format = { balanceLabel(it) },
@@ -124,7 +124,7 @@ fun AudioSettingsScreen(
                 label = "Fader",
                 description = "Front ↔ rear",
                 value = fader,
-                range = -7..7,
+                range = -BAL_FAD_HALF..BAL_FAD_HALF,
                 onChange = { fader = it; control { carService.setBalanceFader(displayToAmp(balance), displayToAmp(it)) } },
                 enabled = connected,
                 format = { faderLabel(it) },

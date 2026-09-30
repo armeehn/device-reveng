@@ -18,6 +18,7 @@ import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ripostelabs.carlauncher.carlib.McuSetup
 import com.ripostelabs.carlauncher.carlib.McuSetupStore
+import com.ripostelabs.carlauncher.carlib.BAL_FAD_HALF
 import com.ripostelabs.carlauncher.carlib.ampToDisplay
 import com.ripostelabs.carlauncher.carlib.displayToAmp
 
@@ -52,7 +53,7 @@ fun McuAudioSettingsScreen(
                 label = "Balance",
                 description = "Left ↔ right",
                 value = ampToDisplay(setup.balance),
-                range = DISPLAY_RANGE,
+                range = BAL_FAD_RANGE,
                 onChange = { store.setBalanceFader(displayToAmp(it), setup.fader) },
                 format = ::balanceLabel,
             )
@@ -60,7 +61,7 @@ fun McuAudioSettingsScreen(
                 label = "Fader",
                 description = "Front ↔ rear",
                 value = ampToDisplay(setup.fader),
-                range = DISPLAY_RANGE,
+                range = BAL_FAD_RANGE,
                 onChange = { store.setBalanceFader(setup.balance, displayToAmp(it)) },
                 format = ::faderLabel,
             )
@@ -129,9 +130,9 @@ fun McuAudioSettingsScreen(
 private fun ToneSlider(label: String, value: Int, onChange: (Int) -> Unit) {
     SliderSetting(
         label = label,
-        value = ampToDisplay(value),
-        range = DISPLAY_RANGE,
-        onChange = { onChange(displayToAmp(it)) },
+        value = value - McuSetup.CENTRE,
+        range = TONE_RANGE,
+        onChange = { onChange((it + McuSetup.CENTRE).coerceIn(0, McuSetup.LEVEL_MAX)) },
         format = ::toneLabel,
     )
 }
@@ -146,8 +147,11 @@ private fun GainSlider(
     VolumeSlider(icon = icon, label = label, value = value, range = GAIN_RANGE, onChange = onChange)
 }
 
-/** The centred -7..7 the sliders show for the amp's 0..14 (see BalanceFaderMappingTest). */
-private val DISPLAY_RANGE = -McuSetup.CENTRE..McuSetup.CENTRE
+/** The centred -7..7 the tone sliders show for the amp's 0..14. */
+private val TONE_RANGE = -McuSetup.CENTRE..McuSetup.CENTRE
+
+/** The centred -10..10 the balance sliders show for the DSP's 0..20 (see BalanceFaderMappingTest). */
+private val BAL_FAD_RANGE = -BAL_FAD_HALF..BAL_FAD_HALF
 
 /** The vendor slider's span (`ItemSeekBarView`), the same the gateway path offered. */
 private val SUBWOOFER_RANGE = 0..20

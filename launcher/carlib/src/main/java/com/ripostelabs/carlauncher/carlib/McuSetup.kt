@@ -9,13 +9,14 @@ package com.ripostelabs.carlauncher.carlib
  * SysVar export reads the same as stock.
  *
  * Defaults are `initSoundValue` / `setRecordDefaultValue` (EventService.java:6507-6557,
- * 6708-6720): balance, fader and the three tone bands centre on 7 of 0..14, EQ 0, loudness
+ * 6708-6720): the three tone bands centre on 7 of 0..14, EQ 0, loudness
  * off, subwoofer 10, key beep OFF ("0", :6515), sleep option 2, nav volume 28, host default
- * volume 30 (:9929) and every source gain 28 (:6548-6557).
+ * volume 30 (:9929) and every source gain 28 (:6548-6557). Balance and fader centre on 10 of
+ * 0..20, the DSP app's range (BalanceModel_two.java:56-69), not eventcenter's 7.
  */
 data class McuSetup(
-    val balance: Int = CENTRE,
-    val fader: Int = CENTRE,
+    val balance: Int = BAL_FAD_CENTRE,
+    val fader: Int = BAL_FAD_CENTRE,
     val tone: Tone = Tone(),
     val eqMode: Int = 0,
     val loudness: Boolean = false,
@@ -88,7 +89,7 @@ data class McuSetup(
     )
 
     companion object {
-        /** Balance, fader and tone run 0..14 with the centre at 7 (mBALVal etc. default 7, :6718). */
+        /** Tone runs 0..14 with the centre at 7 (mBassVal etc. default 7, :6718). */
         const val CENTRE = 7
         const val LEVEL_MAX = 14
         const val DEFAULT_SUBWOOFER = 10
