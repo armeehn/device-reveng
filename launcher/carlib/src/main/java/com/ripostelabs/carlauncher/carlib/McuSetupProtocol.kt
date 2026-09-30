@@ -11,8 +11,8 @@ package com.ripostelabs.carlauncher.carlib
  * clamped to a byte, never wrapped. What the MCU does with a value outside the vendor UI's
  * range is unverified; the ranges the screens offer are the vendor's.
  *
- * Not typed here, on purpose: the `0F` factory bit-field (`sendFactoryMcuSet`, :9984), the
- * `10` block (`sendVolumeFader`, :9954), `45` baud (`sendMcuBaudRate`) and the 32-byte DSP
+ * The `0F` factory bit-field (`sendFactoryMcuSet`, :9984) lives in [McuFactorySet]. Not typed
+ * here, on purpose: the `10` block (`sendVolumeFader`, :9954), `45` baud (`sendMcuBaudRate`) and the 32-byte DSP
  * table (`sendSndFreqArray`, :9149). Their bytes are config-derived (car id, panel type,
  * encoder wiring) and unknown for this unit, so a wrong guess could change what the reverse
  * line or the radar does. They stay replayed in [McuOwnerProtocol.vendorInit] until a capture

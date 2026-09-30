@@ -39,6 +39,7 @@ import com.ripostelabs.carlauncher.carlib.BtCarKit
 import com.ripostelabs.carlauncher.carlib.PhoneInternet
 import com.ripostelabs.carlauncher.carlib.CarEvents
 import com.ripostelabs.carlauncher.carlib.DozeGuard
+import com.ripostelabs.carlauncher.carlib.McuFactorySet
 import com.ripostelabs.carlauncher.carlib.McuSetupProtocol
 import com.ripostelabs.carlauncher.carlib.McuSetupStore
 import com.ripostelabs.carlauncher.carlib.RadioMemory
@@ -443,6 +444,7 @@ class MainActivity : ComponentActivity() {
                     radioZone = radioMemory.zone(),
                     sleepTime = McuSetupProtocol.sleepOption(setupStore.setup.value.sleepTime),
                     setup = setupStore.setup.value,
+                    factoryRows = { SysVarLocalStore.prefs(applicationContext).readAll() },
                 ),
             )
             // One owner (os/CARHAL.md): the car service when the image has one, else this process.
@@ -569,8 +571,13 @@ class MainActivity : ComponentActivity() {
         // Both write SysVar through the bound gateway (changeSetup) and fall back to the provider.
         // Riposte OS 0.2: no gateway and no vendor provider, so the launcher keeps the rows itself,
         // serves them to the suite through the mirror and applies the camera decoder row.
-        val localRows = mcuOwner?.let {
-            SysVarLocalStore(SysVarLocalStore.prefs(applicationContext)) { key, value ->
+        val localRows = mcuOwner?.let { owner ->
+            // The 0F factory set and ACC delay follow their rows, as eventcenter's changeSetup did.
+            val factoryRows = SysVarLocalStore.prefs(applicationContext)
+            val factory = McuFactorySet.Watcher(factoryRows::readAll, owner::send)
+            factory.booted(McuFactorySet.boot(factoryRows.readAll()))
+            SysVarLocalStore(factoryRows) { key, value ->
+                factory.onRow(key)
                 SysVarMirrorProvider.publish(applicationContext, key, value)
                 ReverseCameraDecoder.apply(key, value, service = { mode -> DecoderSignal.service?.setDecoderMode(mode) == true })
             }

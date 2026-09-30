@@ -30,6 +30,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ripostelabs.carlauncher.carlib.CarService
+import com.ripostelabs.carlauncher.data.SettingKeys
 import com.ripostelabs.carlauncher.data.CarSettingsController
 import com.ripostelabs.carlauncher.data.RadioPreset
 import com.ripostelabs.carlauncher.data.RadioPresetsStore
@@ -114,6 +115,15 @@ fun RadioSettingsScreen(
                 SmallActionChip("Seek ◀", connected) { control { carService.radioSeekDown() } }
                 SmallActionChip("Seek ▶", connected) { control { carService.radioSeekUp() } }
             }
+        }
+
+        SettingsSection(title = "Antenna") {
+            ToggleSetting(
+                label = "Automatic antenna",
+                description = "Power the antenna amplifier while the radio plays",
+                checked = controller.getBoolean(SettingKeys.AUTO_ANTENNA, factoryDefault(SettingKeys.AUTO_ANTENNA)),
+                onChange = { controller.setBoolean(SettingKeys.AUTO_ANTENNA, it) },
+            )
         }
 
         SettingsSection(title = "Presets") {

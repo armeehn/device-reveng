@@ -187,6 +187,11 @@ object McuOwnerProtocol {
         val sleepTime: SleepTime = SleepTime.H8,
         /** The setup table to re-send, as the vendor did from SysVar; null sends none ([McuSetupProtocol.boot]). */
         val setup: McuSetup? = null,
+        /**
+         * The SysVar rows the `0F` factory set and ACC delay are built from ([McuFactorySet.boot]),
+         * read at each send so a wake re-sends what the user set since boot; null sends neither.
+         */
+        val factoryRows: (() -> Map<String, String>)? = null,
     )
 
     /**
@@ -342,7 +347,7 @@ object McuOwnerProtocol {
         mode(Mode.MCU_VERSION),
         setup(SETUP_RDS, if (config.rds) 0 else 1),
         setup(SETUP_ZONE, config.radioZone),
-    ) + setupTable(config) + vendorInit() + listOfNotNull(
+    ) + setupAndFactory(config) + vendorInit() + listOfNotNull(
         // sendSleepTime sits between the config blocks and sendBacklight (:3797-3798).
         sleepTime(config.sleepTime),
         backlight(config.backlightDay, config.backlightNight),
@@ -408,7 +413,7 @@ object McuOwnerProtocol {
     fun reload(config: StartupConfig, lastMode: Mode?): List<ByteArray> = listOf(
         mode(Mode.POWER_ON),
         mode(Mode.MCU_VERSION),
-    ) + setupTable(config) + configBlocks() + listOf(
+    ) + setupAndFactory(config) + configBlocks() + listOf(
         sleepTime(config.sleepTime),
         backlight(config.backlightDay, config.backlightNight),
         mode(Mode.POWER_ON),
@@ -452,6 +457,14 @@ object McuOwnerProtocol {
     /** The typed setup frames both boot and wake re-send (reloadParam, :3627-3632), when there is a table. */
     private fun setupTable(config: StartupConfig): List<ByteArray> =
         config.setup?.let(McuSetupProtocol::boot) ?: emptyList()
+
+    /** The setup table with `0F` and the ACC delay after the key beep, sendFactorySet's order (:9924-9927). */
+    private fun setupAndFactory(config: StartupConfig): List<ByteArray> {
+        val table = setupTable(config)
+        val factory = config.factoryRows?.let { rows -> McuFactorySet.boot(rows()) }.orEmpty()
+
+        return table.take(1) + factory + table.drop(1)
+    }
 
     /** `96 01`: the MCU says it woke (onCmdMcuSleepState, EventService.java:2270-2280). */
     fun isWake(command: McuSerial.Command): Boolean =
