@@ -175,6 +175,21 @@ class RemoteMcuOwner(
         return at(NIGHT_API) { it.setNightMode(mode.code) }
     }
 
+    // RAV4-216: one-off actions, so unlike the night mode nothing is kept for [replay].
+    override val controlsSystem: Boolean
+        get() = service != null && api >= SYSTEM_API
+
+    override fun setHotspot(state: Hotspot): Boolean = at(SYSTEM_API) { it.setHotspot(state.code) }
+
+    override fun hotspot(): Hotspot? {
+        if (api < SYSTEM_API) {
+            return null
+        }
+        return Hotspot.of(call { it.hotspotState() } ?: return null)
+    }
+
+    override fun setLanguage(tag: String): Boolean = at(SYSTEM_API) { it.setLanguage(tag) }
+
     override fun onNavTouch(action: () -> Unit) {
         navTouch = action
     }
@@ -288,6 +303,9 @@ class RemoteMcuOwner(
 
         /** ICarService.apiVersion that sets the system night mode (RAV4-169). */
         const val NIGHT_API = 8
+
+        /** ICarService.apiVersion that sets the hotspot and the language (RAV4-216). */
+        const val SYSTEM_API = 9
 
         /** [McuOwner.Status.Failed] reason while the service is down (it restarts, we rebind). */
         const val SERVICE_GONE = "car service gone"

@@ -38,7 +38,7 @@
             <!-- ICarService.apiVersion (CarBinder.API_VERSION), read by clients before binding. -->
             <meta-data
                 android:name="com.ripostelabs.car.API"
-                android:value="8" />
+                android:value="9" />
         </service>
 
         <!-- The vendor IEventService subset for stock-built apps (os/CARHAL.md "IEventService

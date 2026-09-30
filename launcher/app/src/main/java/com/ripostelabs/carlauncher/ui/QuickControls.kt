@@ -1,5 +1,7 @@
 package com.ripostelabs.carlauncher.ui
 
+import com.ripostelabs.carlauncher.carlib.Hotspot
+import com.ripostelabs.carlauncher.data.SystemControl
 import com.ripostelabs.carlauncher.ui.theme.carCard
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -177,16 +179,22 @@ fun QuickControlsPanel(
             )
 
             // RAV4-174: Wi-Fi and Bluetooth toggle on a tap and open Android's page on a long
-            // press. Hotspot opens the tether page: starting tethering needs the platform key.
+            // press. Hotspot needs the platform key (RAV4-216): it toggles through the car
+            // service, and opens the tether page on an image without one.
+            val system = LocalSystemControl.current?.takeIf { it.routed }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 RadioChip(Radios.Radio.WIFI, Icons.Filled.Wifi, "Wi-Fi", Modifier.weight(1f))
                 RadioChip(Radios.Radio.BLUETOOTH, Icons.Filled.Bluetooth, "Bluetooth", Modifier.weight(1f))
-                ShortcutChip(
-                    icon = Icons.Filled.WifiTethering,
-                    label = "Hotspot",
-                    modifier = Modifier.weight(1f),
-                    onClick = { Radios.open(context, Radios.Page.HOTSPOT) },
-                )
+                if (system != null) {
+                    HotspotChip(system, Modifier.weight(1f))
+                } else {
+                    ShortcutChip(
+                        icon = Icons.Filled.WifiTethering,
+                        label = "Hotspot",
+                        modifier = Modifier.weight(1f),
+                        onClick = { Radios.open(context, Radios.Page.HOTSPOT) },
+                    )
+                }
             }
 
             // RAV4-156: stock's pull-down BtnBlackScreen. A touch or any key lights it again.
@@ -488,6 +496,40 @@ private fun RadioChip(radio: Radios.Radio, icon: ImageVector, label: String, mod
         Icon(imageVector = icon, contentDescription = label, tint = fg, modifier = Modifier.size(22.dp))
         Spacer(Modifier.width(10.dp))
         AutoSizeText(text = label, style = MaterialTheme.typography.titleMedium, color = fg)
+    }
+}
+
+/** RAV4-216: the hotspot's on/off tile through the car service; a long press opens its page. */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun HotspotChip(system: SystemControl, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val on = remember(system) { system.hotspotState() }.collectAsStateSafe(initial = null).value == Hotspot.ON
+
+    val toggle = withTapFeedback {
+        scope.launch {
+            val sent = withContext(Dispatchers.IO) { system.toggleHotspot() }
+            if (!sent) {
+                Radios.open(context, Radios.Page.HOTSPOT)
+            }
+        }
+    }
+
+    val bg = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+    val fg = if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+    Row(
+        modifier = modifier
+            .clip(carShape(14.dp))
+            .background(bg)
+            .combinedClickable(onClick = toggle, onLongClick = { Radios.open(context, Radios.Page.HOTSPOT) })
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
+    ) {
+        Icon(imageVector = Icons.Filled.WifiTethering, contentDescription = "Hotspot", tint = fg, modifier = Modifier.size(22.dp))
+        Spacer(Modifier.width(10.dp))
+        AutoSizeText(text = "Hotspot", style = MaterialTheme.typography.titleMedium, color = fg)
     }
 }
 

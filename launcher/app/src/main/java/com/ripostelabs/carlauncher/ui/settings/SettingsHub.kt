@@ -1,5 +1,13 @@
 package com.ripostelabs.carlauncher.ui.settings
 
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import com.ripostelabs.carlauncher.carlib.Hotspot
+import com.ripostelabs.carlauncher.ui.LocalSystemControl
+import com.ripostelabs.carlauncher.ui.collectAsStateSafe
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material.icons.Icons
@@ -54,6 +62,9 @@ fun SettingsHub(
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val system = LocalSystemControl.current?.takeIf { it.routed }
+    val hotspot by remember(system) { system?.hotspotState() ?: flowOf(null) }.collectAsStateSafe(initial = null)
     val root by controller.rootAvailable.collectAsStateWithLifecycle()
     val subtitle = when (root) {
         false -> "Read-only: root not detected, changes to car settings won't persist"
@@ -69,6 +80,7 @@ fun SettingsHub(
                 onClick = { onOpen(SettingsRoute.LauncherPrefs) },
             )
             // RAV4-174: stock's Wi-Fi, hotspot and Bluetooth rows open Android's own pages.
+            // RAV4-216: the hotspot toggles here when the car service takes it.
             SettingsCategoryCard(
                 icon = Icons.Filled.Wifi,
                 title = "Wi-Fi",
@@ -78,8 +90,18 @@ fun SettingsHub(
             SettingsCategoryCard(
                 icon = Icons.Filled.WifiTethering,
                 title = "Hotspot",
-                subtitle = "Share the connection with passengers, in Android settings",
-                onClick = { Radios.open(context, Radios.Page.HOTSPOT) },
+                subtitle = when {
+                    system == null -> "Share the connection with passengers, in Android settings"
+                    hotspot == Hotspot.ON -> "On: passengers can join. Tap to turn off"
+                    else -> "Off. Tap to share the connection with passengers"
+                },
+                onClick = {
+                    if (system == null) {
+                        Radios.open(context, Radios.Page.HOTSPOT)
+                    } else {
+                        scope.launch(Dispatchers.IO) { system.toggleHotspot() }
+                    }
+                },
             )
             SettingsCategoryCard(
                 icon = Icons.Filled.Bluetooth,

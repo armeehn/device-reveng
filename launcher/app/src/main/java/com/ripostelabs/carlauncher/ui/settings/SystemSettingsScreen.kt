@@ -1,5 +1,8 @@
 package com.ripostelabs.carlauncher.ui.settings
 
+import android.content.res.Resources
+import com.ripostelabs.carlauncher.data.SystemControl
+import com.ripostelabs.carlauncher.ui.LocalSystemControl
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -241,9 +244,42 @@ private fun TimeRows() {
         SystemTime.Dst.NEVER -> "Not used in this zone"
     }
     InfoRow("Daylight saving", dst)
-    ActionRow(
+    LanguageRow()
+}
+
+/**
+ * RAV4-216: the unit's languages, set in place through the car service. An image without one
+ * opens Android's language page, as before.
+ */
+@Composable
+private fun LanguageRow() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val system = LocalSystemControl.current?.takeIf { it.routed }
+    if (system == null) {
+        ActionRow(
+            label = "Language",
+            description = Locale.getDefault().displayName,
+            onClick = { SystemTime.openLanguages(context) },
+        )
+        return
+    }
+
+    var language by remember { mutableStateOf(Locale.getDefault().toLanguageTag()) }
+    // The unit's own language may be one its assets leave out: listed anyway, like the zone.
+    val options = remember(language) {
+        SystemControl.languages(arrayOf(language) + Resources.getSystem().assets.locales, Locale.getDefault())
+    }
+    PickerSetting(
         label = "Language",
-        description = Locale.getDefault().displayName,
-        onClick = { SystemTime.openLanguages(context) },
+        current = language,
+        options = options,
+        onSelect = { tag ->
+            scope.launch {
+                if (withContext(Dispatchers.IO) { system.setLanguage(tag) }) {
+                    language = tag
+                }
+            }
+        },
     )
 }

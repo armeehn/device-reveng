@@ -269,6 +269,23 @@ change and on every bind. The service sets the system mode, so the suite apps, t
 and CarPlay's night map follow. Without a service at 8 the launcher falls back to
 `cmd uimode night` through the root shell.
 
+### Hotspot and language (apiVersion 9)
+
+```aidl
+const int HOTSPOT_OFF = 0;  const int HOTSPOT_ON = 1;
+void setHotspot(int state);    // CONTROL; TetheringManager as system uid
+int hotspotState();            // READ; HOTSPOT_*
+void setLanguage(String tag);  // CONTROL; a BCP 47 tag, LocalePicker.updateLocales
+```
+
+Starting tethering needs `TETHER_PRIVILEGED`, and a locale change needs
+`CHANGE_CONFIGURATION`. The launcher is not platform-signed and holds neither. A privileged
+permission missing from the image's privapp allowlist would stop the boot, so neither is
+declared: the system uid holds both. The shade's Hotspot chip and the Settings Hotspot row
+toggle through here and show the state the service reads back. System & about lists the
+unit's languages and sets one in place. Without a service at 9, all three open Android's
+pages as before. The service lives in `/system`, so the unit gets it only with a new image.
+
 ### IEventService compatibility (no apiVersion change)
 
 `EventCompatService` in `com.ripostelabs.car` answers the vendor's `IEventService` binder

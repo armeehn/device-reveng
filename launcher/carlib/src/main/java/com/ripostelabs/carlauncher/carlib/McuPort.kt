@@ -40,4 +40,17 @@ interface McuPort {
 
     /** RAV4-156: whether POWER runs the power-off burst. False where the owner cannot take it. */
     fun setPowerKey(mode: PowerKeyMode): Boolean = false
+
+    /** RAV4-216: whether the hotspot and the language go through this owner. */
+    val controlsSystem: Boolean
+        get() = false
+
+    /** RAV4-216: turns the Wi-Fi hotspot on or off. False where the owner cannot. */
+    fun setHotspot(state: Hotspot): Boolean = false
+
+    /** RAV4-216: the hotspot as the system holds it; null where the owner cannot tell. */
+    fun hotspot(): Hotspot? = null
+
+    /** RAV4-216: the system language, a BCP 47 tag. False where the owner cannot set it. */
+    fun setLanguage(tag: String): Boolean = false
 }

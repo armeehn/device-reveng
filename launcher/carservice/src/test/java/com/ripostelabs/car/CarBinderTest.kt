@@ -84,6 +84,16 @@ class CarBinderTest {
         override fun setNightMode(mode: Int) { modes += mode }
     }
 
+    /** Hotspot and language: records what the launcher asked the system for. */
+    private class FakeSystem : SystemSettings {
+        val calls = mutableListOf<String>()
+        var held = ICarService.HOTSPOT_OFF
+        override fun setHotspot(state: Int) { calls += "hotspot $state" }
+        override fun hotspotState() = held
+        override fun setLanguage(tag: String) { calls += "language $tag" }
+    }
+
+    private val system = FakeSystem()
     private val nav = FakeNav()
     private val uiMode = FakeUiMode()
     private val power = FakePower()
@@ -92,11 +102,11 @@ class CarBinderTest {
     private val link = FakeLink()
 
     private fun binder(vararg held: String) =
-        CarBinder(Gate { it in held }, listeners, power, systemUid, link, decoder, nav, uiMode)
+        CarBinder(Gate { it in held }, listeners, power, systemUid, link, decoder, nav, uiMode, system)
 
     @Test
-    fun apiVersionIsEight() {
-        assertEquals(8, binder().apiVersion())
+    fun apiVersionIsNine() {
+        assertEquals(9, binder().apiVersion())
     }
 
     @Test
@@ -220,6 +230,37 @@ class CarBinderTest {
         assertThrows(SecurityException::class.java) { binder(READ_PERMISSION).setNightMode(ICarService.NIGHT_MODE_DAY) }
         assertThrows(IllegalArgumentException::class.java) { binder(CONTROL_PERMISSION).setNightMode(0) }
         assertEquals(2, uiMode.modes.size)
+    }
+
+    // RAV4-216: the hotspot is a change, so CONTROL; only on and off pass.
+    @Test
+    fun hotspotNeedsControlAndAKnownState() {
+        binder(CONTROL_PERMISSION).setHotspot(ICarService.HOTSPOT_ON)
+        binder(CONTROL_PERMISSION).setHotspot(ICarService.HOTSPOT_OFF)
+
+        assertEquals(listOf("hotspot 1", "hotspot 0"), system.calls)
+        assertThrows(SecurityException::class.java) { binder(READ_PERMISSION).setHotspot(ICarService.HOTSPOT_ON) }
+        assertThrows(IllegalArgumentException::class.java) { binder(CONTROL_PERMISSION).setHotspot(2) }
+        assertEquals(2, system.calls.size)
+    }
+
+    @Test
+    fun hotspotStateNeedsOnlyRead() {
+        system.held = ICarService.HOTSPOT_ON
+        assertEquals(ICarService.HOTSPOT_ON, binder(READ_PERMISSION).hotspotState())
+        assertThrows(SecurityException::class.java) { binder().hotspotState() }
+    }
+
+    // RAV4-216: the language is a change, so CONTROL; a tag that names no language is refused.
+    @Test
+    fun languageNeedsControlAndATag() {
+        binder(CONTROL_PERMISSION).setLanguage("fr-CA")
+
+        assertEquals(listOf("language fr-CA"), system.calls)
+        assertThrows(SecurityException::class.java) { binder(READ_PERMISSION).setLanguage("en-US") }
+        assertThrows(IllegalArgumentException::class.java) { binder(CONTROL_PERMISSION).setLanguage("") }
+        assertThrows(IllegalArgumentException::class.java) { binder(CONTROL_PERMISSION).setLanguage(null) }
+        assertEquals(1, system.calls.size)
     }
 
     // RAV4-170: the source kept across boots is a read, like the live one.
