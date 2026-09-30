@@ -530,6 +530,13 @@ class CarEvents(private val appContext: Context) {
      */
     val carSettings: StateFlow<CarSettingsState?> = _carSettings.asStateFlow()
 
+    private val _oemAmp = MutableStateFlow<OemAmpState?>(null)
+    /**
+     * RAV4-187: the factory amplifier from the box's last 0xA6 report ([OemAmp]). Stays null on a
+     * car without the amp, which is what hides its settings.
+     */
+    val oemAmp: StateFlow<OemAmpState?> = _oemAmp.asStateFlow()
+
     private val canGearWatch = CanGearWatch()
     private val _canGear = MutableStateFlow<Gear?>(null)
     /**
@@ -944,6 +951,10 @@ class CarEvents(private val appContext: Context) {
                         _tpms.value = signal
                         return
                     }
+                    if (signal is CanSignal.OemAmp) {
+                        _oemAmp.value = signal.state
+                        return
+                    }
 
                     // RAV4-38: the dashboard's steering is this frame's 0x11 decode, the one
                     // the capture screen already shows. Other opcodes leave it untouched.
@@ -1174,6 +1185,7 @@ class CarEvents(private val appContext: Context) {
                 // frame is the only source for the reverse screen's radar overlay.
                 is CanSignal.ParkingRadar -> _radar.value = RadarState.fromParkingRadar(signal)
                 is CanSignal.CarSettings -> _carSettings.value = signal.state
+                is CanSignal.OemAmp -> _oemAmp.value = signal.state
                 is CanSignal.RpmGearMirror -> onCanGear(signal.gear, atMs)
                 is CanSignal.Tpms -> _tpms.value = signal
                 is CanSignal.BasicStatus -> {

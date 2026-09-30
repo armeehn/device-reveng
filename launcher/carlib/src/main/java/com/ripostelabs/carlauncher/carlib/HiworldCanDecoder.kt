@@ -57,6 +57,7 @@ object HiworldCanDecoder {
     private const val OP_KNOB = 0x22           // car volume / tune knob, TOY:676
     private const val OP_VOICE_STATUS = 0xC5   // voice button state, TOY:376
     private const val OP_MODE_CHANGE = 0xE0    // car mode key, TOY:390
+    private const val OP_OEM_AMP = OemAmp.REPORT_OPCODE // factory amp (JBL), TOY:559
 
     /**
      * 0x32 p[4:5] "speed" scale. **NOT ROAD SPEED.** The 2026-08-29 drive capture (0→54.8 km/h vs
@@ -177,6 +178,7 @@ object HiworldCanDecoder {
         OP_KNOB -> boxKey(CanSignal.BoxKey.Kind.KNOB, payload)
         OP_VOICE_STATUS -> boxKey(CanSignal.BoxKey.Kind.VOICE, payload)
         OP_MODE_CHANGE -> boxKey(CanSignal.BoxKey.Kind.MODE, payload)
+        OP_OEM_AMP -> OemAmp.decode(payload)?.let { CanSignal.OemAmp(it) } ?: CanSignal.Unknown(opcode, payload)
         else -> CanSignal.Unknown(opcode, payload)
     }
 
@@ -954,6 +956,11 @@ sealed interface CanSignal {
     /** 0x62 — the car's customisation settings, as the box last read them ([CarSettings]). */
     data class CarSettings(
         val state: CarSettingsState,
+    ) : CanSignal
+
+    /** 0xA6 — the factory amplifier's settings; only a car with the amp sends it ([OemAmp]). */
+    data class OemAmp(
+        val state: OemAmpState,
     ) : CanSignal
 
     /** 0x21, 0x22, 0xC5, 0xE0 — the box's own keys; [BoxKeys] says what each one does. */

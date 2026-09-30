@@ -126,6 +126,7 @@ data class VehicleSnapshot(
             is CanSignal.RpmGearMirror -> this
             is CanSignal.Version -> this
             is CanSignal.CarSettings -> this
+            is CanSignal.OemAmp -> this
             is CanSignal.ClimateRear -> this
             is CanSignal.BoxKey -> this
             is CanSignal.Unknown -> this

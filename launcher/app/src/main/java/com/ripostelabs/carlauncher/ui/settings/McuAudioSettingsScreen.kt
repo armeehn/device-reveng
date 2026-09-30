@@ -46,6 +46,7 @@ import com.ripostelabs.carlauncher.carlib.displayToAmp
 fun McuAudioSettingsScreen(
     store: McuSetupStore,
     onBack: () -> Unit,
+    oemAmp: @Composable () -> Unit = {},
 ) {
     val setup by store.setup.collectAsStateWithLifecycle()
 
@@ -53,6 +54,9 @@ fun McuAudioSettingsScreen(
     var editSpeakers by remember { mutableStateOf(false) }
 
     SettingsScaffold(title = "Audio & EQ", onBack = onBack) {
+        // RAV4-187: the factory amp, drawn only on a car that reports one.
+        oemAmp()
+
         // The GT6 sound path: the DSP app's 48-band EQ, re-sent at every boot (RAV4-154).
         SettingsSection(title = "DSP equalizer") {
             PickerSetting(
