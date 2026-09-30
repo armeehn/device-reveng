@@ -388,6 +388,17 @@ class CarService(private val appContext: Context) {
         o.send(McuOwnerProtocol.carSettingsQuery())
     }
 
+    /** Ask the box for its TPMS report; the answer arrives as [CarEvents.tpms]. */
+    fun requestTpms() {
+        val o = owner
+        if (o == null) {
+            broadcastCanBox(TpmsAlert.QUERY)
+            return
+        }
+
+        o.send(McuOwnerProtocol.tpmsQuery())
+    }
+
     /** Vendor path: the same `0D 08 5A A5 ...` broadcast canbus2 hands the port owner ([McuCommand]). */
     private fun broadcastCanBox(payload: IntArray) {
         val intent = Intent(McuCommand.ACTION).putExtra(McuCommand.EXTRA_DATA, McuCommand.framed(payload))

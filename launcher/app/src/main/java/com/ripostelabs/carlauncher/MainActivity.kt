@@ -150,6 +150,7 @@ import com.ripostelabs.carlauncher.ui.ShadeOverlay // v2.5 shade
 import com.ripostelabs.carlauncher.ui.RadarSideStrip // v2.8
 import com.ripostelabs.carlauncher.ui.ReverseCameraGate
 import com.ripostelabs.carlauncher.ui.ReverseCameraWindow
+import com.ripostelabs.carlauncher.ui.settings.TyreWarningPopup
 import com.ripostelabs.carlauncher.ui.PhoneScreen // RAV4-50
 import com.ripostelabs.carlauncher.ui.RadioScreen // v2.6
 import com.ripostelabs.carlauncher.ui.rememberClockNight // v2.7
@@ -1341,6 +1342,9 @@ class MainActivity : ComponentActivity() {
                     if (maneuvering) {
                         RadarSideStrip(state = radar)
                     }
+
+                    // RAV4-157: the car's own TPMS warning bit raises a popup over any screen here.
+                    TyreWarningPopup(carEvents = carEvents)
                   }
                 }
                }

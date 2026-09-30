@@ -112,6 +112,10 @@ object HiworldCanDecoder {
     /** OEM sentinel: 0xFE in a TPMS byte means "no reading" (see `addTpms`, `!= 254`). */
     private const val TPMS_SENTINEL = 0xFE
 
+    // 0x48 p[0] status bits (stock `OnHandleCanTpmsInfoCmd`, `bArr[2]` bits 7 and 6).
+    private const val TPMS_VALID = 0x80
+    private const val TPMS_ABNORMAL = 0x40
+
     /** 16-bit "no data" sentinel used by the OEM `computeValue` consumers (`!= 65535`). */
     private const val U16_SENTINEL = 0xFFFF
 
@@ -469,6 +473,8 @@ object HiworldCanDecoder {
      * Sentinel is the FIRST byte of each pair only — see [tpms].
      */
     private fun decodeTpms(p: ByteArray): CanSignal.Tpms = CanSignal.Tpms(
+        valid = (u(p, 0) and TPMS_VALID) != 0,
+        abnormal = (u(p, 0) and TPMS_ABNORMAL) != 0,
         frontLeftKpa = tpms(p, 2),
         frontRightKpa = tpms(p, 3),
         rearLeftKpa = tpms(p, 4),
@@ -864,6 +870,10 @@ sealed interface CanSignal {
         val rearLeftKpa: Int?,
         val rearRightKpa: Int?,
         val spareKpa: Int?,
+        /** p[0] bit 7: the car's TPMS is working. Stock shows the warning line only when set. */
+        val valid: Boolean = false,
+        /** p[0] bit 6: the car says a tyre pressure is abnormal. Its verdict, not a threshold of ours. */
+        val abnormal: Boolean = false,
     ) : CanSignal
 
     /**
