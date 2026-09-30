@@ -55,6 +55,7 @@ import com.ripostelabs.carlauncher.carlib.ReverseTrigger
 import com.ripostelabs.carlauncher.carlib.RootShell
 import com.ripostelabs.carlauncher.input.WheelGamepad
 import com.ripostelabs.carlauncher.service.CanCaptureService
+import com.ripostelabs.carlauncher.service.DialRequests
 import com.ripostelabs.carlauncher.carlib.AccStandby
 import com.ripostelabs.carlauncher.carlib.CarAcc
 import com.ripostelabs.carlauncher.carlib.AndroidOwnerGate
@@ -85,6 +86,7 @@ import com.ripostelabs.carlauncher.carlib.GatewayHandshake // v3.0
 import com.ripostelabs.carlauncher.carlib.Gear
 import com.ripostelabs.carlauncher.carlib.PowerKeyMode
 import com.ripostelabs.carlauncher.carlib.SysVar // v0.4.9 vendor hidden-apps list
+import com.ripostelabs.carlauncher.carlib.VendorBt
 import com.ripostelabs.carlauncher.carlib.VendorBtService
 import com.ripostelabs.carlauncher.carlib.VendorBtState
 import com.ripostelabs.carlauncher.carlib.WheelGesture
@@ -576,6 +578,20 @@ class MainActivity : ComponentActivity() {
         reverseWindow = ReverseCameraWindow(applicationContext) { on -> settingsStore.setReverseGuideLines(on) }
         // RAV4-152: the ringing window over any app; the Phone screen carries its own buttons.
         incomingCalls = IncomingCalls(applicationContext, btCarKit, callerNames)
+        // RAV4-162: a contact's Call button (DialActivity) dials on this slot's stack and shows
+        // the Phone screen, where the call's state and Hang up are.
+        lifecycleScope.launch {
+            DialRequests.numbers.filterNotNull().collect {
+                val number = DialRequests.take() ?: return@collect
+                val kit = btCarKit
+                if (kit != null) {
+                    kit.dial(number)
+                } else {
+                    VendorBt.dial(number).broadcast(applicationContext)
+                }
+                screenState.value = Screen.Phone
+            }
+        }
         val front = combine(lifecycle.currentStateFlow, snapshotFlow { screenState.value }) { st, sc ->
             if (st.isAtLeast(Lifecycle.State.RESUMED) && sc == Screen.Phone) LauncherFront.PHONE_SCREEN else LauncherFront.ELSEWHERE
         }

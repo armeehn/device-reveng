@@ -2,6 +2,7 @@ package com.ripostelabs.carlauncher.ui
 
 import com.ripostelabs.carlauncher.carlib.HfpState
 import com.ripostelabs.carlauncher.carlib.VendorBtState
+import com.ripostelabs.carlauncher.carlib.VendorCallLog
 
 /**
  * RAV4-50 — the pure half of [PhoneScreen]: what the HFP state means for the buttons and the
@@ -114,4 +115,29 @@ internal object PhoneLogic {
         val party = party(state) ?: return head
         return "$head · $party"
     }
+
+    /** RAV4-162: the call list's tabs, as stock's history page has them (all / missed / dialled). */
+    enum class CallTab(val label: String, val type: VendorCallLog.CallType?) {
+        ALL("All", null),
+        MISSED("Missed", VendorCallLog.CallType.MISSED),
+        DIALED("Dialled", VendorCallLog.CallType.DIALED),
+    }
+
+    /** The rows one tab shows; null (not read yet) stays null. */
+    fun filter(entries: List<VendorCallLog.Entry>?, tab: CallTab): List<VendorCallLog.Entry>? {
+        val type = tab.type ?: return entries
+        return entries?.filter { it.type == type }
+    }
+
+    /**
+     * RAV4-162: a number as a contact stores it ("+1 (604) 123-4567") stripped to what the pad
+     * dials. Spaces, dashes, dots and brackets go; a letter makes the whole number unusable,
+     * since dialling the digits around it would reach a stranger.
+     */
+    fun telNumber(raw: String?): String? {
+        val kept = raw.orEmpty().filterNot { it in TEL_FORMATTING }
+        return kept.takeIf(::isDialable)
+    }
+
+    private val TEL_FORMATTING = setOf(' ', '-', '.', '(', ')', '/')
 }

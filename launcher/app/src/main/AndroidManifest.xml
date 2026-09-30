@@ -78,6 +78,11 @@
     -->
     <uses-permission android:name="android.permission.READ_CONTACTS" />
     <!--
+      RAV4-162: the Phone screen's call list on 0.2 reads the history the PBAP client pulls
+      into CallLog.Calls (PhoneCallLog). Runtime; the 0.2 image grants it at first boot.
+    -->
+    <uses-permission android:name="android.permission.READ_CALL_LOG" />
+    <!--
       Riposte OS: connect the A2DP sink to the CarPlay phone (BtCarKit.connectSink), so the
       stack's AVRCP session carries the track for the media card while the audio itself
       runs over Wi-Fi. signature|privileged: granted through the image's privapp allowlist,
@@ -296,6 +301,25 @@
             <meta-data
                 android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
                 android:resource="@xml/canable_device_filter" />
+        </activity>
+
+        <!--
+          RAV4-162: "call from contact". The suite Contacts app sends ACTION_CALL tel:… here and
+          the launcher dials on the car kit. Guarded by CALL_PHONE: only an app allowed to place
+          calls can make the car dial. No UI; the Phone screen shows the call.
+        -->
+        <activity
+            android:name=".service.DialActivity"
+            android:exported="true"
+            android:noHistory="true"
+            android:excludeFromRecents="true"
+            android:permission="android.permission.CALL_PHONE"
+            android:theme="@android:style/Theme.NoDisplay">
+            <intent-filter>
+                <action android:name="android.intent.action.CALL" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="tel" />
+            </intent-filter>
         </activity>
 
 </application>
