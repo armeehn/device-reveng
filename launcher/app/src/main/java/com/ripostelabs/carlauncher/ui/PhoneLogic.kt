@@ -82,6 +82,13 @@ internal object PhoneLogic {
 
     fun backspace(number: String): String = number.dropLast(1)
 
+    /** What a pad key does: build the number to dial, or send a tone down the call. */
+    enum class PadMode { DIAL, TONES }
+
+    /** RAV4-159: tones only once the call is up, as stock (`BTFloatWndLandscape.java:426`, state 6). */
+    fun padMode(state: HfpState?): PadMode =
+        if (state == HfpState.ACTIVE_CALL) PadMode.TONES else PadMode.DIAL
+
     /** `mm:ss`; hours roll into minutes (a 90-minute call reads `90:00`). */
     fun timer(seconds: Int): String {
         val clamped = seconds.coerceAtLeast(0)
