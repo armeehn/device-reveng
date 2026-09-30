@@ -91,4 +91,13 @@ class PhoneLogicTest {
         val anonymous = VendorBtState(hshf = HfpState.OUTGOING_CALL.code, inCall = true)
         assertEquals("Calling", PhoneLogic.callChip(anonymous))
     }
+
+    @Test
+    fun `pad sends tones only during an active call`() {
+        assertEquals(PhoneLogic.PadMode.TONES, PhoneLogic.padMode(HfpState.ACTIVE_CALL))
+        assertEquals(PhoneLogic.PadMode.DIAL, PhoneLogic.padMode(HfpState.CONNECTED))
+        assertEquals(PhoneLogic.PadMode.DIAL, PhoneLogic.padMode(HfpState.OUTGOING_CALL))
+        assertEquals(PhoneLogic.PadMode.DIAL, PhoneLogic.padMode(HfpState.INCOMING_CALL))
+        assertEquals(PhoneLogic.PadMode.DIAL, PhoneLogic.padMode(null))
+    }
 }

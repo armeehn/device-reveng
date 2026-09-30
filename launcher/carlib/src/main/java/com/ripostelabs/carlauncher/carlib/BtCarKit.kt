@@ -35,7 +35,7 @@ import kotlinx.coroutines.flow.asStateFlow
  *    │   AG_CALL_CHANGED broadcasts             ▼
  *    ▼                                     audio HAL · NowPlayingRepository (unchanged)
  *  BtCarKit ─▶ BtCarKitSnapshot ─▶ BtCarKitMap.vendorView ─▶ CarEvents.feedVendorBt
- *           ◀─ answer / hangUp / dial  (BluetoothHeadsetClient, reflection)
+ *           ◀─ answer / hangUp / dial / dtmf  (BluetoothHeadsetClient, reflection)
  * ```
  *
  * The three proxies are `@SystemApi` (`BluetoothA2dpSink`, `BluetoothHeadsetClient`,
@@ -225,6 +225,11 @@ class BtCarKit(
 
     fun dial(number: String) = hfCall { hf, device ->
         hf.method("dial", BluetoothDevice::class.java, String::class.java).invoke(hf, device, number)
+    }
+
+    /** RAV4-159: one touch tone of the active call ([Dtmf]). */
+    fun dtmf(key: Char) = hfCall { hf, device ->
+        Dtmf.send(hf, device, key)
     }
 
     /** Run [block] on the worker against the HF proxy and its connected phone, if any. */
