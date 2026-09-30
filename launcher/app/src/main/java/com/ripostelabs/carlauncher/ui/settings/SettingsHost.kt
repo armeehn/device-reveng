@@ -217,6 +217,12 @@ fun SettingsHost(
             // The instrument for attributing a signal to a control, with a human in the loop.
             SettingsRoute.GuidedTests -> GuidedTestScreen(onBack = ::pop)
 
+            SettingsRoute.Tyres -> TyresScreen(
+                carService = carService,
+                carEvents = carEvents,
+                onBack = ::pop,
+            )
+
             SettingsRoute.CarSettings -> CarCustomizeScreen(
                 carService = carService,
                 carEvents = carEvents,
@@ -365,6 +371,7 @@ sealed interface SettingsRoute {
     data object Radar : SettingsRoute
     data object RadarCapture : SettingsRoute // v2.8
     data object Vehicle : SettingsRoute
+    data object Tyres : SettingsRoute
     data object CarSettings : SettingsRoute
     data object Games : SettingsRoute
     data object Accessories : SettingsRoute

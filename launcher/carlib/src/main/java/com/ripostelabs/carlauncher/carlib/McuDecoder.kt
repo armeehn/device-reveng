@@ -55,7 +55,7 @@ class McuDecoder(private val listener: McuOwner.Listener) {
             return
         }
 
-        // Once per opcode: the MCU streams 0x8E (G-sensor, RADAR_3DH) at 10 Hz for the whole
+        // Once per opcode: the MCU streams 0x8E (G-sensor, see GSensor) at 10 Hz for the whole
         // drive and the vendor only stores the bytes; the log is for the first sighting.
         if (loggedUnhandled.add(command.opcode)) {
             Log.i(LOG_TAG, "unhandled opcode 0x%02X (%d bytes): %s".format(

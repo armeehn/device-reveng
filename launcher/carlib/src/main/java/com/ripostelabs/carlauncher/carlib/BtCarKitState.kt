@@ -35,6 +35,8 @@ data class BtCarKitSnapshot(
     val audioPlaying: Boolean = false,
     /** When the first ACTIVE call of the current call was seen, for the speaking timer. */
     val activeSinceMs: Long? = null,
+    /** The HF client's SCO link, from its last `AUDIO_STATE_CHANGED` ([IncomingCallGate]). */
+    val hfAudio: HfAudio = HfAudio.OFF,
 )
 
 /** One call as the HF client reports it (`BluetoothHeadsetClientCall`). */

@@ -29,14 +29,19 @@ object HiworldCanDecoder {
 
     // ---- Opcodes we decode (== the byte after LEN). See variance.txt for observed counts. ----
     private const val OP_BASIC_STATUS = 0x11   // key/SWC + doors + steering
-    private const val OP_TRIP_INFO = 0x13      // vehicle information page (range/trip) + speed candidate p[0:1]
+    private const val OP_TRIP_INFO = 0x13      // vehicle information page (range/trip/fuel)
     private const val KM_PER_MILE = 1.609344
     private const val UNIT_MILE = 1               // 0x13 p[11]: 1 = mile, anything else km
     private const val FUEL_TENTHS = 0.1           // 0x13 fuel words are x0.1 in the p[10] unit
     private const val FUEL_UNIT_KM_PER_L = 1      // 0x13 p[10] code table, vendor page handler
     private const val FUEL_UNIT_L_PER_100KM = 2
     private const val FUEL_UNIT_MPG_UK = 3        // any other code => MPG (US)
-    private const val OP_SPEED = 0x17          // dedicated low-rate speed field (2026-08-29 drive); p[0:1] BE ×0.1 km/h
+    private const val OP_FUEL_HISTORY = 0x16   // current trip + 5 past trips, TOY:476
+    private const val OP_FUEL_CHART = 0x17     // 15-bar fuel chart, TOY:447 (was misread as speed)
+    private const val FUEL_CHART_BARS = 15
+    private const val FUEL_CHART_UNIT = 60     // 0x17 p[60] = stock bArr[62]
+    private const val FUEL_HISTORY_TRIPS = 5
+    private const val FUEL_HISTORY_UNIT = 12   // 0x16 p[12] = stock bArr[14]
     private const val OP_RPM_GEAR_MIRROR = 0x1A // unparsed by OEM; RPM + gear raw found in capture
     private const val OP_HYBRID = 0x1F         // hybrid battery + energy flow
     private const val OP_VEHICLE_INFO = 0x32   // RPM / coolant (NOT road speed — see 2026-08-29 finding)
@@ -53,17 +58,10 @@ object HiworldCanDecoder {
      * 0x32 p[4:5] "speed" scale. **NOT ROAD SPEED.** The 2026-08-29 drive capture (0→54.8 km/h vs
      * head-unit GPS) proved this field does not track road speed — the earlier 0x32 correlation was
      * an interpolation artifact across a GPS dropout. Kept only so the raw byte is still surfaced as
-     * a diagnostic; do not use for a speedometer. The real speed lives in 0x17 / 0x13 (below).
+     * a diagnostic; do not use for a speedometer. No HiWorld field is road speed: 0x17 and
+     * 0x13 p[0:1] are fuel figures on stock (below).
      */
     const val SPEED_SCALE_KMH: Double = 1.0
-
-    /**
-     * 0x17 p[0:1] BE → km/h. Dedicated speed field found on the 2026-08-29 drive: raw 540 = 54.0 km/h
-     * exactly, raw 350 ≈ 35 km/h. Scale ≈ 0.1 km/h/LSB but rests on **only 2 distinct levels** (0x17
-     * updates ~once per 25–40 s), so it is a candidate, not a calibrated speedometer. A steady-cruise
-     * capture holding several constant speeds is needed to confirm the scale and linearity.
-     */
-    const val SPEED_017_SCALE_KMH: Double = 0.1
 
     // Door bitfield in 0x11 p[4].
     //
@@ -111,6 +109,10 @@ object HiworldCanDecoder {
 
     /** OEM sentinel: 0xFE in a TPMS byte means "no reading" (see `addTpms`, `!= 254`). */
     private const val TPMS_SENTINEL = 0xFE
+
+    // 0x48 p[0] status bits (stock `OnHandleCanTpmsInfoCmd`, `bArr[2]` bits 7 and 6).
+    private const val TPMS_VALID = 0x80
+    private const val TPMS_ABNORMAL = 0x40
 
     /** 16-bit "no data" sentinel used by the OEM `computeValue` consumers (`!= 65535`). */
     private const val U16_SENTINEL = 0xFFFF
@@ -162,7 +164,8 @@ object HiworldCanDecoder {
         OP_CLIMATE_REAR -> decodeClimateRear(payload)
         OP_RADAR -> decodeRadar(payload)
         OP_TRIP_INFO -> decodeTripInfo(payload)
-        OP_SPEED -> decodeSpeed(payload)
+        OP_FUEL_CHART -> decodeFuelChart(payload)
+        OP_FUEL_HISTORY -> decodeFuelHistory(payload)
         OP_RPM_GEAR_MIRROR -> decodeRpmGearMirror(payload)
         OP_VERSION -> decodeVersion(payload)
         OP_CAR_SET -> CanSignal.CarSettings(CarSettings.decode(payload))
@@ -469,6 +472,8 @@ object HiworldCanDecoder {
      * Sentinel is the FIRST byte of each pair only — see [tpms].
      */
     private fun decodeTpms(p: ByteArray): CanSignal.Tpms = CanSignal.Tpms(
+        valid = (u(p, 0) and TPMS_VALID) != 0,
+        abnormal = (u(p, 0) and TPMS_ABNORMAL) != 0,
         frontLeftKpa = tpms(p, 2),
         frontRightKpa = tpms(p, 3),
         rearLeftKpa = tpms(p, 4),
@@ -528,10 +533,9 @@ object HiworldCanDecoder {
      * "optimal" (best) figure `bArr[6:7]` = p[4:5], both ×0.1 in the unit coded by `bArr[12]`
      * = p[10] (1 km/L, 2 L/100km, 3 MPG UK, else MPG US). The vendor reading of p[0:1] as
      * fuel economy is consistent with the 2026-08-29 finding that it tracks the speed profile
-     * (economy follows speed); the raw word stays exposed as the candidate until a drive
-     * settles it. p[4:5] was static 0 in every capture, which is a fresh best-of record, not a
-     * sentinel. None of the trip fields has been read against the car's own display yet; the
-     * tiles say so.
+     * (economy follows speed), so it is no longer offered as a speed candidate. p[4:5] was
+     * static 0 in every capture, which is a fresh best-of record, not a sentinel. None of the
+     * trip fields has been read against the car's own display yet; the tiles say so.
      */
     private fun decodeTripInfo(p: ByteArray): CanSignal.TripInfo {
         val raw = u16be(p, 2, 3)
@@ -547,16 +551,9 @@ object HiworldCanDecoder {
             tripFuel = fuelWord(p, 0, 1),
             bestFuel = fuelWord(p, 4, 5),
             fuelUnit = fuelUnit(u(p, 10)),
-            // 2026-08-29: p[0:1] is a ~10 Hz value that tracks the speed profile up and down
-            // (R²≈0.66, capped by 1 Hz GPS lag). Best *live* speed candidate; scale UNCONFIRMED.
-            speedCandidateRaw = u16be(p, 0, 1),
         )
     }
 
-    /**
-     * 0x17 — dedicated speed field (2026-08-29 drive). p[0:1] BE × [SPEED_017_SCALE_KMH]. Accurate
-     * (raw 540 = 54.0 km/h) but low-rate (~once per 25–40 s) and the scale rests on 2 points.
-     */
     /** A 0x13 fuel word: BE ×0.1, 0xFFFF = no reading. */
     private fun fuelWord(p: ByteArray, hi: Int, lo: Int): Double? =
         u16be(p, hi, lo).takeIf { it != U16_SENTINEL }?.let { it * FUEL_TENTHS }
@@ -568,14 +565,26 @@ object HiworldCanDecoder {
         else -> CanSignal.FuelUnit.MPG_US
     }
 
-    private fun decodeSpeed(p: ByteArray): CanSignal.SpeedCandidate {
-        val raw = u16be(p, 0, 1)
-        return CanSignal.SpeedCandidate(
-            source = "0x17",
-            raw = raw,
-            kmh = raw * SPEED_017_SCALE_KMH,
-        )
-    }
+    /**
+     * 0x17 — the 15-bar fuel chart (stock `OnHandleCanVehicleInformationPageCmd2`, TOY:447).
+     * Bar i is `computeValue(bArr[2i+3], bArr[2i+2])` = p[2i:2i+1] BE ×0.1; the unit is
+     * `bArr[62]` = p[60]. The car sends 61-byte payloads, which fits that layout exactly.
+     * The 2026-08-29 drive read p[0:1] as speed (raw 540 = 54.0); stock says it is bar 1.
+     */
+    private fun decodeFuelChart(p: ByteArray): CanSignal.FuelChart = CanSignal.FuelChart(
+        bars = List(FUEL_CHART_BARS) { fuelWord(p, it * 2, it * 2 + 1) },
+        unit = fuelUnit(u(p, FUEL_CHART_UNIT)),
+    )
+
+    /**
+     * 0x16 — trip history (stock `OnHandleCanVehicleInformationPageCmd1`, TOY:476): current
+     * trip p[0:1], trips 1..5 p[2:11], all BE ×0.1, unit `bArr[14]` = p[12].
+     */
+    private fun decodeFuelHistory(p: ByteArray): CanSignal.FuelHistory = CanSignal.FuelHistory(
+        current = fuelWord(p, 0, 1),
+        trips = List(FUEL_HISTORY_TRIPS) { fuelWord(p, it * 2 + 2, it * 2 + 3) },
+        unit = fuelUnit(u(p, FUEL_HISTORY_UNIT)),
+    )
 
     /**
      * 0x1A — NOT parsed by the OEM app; mapping recovered from the variance capture.
@@ -864,6 +873,10 @@ sealed interface CanSignal {
         val rearLeftKpa: Int?,
         val rearRightKpa: Int?,
         val spareKpa: Int?,
+        /** p[0] bit 7: the car's TPMS is working. Stock shows the warning line only when set. */
+        val valid: Boolean = false,
+        /** p[0] bit 6: the car says a tyre pressure is abnormal. Its verdict, not a threshold of ours. */
+        val abnormal: Boolean = false,
     ) : CanSignal
 
     /**
@@ -880,7 +893,7 @@ sealed interface CanSignal {
         KM_PER_L("km/L"), L_PER_100KM("L/100km"), MPG_UK("MPG (UK)"), MPG_US("MPG (US)"),
     }
 
-    /** 0x13 — driving range to empty (km; null = no data) + the ~10 Hz raw speed candidate p[0:1]. */
+    /** 0x13 — driving range to empty (km; null = no data) and the trip page figures. */
     data class TripInfo(
         val rangeToEmptyKm: Int?,
         /** p[6:7] BE — trip elapsed time in minutes; null = no data (0xFFFF). Unverified on the car. */
@@ -893,18 +906,19 @@ sealed interface CanSignal {
         val bestFuel: Double? = null,
         /** p[10] — the unit the car reports its fuel figures in. */
         val fuelUnit: FuelUnit = FuelUnit.L_PER_100KM,
-        /** p[0:1] BE — live speed candidate (2026-08-29); tracks the profile, scale UNCONFIRMED. */
-        val speedCandidateRaw: Int = 0,
     ) : CanSignal
 
-    /**
-     * 0x17 — dedicated speed field (2026-08-29 drive). Accurate scale (~0.1 km/h/LSB) but low-rate
-     * and 2-point; a candidate speedometer, not yet calibrated. [kmh] = [raw] × SPEED_017_SCALE_KMH.
-     */
-    data class SpeedCandidate(
-        val source: String,
-        val raw: Int,
-        val kmh: Double,
+    /** 0x17 — 15 fuel-economy bars in [unit], in stock's order (`tag_oil1..15`); null = no data. */
+    data class FuelChart(
+        val bars: List<Double?>,
+        val unit: FuelUnit,
+    ) : CanSignal
+
+    /** 0x16 — current trip and the 5 past trips in [unit]; null = no data. */
+    data class FuelHistory(
+        val current: Double?,
+        val trips: List<Double?>,
+        val unit: FuelUnit,
     ) : CanSignal
 
     /**

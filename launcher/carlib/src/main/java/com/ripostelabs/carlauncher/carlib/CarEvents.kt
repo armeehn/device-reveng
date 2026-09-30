@@ -539,6 +539,10 @@ class CarEvents(private val appContext: Context) {
     val canGear: StateFlow<Gear?> = _canGear.asStateFlow()
     private val expireCanGear = Runnable { _canGear.value = canGearWatch.gear(System.currentTimeMillis()) }
 
+    private val _tpms = MutableStateFlow<CanSignal.Tpms?>(null)
+    /** The box's last 0x48 tyre report, or null until one arrives. Kept whole, no staleness. */
+    val tpms: StateFlow<CanSignal.Tpms?> = _tpms.asStateFlow()
+
     // v0.7 --- Parking radar (CAR_API §1.3 MCU_CAR_CAN_RADAR_INFO) ------------
     private val _radar = MutableStateFlow<RadarState?>(null)
     /**
@@ -936,6 +940,10 @@ class CarEvents(private val appContext: Context) {
                         _carSettings.value = signal.state
                         return
                     }
+                    if (signal is CanSignal.Tpms) {
+                        _tpms.value = signal
+                        return
+                    }
 
                     // RAV4-38: the dashboard's steering is this frame's 0x11 decode, the one
                     // the capture screen already shows. Other opcodes leave it untouched.
@@ -946,12 +954,23 @@ class CarEvents(private val appContext: Context) {
                     scheduleGestureTick()
                 }
 
-                // Zlink's own session status; only the connect/disconnect words are read.
+                // Zlink's own session status: the connect/disconnect words for the wheel NAV
+                // gesture, and every word for the RAV4-52 CarPlay state. One branch: a second
+                // `Zlink.ACTION_MESSAGE ->` below was never reached (CarEventsDispatchAuditTest).
+                // The same action also carries gateway → zlink commands (no `status` extra, our
+                // own REQ_SPEC_FUNC_CMD included): skipped.
                 Zlink.ACTION_MESSAGE -> {
-                    when (intent.getStringExtra(Zlink.EXTRA_STATUS)) {
+                    val status = intent.getStringExtra(Zlink.EXTRA_STATUS) ?: return
+                    when (status) {
                         Zlink.STATUS_CONNECTED -> _zlinkConnected.value = true
                         Zlink.STATUS_DISCONNECT, Zlink.STATUS_EXIT -> _zlinkConnected.value = false
                     }
+                    _carPlay.value = CarPlayDecode.applyStatus(
+                        _carPlay.value,
+                        status,
+                        intent.getStringExtra(Zlink.EXTRA_PHONE_MODE),
+                        System.currentTimeMillis(),
+                    )
                 }
 
                 // canbus2's 3-byte digest: [speed km/h, rpmH, rpmL].
@@ -975,18 +994,6 @@ class CarEvents(private val appContext: Context) {
                     // and field order match the vendor's. A missing extra leaves the flow as-is.
                     intent.getParcelableExtra(EXTRA_CAR_AIR_STATE, CarAirState::class.java)
                         ?.let { _climate.value = ClimateState.from(it) }
-                }
-
-                // RAV4-52: Zlink session status. The same action also carries gateway → zlink
-                // commands (no `status` extra, our own REQ_SPEC_FUNC_CMD included): skipped.
-                Zlink.ACTION_MESSAGE -> {
-                    val status = intent.getStringExtra(Zlink.EXTRA_STATUS) ?: return
-                    _carPlay.value = CarPlayDecode.applyStatus(
-                        _carPlay.value,
-                        status,
-                        intent.getStringExtra(Zlink.EXTRA_PHONE_MODE),
-                        System.currentTimeMillis(),
-                    )
                 }
 
                 Zlink.ACTION_TELEPHONE_STATUS -> {
@@ -1163,6 +1170,7 @@ class CarEvents(private val appContext: Context) {
                 is CanSignal.ParkingRadar -> _radar.value = RadarState.fromParkingRadar(signal)
                 is CanSignal.CarSettings -> _carSettings.value = signal.state
                 is CanSignal.RpmGearMirror -> onCanGear(signal.gear, atMs)
+                is CanSignal.Tpms -> _tpms.value = signal
                 is CanSignal.BasicStatus -> {
                     _doors.value = DoorState.from(signal, atMs)
                     // RAV4-53: the same frame carries the wheel key byte pair; on 0.2 this is the

@@ -41,7 +41,7 @@ enum class McuOpcode(val code: Int, val handler: String) {
     WHEEL_STATE(0x88, "OnCmdWheelState"),
     RADAR_PLUG_IN(0x6D, "onCmdMcuPlugInRadarData"),
     RADAR_IR(0x8D, "onCmdMcuIRRadarData"),
-    RADAR_3DH(0x8E, "onCmdMcu3DHData"),
+    G_SENSOR(0x8E, "onCmdMcu3DHData"),     // stock gyro page reads it; not a radar
     VALUE_8836(0x94, "ACTION_MCU_8836_VALUE_EVENT"),
     HDMI_RESOLUTION(0x95, "onCmdMcuHdmiResolutionData"),
     SLEEP_STATE(0x96, "onCmdMcuSleepState"),

@@ -446,6 +446,9 @@ object McuOwnerProtocol {
     /** `6A group key value`: change one car customisation ([CarSettings.setPayload]). */
     fun carSetting(setting: CarSetting, value: Int): ByteArray = canBox(CarSettings.setPayload(setting, value))
 
+    /** `6A 05 01 48`: ask the box for its TPMS report, as the stock tyre page does on open. */
+    fun tpmsQuery(): ByteArray = canBox(TpmsAlert.QUERY)
+
     /** `6A 05 01 62`: ask the box for its car settings report. */
     fun carSettingsQuery(): ByteArray = canBox(CarSettings.QUERY)
 

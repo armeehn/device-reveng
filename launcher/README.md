@@ -814,7 +814,8 @@ check.
   `MCU_CAR_CAN_INFO` digest (`[speed, rpmH, rpmL]`) is decoded into `CarEvents.canSpeedKmh` and
   would outrank GPS via `CarEvents.pickSpeed`, but the 2026-09-09 drive closed every MCU
   candidate: `0x32` never tracked road speed, `0x17` never arrived in 996 paired samples, and
-  `0x13` spans 0..175 while the car holds a steady 16 km/h. The verified source is the **raw
+  `0x13` spans 0..175 while the car holds a steady 16 km/h. Stock reads `0x17` as the 15-bar
+  fuel chart and `0x13` p[0:1] as trip fuel, and the decoder now does too. The verified source is the **raw
   Toyota body bus** — `RawCanDecoder` on `0x361`, `0x498`, `0x0B4` and `0x0AA`, checked against
   the car's own ECU over OBD PID `0x0D` from 0 to 60 km/h. `CarEvents.speedKmh` prefers that bus
   reading and falls back to GPS, and the parked-only gate runs on it — as `SpeedSource.BUS`, its
