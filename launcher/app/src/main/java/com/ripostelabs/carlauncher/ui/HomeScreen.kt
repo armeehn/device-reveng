@@ -51,6 +51,9 @@ import com.ripostelabs.carlauncher.carlib.CarPlayState // RAV4-52
 import com.ripostelabs.carlauncher.carlib.CarService
 import com.ripostelabs.carlauncher.carlib.Zlink // RAV4-52
 import com.ripostelabs.carlauncher.data.AppDirectoryStore // v0.4.2 custom app directory
+import com.ripostelabs.carlauncher.data.ClockStyle // RAV4-196
+import com.ripostelabs.carlauncher.data.WallpaperStore // RAV4-196
+import com.ripostelabs.carlauncher.data.WeatherFeed // RAV4-196
 import com.ripostelabs.carlauncher.data.DriverSide // v2.8
 import com.ripostelabs.carlauncher.data.LauncherSettings // v0.6
 import com.ripostelabs.carlauncher.data.OemApps
@@ -114,6 +117,10 @@ fun HomeScreen(
     appDirectoryStore: AppDirectoryStore? = null,
     // v0.4.9: packages the VENDOR settings hide (SysVar SYS_LAUNCHER_APP_HIDE_KEY, read-only).
     vendorHidden: Set<String> = emptySet(),
+    // RAV4-196: the active theme's wallpaper (null store keeps previews plain).
+    wallpaperStore: WallpaperStore? = null,
+    themeId: String = "",
+    night: Boolean = false,
 ) {
     val reverse by carEvents.reverse.collectAsStateSafe(initial = false)
     val media by nowPlaying.state.collectAsStateSafe(initial = null)
@@ -225,7 +232,16 @@ fun HomeScreen(
         }
     }
 
+    // RAV4-196: the weather app's last fresh reading, for the clock card.
+    val weather by rememberWeather(enabled = settings.showWeather)
+    val cardWeather = weather.takeIf { settings.showWeather }
+    val showClockCard = settings.homeClock != ClockStyle.OFF || cardWeather != null
+    val openWeather: () -> Unit = {
+        appRepository.resolveApp(WeatherFeed.PACKAGE)?.let(appRepository::launch)
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
+        HomeWallpaper(store = wallpaperStore, themeId = themeId, night = night)
         Column(modifier = Modifier.fillMaxSize()) {
             StatusBar(
                 carEvents = carEvents,
@@ -255,6 +271,18 @@ fun HomeScreen(
                         .fillMaxHeight()
                         .focusGroup(),
                 ) {
+                    // RAV4-196: clock and weather on top, the stock home's first glance.
+                    if (showClockCard) {
+                        HomeClockCard(
+                            style = settings.homeClock,
+                            weather = cardWeather,
+                            onOpenWeather = openWeather,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(CLOCK_CARD_HEIGHT),
+                        )
+                        Spacer(Modifier.height(16.dp))
+                    }
                     // v0.6: media/climate cards are individually toggleable in Settings.
                     // v0.8: wrap card call-sites in a focus-ring highlight (cards untouched).
                     if (settings.showMedia) {
@@ -488,6 +516,9 @@ private val QUICK_LAUNCH_PINNED = listOf(
     "com.ripostelabs.claudecar", // Claude
     "org.linphone",         // VoIP dialer
 )
+
+/** RAV4-196: the clock card is one line of big digits and the date beside them. */
+private val CLOCK_CARD_HEIGHT = 96.dp
 
 /** The quick-launch grid is a fixed 3×2: six tiles sharing the space above the RadioCard. */
 private const val QUICK_LAUNCH_SLOTS = 6
