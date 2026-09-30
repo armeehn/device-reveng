@@ -75,6 +75,13 @@ data class McuSetup(
     /** The EQ page's default button (EqFragment_two_48.java:546-551): flat, loudness off, slots kept. */
     fun dspReset(): McuSetup = copy(dspEq = DspEq.FLAT, dspPreset = DspEq.Preset.FLAT.index, dspLoud = false)
 
+    /**
+     * Stock's "Restore defaults" in the sound gain list (settings `ProviderHelps.setSysPSounds`,
+     * :284-292): every source gain and the nav prompt level back to 28. Stock's list has no TV,
+     * DVD or USB row; they go back to 28 too, their default.
+     */
+    fun withGainsRestored(): McuSetup = copy(gains = SourceGains(), navVolume = DEFAULT_NAV_VOLUME)
+
     /** The key-press beep the MCU plays on a panel touch (`Set_TouchBeep`). */
     enum class Beep { ON, OFF }
 
