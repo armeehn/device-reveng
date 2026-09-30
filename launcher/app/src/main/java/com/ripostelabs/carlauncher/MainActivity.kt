@@ -81,6 +81,7 @@ import com.ripostelabs.carlauncher.carlib.VendorBroadcastReemitter
 import com.ripostelabs.carlauncher.carlib.McuSleepWake
 import com.ripostelabs.carlauncher.carlib.PlaybackWatch
 import com.ripostelabs.carlauncher.carlib.GatewayHandshake // v3.0
+import com.ripostelabs.carlauncher.carlib.Gear
 import com.ripostelabs.carlauncher.carlib.SysVar // v0.4.9 vendor hidden-apps list
 import com.ripostelabs.carlauncher.carlib.VendorBtService
 import com.ripostelabs.carlauncher.carlib.VendorBtState
@@ -115,6 +116,8 @@ import com.ripostelabs.carlauncher.data.SettingKeys // v2.5 touch beep
 import com.ripostelabs.carlauncher.data.SettingsStore // v0.6
 import com.ripostelabs.carlauncher.data.SystemChrome // v2.5
 import com.ripostelabs.carlauncher.ui.nav.NavBar
+import com.ripostelabs.carlauncher.ui.nav.VolumePopup
+import com.ripostelabs.carlauncher.ui.nav.VolumePopupPolicy
 import com.ripostelabs.carlauncher.data.ThemeSnapshotStore
 import com.ripostelabs.carlauncher.data.ThemeStore
 import com.ripostelabs.carlauncher.data.UpdateController // v0.7 auto-updater
@@ -234,6 +237,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var themeStore: ThemeStore
     /** The launcher-drawn Back/Home/Apps strip that stands in for the suppressed system bar. */
     private lateinit var navBar: NavBar
+    private lateinit var volumePopup: VolumePopup
     private lateinit var reverseWindow: ReverseCameraWindow // Riposte OS 0.2
     private lateinit var settingsStore: SettingsStore // v0.6
     private lateinit var speechController: com.ripostelabs.carlauncher.media.SpeechController // v0.4.2 TTS
@@ -542,6 +546,7 @@ class MainActivity : ComponentActivity() {
         }
         themeStore = ThemeStore(applicationContext)
         navBar = NavBar(applicationContext).also { it.service = mcuOwner as? CarNav }
+        volumePopup = VolumePopup(applicationContext)
         reverseWindow = ReverseCameraWindow(applicationContext) { on -> settingsStore.setReverseGuideLines(on) }
 
         // v2.7: the notification shelf's mute filter. Constructed before the speech controller
@@ -818,6 +823,27 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        // RAV4-155: the volume popup over any app. Keys, wheel and our slider all end as an MCU
+        // 79/78 report, so the report is the trigger; lifecycleScope keeps it alive while stopped.
+        lifecycleScope.launch {
+            val policy = VolumePopupPolicy()
+            carEvents.volume.collect { reading ->
+                val gear = if (carEvents.reverse.value) Gear.REVERSE else Gear.DRIVE
+                if (reading == null || !policy.onReading(reading, gear)) {
+                    return@collect
+                }
+
+                volumePopup.show(reading)
+            }
+        }
+        lifecycleScope.launch {
+            carEvents.reverse.collect { engaged ->
+                if (engaged) {
+                    volumePopup.hide()
+                }
+            }
+        }
+
         // Riposte OS 0.2: the vendor camera app is gone, so the launcher shows the feed itself, in
         // an overlay window (ReverseCameraWindow) so it also covers CarPlay while this activity is
         // stopped. Driven here and not from the composition, which does not run while stopped.
@@ -917,6 +943,7 @@ class MainActivity : ComponentActivity() {
             // suppressed (that switch takes SystemUI's gesture pill with it on the 0.2 base).
             LaunchedEffect(activeTheme, night, settings.replaceSystemBars, settings.navBarMode) {
                 navBar.update(if (night) activeTheme.night else activeTheme.day, settings.replaceSystemBars, settings.navBarMode)
+                volumePopup.update(if (night) activeTheme.night else activeTheme.day)
                 reverseWindow.update(activeTheme, night)
             }
 

@@ -124,6 +124,7 @@ class UiSourceAuditTest {
         "SearchOverlay.kt", // magnifier beside the query line and the search trigger's own text
         "SettingsComponents.kt", // row leading icons and the chevron; the row's title is the name
         "VideoMiniCard.kt", // movie glyph beside the video title
+        "VolumePopup.kt", // speaker glyph; the popup row itself carries "Volume N"
     )
 
     @Test
