@@ -38,6 +38,8 @@ data class McuSetup(
     val dspSub: DspSound.Sub = DspSound.Sub(),
     /** The DSP bass boost ([DspSound.Bass]); boot re-sends it as `4F 16`. */
     val dspBass: DspSound.Bass = DspSound.Bass(),
+    /** The DSP listening position ([DspSound.Field]); boot re-sends it as `4F 12` and `4F 13`. */
+    val dspField: DspSound.Field = DspSound.Field(),
 ) {
     /** A preset or custom slot loads its whole curve (EqModel_Two_48.setMode, :180-188). */
     fun withDspPreset(preset: DspEq.Preset): McuSetup {
@@ -134,7 +136,10 @@ data class McuSetup(
         KEY_DSP_OFF_ON to flag(dspSub.offOn),
         KEY_DSP_BASS_LEVEL to "${dspBass.level}",
         KEY_DSP_BASS_FREQ to "${dspBass.freq}",
-    ) + KEY_DSP_CUSTOM.zip(dspCustom.map(DspEq::row))
+        KEY_DSP_SEAT to "${dspField.seat.mode}",
+    ) + KEY_DSP_CUSTOM.zip(dspCustom.map(DspEq::row)) +
+        KEY_DSP_DELAY.zip(dspField.delays.map { "$it" }) +
+        KEY_DSP_GAIN.zip(dspField.gains.map { "$it" })
 
     companion object {
         /** Tone runs 0..14 with the centre at 7 (mBassVal etc. default 7, :6718). */
@@ -184,6 +189,17 @@ data class McuSetup(
         const val KEY_DSP_OFF_ON = "off_on_values"
         const val KEY_DSP_BASS_LEVEL = "bass_progress_values"
         const val KEY_DSP_BASS_FREQ = "frequency_values"
+        const val KEY_DSP_SEAT = "drive_mode_values"
+
+        /** Per speaker in [DspSound.Speaker] order: stock's *_MILE (distance) and *_BL (gain) rows. */
+        val KEY_DSP_DELAY = listOf(
+            "left_front_mile_values", "right_front_mile_values", "left_rear_mile_values",
+            "right_rear_mile_values", "front_mile_values",
+        )
+        val KEY_DSP_GAIN = listOf(
+            "left_front_bl_values", "right_front_bl_values", "left_rear_bl_values",
+            "right_rear_bl_values", "front_bl_values",
+        )
 
         private const val TRUE = "1"
         private const val FALSE = "0"
@@ -249,6 +265,11 @@ data class McuSetup(
                 dspBass = DspSound.Bass(
                     level = DspSound.number(rows[KEY_DSP_BASS_LEVEL]) ?: 0,
                     freq = DspSound.number(rows[KEY_DSP_BASS_FREQ]) ?: 0,
+                ).clamped(),
+                dspField = DspSound.Field(
+                    delays = KEY_DSP_DELAY.map { DspSound.number(rows[it]) ?: 0 },
+                    gains = KEY_DSP_GAIN.map { DspSound.number(rows[it]) ?: DspSound.GAIN_FLAT },
+                    seat = DspSound.Seat.of(DspSound.number(rows[KEY_DSP_SEAT]) ?: DspSound.Seat.ALL.mode),
                 ).clamped(),
             )
         }

@@ -50,6 +50,7 @@ fun McuAudioSettingsScreen(
     val setup by store.setup.collectAsStateWithLifecycle()
 
     var editBands by remember { mutableStateOf(false) }
+    var editSpeakers by remember { mutableStateOf(false) }
 
     SettingsScaffold(title = "Audio & EQ", onBack = onBack) {
         // The GT6 sound path: the DSP app's 48-band EQ, re-sent at every boot (RAV4-154).
@@ -103,6 +104,11 @@ fun McuAudioSettingsScreen(
                     store.setDspBass(DspSound.Bass())
                 },
             )
+        }
+
+        // The DSP app's Sound field tab: time alignment `4F 12` and channel gain `4F 13` (RAV4-173).
+        SettingsSection(title = "Listening position") {
+            DspFieldRows(setup.dspField, editSpeakers, { editSpeakers = it }, store::setDspField)
         }
 
         SettingsSection(title = "Amp equalizer") {
@@ -280,6 +286,55 @@ private fun DspBassRows(bass: DspSound.Bass, onChange: (DspSound.Bass) -> Unit) 
     )
 }
 
+/**
+ * A stock seat preset, then per speaker a distance (the delay a nearer speaker needs) and a
+ * gain. A distance edit makes the seat Custom, as stock's dial did.
+ */
+@Composable
+private fun DspFieldRows(
+    field: DspSound.Field,
+    editing: Boolean,
+    onEditing: (Boolean) -> Unit,
+    onChange: (DspSound.Field) -> Unit,
+) {
+    PickerSetting(
+        label = "Seat",
+        current = field.seat,
+        options = SEAT_OPTIONS,
+        onSelect = { onChange(field.withSeat(it)) },
+    )
+    ToggleSetting(
+        label = "Edit per speaker",
+        description = "Distance 0 to 272 cm and gain -80 to +15 dB",
+        checked = editing,
+        onChange = onEditing,
+    )
+    if (editing) {
+        DspSound.Speaker.values().forEach { speaker ->
+            SliderSetting(
+                label = "${speaker.label} distance",
+                value = field.delays[speaker.ordinal],
+                range = DELAY_RANGE,
+                onChange = { onChange(field.withDelay(speaker, it)) },
+                step = DELAY_STEP,
+                format = ::delayLabel,
+            )
+            SliderSetting(
+                label = "${speaker.label} gain",
+                value = field.gains[speaker.ordinal] - DspSound.GAIN_FLAT,
+                range = FIELD_GAIN_RANGE,
+                onChange = { onChange(field.withGain(speaker, it + DspSound.GAIN_FLAT)) },
+                format = { "${toneLabel(it)} dB" },
+            )
+        }
+    }
+    ActionRow(
+        label = "Default listening position",
+        description = "All seats, no delay, every speaker at 0 dB",
+        onClick = { onChange(DspSound.Field()) },
+    )
+}
+
 @Composable
 private fun ToneSlider(label: String, value: Int, onChange: (Int) -> Unit) {
     SliderSetting(
@@ -327,6 +382,17 @@ private val SUB_GAIN_RANGE = -DspSound.SUB_GAIN_FLAT..(DspSound.SUB_GAIN_MAX - D
 
 private val BASS_LEVEL_RANGE = 0..DspSound.BASS_LEVEL_MAX
 
+private val DELAY_RANGE = 0..DspSound.DELAY_MAX_CM
+
+/** 4 cm notches (about 0.12 ms); the stock seats' 136 and 272 cm both sit on one. */
+private const val DELAY_STEP = 4
+
+/** Stock's 0..95 gain as -80..+15 dB around its 80. */
+private val FIELD_GAIN_RANGE = -DspSound.GAIN_FLAT..(DspSound.GAIN_MAX - DspSound.GAIN_FLAT)
+
+/** Custom is listed so the row names it; picking it keeps the distances, as on stock. */
+private val SEAT_OPTIONS: List<Pair<DspSound.Seat, String>> = DspSound.Seat.values().map { it to it.label }
+
 private val BASS_FREQ_OPTIONS: List<Pair<Int, String>> = DspSound.BASS_FREQS.mapIndexed { i, label -> i to label }
 
 /** The vendor slider's span (`ItemSeekBarView`), the same the gateway path offered. */
@@ -355,6 +421,9 @@ private fun faderLabel(v: Int): String = when {
     v < 0 -> "F${-v}"
     else -> "R$v"
 }
+
+/** Stock's "cm" and "ms" pair (FieldFragment_Two.java:397-398): 68 cm is 2.00 ms. */
+private fun delayLabel(cm: Int): String = "$cm cm · ${"%.2f".format(cm.toFloat() / DspSound.CM_PER_MS)} ms"
 
 private fun toneLabel(v: Int): String = when {
     v == 0 -> "0"

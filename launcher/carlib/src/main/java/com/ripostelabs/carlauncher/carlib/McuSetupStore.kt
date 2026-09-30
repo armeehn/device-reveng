@@ -126,6 +126,14 @@ class McuSetupStore(
         send(McuSetupProtocol.dspBass(b))
     }
 
+    /** The DSP listening position: distances go out as `4F 12`, gains as `4F 13`. */
+    fun setDspField(field: DspSound.Field) {
+        val f = field.clamped()
+        update { copy(dspField = f) }
+        send(McuSetupProtocol.dspDelay(f))
+        send(McuSetupProtocol.dspChannelGain(f))
+    }
+
     /** The test tone, whatever the key-beep setting says (the vendor's `beep()` gated on it). */
     fun beep() {
         send(McuSetupProtocol.beep())
