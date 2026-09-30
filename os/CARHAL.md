@@ -242,6 +242,19 @@ amp. The launcher then sends `1F 00 01` and draws a black window that a touch or
 lifts. The service does not persist the mode. The launcher re-sends it on every bind, and
 standby is the default until then.
 
+### Last source (apiVersion 7)
+
+```aidl
+int lastSource();  // READ; a Mode code, or -1
+```
+
+Stock keeps `Sys_Last_Mode` and reopens that source after a cold boot
+(`EventService.java:3898-3905`). The service stores every acked `setSource` of a playable
+mode (radio, music, BT music, video) in its prefs. The owner's own modes (SRC_NULL, power,
+reverse) never replace it. Once per boot, by `Settings.Global.BOOT_COUNT`, the launcher
+reads it and starts the matching suite app, then sends a play key to music and BT music.
+An ACC wake is not a boot, so it relaunches nothing.
+
 ### IEventService compatibility (no apiVersion change)
 
 `EventCompatService` in `com.ripostelabs.car` answers the vendor's `IEventService` binder

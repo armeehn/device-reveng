@@ -9,6 +9,7 @@ import com.ripostelabs.carlauncher.carlib.FramePack
 import com.ripostelabs.carlauncher.carlib.McuOwner
 import com.ripostelabs.carlauncher.carlib.McuOwnerProtocol
 import com.ripostelabs.carlauncher.carlib.PowerKeyMode
+import com.ripostelabs.carlauncher.carlib.SourceResume
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -68,10 +69,18 @@ class OwnerHost(context: Context, forward: (McuEvent) -> Unit) : Link {
 
     override fun setSource(mode: Int): Boolean {
         val m = McuOwnerProtocol.Mode.entries.firstOrNull { it.code == mode } ?: return false
-        return owner.setMode(m)
+        val acked = owner.setMode(m)
+
+        // RAV4-170: a playable source survives a cold boot, so the launcher can reopen its app.
+        if (acked && SourceResume.keeps(m)) {
+            prefs.edit().putInt(KEY_SOURCE, m.code).apply()
+        }
+        return acked
     }
 
     override fun currentSource(): Int = owner.lastMode?.code ?: Link.NO_SOURCE
+
+    override fun lastSource(): Int = prefs.getInt(KEY_SOURCE, Link.NO_SOURCE)
 
     override fun selectCar(id: String) {
         prefs.edit().putString(KEY_CAR, id).apply()
@@ -92,5 +101,6 @@ class OwnerHost(context: Context, forward: (McuEvent) -> Unit) : Link {
         const val PREFS = "owner"
         const val KEY_STARTUP = "startup"
         const val KEY_CAR = "car"
+        const val KEY_SOURCE = "source"
     }
 }
