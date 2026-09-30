@@ -61,6 +61,46 @@ object NavRepository {
     /** A vendor nav target: package, plus an explicit activity class when one is set. */
     data class NavTarget(val packageName: String, val className: String?)
 
+    /** RAV4-158: the driver's pick in Settings > Launcher; blank = automatic. */
+    @Volatile
+    private var chosenNav: String = ""
+
+    fun setChosenNav(pkg: String) {
+        chosenNav = pkg.trim()
+    }
+
+    /**
+     * The app a nav tap opens: the driver's choice, then the vendor SysVar, then Maps, each only
+     * when [launchable] says it can start. Null leaves the generic geo: chooser.
+     */
+    fun pickTarget(chosen: String, vendor: NavTarget?, launchable: (String) -> Boolean): NavTarget? {
+        if (chosen.isNotBlank() && launchable(chosen)) {
+            return NavTarget(chosen, null)
+        }
+        if (vendor != null && launchable(vendor.packageName)) {
+            return vendor
+        }
+        if (launchable(MAPS_PACKAGE)) {
+            return NavTarget(MAPS_PACKAGE, null)
+        }
+        return null
+    }
+
+    /**
+     * Apps the picker offers: every activity that opens a geo: link, Maps first when present.
+     * The geo: filter is how Maps, Waze, OsmAnd and Organic Maps all say "I navigate".
+     */
+    fun navApps(context: Context): List<Pair<String, String>> {
+        val pm = context.packageManager
+        val geo = Intent(Intent.ACTION_VIEW, Uri.parse(GEO_ANY))
+        return pm.queryIntentActivities(geo, 0)
+            .map { it.activityInfo.packageName to it.loadLabel(pm).toString() }
+            .distinctBy { it.first }
+            .sortedWith(compareBy({ it.first != MAPS_PACKAGE }, { it.second.lowercase() }))
+    }
+
+    private const val GEO_ANY = "geo:0,0?q="
+
     /**
      * Normalise the two SysVar values into a [NavTarget], or null when no package is set.
      * Defensive: values are trimmed, a class without a package is meaningless (ignored), and a
@@ -90,21 +130,21 @@ object NavRepository {
     }
 
     /**
-     * Launch the navigation app: the vendor-configured one when it is set AND resolvable,
-     * else Google Maps (which also drives Android Auto projection), else the generic geo:
+     * Launch the navigation app: the driver's pick (RAV4-158), then the vendor-configured one
+     * when it is set AND resolvable, else Google Maps (which also drives Android Auto projection), else the generic geo:
      * chooser. A configured-but-uninstalled vendor entry must not brick the tap.
      */
     fun launchMaps(context: Context) {
         val pm = context.packageManager
-        val vendor = vendorNav?.let { target ->
-            val explicit = target.className?.let { cls ->
-                Intent().setComponent(ComponentName(target.packageName, cls))
+        val target = pickTarget(chosenNav, vendorNav) { pkg -> pm.getLaunchIntentForPackage(pkg) != null }
+        val direct = target?.let { t ->
+            val explicit = t.className?.let { cls ->
+                Intent().setComponent(ComponentName(t.packageName, cls))
                     .takeIf { pm.resolveActivity(it, 0) != null }
             }
-            explicit ?: pm.getLaunchIntentForPackage(target.packageName)
+            explicit ?: pm.getLaunchIntentForPackage(t.packageName)
         }
-        val direct = vendor ?: pm.getLaunchIntentForPackage(MAPS_PACKAGE)
-        val intent = direct ?: Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q="))
+        val intent = direct ?: Intent(Intent.ACTION_VIEW, Uri.parse(GEO_ANY))
         runCatching {
             context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         }.onFailure { Log.w(TAG, "launchMaps failed: ${it.message}") }

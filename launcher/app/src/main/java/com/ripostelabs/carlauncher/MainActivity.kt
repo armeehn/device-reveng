@@ -117,6 +117,7 @@ import com.ripostelabs.carlauncher.data.RootTierController // v2.9
 import com.ripostelabs.carlauncher.data.SettingKeys // v2.5 touch beep
 import com.ripostelabs.carlauncher.data.SettingsStore // v0.6
 import com.ripostelabs.carlauncher.data.SystemChrome // v2.5
+import com.ripostelabs.carlauncher.nav.NavRepository
 import com.ripostelabs.carlauncher.ui.nav.NavBar
 import com.ripostelabs.carlauncher.ui.nav.ScreenOffWindow
 import com.ripostelabs.carlauncher.ui.nav.VolumePopup
@@ -567,6 +568,10 @@ class MainActivity : ComponentActivity() {
         }
         themeStore = ThemeStore(applicationContext)
         navBar = NavBar(applicationContext).also { it.service = mcuOwner as? CarNav }
+        // RAV4-158: every nav route (card, NAV key, gesture) reads the pick through NavRepository.
+        lifecycleScope.launch {
+            settingsStore.settings.map { it.navAppPackage }.distinctUntilChanged().collect(NavRepository::setChosenNav)
+        }
         volumePopup = VolumePopup(applicationContext)
         reverseWindow = ReverseCameraWindow(applicationContext) { on -> settingsStore.setReverseGuideLines(on) }
         // RAV4-152: the ringing window over any app; the Phone screen carries its own buttons.
