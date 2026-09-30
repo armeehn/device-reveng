@@ -439,6 +439,35 @@ class McuOwnerProtocolTest {
         assertArrayEquals(McuOwnerProtocol.mainVolume(12), frames.last())
     }
 
+    /** sendFactorySet (:9924-9927): key beep, then `0F`, then the ACC delay, then the rest. */
+    @Test
+    fun startupSendsTheFactorySetAfterTheKeyBeep() {
+        val rows = mapOf(McuFactorySet.KEY_SLEEP_SWITCH to "0")
+        val setup = McuSetup()
+        val config = McuOwnerProtocol.StartupConfig(setup = setup, factoryRows = { rows })
+        val table = McuSetupProtocol.boot(setup)
+        val expected = listOf(table[0]) + McuFactorySet.boot(rows) + table.drop(1)
+
+        for (frames in listOf(McuOwnerProtocol.startup(config), McuOwnerProtocol.reload(config, null))) {
+            val start = frames.indexOfFirst { it.contentEquals(table[0]) }
+            val got = frames.subList(start, start + expected.size)
+
+            expected.zip(got).forEach { (want, have) -> assertArrayEquals(want, have) }
+        }
+    }
+
+    /** A wake reads the rows again: a change since boot is what goes out. */
+    @Test
+    fun reloadReadsTheRowsAtSendTime() {
+        var rows = mapOf<String, String>()
+        val config = McuOwnerProtocol.StartupConfig(factoryRows = { rows })
+        rows = mapOf(McuFactorySet.KEY_SLEEP_SWITCH to "0")
+
+        val frames = McuOwnerProtocol.reload(config, null)
+
+        assertTrue(frames.any { it.contentEquals(McuFactorySet.frame(rows)) })
+    }
+
     @Test
     fun startupLeavesTheVolumeAloneWhenNoneIsKnown() {
         val config = McuOwnerProtocol.StartupConfig()

@@ -58,6 +58,9 @@ object SettingKeys {
     const val DSP_LOUDNESS = "Set_Dsp_Loud_On_Off_Key"
     const val REVERSING_ATTENUATION = "Sys_Reversing_Attenuation"
 
+    // ---- Radio antenna -------------------------------------------------------
+    const val AUTO_ANTENNA = "Sys_Auto_Antenna_Set"
+
     // ---- OEM per-source volume gains (SysProviderOpt.java) ------------------
     // Each trims the gain of one audio source relative to the main volume.
     const val VOL_MUSIC = "Sys_Music_Volume_Gain"

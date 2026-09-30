@@ -151,11 +151,6 @@ fun AudioSettingsScreen(
                 checked = controller.getBoolean(SettingKeys.TOUCH_BEEP, true),
                 onChange = { controller.setBoolean(SettingKeys.TOUCH_BEEP, it) },
             )
-            ToggleSetting(
-                label = "Mute audio when reversing",
-                checked = controller.getBoolean(SettingKeys.REVERSING_ATTENUATION, false),
-                onChange = { controller.setBoolean(SettingKeys.REVERSING_ATTENUATION, it) },
-            )
             ActionRow(
                 label = "Test beep",
                 description = "Play a short tone through the audio path",

@@ -5,6 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ripostelabs.carlauncher.carlib.McuFactorySet
 import com.ripostelabs.carlauncher.data.CarSettingsController
 import com.ripostelabs.carlauncher.data.ReverseCameraDecoder
 import com.ripostelabs.carlauncher.data.SettingKeys
@@ -26,10 +27,22 @@ fun ReverseCameraSettingsScreen(
     onBack: () -> Unit,
 ) {
     val snap by controller.snapshot.collectAsStateWithLifecycle()
-    snap
     val context = LocalContext.current
 
     SettingsScaffold(title = "Reverse camera", onBack = onBack) {
+        SettingsSection(title = "Audio while reversing") {
+            // The stock three modes; the rows land in the 0F frame's Sys_McuSet bits.
+            PickerSetting(
+                label = "Reverse mute",
+                current = McuFactorySet.ReverseMute.of(snap).ordinal,
+                options = REVERSE_MUTE_OPTIONS,
+                onSelect = { index ->
+                    val mode = McuFactorySet.ReverseMute.values()[index]
+                    mode.rows(snap).forEach { (key, value) -> controller.setString(key, value) }
+                },
+            )
+        }
+
         SettingsSection(title = "Camera input") {
             PickerSetting(
                 label = "Video input type",
@@ -121,3 +134,10 @@ fun ReverseCameraSettingsScreen(
         }
     }
 }
+
+/** Picker rows in [McuFactorySet.ReverseMute] order, the stock labels (getDataBackCarMute). */
+private val REVERSE_MUTE_OPTIONS = listOf(
+    McuFactorySet.ReverseMute.MUTE.ordinal to "Mute",
+    McuFactorySet.ReverseMute.ATTENUATE.ordinal to "Lower",
+    McuFactorySet.ReverseMute.OFF.ordinal to "Off",
+)

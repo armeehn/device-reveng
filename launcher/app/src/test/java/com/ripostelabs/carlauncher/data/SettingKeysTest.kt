@@ -63,6 +63,7 @@ class SettingKeysTest {
             "CAN_SUPPLIER_ID" to "Sys_camry_air_Supplier_id", // :260
             "SLEEP_TIME" to "SYS_SLEEP_TIME", // :425
             "ACC_ON_DELAY" to "SET_ACC_ON_DELAY", // :65
+            "AUTO_ANTENNA" to "Sys_Auto_Antenna_Set", // :232
         )
 
         expected.forEach { (name, value) -> assertEquals(name, value, keys[name]) }

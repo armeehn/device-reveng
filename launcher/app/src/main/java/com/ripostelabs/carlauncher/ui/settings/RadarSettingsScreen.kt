@@ -72,7 +72,8 @@ fun RadarSettingsScreen(
         SettingsSection(title = "Warning tone") {
             ToggleSetting(
                 label = "Beep on approach",
-                checked = controller.getBoolean(SettingKeys.RADAR_TONE_ENABLE, true),
+                // Default is the unit's factory row: what the 0F frame sends until changed.
+                checked = controller.getBoolean(SettingKeys.RADAR_TONE_ENABLE, factoryDefault(SettingKeys.RADAR_TONE_ENABLE)),
                 onChange = { controller.setBoolean(SettingKeys.RADAR_TONE_ENABLE, it) },
             )
             PickerSetting(

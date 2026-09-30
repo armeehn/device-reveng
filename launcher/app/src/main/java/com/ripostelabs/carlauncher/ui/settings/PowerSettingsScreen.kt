@@ -79,7 +79,7 @@ fun PowerSettingsScreen(
             ToggleSetting(
                 label = "Enable sleep",
                 description = "Let the unit sleep instead of powering off",
-                checked = controller.getBoolean(SettingKeys.SLEEP_SWITCH, false),
+                checked = controller.getBoolean(SettingKeys.SLEEP_SWITCH, factoryDefault(SettingKeys.SLEEP_SWITCH)),
                 onChange = { controller.setBoolean(SettingKeys.SLEEP_SWITCH, it) },
             )
             if (mcuSetup != null) {
