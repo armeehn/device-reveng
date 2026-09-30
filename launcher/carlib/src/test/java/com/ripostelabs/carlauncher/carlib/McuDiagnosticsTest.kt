@@ -125,4 +125,16 @@ class McuDiagnosticsTest {
         assertEquals("can box car: not told yet", report[2])
         assertNull(diag().snapshot.value.mcuVersion)
     }
+
+    /** RAV4-193: the box's `0xF0` answer is the System page's CAN box version; the latest wins. */
+    @Test
+    fun canVersionIsTheLatestBoxVersion() {
+        val d = diag()
+        assertNull(d.snapshot.value.canVersion)
+
+        d.onCanSignal(CanSignal.Version("HW-1.2"), NOW)
+        d.onCanSignal(CanSignal.Version("HW-1.3"), NOW)
+
+        assertEquals("HW-1.3", d.snapshot.value.canVersion)
+    }
 }

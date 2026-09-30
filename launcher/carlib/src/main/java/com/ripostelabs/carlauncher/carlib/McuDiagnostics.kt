@@ -40,7 +40,11 @@ class McuDiagnostics(
         val relayCount: Long = 0,
         val boxFrames: Long = 0,
         val boxMalformed: Long = 0,
-    )
+    ) {
+        /** RAV4-193: the box's `0xF0` firmware string, asked for at startup (`6A 05 01 F0`). */
+        val canVersion: String?
+            get() = signals.firstNotNullOfOrNull { (it.signal as? CanSignal.Version)?.text }
+    }
 
     private val lock = Any()
     private val relays = ArrayDeque<Relay>()
