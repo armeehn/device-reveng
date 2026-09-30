@@ -1,6 +1,7 @@
 package com.ripostelabs.carlauncher.ui
 
 import com.ripostelabs.carlauncher.carlib.HfpState
+import com.ripostelabs.carlauncher.carlib.VendorCallLog
 import com.ripostelabs.carlauncher.carlib.VendorBtState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -99,5 +100,31 @@ class PhoneLogicTest {
         assertEquals(PhoneLogic.PadMode.DIAL, PhoneLogic.padMode(HfpState.OUTGOING_CALL))
         assertEquals(PhoneLogic.PadMode.DIAL, PhoneLogic.padMode(HfpState.INCOMING_CALL))
         assertEquals(PhoneLogic.PadMode.DIAL, PhoneLogic.padMode(null))
+    }
+
+    @Test
+    fun `call tabs keep only their own rows`() {
+        fun e(n: String, t: VendorCallLog.CallType?) = VendorCallLog.Entry(null, n, "", "", t)
+        val rows = listOf(
+            e("1", VendorCallLog.CallType.MISSED),
+            e("2", VendorCallLog.CallType.DIALED),
+            e("3", VendorCallLog.CallType.RECEIVED),
+            e("4", null),
+        )
+        assertEquals(rows, PhoneLogic.filter(rows, PhoneLogic.CallTab.ALL))
+        assertEquals(listOf("1"), PhoneLogic.filter(rows, PhoneLogic.CallTab.MISSED)?.map { it.number })
+        assertEquals(listOf("2"), PhoneLogic.filter(rows, PhoneLogic.CallTab.DIALED)?.map { it.number })
+        assertNull(PhoneLogic.filter(null, PhoneLogic.CallTab.MISSED))
+    }
+
+    @Test
+    fun `a contact's number is stripped to what the pad dials`() {
+        assertEquals("+16041234567", PhoneLogic.telNumber("+1 (604) 123-4567"))
+        assertEquals("6041234567", PhoneLogic.telNumber("604.123.4567"))
+        assertEquals("*67#", PhoneLogic.telNumber("*67#"))
+        assertNull(PhoneLogic.telNumber(""))
+        assertNull(PhoneLogic.telNumber(null))
+        assertNull(PhoneLogic.telNumber("ext"))
+        assertNull(PhoneLogic.telNumber("1-800-FLOWERS"))   // letters: not dialable, never half-dialled
     }
 }

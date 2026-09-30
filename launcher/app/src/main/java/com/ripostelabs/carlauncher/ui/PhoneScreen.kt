@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -50,6 +51,7 @@ import com.ripostelabs.carlauncher.carlib.BtCarKit
 import com.ripostelabs.carlauncher.carlib.CarEvents
 import com.ripostelabs.carlauncher.carlib.HfpState
 import com.ripostelabs.carlauncher.carlib.IntentSpec
+import com.ripostelabs.carlauncher.carlib.PhoneCallLog
 import com.ripostelabs.carlauncher.carlib.VendorBt
 import com.ripostelabs.carlauncher.carlib.VendorBtState
 import com.ripostelabs.carlauncher.carlib.VendorCallLog
@@ -111,8 +113,15 @@ fun PhoneScreen(
 
     fun open(page: VendorBt.Page) {
         feedback?.tap()
+        if (carKit != null && page == VendorBt.Page.PHONE_BOOK) {
+            // RAV4-162: no btsuite on 0.2; the suite Contacts app lists the PBAP-synced phonebook.
+            val contacts = context.packageManager.getLaunchIntentForPackage(CONTACTS_PKG)
+            missingPage = if (contacts == null) page else null
+            contacts?.let { context.startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+            return
+        }
         if (carKit != null) {
-            // No btsuite pages on 0.2: every escape hatch is the system Bluetooth settings.
+            // No btsuite pages on 0.2: the other escape hatch is the system Bluetooth settings.
             context.startActivity(
                 Intent(Settings.ACTION_BLUETOOTH_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             )
@@ -138,9 +147,13 @@ fun PhoneScreen(
 
     // The provider is a blocking ContentResolver query; re-read when a call ends, since that is
     // when btsuite appends a row. null = not read yet, empty = unreadable or nothing there.
+    // RAV4-162: 0.2 reads CallLog.Calls, which the PBAP client fills from the phone.
     val callLog by produceState<List<VendorCallLog.Entry>?>(initialValue = null, vendor.inCall) {
-        value = withContext(Dispatchers.IO) { VendorCallLog.read(context) }
+        value = withContext(Dispatchers.IO) {
+            if (carKit != null) PhoneCallLog.read(context) else VendorCallLog.read(context)
+        }
     }
+    var tab by remember { mutableStateOf(PhoneLogic.CallTab.ALL) }
 
     Column(modifier = Modifier.fillMaxSize()) {
         PhoneHeader(onBack = onBack)
@@ -188,14 +201,21 @@ fun PhoneScreen(
                     modifier = Modifier.weight(1f),
                 ) {
                     CallList(
-                        entries = callLog,
+                        entries = PhoneLogic.filter(callLog, tab),
+                        tab = tab,
+                        onTab = { tab = it },
                         canDial = vendor.hfp == HfpState.CONNECTED,
                         onDial = ::dial,
-                        onOpenVendorLog = { open(VendorBt.Page.CALL_RECORD) },
+                        // 0.2 has no vendor log to fall back on: the list IS the call log.
+                        onOpenVendorLog = if (carKit == null) ({ open(VendorBt.Page.CALL_RECORD) }) else null,
                         modifier = Modifier.weight(1f),
                     )
                 }
-                VendorPages(onOpen = ::open, missing = missingPage)
+                VendorPages(
+                    pages = if (carKit == null) VENDOR_PAGES else CAR_KIT_PAGES,
+                    onOpen = ::open,
+                    missing = missingPage,
+                )
             }
         }
     }
@@ -447,25 +467,22 @@ private fun DialKey(key: Char, onPress: () -> Unit, modifier: Modifier = Modifie
 }
 
 /**
- * Recent calls from btsuite's provider; a tap dials. While the read is pending, or when it
- * yields nothing (unreadable OR empty — the provider cannot say which), the vendor's own
- * call-record page is offered instead.
+ * Recent calls from btsuite's provider (0.2: `CallLog.Calls`); a tap dials. While the read is
+ * pending, or when it yields nothing (unreadable OR empty — the provider cannot say which), the
+ * vendor's own call-record page is offered instead, where there is one ([onOpenVendorLog]).
  */
 @Composable
 private fun CallList(
     entries: List<VendorCallLog.Entry>?,
+    tab: PhoneLogic.CallTab,
+    onTab: (PhoneLogic.CallTab) -> Unit,
     canDial: Boolean,
     onDial: (String) -> Unit,
-    onOpenVendorLog: () -> Unit,
+    onOpenVendorLog: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
-        Text(
-            text = "Recent calls",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(bottom = 8.dp),
-        )
+        CallTabs(current = tab, onTab = onTab)
 
         if (entries.isNullOrEmpty()) {
             Column(
@@ -476,20 +493,22 @@ private fun CallList(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 Text(
-                    text = if (entries == null) "Reading…" else "No call history readable here.",
+                    text = emptyLabel(entries, tab, vendorLog = onOpenVendorLog != null),
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
                 )
-                BigButton(
-                    label = "Open vendor call log",
-                    enabled = true,
-                    color = MaterialTheme.colorScheme.secondary,
-                    onClick = onOpenVendorLog,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(CALL_BUTTON_HEIGHT_DP.dp),
-                )
+                if (onOpenVendorLog != null) {
+                    BigButton(
+                        label = "Open vendor call log",
+                        enabled = true,
+                        color = MaterialTheme.colorScheme.secondary,
+                        onClick = onOpenVendorLog,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(CALL_BUTTON_HEIGHT_DP.dp),
+                    )
+                }
             }
             return
         }
@@ -500,6 +519,46 @@ private fun CallList(
         ) {
             items(entries) { entry ->
                 CallRow(entry = entry, canDial = canDial, onDial = onDial)
+            }
+        }
+    }
+}
+
+/** What an empty list says: still reading, nothing in this tab, or (btsuite) nothing readable. */
+private fun emptyLabel(entries: List<VendorCallLog.Entry>?, tab: PhoneLogic.CallTab, vendorLog: Boolean): String = when {
+    entries == null -> "Reading…"
+    vendorLog -> "No call history readable here."
+    tab == PhoneLogic.CallTab.ALL -> "No calls yet. The phone's history appears once it connects."
+    else -> "No ${tab.label.lowercase()} calls."
+}
+
+/** All / Missed / Dialled, one car-sized chip each, in place of the list's title. */
+@Composable
+private fun CallTabs(current: PhoneLogic.CallTab, onTab: (PhoneLogic.CallTab) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 8.dp)
+            .height(MIN_TAP_DP.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        for (tab in PhoneLogic.CallTab.entries) {
+            val on = tab == current
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .clip(carShape(12.dp))
+                    .background(if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
+                    .semantics { selected = on }
+                    .clickable(onClick = withTapFeedback { onTab(tab) }),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = tab.label,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }
@@ -544,7 +603,11 @@ private fun CallRow(entry: VendorCallLog.Entry, canDial: Boolean, onDial: (Strin
 
 /** The btsuite pages this screen does not replace. Never gated: they are the escape hatch. */
 @Composable
-private fun VendorPages(onOpen: (VendorBt.Page) -> Unit, missing: VendorBt.Page?) {
+private fun VendorPages(
+    pages: List<Pair<String, VendorBt.Page>>,
+    onOpen: (VendorBt.Page) -> Unit,
+    missing: VendorBt.Page?,
+) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         if (missing != null) {
             Text(
@@ -560,7 +623,7 @@ private fun VendorPages(onOpen: (VendorBt.Page) -> Unit, missing: VendorBt.Page?
                 .height(VENDOR_BUTTON_HEIGHT_DP.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            for ((label, page) in VENDOR_PAGES) {
+            for ((label, page) in pages) {
                 BigButton(
                     label = label,
                     enabled = true,
@@ -622,6 +685,13 @@ private val VENDOR_PAGES = listOf(
     "Contacts" to VendorBt.Page.PHONE_BOOK,
     "Bluetooth settings" to VendorBt.Page.SETTINGS,
 )
+
+/** RAV4-162: 0.2 has no btsuite. The call log is the list above, Contacts is the suite app. */
+private val CAR_KIT_PAGES = listOf(
+    "Contacts" to VendorBt.Page.PHONE_BOOK,
+    "Bluetooth settings" to VendorBt.Page.SETTINGS,
+)
+private const val CONTACTS_PKG = "com.ripostelabs.contacts"
 
 /** Forgiving targets for a moving car: taller than the 48 dp minimum by a clear margin. */
 private const val CALL_BUTTON_HEIGHT_DP = 72
