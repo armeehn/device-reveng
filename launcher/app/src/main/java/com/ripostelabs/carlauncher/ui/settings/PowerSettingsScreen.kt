@@ -162,7 +162,10 @@ private fun RangeSetting(
     range: IntRange,
     format: (Int) -> String,
 ) {
-    val raw = controller.getString(key)
+    // Collected here, not read off the controller: a plain read is not Compose state, and with
+    // unchanged parameters Compose skipped the row, so a pick showed only on reopen (RAV4-214).
+    val snap by controller.snapshot.collectAsStateWithLifecycle()
+    val raw = snap[key].orEmpty()
     val value = if (raw.isBlank()) default else PowerOptions.rawOrNull(raw, range)
 
     if (value == null) {
@@ -191,7 +194,10 @@ private fun OptionSetting(
     options: List<Pair<Int, String>>,
     enabled: Boolean = true,
 ) {
-    val raw = controller.getString(key)
+    // Collected here, not read off the controller: a plain read is not Compose state, and with
+    // unchanged parameters Compose skipped the row, so a pick showed only on reopen (RAV4-214).
+    val snap by controller.snapshot.collectAsStateWithLifecycle()
+    val raw = snap[key].orEmpty()
     val value = if (raw.isBlank()) default else PowerOptions.rawOrNull(raw, options)
 
     if (value == null) {
