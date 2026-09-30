@@ -6,6 +6,7 @@ import com.ripostelabs.carlauncher.carlib.VendorCanKey
 import com.ripostelabs.carlauncher.carlib.WheelKey
 import com.ripostelabs.carlauncher.carlib.Zlink
 import com.ripostelabs.carlauncher.data.RadioPresetsStore
+import com.ripostelabs.carlauncher.data.VoiceKey
 import com.ripostelabs.carlauncher.data.WheelGestureAction
 import com.ripostelabs.carlauncher.media.NowPlayingRepository
 import com.ripostelabs.carlauncher.nav.NavRepository
@@ -32,6 +33,8 @@ class WheelGestureDispatcher(
     private val openMedia: () -> Unit,
     private val openRadio: () -> Unit,
     private val openHome: () -> Unit,
+    /** RAV4-176: the voice key's app package; blank is the system assistant. */
+    private val voiceApp: () -> String = { "" },
 ) {
 
     /** Run [action]. Returns false only for [WheelGestureAction.NONE], so feedback can stay quiet. */
@@ -55,7 +58,7 @@ class WheelGestureDispatcher(
             WheelGestureAction.SIRI -> Zlink.request(Zlink.Feature.SIRI).broadcast(context)
             WheelGestureAction.NAV -> nav()
             WheelGestureAction.MUTE_TOGGLE -> toggleMute()
-            WheelGestureAction.VOICE -> VendorCanKey.press(WheelKey.VOICE).broadcast(context)
+            WheelGestureAction.VOICE -> voice()
         }
         return true
     }
@@ -66,6 +69,17 @@ class WheelGestureDispatcher(
         val target = now.livePositionMs() + deltaMs
         val max = if (now.durationMs > 0) now.durationMs else Long.MAX_VALUE
         nowPlaying.seekTo(target.coerceIn(0L, max))
+    }
+
+    /** The chosen voice app or assistant; the vendor voice key when nothing answers. */
+    private fun voice() {
+        val intent = VoiceKey.intent(context, voiceApp())
+        if (intent == null) {
+            VendorCanKey.press(WheelKey.VOICE).broadcast(context)
+            return
+        }
+
+        runCatching { context.startActivity(intent) }
     }
 
     /** CarPlay's Maps while a phone is projected; otherwise the nav app the Nav card opens. */

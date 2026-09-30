@@ -100,6 +100,7 @@ import com.ripostelabs.carlauncher.carlib.WheelKeyMap
 import com.ripostelabs.carlauncher.carlib.WheelKeySwallow
 import com.ripostelabs.carlauncher.carlib.WheelLearn
 import com.ripostelabs.carlauncher.carlib.Zlink // RAV4-52 CarPlay deep link
+import com.ripostelabs.carlauncher.data.AutoStart
 import com.ripostelabs.carlauncher.data.CallPopupGuard
 import com.ripostelabs.carlauncher.data.ColdBootResume
 import com.ripostelabs.carlauncher.data.DecoderSignal
@@ -869,7 +870,21 @@ class MainActivity : ComponentActivity() {
             openMedia = { screenState.value = Screen.Media },
             openRadio = ::openRadio,
             openHome = { screenState.value = Screen.Home; launcherFocus.reset() },
+            voiceApp = { settingsStore.settings.value.voiceAppPackage },
         )
+
+        // RAV4-176: the chosen app starts when the car comes on. The first reading is the
+        // launcher's own start (a boot, gated once per boot); each later "on" is an ACC wake.
+        lifecycleScope.launch {
+            var trigger = AutoStart.Trigger.LAUNCH
+            carEvents.accOn.collect { on ->
+                if (on) {
+                    val pkg = settingsStore.autoStartPackage.filterNotNull().first()
+                    AutoStart.run(applicationContext, trigger, pkg)
+                }
+                trigger = AutoStart.Trigger.WAKE
+            }
+        }
         keyActions = KeyActionDispatcher(
             audio = getSystemService(AudioManager::class.java),
             gestures = wheelGestures,

@@ -43,6 +43,7 @@ import com.ripostelabs.carlauncher.data.SettingKeys // v2.8
 import com.ripostelabs.carlauncher.data.SettingsStore
 import com.ripostelabs.carlauncher.ui.collectAsStateSafe
 import com.ripostelabs.carlauncher.nav.NavRepository
+import com.ripostelabs.carlauncher.data.AutoStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -291,6 +292,29 @@ fun LauncherPrefsScreen(
                 current = settings.navAppPackage,
                 options = listOf("" to "Automatic") + navApps,
                 onSelect = settingsStore::setNavAppPackage,
+            )
+        }
+
+        // RAV4-176: stock's auto-start app and custom voice key.
+        SettingsSection(title = "Start and voice") {
+            val autoStart by settingsStore.autoStartPackage.collectAsStateWithLifecycle()
+            var apps by remember { mutableStateOf(emptyList<Pair<String, String>>()) }
+            LaunchedEffect(Unit) {
+                apps = withContext(Dispatchers.IO) { AutoStart.apps(context) }
+            }
+            PickerSetting(
+                label = "Start with the car",
+                description = "Opened once home is up, at power-on and after every ACC on",
+                current = autoStart.orEmpty(),
+                options = listOf("" to "Nothing") + apps,
+                onSelect = settingsStore::setAutoStartPackage,
+            )
+            PickerSetting(
+                label = "Voice key opens",
+                description = "The wheel voice key. Assistant is Android's default.",
+                current = settings.voiceAppPackage,
+                options = listOf("" to "Assistant") + apps,
+                onSelect = settingsStore::setVoiceAppPackage,
             )
         }
 
