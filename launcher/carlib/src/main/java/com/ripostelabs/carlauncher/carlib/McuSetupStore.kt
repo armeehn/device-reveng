@@ -134,6 +134,19 @@ class McuSetupStore(
         send(McuSetupProtocol.dspChannelGain(f))
     }
 
+    /** The DSP crossover: front and rear high- and low-pass and the two slopes, `4F 14`. */
+    fun setDspCrossover(crossover: DspSound.Crossover) {
+        val c = crossover.clamped()
+        update { copy(dspCrossover = c) }
+        send(McuSetupProtocol.dspCrossover(c))
+    }
+
+    /** The DSP surround: on, centre speaker and mode, `4F 0F`. */
+    fun setDspSurround(surround: DspSound.Surround) {
+        update { copy(dspSurround = surround) }
+        send(McuSetupProtocol.dspSurround(surround))
+    }
+
     /** The test tone, whatever the key-beep setting says (the vendor's `beep()` gated on it). */
     fun beep() {
         send(McuSetupProtocol.beep())

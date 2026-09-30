@@ -39,8 +39,10 @@ object McuSetupProtocol {
     private const val CONFIG_DSP_LOUD = 0x0E   // :15053
     private const val CONFIG_DSP_EQ = 0x10     // DSP EqModel_Two_48.sendEq, :200-207
     private const val CONFIG_DSP_BAND = 0x11   // DSP EqModel_Two_48.sendEq(int), :162-164
+    private const val CONFIG_DSP_SURROUND = 0x0F // DSP SoundModel_Two.sendSound, :33-50
     private const val CONFIG_DSP_DELAY = 0x12  // DSP SoundFieldModel_Two.sendDelay, :85-114
     private const val CONFIG_DSP_GAIN = 0x13   // DSP SoundFieldModel_Two.sendChannelGains, :118-147
+    private const val CONFIG_DSP_CROSSOVER = 0x14 // DSP SubWoofModel_Two.sendFilter, :428-450
     private const val CONFIG_DSP_SUB = 0x15    // DSP SubWoofModel_Two.sendStrongBass, :155-169
     private const val CONFIG_DSP_BASS = 0x16   // DSP BassModel_Two.sendFrequency, :126-140
 
@@ -52,6 +54,9 @@ object McuSetupProtocol {
     private val SLEEP_TABLE = mapOf(1 to 960, 2 to 1440, 3 to 2880)
 
     private const val SECONDS_PER_MINUTE = 60
+
+    /** sendSound packs the centre speaker as bit 1 (`SOUND_ZHONGZHI * 2`). */
+    private const val SURROUND_CENTRE_BIT = 2
 
     /** A delay byte runs 0..100 for 0..272 cm (sendDelay's `* 100 / 272.0f`). */
     private const val DELAY_WIRE_MAX = 100
@@ -103,6 +108,27 @@ object McuSetupProtocol {
         val wire = field.clamped().gains.map { (it - DspSound.GAIN_FLAT) and BYTE }
 
         return McuSerial.encode(OP_CONFIG, bytes(CONFIG_DSP_GAIN, 0, *wire.toIntArray()))
+    }
+
+    /**
+     * `4F 14 fLPh fLPl fHPh fHPl rLPh rLPl rHPh rHPl lpSlope hpSlope`: each frequency as
+     * `value / 256`, `value % 256` (sendFilter, :428-450).
+     */
+    fun dspCrossover(crossover: DspSound.Crossover): ByteArray {
+        val c = crossover.clamped()
+        val hz = listOf(c.frontLp, c.frontHp, c.rearLp, c.rearHp).flatMap { listOf(it shr 8, it and BYTE) }
+
+        return McuSerial.encode(
+            OP_CONFIG,
+            bytes(CONFIG_DSP_CROSSOVER, *hz.toIntArray(), c.lpSlope.ordinal, c.hpSlope.ordinal),
+        )
+    }
+
+    /** `4F 0F (on + 2 * centre) mode` (sendSound, :33-50). */
+    fun dspSurround(surround: DspSound.Surround): ByteArray {
+        val flags = bit(surround.on) + SURROUND_CENTRE_BIT * bit(surround.centre)
+
+        return McuSerial.encode(OP_CONFIG, bytes(CONFIG_DSP_SURROUND, flags, surround.mode.wire))
     }
 
     /** `09 mode` (sendEQMode, :4291). The preset curves are the MCU's; 0 is the user curve. */
