@@ -158,9 +158,9 @@ fun CanCaptureScreen(
                 decoded.forEach { (label, value) -> InfoRow(label = label, value = value) }
                 Spacer(Modifier.size(8.dp))
                 Text(
-                    text = "No MCU field is road speed. The 2026-09-09 drive paired 0x17 and 0x13 " +
-                        "against the ECU's own OBD answer: 0x17 never arrived, 0x13 wanders 0..175 at " +
-                        "a steady 16 km/h. Speed now comes from the raw bus (0x361, 0x498, 0x0B4, " +
+                    text = "No MCU field is road speed. Stock reads 0x17 and 0x13 p[0:1] as fuel " +
+                        "figures, and the 2026-09-09 drive found 0x13 wanders 0..175 at a steady " +
+                        "16 km/h. Speed now comes from the raw bus (0x361, 0x498, 0x0B4, " +
                         "wheels 0x0AA) and shows on the Vehicle page. Gear: only REVERSE is in the " +
                         "digest (0x71 bit 0x02); the 0x1A gear bytes are raw only.",
                     style = MaterialTheme.typography.bodySmall,
@@ -524,8 +524,12 @@ private fun decodedRows(sig: CanSignal): Map<String, String> = when (sig) {
         put("0x32 p[4:5] (NOT speed)", sig.speedRaw.toString())
         put("Coolant", sig.coolantC?.let { "$it °C" } ?: "—")
     }
-    is CanSignal.SpeedCandidate -> mapOf(
-        "Speed (${sig.source} candidate, ~0.1 km/h)" to "%.1f km/h (raw %d)".format(sig.kmh, sig.raw),
+    is CanSignal.FuelChart -> mapOf(
+        "Fuel chart (${sig.unit.label})" to sig.bars.joinToString(" ") { it?.let { v -> "%.1f".format(v) } ?: "–" },
+    )
+    is CanSignal.FuelHistory -> mapOf(
+        "Fuel now (${sig.unit.label})" to (sig.current?.let { "%.1f".format(it) } ?: "—"),
+        "Fuel trips 1-5" to sig.trips.joinToString(" ") { it?.let { v -> "%.1f".format(v) } ?: "–" },
     )
     is CanSignal.Hybrid -> buildMap {
         put("Hybrid battery", "${sig.batteryLevel}/15")
@@ -618,7 +622,6 @@ private fun decodedRows(sig: CanSignal): Map<String, String> = when (sig) {
         put("Trip average speed", sig.avgSpeedKmh?.let { "$it km/h" } ?: "—")
         put("Trip fuel", sig.tripFuel?.let { "%.1f %s".format(it, sig.fuelUnit.label) } ?: "—")
         put("Best fuel", sig.bestFuel?.let { "%.1f %s".format(it, sig.fuelUnit.label) } ?: "—")
-        put("Speed (0x13 live candidate, raw)", sig.speedCandidateRaw.toString())
     }
     is CanSignal.RpmGearMirror -> mapOf(
         "Gear" to sig.gear.name,

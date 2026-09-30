@@ -119,10 +119,10 @@ data class VehicleSnapshot(
                     }
                 }
 
-            // Speed is NOT folded in. A real drive proved 0x32 is not road speed, and 0x17/0x13
-            // remain unconfirmed candidates. Putting either here would let a screen show it as
-            // fact, and the motion safety gate is downstream of exactly this type.
-            is CanSignal.SpeedCandidate -> this
+            // Speed is NOT folded in: a real drive proved 0x32 is not road speed, and the motion
+            // safety gate is downstream of exactly this type. The fuel charts wait for a Trip page.
+            is CanSignal.FuelChart -> this
+            is CanSignal.FuelHistory -> this
             is CanSignal.RpmGearMirror -> this
             is CanSignal.Version -> this
             is CanSignal.CarSettings -> this

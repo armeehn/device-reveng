@@ -66,13 +66,10 @@ class VehicleSnapshotTest {
         assertEquals(listOf(220, null, 210, 205), s.tyresKpa)
     }
 
-    /**
-     * Speed must not reach the snapshot. A drive proved 0x32 is not road speed and the other two
-     * are unconfirmed candidates; folding either would let a screen present a guess as fact.
-     */
+    /** 0x17 was once read as speed (raw 540 = "54.0 km/h"). It is a fuel chart and must not fold. */
     @Test
-    fun `speed candidates are deliberately not folded in`() {
-        val s = empty.fold(CanSignal.SpeedCandidate(source = "0x17", raw = 540, kmh = 54.0), atMs = 1_000)
+    fun `the fuel chart is not folded in as speed`() {
+        val s = empty.fold(CanSignal.FuelChart(bars = listOf(54.0), unit = CanSignal.FuelUnit.L_PER_100KM), atMs = 1_000)
         assertFalse(s.hasAnySource(now = 1_000))
     }
 
