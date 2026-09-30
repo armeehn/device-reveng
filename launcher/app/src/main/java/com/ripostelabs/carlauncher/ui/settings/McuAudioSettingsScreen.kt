@@ -197,6 +197,11 @@ fun McuAudioSettingsScreen(
             GainSlider(Icons.Filled.Tv, "TV", g.tv) { store.setGains(g.copy(tv = it)) }
             GainSlider(Icons.AutoMirrored.Filled.VolumeUp, "Other", g.other) { store.setGains(g.copy(other = it)) }
             GainSlider(Icons.Filled.Navigation, "Navigation prompts", setup.navVolume, store::setNavVolume)
+            ActionRow(
+                label = "Restore defaults",
+                description = "Every source and navigation prompts back to ${McuSetup.DEFAULT_GAIN}",
+                onClick = store::restoreGains,
+            )
         }
 
         Text(

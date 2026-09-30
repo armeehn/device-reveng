@@ -78,6 +78,13 @@ class McuSetupStore(
         send(McuSetupProtocol.sourceGains(gains))
     }
 
+    /** Every source gain and the nav prompt level back to 28: `49 08` then `26`. */
+    fun restoreGains() {
+        update { withGainsRestored() }
+        send(McuSetupProtocol.sourceGains(_setup.value.gains))
+        send(McuSetupProtocol.navVolume(_setup.value.navVolume))
+    }
+
     fun setDspLoud(on: Boolean) {
         update { copy(dspLoud = on) }
         send(McuSetupProtocol.dspLoud(on))
