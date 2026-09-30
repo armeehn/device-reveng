@@ -41,13 +41,20 @@ interface NavPanel {
     companion object {
         private const val EXPANDED_DP = 64
 
-        /** A finger needs more than the 6 dp line it can see. */
-        private const val HANDLE_TOUCH_DP = 12
+        /**
+         * The folded strip: 36 px on the 240 dpi panel, visible at a glance and easy to hit. It is
+         * also the inset apps give up while folded, so it stays well short of the 64 dp strip.
+         */
+        private const val HANDLE_STRIP_DP = 24
+
+        /** The pill on the folded strip: 240 x 12 px, the old 6 dp line was 9 px of faint accent. */
+        const val PILL_WIDTH_DP = 160
+        const val PILL_HEIGHT_DP = 8
 
         /** The window height, which is also the inset the apps above it give up. */
         fun heightDp(state: Int): Int = when (state) {
             ICarService.NAV_EXPANDED -> EXPANDED_DP
-            ICarService.NAV_HANDLE -> HANDLE_TOUCH_DP
+            ICarService.NAV_HANDLE -> HANDLE_STRIP_DP
             else -> 0
         }
     }

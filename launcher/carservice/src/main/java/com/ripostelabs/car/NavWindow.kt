@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.PixelFormat
+import android.graphics.drawable.GradientDrawable
 import android.os.Binder
 import android.os.Handler
 import android.os.Looper
@@ -13,7 +14,6 @@ import android.util.Log
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
-import android.view.ViewGroup
 import android.view.WindowInsets
 import android.view.WindowManager
 import android.widget.FrameLayout
@@ -34,7 +34,7 @@ import java.util.concurrent.Executors
  * platform-signed app): DisplayPolicy then shrinks every app that does not hide its own bars.
  * On the bench DAVx5's intro arrow moved from y 575-659 to 515-599 above a 96 px bar.
  *
- * Same look as the launcher's: 60 % surface, Back / Home / Apps, a 6 dp accent line folded.
+ * Same look as the launcher's: 60 % surface, Back / Home / Apps, a pill on a 24 dp strip folded.
  */
 class NavWindow(private val context: Context, private val onTouch: () -> Unit) : NavPanel {
 
@@ -146,11 +146,18 @@ class NavWindow(private val context: Context, private val onTouch: () -> Unit) :
         }
     }
 
-    /** The folded bar: a faint accent line on the bottom edge. A press anywhere on it unfolds it. */
+    /** The folded bar: a translucent strip with an accent pill in the middle. A press anywhere on it unfolds it. */
     private fun handle(colors: IntArray): View {
-        val frame = FrameLayout(context)
-        val line = View(context).apply { setBackgroundColor(withAlpha(colors[PRIMARY], HANDLE_ALPHA)) }
-        frame.addView(line, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, px(HANDLE_DP), Gravity.BOTTOM))
+        val frame = FrameLayout(context).apply { setBackgroundColor(withAlpha(colors[SURFACE], BAR_ALPHA)) }
+
+        // Rounded ends read as a handle, not a divider line.
+        val pill = View(context).apply {
+            background = GradientDrawable().apply {
+                cornerRadius = px(NavPanel.PILL_HEIGHT_DP) / 2f
+                setColor(withAlpha(colors[PRIMARY], PILL_ALPHA))
+            }
+        }
+        frame.addView(pill, FrameLayout.LayoutParams(px(NavPanel.PILL_WIDTH_DP), px(NavPanel.PILL_HEIGHT_DP), Gravity.CENTER))
         frame.setOnTouchListener { _, e ->
             if (e.actionMasked == MotionEvent.ACTION_DOWN) {
                 onTouch()
@@ -198,8 +205,8 @@ class NavWindow(private val context: Context, private val onTouch: () -> Unit) :
 
         /** The launcher's BAR_ALPHA: the app underneath shows through the strip. */
         const val BAR_ALPHA = 0.6f
-        const val HANDLE_ALPHA = 0.4f
-        const val HANDLE_DP = 6
+        /** Near-opaque accent: the pill must stand out over any app colour. */
+        const val PILL_ALPHA = 0.9f
         const val FULL_ALPHA = 255
 
         const val KEY_DP = 56

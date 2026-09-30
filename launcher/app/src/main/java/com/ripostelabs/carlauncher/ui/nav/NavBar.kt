@@ -14,9 +14,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Apps
@@ -88,10 +87,12 @@ class NavBar(private val context: Context) {
     private companion object {
         const val TAG = "NavBar"
         const val HEIGHT_DP = 64
-        const val HANDLE_DP = 6
-        /** Window height while folded: a finger needs more than the 6 dp it can see. */
-        const val HANDLE_TOUCH_DP = 12
-        const val HANDLE_ALPHA = 0.4f
+        /** Window height while folded: the car service's NavPanel strip, 36 px on the panel. */
+        const val HANDLE_TOUCH_DP = 24
+        /** The pill on the folded strip, as NavPanel.PILL_*_DP draws it in the car service. */
+        const val PILL_WIDTH_DP = 160
+        const val PILL_HEIGHT_DP = 8
+        const val PILL_ALPHA = 0.9f
         /** The keys strip lets the app underneath show through: it sits over the app's bottom edge. */
         const val BAR_ALPHA = 0.6f
         const val ICON_DP = 34
@@ -296,20 +297,20 @@ class NavBar(private val context: Context) {
         }
     }
 
-    /** The folded bar: a faint accent line on the bottom edge. A press or a swipe up unfolds it. */
+    /** The folded bar: a translucent strip with an accent pill in the middle. A press or a swipe up unfolds it. */
     @Composable
     private fun Handle(c: ThemeColors) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .background(Color(c.surface).copy(alpha = BAR_ALPHA))
                 .pointerInput(Unit) { detectTapGestures(onPress = { interact() }) },
-            contentAlignment = Alignment.BottomCenter,
+            contentAlignment = Alignment.Center,
         ) {
             Box(
                 Modifier
-                    .fillMaxWidth()
-                    .height(HANDLE_DP.dp)
-                    .background(Color(c.primary).copy(alpha = HANDLE_ALPHA)),
+                    .size(PILL_WIDTH_DP.dp, PILL_HEIGHT_DP.dp)
+                    .background(Color(c.primary).copy(alpha = PILL_ALPHA), RoundedCornerShape(PILL_HEIGHT_DP.dp / 2)),
             )
         }
     }
