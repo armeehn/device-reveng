@@ -29,6 +29,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ripostelabs.carlauncher.carlib.DspEq
+import com.ripostelabs.carlauncher.carlib.DspSound
 import com.ripostelabs.carlauncher.carlib.McuSetup
 import com.ripostelabs.carlauncher.carlib.McuSetupStore
 import com.ripostelabs.carlauncher.carlib.BAL_FAD_HALF
@@ -87,6 +88,20 @@ fun McuAudioSettingsScreen(
                 label = "Reset sound",
                 description = "Flat EQ and DSP loudness off; custom slots stay",
                 onClick = store::resetDsp,
+            )
+        }
+
+        // The DSP app's Bass and Subwoofer tabs, `4F 16` and `4F 15`, re-sent at boot (RAV4-172).
+        SettingsSection(title = "DSP subwoofer & bass") {
+            DspSubRows(setup.dspSub, store::setDspSub)
+            DspBassRows(setup.dspBass, store::setDspBass)
+            ActionRow(
+                label = "Default subwoofer & bass",
+                description = "250 Hz, 0 dB, normal phase; bass boost off",
+                onClick = {
+                    store.setDspSub(DspSound.Sub())
+                    store.setDspBass(DspSound.Bass())
+                },
             )
         }
 
@@ -212,6 +227,59 @@ private fun DspCurve(curve: List<Int>) {
     }
 }
 
+/** Cut-off, gain around 0 dB, phase, amplifier and stock's unset on/off flag. */
+@Composable
+private fun DspSubRows(sub: DspSound.Sub, onChange: (DspSound.Sub) -> Unit) {
+    SliderSetting(
+        label = "Subwoofer cut-off",
+        value = sub.freq,
+        range = SUB_FREQ_RANGE,
+        onChange = { onChange(sub.copy(freq = it)) },
+        step = SUB_FREQ_STEP,
+        format = { "$it Hz" },
+    )
+    SliderSetting(
+        label = "Subwoofer gain",
+        value = sub.gain - DspSound.SUB_GAIN_FLAT,
+        range = SUB_GAIN_RANGE,
+        onChange = { onChange(sub.copy(gain = it + DspSound.SUB_GAIN_FLAT)) },
+        format = { "${toneLabel(it)} dB" },
+    )
+    ToggleSetting(
+        label = "Reverse subwoofer phase",
+        checked = sub.reversePhase,
+        onChange = { onChange(sub.copy(reversePhase = it)) },
+    )
+    ToggleSetting(
+        label = "Subwoofer amplifier",
+        checked = sub.amplifier,
+        onChange = { onChange(sub.copy(amplifier = it)) },
+    )
+    ToggleSetting(
+        label = "Subwoofer on/off flag",
+        description = "Stock never set it; the car shows which way is on",
+        checked = sub.offOn,
+        onChange = { onChange(sub.copy(offOn = it)) },
+    )
+}
+
+/** Bass boost level and the stock picker's centre frequency. */
+@Composable
+private fun DspBassRows(bass: DspSound.Bass, onChange: (DspSound.Bass) -> Unit) {
+    SliderSetting(
+        label = "Bass boost",
+        value = bass.level,
+        range = BASS_LEVEL_RANGE,
+        onChange = { onChange(bass.copy(level = it)) },
+    )
+    PickerSetting(
+        label = "Bass boost frequency",
+        current = bass.freq,
+        options = BASS_FREQ_OPTIONS,
+        onSelect = { onChange(bass.copy(freq = it)) },
+    )
+}
+
 @Composable
 private fun ToneSlider(label: String, value: Int, onChange: (Int) -> Unit) {
     SliderSetting(
@@ -248,6 +316,18 @@ private val DSP_SLOTS: List<Pair<Int, String>> = List(DspEq.CUSTOM_SLOTS) { it t
 private val DSP_GAIN_RANGE = DspEq.GAIN_MIN..DspEq.GAIN_MAX
 
 private val CURVE_HEIGHT = 96.dp
+
+private val SUB_FREQ_RANGE = DspSound.SUB_FREQ_MIN..DspSound.SUB_FREQ_MAX
+
+/** 10 Hz notches, 20..250; stock's slider moved by 1 Hz, too fine to hit while parked. */
+private const val SUB_FREQ_STEP = 10
+
+/** The sub gain as -12..+12 dB around stock's 12. */
+private val SUB_GAIN_RANGE = -DspSound.SUB_GAIN_FLAT..(DspSound.SUB_GAIN_MAX - DspSound.SUB_GAIN_FLAT)
+
+private val BASS_LEVEL_RANGE = 0..DspSound.BASS_LEVEL_MAX
+
+private val BASS_FREQ_OPTIONS: List<Pair<Int, String>> = DspSound.BASS_FREQS.mapIndexed { i, label -> i to label }
 
 /** The vendor slider's span (`ItemSeekBarView`), the same the gateway path offered. */
 private val SUBWOOFER_RANGE = 0..20
