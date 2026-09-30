@@ -30,10 +30,16 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: launcher-ci-${{ github.ref }}
-  # Cancel superseded runs on PRs only. On main, two merges landing within one
-  # run's duration share the group, and cancelling the older run would kill its
-  # release job — that merged build would never be tagged or published.
+  # PRs share one group per ref, so a new push cancels the superseded run.
+  # Every other run (push to main, dispatch) gets a group of its own, keyed by
+  # run id. A shared group is not a queue on Gitea 1.27: even with
+  # cancel-in-progress false, a new run cancels the Waiting and Blocked jobs
+  # of the older runs in its group (models/actions/run.go,
+  # CancelPreviousJobsByRunConcurrency). That killed the older main run's
+  # release job, which sits Blocked on `needs` (runs 6726 and 6743, #363 held
+  # back ~65 min). Parallel main runs are safe: the kvm runner serialises the
+  # emulator jobs, and each release writes its own tag.
+  group: launcher-ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # The AVD name is shared: the action creates the AVD under it and
