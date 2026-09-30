@@ -54,4 +54,12 @@ interface ICarService {
     const int NIGHT_MODE_DAY = 1;               // UiModeManager.MODE_NIGHT_NO
     const int NIGHT_MODE_NIGHT = 2;             // UiModeManager.MODE_NIGHT_YES
     void setNightMode(int mode);                // CONTROL
+
+    // 9: the Wi-Fi hotspot and the system language. Tethering needs TETHER_PRIVILEGED and a
+    // locale change CHANGE_CONFIGURATION; the system uid holds both, the launcher neither.
+    const int HOTSPOT_OFF = 0;
+    const int HOTSPOT_ON = 1;
+    void setHotspot(int state);                 // CONTROL
+    int hotspotState();                         // READ: HOTSPOT_*
+    void setLanguage(String tag);               // CONTROL: a BCP 47 tag, "fr-CA"
 }

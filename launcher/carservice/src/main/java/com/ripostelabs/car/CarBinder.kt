@@ -1,6 +1,7 @@
 package com.ripostelabs.car
 
 import android.os.RemoteException
+import java.util.Locale
 import com.ripostelabs.carlauncher.carlib.McuOwner
 import com.ripostelabs.carlauncher.carlib.McuOwnerProtocol
 
@@ -67,6 +68,14 @@ interface UiMode {
     fun setNightMode(mode: Int)
 }
 
+/** Hotspot and language as the system uid sets them: [SystemControls] on the unit, a fake in tests. */
+interface SystemSettings {
+    /** ICarService.HOTSPOT_* */
+    fun setHotspot(state: Int)
+    fun hotspotState(): Int
+    fun setLanguage(tag: String)
+}
+
 interface Link {
     fun status(): McuOwner.Status
     fun open()
@@ -103,6 +112,7 @@ class CarBinder(
     private val decoder: Decoder,
     private val nav: NavPanel,
     private val uiMode: UiMode,
+    private val system: SystemSettings,
 ) : ICarService.Stub() {
 
     /** The `71` reverse bit while the link runs; only [publish] and [publishStatus] move it. */
@@ -213,6 +223,25 @@ class CarBinder(
         uiMode.setNightMode(mode)
     }
 
+    override fun setHotspot(state: Int) {
+        gate.enforce(Access.CONTROL)
+        require(state == ICarService.HOTSPOT_ON || state == ICarService.HOTSPOT_OFF) { "unknown hotspot state $state" }
+        system.setHotspot(state)
+    }
+
+    override fun hotspotState(): Int {
+        gate.enforce(Access.READ)
+        return system.hotspotState()
+    }
+
+    // A tag that names no language ("", "!!") would reset the unit to its default: refused.
+    override fun setLanguage(tag: String?) {
+        gate.enforce(Access.CONTROL)
+        val language = tag.orEmpty()
+        require(Locale.forLanguageTag(language).language.isNotEmpty()) { "not a language tag: $tag" }
+        system.setLanguage(language)
+    }
+
     override fun lastSource(): Int {
         gate.enforce(Access.READ)
         return link.lastSource()
@@ -282,9 +311,9 @@ class CarBinder(
 
     private companion object {
         // 1 was the skeleton; 2 adds the MCU link calls; 3 power (factoryReset); 4 reverse and
-        // decoder; 5 the nav bar; 6 the POWER key choice. Additions to ICarService bump it. The manifest's com.ripostelabs.car.API
+        // decoder; 5 the nav bar; 6 the POWER key choice; 9 hotspot and language. Additions to ICarService bump it. The manifest's com.ripostelabs.car.API
         // meta-data must say the same.
-        const val API_VERSION = 8
+        const val API_VERSION = 9
 
         /** surface, onSurface, primary. */
         const val NAV_COLORS = 3

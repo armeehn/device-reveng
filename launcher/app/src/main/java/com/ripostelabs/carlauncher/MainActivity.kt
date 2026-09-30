@@ -1,5 +1,7 @@
 package com.ripostelabs.carlauncher
 
+import com.ripostelabs.carlauncher.data.SystemControl
+import com.ripostelabs.carlauncher.ui.LocalSystemControl
 import android.Manifest // v2.5
 import android.content.IntentFilter
 import android.content.Context
@@ -209,6 +211,9 @@ class MainActivity : ComponentActivity() {
 
     /** Riposte OS 0.2 only: our MCU port owner. Null on a stock or 0.1 slot. */
     private var mcuOwner: McuPort? = null
+
+    /** RAV4-216: hotspot and language through [mcuOwner]'s car service. */
+    private val systemControl = SystemControl { mcuOwner }
     private var mcuSetupStore: McuSetupStore? = null
 
     /** Riposte OS 0.2 only: the decoded MCU events on 127.0.0.1:5589 for Helm, the car computer. */
@@ -1190,6 +1195,7 @@ class MainActivity : ComponentActivity() {
               CompositionLocalProvider(
                   LocalLauncherFocus provides launcherFocus,
                   LocalCarFeedback provides carFeedback, // v2.5
+                  LocalSystemControl provides systemControl, // RAV4-216
               ) {
                ProvideParkedOnlyLock(locked = parkedOnlyLock) { // v2.5
                 Surface(
