@@ -18,6 +18,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.VolumeDown
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.Icon
@@ -44,6 +46,7 @@ import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.ripostelabs.carlauncher.MainActivity
 import com.ripostelabs.car.ICarService
 import com.ripostelabs.carlauncher.carlib.CarNav
+import com.ripostelabs.carlauncher.carlib.NavVolume
 import com.ripostelabs.carlauncher.carlib.RootShell
 import com.ripostelabs.carlauncher.data.NavBarMode
 import com.ripostelabs.carlauncher.input.WheelGamepad
@@ -259,6 +262,8 @@ class NavBar(private val context: Context) {
 
     private fun recents() = inject(KEYCODE_APP_SWITCH)
 
+    private fun volume(step: NavVolume.Step) = NavVolume.step(context, step)
+
     private fun home() {
         val intent = Intent(context, MainActivity::class.java).addFlags(
             Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP,
@@ -290,9 +295,12 @@ class NavBar(private val context: Context) {
                 horizontalArrangement = Arrangement.spacedBy(96.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                // RAV4-177: volume at the two ends, as stock's floating ball has it.
+                Key(Icons.AutoMirrored.Filled.VolumeDown, "Volume down", Color(c.onSurface)) { volume(NavVolume.Step.DOWN) }
                 Key(Icons.AutoMirrored.Filled.ArrowBack, "Back", Color(c.onSurface), ::back)
                 Key(Icons.Filled.Home, "Home", Color(c.primary), ::home)
                 Key(Icons.Filled.Apps, "Apps", Color(c.onSurface), ::recents)
+                Key(Icons.AutoMirrored.Filled.VolumeUp, "Volume up", Color(c.onSurface)) { volume(NavVolume.Step.UP) }
             }
         }
     }

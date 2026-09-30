@@ -19,6 +19,7 @@ import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.LinearLayout
+import com.ripostelabs.carlauncher.carlib.NavVolume
 import java.io.IOException
 import java.util.concurrent.Executors
 
@@ -34,7 +35,8 @@ import java.util.concurrent.Executors
  * platform-signed app): DisplayPolicy then shrinks every app that does not hide its own bars.
  * On the bench DAVx5's intro arrow moved from y 575-659 to 515-599 above a 96 px bar.
  *
- * Same look as the launcher's: 60 % surface, Back / Home / Apps, a pill on a 24 dp strip folded.
+ * Same look as the launcher's: 60 % surface, Vol - / Back / Home / Apps / Vol +, a pill on a
+ * 24 dp strip folded.
  */
 class NavWindow(private val context: Context, private val onTouch: () -> Unit) : NavPanel {
 
@@ -121,9 +123,12 @@ class NavWindow(private val context: Context, private val onTouch: () -> Unit) :
             gravity = Gravity.CENTER
             setBackgroundColor(withAlpha(colors[SURFACE], BAR_ALPHA))
         }
+        // RAV4-177: volume at the two ends, as stock's floating ball has it.
+        row.addView(key(R.drawable.nav_volume_down, "Volume down", colors[ON_SURFACE]) { volume(NavVolume.Step.DOWN) })
         row.addView(key(R.drawable.nav_back, "Back", colors[ON_SURFACE]) { inject(KEYCODE_BACK) })
         row.addView(key(R.drawable.nav_home, "Home", colors[PRIMARY]) { home() })
         row.addView(key(R.drawable.nav_apps, "Apps", colors[ON_SURFACE]) { inject(KEYCODE_APP_SWITCH) })
+        row.addView(key(R.drawable.nav_volume_up, "Volume up", colors[ON_SURFACE]) { volume(NavVolume.Step.UP) })
         return row
     }
 
@@ -172,6 +177,10 @@ class NavWindow(private val context: Context, private val onTouch: () -> Unit) :
             Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP,
         )
         runCatching { context.startActivity(intent) }.onFailure { Log.w(TAG, "cannot start the launcher", it) }
+    }
+
+    private fun volume(step: NavVolume.Step) {
+        runCatching { NavVolume.step(context, step) }.onFailure { Log.w(TAG, "volume $step failed", it) }
     }
 
     // `input keyevent` as system uid, which holds INJECT_EVENTS: no root shell.
