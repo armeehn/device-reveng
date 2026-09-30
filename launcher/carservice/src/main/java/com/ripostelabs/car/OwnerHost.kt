@@ -8,6 +8,7 @@ import com.ripostelabs.carlauncher.carlib.CarProfiles
 import com.ripostelabs.carlauncher.carlib.FramePack
 import com.ripostelabs.carlauncher.carlib.McuOwner
 import com.ripostelabs.carlauncher.carlib.McuOwnerProtocol
+import com.ripostelabs.carlauncher.carlib.PowerKeyMode
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -78,6 +79,11 @@ class OwnerHost(context: Context, forward: (McuEvent) -> Unit) : Link {
     }
 
     override fun send(frame: ByteArray) = owner.send(frame)
+
+    // Not persisted: the launcher sends its choice on every bind, and standby is the safe default.
+    override fun setPowerKey(mode: Int) {
+        PowerKeyMode.ofRaw(mode)?.let(owner::setPowerKey)
+    }
 
     private fun stored(): ByteArray? =
         prefs.getString(KEY_STARTUP, null)?.let { Base64.decode(it, Base64.NO_WRAP) }

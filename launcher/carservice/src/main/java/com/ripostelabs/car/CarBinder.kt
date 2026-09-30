@@ -73,6 +73,9 @@ interface Link {
     fun selectCar(id: String)
     fun send(frame: ByteArray)
 
+    /** ICarService.POWER_KEY_* */
+    fun setPowerKey(mode: Int)
+
     companion object {
         const val NO_SOURCE = -1
     }
@@ -204,6 +207,12 @@ class CarBinder(
         frame?.let(link::send)
     }
 
+    override fun setPowerKey(mode: Int) {
+        gate.enforce(Access.CONTROL)
+        require(mode == ICarService.POWER_KEY_SCREEN_OFF || mode == ICarService.POWER_KEY_STANDBY) { "unknown power key mode $mode" }
+        link.setPowerKey(mode)
+    }
+
     /** One MCU event to every client, in the order the owner saw them; a `71` also moves the line. */
     fun publish(event: McuEvent) {
         broadcast { it.onMcuEvent(event) }
@@ -252,9 +261,9 @@ class CarBinder(
 
     private companion object {
         // 1 was the skeleton; 2 adds the MCU link calls; 3 power (factoryReset); 4 reverse and
-        // decoder; 5 the nav bar. Additions to ICarService bump it. The manifest's com.ripostelabs.car.API
+        // decoder; 5 the nav bar; 6 the POWER key choice. Additions to ICarService bump it. The manifest's com.ripostelabs.car.API
         // meta-data must say the same.
-        const val API_VERSION = 5
+        const val API_VERSION = 6
 
         /** surface, onSurface, primary. */
         const val NAV_COLORS = 3

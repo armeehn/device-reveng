@@ -295,6 +295,15 @@ class McuOwner(
         write(s, frame)
     }
 
+    /** Read on the reader thread for each POWER key; set from the launcher or the car service. */
+    @Volatile
+    private var powerKey = PowerKeyMode.STANDBY
+
+    override fun setPowerKey(mode: PowerKeyMode): Boolean {
+        powerKey = mode
+        return true
+    }
+
     override fun setMode(mode: McuOwnerProtocol.Mode): Boolean {
         val s = session ?: return false
         lastMode = mode
@@ -552,7 +561,8 @@ class McuOwner(
             return
         }
 
-        if (key.code == McuOwnerProtocol.Key.POWER) {
+        // RAV4-156: the black screen keeps the MCU on its source; only standby powers off.
+        if (key.code == McuOwnerProtocol.Key.POWER && powerKey == PowerKeyMode.STANDBY) {
             powerOff()
         }
     }

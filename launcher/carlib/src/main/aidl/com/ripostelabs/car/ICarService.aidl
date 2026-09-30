@@ -39,4 +39,10 @@ interface ICarService {
     const int NAV_HANDLE = 1;                   // folded: a thin touch edge
     const int NAV_EXPANDED = 2;                 // Back, Home, Apps
     void setNavBar(int state, in int[] colors); // surface, onSurface, primary (ARGB); CONTROL
+
+    // 6: what a short POWER press does, as Sys_Power_key_set stores it. SCREEN_OFF keeps the
+    // MCU on its source (no SRC_POWEROFF burst); the launcher blacks the panel itself.
+    const int POWER_KEY_SCREEN_OFF = 0;
+    const int POWER_KEY_STANDBY = 1;             // the default: the vendor's power-off burst
+    void setPowerKey(int mode);                 // CONTROL
 }

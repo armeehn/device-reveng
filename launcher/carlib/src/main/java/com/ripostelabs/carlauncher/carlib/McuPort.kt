@@ -30,4 +30,7 @@ interface McuPort {
     fun setMode(mode: McuOwnerProtocol.Mode): Boolean
 
     fun selectCar(profile: CarProfile)
+
+    /** RAV4-156: whether POWER runs the power-off burst. False where the owner cannot take it. */
+    fun setPowerKey(mode: PowerKeyMode): Boolean = false
 }

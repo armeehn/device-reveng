@@ -23,6 +23,7 @@ class EventCallsTest {
         override fun currentSource() = source
         override fun selectCar(id: String) = Unit
         override fun send(frame: ByteArray) { frames += frame }
+        override fun setPowerKey(mode: Int) = Unit
     }
 
     private class FakePower : Power {

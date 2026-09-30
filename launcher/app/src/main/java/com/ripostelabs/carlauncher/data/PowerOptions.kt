@@ -1,5 +1,7 @@
 package com.ripostelabs.carlauncher.data
 
+import com.ripostelabs.carlauncher.carlib.PowerKeyMode
+
 /**
  * Value domains of the power / sleep SysVars, as the vendor settings app writes them.
  *
@@ -30,6 +32,13 @@ object PowerOptions {
      * default 2. The unit of those MCU values is UNVERIFIED, so the labels state only the order.
      */
     const val SLEEP_TIME_DEFAULT = 2
+
+    /** `Sys_Power_key_set` (onPowerClicked, EventService.java:13824-13880); see [PowerKeyMode]. */
+    val POWER_KEY: List<Pair<Int, String>> = listOf(
+        PowerKeyMode.SCREEN_OFF.raw to "Screen off",
+        PowerKeyMode.STANDBY.raw to "Standby",
+    )
+    val POWER_KEY_DEFAULT = PowerKeyMode.STANDBY.raw
     val SLEEP_TIME: List<Pair<Int, String>> = listOf(
         1 to "1 (shortest)",
         2 to "2 (default)",
