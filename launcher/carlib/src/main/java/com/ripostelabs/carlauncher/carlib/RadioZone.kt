@@ -41,6 +41,25 @@ class RadioZone private constructor(
     val defaultStations: List<Int> =
         (fmBank + fmBank + fmBank + amBank + amBank + List(EMPTY_TAIL) { 0 })
 
+    /**
+     * The regions the vendor radio's picker steps through, in its `radio_zone` order (Europe,
+     * N. America, S. America, Russia, Japan). The settings app labels 3 and 4 the other way
+     * round, but the radio's band plans agree with this order: 3 is OIRT, 4 is 76-90 MHz.
+     */
+    enum class Region(val id: Int, val label: String) {
+        EUROPE(0, "Europe"),
+        NORTH_AMERICA(1, "North America"),
+        SOUTH_AMERICA(2, "South America"),
+        RUSSIA(3, "Russia"),
+        JAPAN(4, "Japan"),
+        ;
+
+        companion object {
+            /** The gateway clamps above 4 to 4 (EventService.java:4825-4830); below 0 reads as Europe. */
+            fun of(id: Int): Region = entries[id.coerceIn(0, entries.size - 1)]
+        }
+    }
+
     /** The plan for [band] as the vendor's `mRadioBndNum` counts them (0..2 FM, 3+ AM). */
     fun plan(band: Int): Plan = if (CarService.isAmBand(band)) am else fm
 

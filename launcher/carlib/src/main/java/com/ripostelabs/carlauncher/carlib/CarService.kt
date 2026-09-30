@@ -50,6 +50,10 @@ class CarService(private val appContext: Context) {
         // 1..6 recall preset N, 7..12 store preset N; the transport keys are below.
         // The old guesses 0 / 1 / 2 meant nothing / preset 1 / preset 2 (CAR_API §3.2).
         const val RADIO_KEY_SCAN = 13
+
+        /** The SysVar rows the vendor radio writes for its region and RDS settings (SysProviderOpt.java:34, :128). */
+        private const val SYSVAR_RADIO_ZONE = "COM.SZCHOICEWAY_RADIO_ZONE_SETTINGS"
+        private const val SYSVAR_RDS = "SYS_RDS_OnOff"
         const val RADIO_KEY_STEP_DOWN = 14
         const val RADIO_KEY_STEP_UP = 15
         const val RADIO_KEY_SEEK_DOWN = 16
@@ -459,6 +463,34 @@ class CarService(private val appContext: Context) {
     /** Store the current station into slot 0..41 (`02 65 slot`); owner path only. */
     fun radioStorePreset(slot: Int) {
         owner?.send(McuOwnerProtocol.radioPresetStore(slot))
+    }
+
+    /**
+     * Change the radio region. Owner path: [McuOwnerProtocol.zoneChange]. Gateway path: the
+     * same keys, then the SysVar write the vendor radio makes, on which the gateway sends
+     * `05 01 z` and reseeds its preset list (EventService.java:4822-4834).
+     */
+    fun setRadioZone(zone: Int) {
+        val state = radioState.state.value
+        radioState.setZone(zone)
+        owner?.let { o ->
+            McuOwnerProtocol.zoneChange(zone, isAmBand(state.band), state.scanning).forEach(o::send)
+            return
+        }
+
+        if (call { getRadioAPSState() } == true) {
+            call { sendRadioKey(RADIO_KEY_SCAN) }
+        }
+        if (isAmBand(call { getRadioBand() } ?: 0)) {
+            call { sendRadioKey(RADIO_KEY_BAND_FM) }
+        }
+        changeSetup(SYSVAR_RADIO_ZONE, zone.toString())
+    }
+
+    /** RDS on or off: `05 00 v` on the owner path, the vendor's `SYS_RDS_OnOff` row on the gateway. */
+    fun setRadioRds(on: Boolean) {
+        owner?.let { it.send(McuOwnerProtocol.rds(on)); return }
+        changeSetup(SYSVAR_RDS, if (on) "1" else "0")
     }
 
     fun radioSelectFm() = sendRadioKey(RADIO_KEY_BAND_FM)

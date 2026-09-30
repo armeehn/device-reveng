@@ -294,6 +294,20 @@ object McuOwnerProtocol {
 
     fun mainVolume(level: Int): ByteArray = setup(SETUP_MAIN_VOLUME, level)
 
+    /** `05 00 v`, RDS on is a ZERO (changeSetup SYS_RDS_OnOff, EventService.java:4837-4843). */
+    fun rds(on: Boolean): ByteArray = setup(SETUP_RDS, if (on) 0 else 1)
+
+    /**
+     * A region change as the vendor radio makes it (SetView.java:99-148): stop a running preset
+     * scan (key 13), leave AM (key 30, the AM grids differ per zone), then `05 01 z`
+     * (EventService.java:4822-4834).
+     */
+    fun zoneChange(zone: Int, onAm: Boolean, scanning: Boolean): List<ByteArray> = listOfNotNull(
+        radioKey(CarService.RADIO_KEY_SCAN).takeIf { scanning },
+        radioKey(CarService.RADIO_KEY_BAND_FM).takeIf { onAm },
+        setup(SETUP_ZONE, zone),
+    )
+
     /**
      * `1F main second`, 1 = lit (sendBlackScreen, :9679-9680): what the vendor's black-screen
      * overlay sends when it shows and hides. This unit has no second screen, so byte 2 stays lit.

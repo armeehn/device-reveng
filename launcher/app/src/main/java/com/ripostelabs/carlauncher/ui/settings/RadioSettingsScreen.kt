@@ -25,11 +25,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ripostelabs.carlauncher.carlib.CarService
+import com.ripostelabs.carlauncher.carlib.RadioMemory
+import com.ripostelabs.carlauncher.carlib.RadioZone
 import com.ripostelabs.carlauncher.data.SettingKeys
 import com.ripostelabs.carlauncher.data.CarSettingsController
 import com.ripostelabs.carlauncher.data.RadioPreset
@@ -64,6 +67,13 @@ fun RadioSettingsScreen(
     var rds by remember { mutableStateOf(false) }
     var ta by remember { mutableStateOf(false) }
     var refreshTick by remember { mutableIntStateOf(0) }
+
+    // Region and RDS are settings, not tuner echoes: persisted in RadioMemory so boot re-sends
+    // them (StartupConfig), and sent at once so the tuner follows without a restart.
+    val context = LocalContext.current
+    val radioMemory = remember { RadioMemory(context.applicationContext) }
+    var zone by remember { mutableIntStateOf(radioMemory.zone()) }
+    var rdsSetting by remember { mutableStateOf(radioMemory.rds()) }
 
     // Re-read the live tuner state off the main thread whenever we (re)connect or a control
     // action bumps refreshTick. Doing these blocking AIDL calls in the composition body — and
@@ -115,6 +125,30 @@ fun RadioSettingsScreen(
                 SmallActionChip("Seek ◀", connected) { control { carService.radioSeekDown() } }
                 SmallActionChip("Seek ▶", connected) { control { carService.radioSeekUp() } }
             }
+        }
+
+        SettingsSection(title = "Region") {
+            PickerSetting(
+                label = "Radio region",
+                description = "Band plan and tuning step of the FM and AM dials",
+                current = RadioZone.Region.of(zone),
+                options = RadioZone.Region.entries.map { it to it.label },
+                onSelect = { region ->
+                    radioMemory.setZone(region.id)
+                    zone = region.id
+                    control { carService.setRadioZone(region.id) }
+                },
+            )
+            ToggleSetting(
+                label = "RDS",
+                description = "Station names, traffic and alternative frequencies. Rare in North America",
+                checked = rdsSetting,
+                onChange = { on ->
+                    radioMemory.setRds(on)
+                    rdsSetting = on
+                    control { carService.setRadioRds(on) }
+                },
+            )
         }
 
         SettingsSection(title = "Antenna") {

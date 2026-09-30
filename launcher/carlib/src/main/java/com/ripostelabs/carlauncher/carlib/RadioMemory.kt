@@ -19,6 +19,18 @@ class RadioMemory(context: Context) : McuOwner.Listener {
     /** `KEY_RADIO_ZONE_SETTINGS`: North America (the car is in Canada) until Settings says otherwise. */
     fun zone(): Int = prefs.getInt(KEY_ZONE, DEFAULT_ZONE)
 
+    /** Persist a region pick; the old zone's preset list no longer fits, so it goes. */
+    fun setZone(zone: Int) {
+        prefs.edit().putInt(KEY_ZONE, zone).remove(KEY_STATIONS).apply()
+    }
+
+    /** `SYS_RDS_OnOff`: off until Settings says otherwise, as on stock's first boot. */
+    fun rds(): Boolean = prefs.getBoolean(KEY_RDS, DEFAULT_RDS)
+
+    fun setRds(on: Boolean) {
+        prefs.edit().putBoolean(KEY_RDS, on).apply()
+    }
+
     /** What to show before the MCU speaks: the remembered station, or the zone's defaults. */
     fun restore(): RadioState = restore(
         zone = zone(),
@@ -49,7 +61,9 @@ class RadioMemory(context: Context) : McuOwner.Listener {
         private const val KEY_BAND = "band"
         private const val KEY_FREQ = "freq"
         private const val KEY_STATIONS = "stations"
-        private const val DEFAULT_ZONE = RadioZone.NORTH_AMERICA
+        private const val KEY_RDS = "rds"
+        const val DEFAULT_ZONE = RadioZone.NORTH_AMERICA
+        const val DEFAULT_RDS = false
         private const val SEPARATOR = ","
 
         /** One string, 42 numbers: what fits a preference without a schema. */
