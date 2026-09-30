@@ -530,6 +530,10 @@ class CarEvents(private val appContext: Context) {
      */
     val carSettings: StateFlow<CarSettingsState?> = _carSettings.asStateFlow()
 
+    private val _tpms = MutableStateFlow<CanSignal.Tpms?>(null)
+    /** The box's last 0x48 tyre report, or null until one arrives. Kept whole, no staleness. */
+    val tpms: StateFlow<CanSignal.Tpms?> = _tpms.asStateFlow()
+
     // v0.7 --- Parking radar (CAR_API §1.3 MCU_CAR_CAN_RADAR_INFO) ------------
     private val _radar = MutableStateFlow<RadarState?>(null)
     /**
@@ -927,6 +931,10 @@ class CarEvents(private val appContext: Context) {
                         _carSettings.value = signal.state
                         return
                     }
+                    if (signal is CanSignal.Tpms) {
+                        _tpms.value = signal
+                        return
+                    }
 
                     // RAV4-38: the dashboard's steering is this frame's 0x11 decode, the one
                     // the capture screen already shows. Other opcodes leave it untouched.
@@ -1144,6 +1152,7 @@ class CarEvents(private val appContext: Context) {
                 // frame is the only source for the reverse screen's radar overlay.
                 is CanSignal.ParkingRadar -> _radar.value = RadarState.fromParkingRadar(signal)
                 is CanSignal.CarSettings -> _carSettings.value = signal.state
+                is CanSignal.Tpms -> _tpms.value = signal
                 is CanSignal.BasicStatus -> {
                     _doors.value = DoorState.from(signal, atMs)
                     // RAV4-53: the same frame carries the wheel key byte pair; on 0.2 this is the

@@ -1,7 +1,9 @@
 package com.ripostelabs.carlauncher.carlib
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -70,4 +72,29 @@ class HiworldTpmsTest {
     fun `a zero pair reads as zero, not as absent`() {
         assertEquals(0, tpms(2 to 0, 7 to 0).frontLeftKpa)
     }
+
+    /**
+     * p[0] is the status byte (`bArr[2]`). Stock's TPMS page shows bit 7 as "valid/invalid" and,
+     * only when valid, bit 6 as "tyre pressure abnormal/normal" (TPMSUILandscapeDefault:112-121).
+     */
+    @Test
+    fun `status bit 7 is TPMS valid and bit 6 is pressure abnormal`() {
+        val warn = tpms(0 to 0xC0, 2 to 150, 7 to 10)
+        assertTrue(warn.valid)
+        assertTrue(warn.abnormal)
+        assertEquals(160, warn.frontLeftKpa)
+
+        val ok = tpms(0 to 0x80)
+        assertTrue(ok.valid)
+        assertFalse(ok.abnormal)
+    }
+
+    /** The 12-byte shape the car sends while parked (car logs: "cmd 0x48 first seen (12 bytes)"). */
+    @Test
+    fun `parked frame is invalid with no warning`() {
+        val parked = tpms(2 to 0xFE, 3 to 0xFE, 4 to 0xFE, 5 to 0xFE, 6 to 0xFE)
+        assertFalse(parked.valid)
+        assertFalse(parked.abnormal)
+    }
 }
+

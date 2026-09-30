@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.SettingsRemote
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.SystemUpdate // v0.7 auto-updater
 import androidx.compose.material.icons.filled.Thermostat
+import androidx.compose.material.icons.filled.TireRepair
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.Info
@@ -155,6 +156,12 @@ fun SettingsHub(
                 title = "Vehicle",
                 subtitle = "Engine, hybrid, doors, tyres — what the car is reporting",
                 onClick = { onOpen(SettingsRoute.Vehicle) },
+            )
+            SettingsCategoryCard(
+                icon = Icons.Filled.TireRepair,
+                title = "Tyres",
+                subtitle = "Tyre pressures and the car's TPMS warning",
+                onClick = { onOpen(SettingsRoute.Tyres) },
             )
             SettingsCategoryCard(
                 icon = Icons.Filled.Tune,
