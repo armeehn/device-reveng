@@ -73,6 +73,11 @@
     -->
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <!--
+      RAV4-152: the incoming-call window names the caller from the PBAP-synced phonebook
+      (CallerNames). Runtime; the 0.2 image grants it at first boot (default-permissions).
+    -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <!--
       Riposte OS: connect the A2DP sink to the CarPlay phone (BtCarKit.connectSink), so the
       stack's AVRCP session carries the track for the media card while the audio itself
       runs over Wi-Fi. signature|privileged: granted through the image's privapp allowlist,
