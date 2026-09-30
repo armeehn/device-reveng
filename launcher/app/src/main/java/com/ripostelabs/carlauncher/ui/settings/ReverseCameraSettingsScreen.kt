@@ -6,6 +6,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ripostelabs.carlauncher.carlib.McuFactorySet
+import com.ripostelabs.carlauncher.carlib.ReverseSource
 import com.ripostelabs.carlauncher.data.CarSettingsController
 import com.ripostelabs.carlauncher.data.ReverseCameraDecoder
 import com.ripostelabs.carlauncher.data.SettingKeys
@@ -44,6 +45,15 @@ fun ReverseCameraSettingsScreen(
         }
 
         SettingsSection(title = "Camera input") {
+            // Stock's reverse type (getDataReverseType): the row reaches the MCU in the 0F frame
+            // (bit 3). The launcher still opens the camera on reverse whatever is picked here.
+            PickerSetting(
+                label = "Reverse type",
+                description = "Which reverse hardware is fitted, as stock tells the MCU",
+                current = controller.getInt(McuFactorySet.KEY_BACKCAR_TYPE, BACKCAR_TYPE_HD_CAMERA),
+                options = REVERSE_TYPE_OPTIONS,
+                onSelect = { controller.setInt(McuFactorySet.KEY_BACKCAR_TYPE, it) },
+            )
             PickerSetting(
                 label = "Video input type",
                 current = controller.getInt(SettingKeys.BACKCAR_VIDEO_TYPE, 0),
@@ -120,6 +130,17 @@ fun ReverseCameraSettingsScreen(
         }
 
         SettingsSection(title = "Behaviour") {
+            // Stock's "protocol reverse". The wire always counts; CAN can only add (ReverseSource).
+            PickerSetting(
+                label = "Reverse signal",
+                description = "Use the CAN gear when the reverse wire is not connected",
+                current = controller.getInt(SettingKeys.REVERSE_SOURCE, ReverseSource.DEFAULT.setting),
+                options = listOf(
+                    ReverseSource.WIRE.setting to "Reverse wire",
+                    ReverseSource.WIRE_OR_CAN.setting to "Wire or CAN gear",
+                ),
+                onSelect = { controller.setInt(SettingKeys.REVERSE_SOURCE, it) },
+            )
             PickerSetting(
                 label = "Auto-exit speed",
                 description = "Leave reverse view above this speed",
@@ -134,6 +155,16 @@ fun ReverseCameraSettingsScreen(
         }
     }
 }
+
+/** `Sys_Backcar_type_key_set` values from stock's clickReverseType (ItemTextRightCheckBoxView:314-340). */
+private const val BACKCAR_TYPE_HD_CAMERA = 1
+
+private val REVERSE_TYPE_OPTIONS = listOf(
+    BACKCAR_TYPE_HD_CAMERA to "Aftermarket camera",
+    0 to "Factory camera",
+    2 to "No camera",
+    3 to "Factory radar",
+)
 
 /** Picker rows in [McuFactorySet.ReverseMute] order, the stock labels (getDataBackCarMute). */
 private val REVERSE_MUTE_OPTIONS = listOf(

@@ -50,6 +50,7 @@ import com.ripostelabs.carlauncher.data.RiposteSuite
 import com.ripostelabs.carlauncher.data.GpsClock
 import com.ripostelabs.carlauncher.data.McuClock
 import com.ripostelabs.carlauncher.data.AccessoryRuntime
+import com.ripostelabs.carlauncher.carlib.ReverseSource
 import com.ripostelabs.carlauncher.carlib.ReverseTrigger
 import com.ripostelabs.carlauncher.carlib.RootShell
 import com.ripostelabs.carlauncher.input.WheelGamepad
@@ -906,7 +907,12 @@ class MainActivity : ComponentActivity() {
         // stops on the sleep path, and no SYS_EVENT arrives while it is down.
         val reverseTrigger = ReverseTrigger()
         lifecycleScope.launch {
-            val picture = combine(carEvents.reverse, carEvents.speedKmh) { bit, speed ->
+            // RAV4-161: the CAN gear can add to the wire, never take away (ReverseSource).
+            val picture = combine(carEvents.reverse, carEvents.canGear, carEvents.speedKmh) { wire, gear, speed ->
+                val source = ReverseSource.of(
+                    carSettingsController.getInt(SettingKeys.REVERSE_SOURCE, ReverseSource.DEFAULT.setting),
+                )
+                val bit = source.line(wire = wire, canGear = gear)
                 val awake = mcuOwner != null
                 val threshold = ReverseTrigger.thresholdKmh(
                     carSettingsController.getInt(SettingKeys.BACKCAR_SPEED_THRESHOLD, 0),
@@ -915,7 +921,7 @@ class MainActivity : ComponentActivity() {
                 // Evidence for the log ring pulled at the next plug-in: the edge and every input
                 // of the decision, once per edge, nothing per speed tick.
                 if (reverseTrigger.lastEdge != ReverseTrigger.Edge.NONE) {
-                    Log.i(REVERSE_TAG, "line ${reverseTrigger.lastEdge}: bit=$bit awake=$awake speed=$speed threshold=$threshold -> picture=$up")
+                    Log.i(REVERSE_TAG, "line ${reverseTrigger.lastEdge}: wire=$wire gear=$gear source=$source bit=$bit awake=$awake speed=$speed threshold=$threshold -> picture=$up")
                 }
                 up
             }
