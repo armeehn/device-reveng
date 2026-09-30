@@ -661,7 +661,7 @@ jobs:
           id=$(printf '%s' "$out" | head -n -1 | jq -r '.id')
 
           # A release with no APK attached is worse than no release: it looks
-          # complete and identifies nothing. Fail loudly if the upload does not land.
+          # complete and identifies nothing. Fail loudly if the upload does not go through.
           up=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
             -H "Authorization: token ${TOKEN}" \
             -F "attachment=@${asset}" \
