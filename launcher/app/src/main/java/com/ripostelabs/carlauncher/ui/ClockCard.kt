@@ -28,7 +28,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.State
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
@@ -257,21 +260,22 @@ private fun skyIcon(sky: Sky): ImageVector = when (sky) {
 @Composable
 fun rememberWeather(enabled: Boolean): State<WeatherNow?> {
     val context = LocalContext.current.applicationContext
-    val poke = produceState(initialValue = 0, enabled) {
+    val poke = remember { mutableIntStateOf(0) }
+    DisposableEffect(enabled) {
         if (!enabled) {
-            return@produceState
+            return@DisposableEffect onDispose {}
         }
         val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
             override fun onChange(selfChange: Boolean) {
-                value++
+                poke.intValue++
             }
         }
         runCatching {
             context.contentResolver.registerContentObserver(WeatherFeed.URI, false, observer)
         }
-        awaitDispose { context.contentResolver.unregisterContentObserver(observer) }
+        onDispose { context.contentResolver.unregisterContentObserver(observer) }
     }
-    return produceState<WeatherNow?>(initialValue = null, enabled, poke.value) {
+    return produceState<WeatherNow?>(initialValue = null, enabled, poke.intValue) {
         while (enabled) {
             value = readFresh(context)
             delay(WEATHER_POLL_MS)
