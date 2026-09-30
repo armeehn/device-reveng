@@ -35,6 +35,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ripostelabs.carlauncher.data.CarSettingsController
+import com.ripostelabs.carlauncher.data.Radios
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.material.icons.filled.WifiTethering
+import androidx.compose.material.icons.filled.Wifi
 
 /**
  * v1.1 — the Settings hub: a categorized menu mirroring the vendor GT6 settings top level,
@@ -48,6 +53,7 @@ fun SettingsHub(
     onOpen: (SettingsRoute) -> Unit,
     onBack: () -> Unit,
 ) {
+    val context = LocalContext.current
     val root by controller.rootAvailable.collectAsStateWithLifecycle()
     val subtitle = when (root) {
         false -> "Read-only: root not detected, changes to car settings won't persist"
@@ -61,6 +67,25 @@ fun SettingsHub(
                 title = "Launcher",
                 subtitle = "Home widgets, grid density, default home, day/night",
                 onClick = { onOpen(SettingsRoute.LauncherPrefs) },
+            )
+            // RAV4-174: stock's Wi-Fi, hotspot and Bluetooth rows open Android's own pages.
+            SettingsCategoryCard(
+                icon = Icons.Filled.Wifi,
+                title = "Wi-Fi",
+                subtitle = "Networks and passwords, in Android settings",
+                onClick = { Radios.open(context, Radios.Page.WIFI) },
+            )
+            SettingsCategoryCard(
+                icon = Icons.Filled.WifiTethering,
+                title = "Hotspot",
+                subtitle = "Share the connection with passengers, in Android settings",
+                onClick = { Radios.open(context, Radios.Page.HOTSPOT) },
+            )
+            SettingsCategoryCard(
+                icon = Icons.Filled.Bluetooth,
+                title = "Bluetooth",
+                subtitle = "Turn Bluetooth on or off and see paired devices, in Android settings",
+                onClick = { Radios.open(context, Radios.Page.BLUETOOTH) },
             )
             SettingsCategoryCard(
                 icon = Icons.Filled.GridView,
