@@ -3,6 +3,7 @@ package com.ripostelabs.carlauncher.input
 import android.media.AudioManager
 import com.ripostelabs.carlauncher.carlib.BtCarKit
 import com.ripostelabs.carlauncher.carlib.KeyAction
+import com.ripostelabs.carlauncher.carlib.MediaActions
 import com.ripostelabs.carlauncher.data.WheelGestureAction
 
 /**
@@ -23,6 +24,7 @@ class KeyActionDispatcher(
     private val back: () -> Unit,
     private val openPhone: () -> Unit,
     private val openSettings: () -> Unit,
+    private val mediaAction: (String) -> Boolean,
 ) {
 
     /** Run [action]; false when nothing could act on it, so feedback stays quiet. */
@@ -44,6 +46,8 @@ class KeyActionDispatcher(
             KeyAction.NAV -> gestures.run(WheelGestureAction.NAV)
             KeyAction.OPEN_MEDIA -> gestures.run(WheelGestureAction.OPEN_MEDIA)
             KeyAction.SETTINGS -> openSettings()
+            KeyAction.REPEAT -> return mediaAction(MediaActions.REPEAT)
+            KeyAction.SHUFFLE -> return mediaAction(MediaActions.SHUFFLE)
         }
         return true
     }

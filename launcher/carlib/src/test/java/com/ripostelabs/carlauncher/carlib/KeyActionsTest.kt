@@ -39,6 +39,13 @@ class KeyActionsTest {
         assertEquals(KeyAction.NAV, KeyActions.forPanel(KeyActions.PANEL_NAV))
     }
 
+    /** Repeat (29) and random (30) went to the playing app; the music app answers them. */
+    @Test
+    fun repeatAndRandomReachThePlayingApp() {
+        assertEquals(KeyAction.REPEAT, KeyActions.forPanel(29))
+        assertEquals(KeyAction.SHUFFLE, KeyActions.forPanel(30))
+    }
+
     /** VOL+/VOL-/MUTE panel keys are echoed to the MCU by the owner (`08 xx`); no second path. */
     @Test
     fun panelVolumeAndMuteAreTheOwnersEcho() {
