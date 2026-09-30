@@ -95,6 +95,7 @@ import com.ripostelabs.carlauncher.carlib.WheelKeySwallow
 import com.ripostelabs.carlauncher.carlib.WheelLearn
 import com.ripostelabs.carlauncher.carlib.Zlink // RAV4-52 CarPlay deep link
 import com.ripostelabs.carlauncher.data.CallPopupGuard
+import com.ripostelabs.carlauncher.data.ColdBootResume
 import com.ripostelabs.carlauncher.data.DecoderSignal
 import com.ripostelabs.carlauncher.data.ReverseCameraDecoder
 import com.ripostelabs.carlauncher.data.SysVarLocalStore
@@ -502,6 +503,11 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 carCommandPort = CarCommandPort(carService.asCommandTarget()).also { port -> port.start() }
+                // RAV4-170: after a cold boot, reopen the last source's app once the link runs.
+                lifecycleScope.launch {
+                    owner.status.first { st -> st is McuOwner.Status.Running }
+                    ColdBootResume.run(applicationContext, owner)
+                }
                 // ACC from the MCU line; standby is stock's accOff/accOn plus a PR2000 re-arm, so
                 // the first reverse after a suspend opens at once (AccStandby).
                 carAcc.start(applicationContext)

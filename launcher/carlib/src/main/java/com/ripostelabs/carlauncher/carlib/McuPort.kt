@@ -31,6 +31,10 @@ interface McuPort {
 
     fun selectCar(profile: CarProfile)
 
+    /** RAV4-170: the last playable source kept across boots; null where the owner keeps none. */
+    val resumeMode: McuOwnerProtocol.Mode?
+        get() = null
+
     /** RAV4-156: whether POWER runs the power-off burst. False where the owner cannot take it. */
     fun setPowerKey(mode: PowerKeyMode): Boolean = false
 }

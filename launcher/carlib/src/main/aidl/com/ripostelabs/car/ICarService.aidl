@@ -45,4 +45,8 @@ interface ICarService {
     const int POWER_KEY_SCREEN_OFF = 0;
     const int POWER_KEY_STANDBY = 1;             // the default: the vendor's power-off burst
     void setPowerKey(int mode);                 // CONTROL
+
+    // 7: the last playable source (radio, music, BT music, video), kept across boots so the
+    // launcher can reopen its app after a cold boot. A Mode code, or -1 when none was set.
+    int lastSource();                           // READ
 }

@@ -38,6 +38,8 @@ class RemoteMcuOwnerTest {
         override fun decoderSignal(action: Int) { calls += "signal $action" }
         override fun setNavBar(state: Int, colors: IntArray?) { calls += "nav $state ${colors?.size}" }
         override fun setPowerKey(mode: Int) { calls += "power key $mode" }
+        var saved = McuOwnerProtocol.Mode.MUSIC.code
+        override fun lastSource() = saved
     }
 
     /** bindService stand-in: the test decides when the service comes up or dies. */
@@ -146,6 +148,23 @@ class RemoteMcuOwnerTest {
 
         assertTrue("power key ${PowerKeyMode.SCREEN_OFF.raw}" in svc.calls)
         assertTrue(old.calls.none { it.startsWith("power key") })
+    }
+
+    // RAV4-170: the source kept across boots comes from a service that stores it; an older one
+    // (no lastSource) and an empty store both answer null, so nothing is relaunched.
+    @Test
+    fun resumeModeOnlyFromANewEnoughService() {
+        remote.start()
+        val svc = FakeService(api = RemoteMcuOwner.RESUME_API)
+        binding.connect(svc)
+        assertEquals(McuOwnerProtocol.Mode.MUSIC, remote.resumeMode)
+
+        svc.saved = -1
+        assertNull(remote.resumeMode)
+
+        binding.die()
+        binding.connect(FakeService(api = RemoteMcuOwner.POWER_KEY_API))
+        assertNull(remote.resumeMode)
     }
 
     // The service died and came back (binderDied, then the system reconnects): everything replays.

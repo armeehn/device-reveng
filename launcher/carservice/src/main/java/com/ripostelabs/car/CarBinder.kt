@@ -76,6 +76,9 @@ interface Link {
     /** ICarService.POWER_KEY_* */
     fun setPowerKey(mode: Int)
 
+    /** The last playable source kept across boots (RAV4-170), or [NO_SOURCE]. */
+    fun lastSource(): Int
+
     companion object {
         const val NO_SOURCE = -1
     }
@@ -197,6 +200,11 @@ class CarBinder(
         return link.currentSource()
     }
 
+    override fun lastSource(): Int {
+        gate.enforce(Access.READ)
+        return link.lastSource()
+    }
+
     override fun selectCar(carId: String?) {
         gate.enforce(Access.CONTROL)
         carId?.let(link::selectCar)
@@ -263,7 +271,7 @@ class CarBinder(
         // 1 was the skeleton; 2 adds the MCU link calls; 3 power (factoryReset); 4 reverse and
         // decoder; 5 the nav bar; 6 the POWER key choice. Additions to ICarService bump it. The manifest's com.ripostelabs.car.API
         // meta-data must say the same.
-        const val API_VERSION = 6
+        const val API_VERSION = 7
 
         /** surface, onSurface, primary. */
         const val NAV_COLORS = 3

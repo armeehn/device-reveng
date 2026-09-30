@@ -46,6 +46,7 @@ class CarBinderTest {
         override fun setStartup(packed: ByteArray) { calls += "startup ${packed.size}" }
         override fun setSource(mode: Int): Boolean { calls += "source $mode"; return true }
         override fun currentSource() = 7
+        override fun lastSource() = 11
         override fun selectCar(id: String) { calls += "car $id" }
         override fun send(frame: ByteArray) { calls += "send ${frame.size}" }
         override fun setPowerKey(mode: Int) { calls += "power key $mode" }
@@ -87,8 +88,8 @@ class CarBinderTest {
         CarBinder(Gate { it in held }, listeners, power, systemUid, link, decoder, nav)
 
     @Test
-    fun apiVersionIsSix() {
-        assertEquals(6, binder().apiVersion())
+    fun apiVersionIsSeven() {
+        assertEquals(7, binder().apiVersion())
     }
 
     @Test
@@ -200,6 +201,13 @@ class CarBinderTest {
     fun currentSourceNeedsOnlyRead() {
         assertEquals(7, binder(READ_PERMISSION).currentSource())
         assertThrows(SecurityException::class.java) { binder().currentSource() }
+    }
+
+    // RAV4-170: the source kept across boots is a read, like the live one.
+    @Test
+    fun lastSourceNeedsOnlyRead() {
+        assertEquals(11, binder(READ_PERMISSION).lastSource())
+        assertThrows(SecurityException::class.java) { binder().lastSource() }
     }
 
     @Test

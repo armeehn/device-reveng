@@ -87,6 +87,15 @@ class RemoteMcuOwner(
             return McuOwnerProtocol.Mode.entries.firstOrNull { it.code == code }
         }
 
+    override val resumeMode: McuOwnerProtocol.Mode?
+        get() {
+            if (api < RESUME_API) {
+                return null
+            }
+
+            return SourceResume.parse(call { it.lastSource() } ?: return null)
+        }
+
     override fun start() {
         open = true
         if (!bound) {
@@ -261,6 +270,9 @@ class RemoteMcuOwner(
 
         /** ICarService.apiVersion that takes the POWER key choice (RAV4-156). */
         const val POWER_KEY_API = 6
+
+        /** ICarService.apiVersion that keeps the last source across boots (RAV4-170). */
+        const val RESUME_API = 7
 
         /** [McuOwner.Status.Failed] reason while the service is down (it restarts, we rebind). */
         const val SERVICE_GONE = "car service gone"
