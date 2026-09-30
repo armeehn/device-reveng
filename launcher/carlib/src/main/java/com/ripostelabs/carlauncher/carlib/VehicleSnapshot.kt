@@ -127,6 +127,7 @@ data class VehicleSnapshot(
             is CanSignal.Version -> this
             is CanSignal.CarSettings -> this
             is CanSignal.ClimateRear -> this
+            is CanSignal.BoxKey -> this
             is CanSignal.Unknown -> this
         }.copy(atMs = atMs)
 

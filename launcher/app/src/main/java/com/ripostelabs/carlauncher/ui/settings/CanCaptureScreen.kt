@@ -629,6 +629,7 @@ private fun decodedRows(sig: CanSignal): Map<String, String> = when (sig) {
     )
     is CanSignal.Version -> mapOf("CANBOX firmware" to sig.text)
     is CanSignal.CarSettings -> CarSetting.entries.associate { it.name to (sig.state[it]?.toString() ?: "—") }
+    is CanSignal.BoxKey -> mapOf("Box key (${sig.kind.name.lowercase()})" to "${sig.code} / ${sig.value}")
     // Exhaustive on purpose: no `else`. A new CanSignal type must fail to compile here until
     // someone decides how to show it. Both SideCamera and SysEvent were decoded and shipped while
     // rendering nothing at all, because an `else` branch swallowed them without a word.
