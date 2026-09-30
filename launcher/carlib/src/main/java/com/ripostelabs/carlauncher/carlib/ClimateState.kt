@@ -98,6 +98,18 @@ data class ClimateState(
         private val VENT_FOOT_SET = setOf(VENT_FOOT, VENT_LEVEL_FOOT, VENT_HEAD_FOOT, VENT_ALL)
 
         /**
+         * RAV4-198 — the box's outside air (0x31 p[11], half-degree steps) as canbus2 wrote it
+         * for the status bar: "23℃", "12.5℃". The box reports Celsius only.
+         */
+        fun outsideLabel(celsius: Double): String {
+            val whole = celsius.toLong()
+            if (celsius == whole.toDouble()) {
+                return "$whole$CELSIUS_SUFFIX"
+            }
+            return "%.1f$CELSIUS_SUFFIX".format(java.util.Locale.ROOT, celsius)
+        }
+
+        /**
          * Map one decoded 0x31 frame onto the same view, for the owner path (no canbus2).
          * Temperatures are formatted like the vendor's `setCanAirTempInfoVertical`
          * (`HiworldCanParseToyota.java:990-1000`): "21.5℃", or the whole-degree "70℉", LO/HI

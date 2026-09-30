@@ -32,6 +32,13 @@ import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.BluetoothConnected
 import androidx.compose.material.icons.filled.BluetoothDisabled
 import androidx.compose.material.icons.filled.BrightnessMedium
+import androidx.compose.material.icons.filled.DeviceThermostat // RAV4-198
+import androidx.compose.material.icons.filled.SignalCellular0Bar // RAV4-198
+import androidx.compose.material.icons.filled.SignalCellular4Bar // RAV4-198
+import androidx.compose.material.icons.filled.SignalCellularAlt // RAV4-198
+import androidx.compose.material.icons.filled.SignalCellularAlt1Bar // RAV4-198
+import androidx.compose.material.icons.filled.SignalCellularAlt2Bar // RAV4-198
+import androidx.compose.material.icons.filled.Usb // RAV4-198
 import androidx.compose.material.icons.filled.Call // RAV4-52 CarPlay chip
 import androidx.compose.material.icons.filled.NetworkWifi1Bar
 import androidx.compose.material.icons.filled.Phone
@@ -123,6 +130,10 @@ internal object StatusIndicatorTags {
     /** RAV4-52: the phone-projection chip. Not in the v3.1 invariant set; present only while connected. */
     const val CARPLAY = "statusIndicator.carplay"
     const val CALL = "statusIndicator.call"
+    /** RAV4-198: stock's outside air, SIM and USB. Outside the invariant set; each needs a source. */
+    const val OUTSIDE_TEMP = "statusIndicator.outsideTemp"
+    const val SIM = "statusIndicator.sim"
+    const val USB = "statusIndicator.usb"
 }
 
 @Composable
@@ -139,6 +150,11 @@ fun StatusIndicators(
     // RAV4-50: a call in progress per the vendor bt module (HSHF > 3), party and timer.
     val vendor by (carEvents?.vendorBt?.collectAsStateSafe(initial = VendorBtState())
         ?: remember { mutableStateOf(VendorBtState()) })
+    // RAV4-198: the car's outside air, from canbus2 or the CAN box directly (0.2).
+    val outside by (carEvents?.outsideTemp?.collectAsStateSafe(initial = null)
+        ?: remember { mutableStateOf<String?>(null) })
+    val simBars by rememberSimBars(context)
+    val usb by rememberUsbMounted(context)
 
     StatusIndicatorsRow(
         wifi = rememberWifiStatus(context),
@@ -149,6 +165,9 @@ fun StatusIndicators(
         onOpen = onOpen,
         carPlay = rememberCarPlayStatus(carEvents),
         call = PhoneLogic.callChip(vendor),
+        outsideTemp = outside,
+        simBars = simBars,
+        usbMounted = usb,
     )
 }
 
@@ -202,6 +221,10 @@ internal fun StatusIndicatorsRow(
     carPlay: CarPlayState = CarPlayState(),
     // RAV4-50: "Incoming · Alice" / "02:15 · Alice" while a call is up; null = no chip.
     call: String? = null,
+    // RAV4-198: null / false = no chip, like every other source.
+    outsideTemp: String? = null,
+    simBars: Int? = null,
+    usbMounted: Boolean = false,
 ) {
     Row(
         horizontalArrangement = Arrangement.spacedBy(14.dp),
@@ -216,11 +239,37 @@ internal fun StatusIndicatorsRow(
         // [visibleIndicators] and what the row actually renders cannot drift apart.
         val shown = visibleIndicators(bt, volume, brightnessPercent)
 
+        // RAV4-198: outside air leads, as on the stock bar.
+        if (outsideTemp != null) {
+            StatusChip(
+                icon = Icons.Filled.DeviceThermostat,
+                description = "Outside $outsideTemp",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                text = outsideTemp,
+                tag = StatusIndicatorTags.OUTSIDE_TEMP,
+            )
+        }
         if (StatusIndicatorTags.WIFI in shown) {
             WifiChip(wifi)
         }
         if (StatusIndicatorTags.BLUETOOTH in shown) {
             BluetoothChip(bt)
+        }
+        if (simBars != null) {
+            StatusChip(
+                icon = simBarsIcon(simBars),
+                description = "Mobile $simBars/$SIM_MAX_BARS bars",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                tag = StatusIndicatorTags.SIM,
+            )
+        }
+        if (usbMounted) {
+            StatusChip(
+                icon = Icons.Filled.Usb,
+                description = "USB storage mounted",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                tag = StatusIndicatorTags.USB,
+            )
         }
         if (StatusIndicatorTags.VOLUME in shown) {
             VolumeChip(volume)
@@ -282,6 +331,14 @@ private fun WifiChip(wifi: WifiStatus) {
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
     StatusChip(icon = icon, description = description, tint = tint, tag = StatusIndicatorTags.WIFI)
+}
+
+private fun simBarsIcon(bars: Int): ImageVector = when (bars) {
+    0 -> Icons.Filled.SignalCellular0Bar
+    1 -> Icons.Filled.SignalCellularAlt1Bar
+    2 -> Icons.Filled.SignalCellularAlt2Bar
+    3 -> Icons.Filled.SignalCellularAlt
+    else -> Icons.Filled.SignalCellular4Bar
 }
 
 private fun wifiBarsIcon(bars: Int): ImageVector = when (bars) {

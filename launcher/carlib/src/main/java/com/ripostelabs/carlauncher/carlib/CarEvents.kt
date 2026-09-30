@@ -1164,7 +1164,12 @@ class CarEvents(private val appContext: Context) {
         override fun onCanSignal(signal: CanSignal, atMs: Long) {
             vehicle?.onSignal(signal, atMs)
             when (signal) {
-                is CanSignal.Climate -> _climate.value = ClimateState.from(signal)
+                is CanSignal.Climate -> {
+                    _climate.value = ClimateState.from(signal)
+                    // RAV4-198: 0.2 has no canbus2 outside-temp broadcast; the same frame
+                    // carries it. 0xFF (no sensor) keeps the last reading.
+                    signal.outsideTempC?.let { _outsideTemp.value = ClimateState.outsideLabel(it) }
+                }
                 // 0.2 has no canbus2 to broadcast MCU_CAR_CAN_RADAR_INFO; the relayed 0x41
                 // frame is the only source for the reverse screen's radar overlay.
                 is CanSignal.ParkingRadar -> _radar.value = RadarState.fromParkingRadar(signal)
