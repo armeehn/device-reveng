@@ -71,6 +71,7 @@ data class LauncherSettings(
     val replaceSystemBars: Boolean = false, // v2.5 suppress vendor status bar + shade (root)
     val navBarMode: NavBarMode = NavBarMode.AUTO_HIDE, // the bar folds to an edge handle after 3 s
     val navAppPackage: String = "", // RAV4-158: nav card / NAV key target; blank = automatic
+    val voiceAppPackage: String = "", // RAV4-176: the voice key's app; blank = system assistant
     /**
      * v2.8 — reachability mirror (LAUNCHER_DESIGN §2.5). AUTO defers to [Reachability], which has
      * cannot resolve RHD on this platform and therefore always answers LHD; LHD/RHD pin it.
@@ -251,6 +252,7 @@ class SettingsStore(context: Context) {
                         NavBarMode.valueOf(prefs[NAV_BAR_MODE_KEY] ?: NavBarMode.AUTO_HIDE.name)
                     }.getOrDefault(NavBarMode.AUTO_HIDE),
                     navAppPackage = prefs[NAV_APP_PACKAGE_KEY] ?: "",
+                    voiceAppPackage = prefs[VOICE_APP_PACKAGE_KEY] ?: "",
                     driverSideMode = runCatching { // v2.8
                         DriverSideMode.valueOf(prefs[DRIVER_SIDE_KEY] ?: DriverSideMode.AUTO.name)
                     }.getOrDefault(DriverSideMode.AUTO),
@@ -322,6 +324,23 @@ class SettingsStore(context: Context) {
 
     fun setNavAppPackage(pkg: String) = scope.launch {
         ds.edit { it[NAV_APP_PACKAGE_KEY] = pkg }
+    }
+
+    /**
+     * RAV4-176: the app started when the car comes on, blank for none. Null until DataStore has
+     * loaded, so the start at boot never reads the default and skips a real choice.
+     */
+    val autoStartPackage: StateFlow<String?> =
+        ds.data
+            .map { prefs -> prefs[AUTO_START_PACKAGE_KEY] ?: "" }
+            .stateIn(scope, SharingStarted.Eagerly, null)
+
+    fun setAutoStartPackage(pkg: String) = scope.launch {
+        ds.edit { it[AUTO_START_PACKAGE_KEY] = pkg }
+    }
+
+    fun setVoiceAppPackage(pkg: String) = scope.launch {
+        ds.edit { it[VOICE_APP_PACKAGE_KEY] = pkg }
     }
 
     /** v2.8 — pin the driver's side, or hand it back to [Reachability]. */
@@ -435,6 +454,8 @@ class SettingsStore(context: Context) {
         val REPLACE_SYSTEM_BARS_KEY = booleanPreferencesKey("replace_system_bars") // v2.5
         val NAV_BAR_MODE_KEY = stringPreferencesKey("nav_bar_mode") // NavBarMode.name
         val NAV_APP_PACKAGE_KEY = stringPreferencesKey("nav_app_package") // RAV4-158
+        val AUTO_START_PACKAGE_KEY = stringPreferencesKey("auto_start_package") // RAV4-176
+        val VOICE_APP_PACKAGE_KEY = stringPreferencesKey("voice_app_package") // RAV4-176
         val DRIVER_SIDE_KEY = stringPreferencesKey("driver_side") // v2.8 reachability mirror
         val RADAR_CONFIRMED_KEY = booleanPreferencesKey("radar_layout_confirmed") // v2.8
         val CLOCK_FALLBACK_KEY = booleanPreferencesKey("clock_fallback") // v2.7
