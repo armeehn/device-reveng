@@ -34,6 +34,33 @@ enum class ClimateButton(val keyValue: Int) {
     ECO(40),
     REAR_LOCK(49),
     SYNC(66),
+
+    // The rest of the Toyota table (CB/CanUtils.java CAR_AIR_KEY_*). The airflow names follow
+    // the stock constant: MID = face, UP_DOWN = feet and screen, DOWN = feet.
+    AIRFLOW_FACE(23),
+    AIRFLOW_FEET(24),
+    AIRFLOW_FEET_DEFROST(25),
+    AIRFLOW_FACE_FEET(27),
+    REAR_FAN_UP(28),
+    REAR_FAN_DOWN(29),
+    REAR_LEFT_TEMP_UP(30),
+    REAR_LEFT_TEMP_DOWN(31),
+    REAR_RIGHT_TEMP_UP(32),
+    REAR_RIGHT_TEMP_DOWN(33),
+    NANOE(42),
+    MODE_RIGHT(55),
+    REAR_POWER(100),
+    REAR_AUTO(101),
+    REAR_AIRFLOW_FACE(102),
+    REAR_AIRFLOW_FEET(103),
+    REAR_AIRFLOW_FACE_FEET(108),
+    MODE_UP(122),
+    MODE_DOWN(123),
+    REAR_LEFT_SEAT_HEAT(213),
+    REAR_RIGHT_SEAT_HEAT(214),
+    REAR_RIGHT_SEAT_COOL(215),
+    REAR_LEFT_SEAT_COOL(216),
+    FRONT_CENTRE_AIR(217),
 }
 
 /** The one broadcast a button press becomes; pure data so tests can check it. */

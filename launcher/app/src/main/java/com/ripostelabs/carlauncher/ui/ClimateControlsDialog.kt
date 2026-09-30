@@ -132,6 +132,19 @@ private fun ClimateControlsPanel(
             }
         }
 
+        // Airflow: the stock direct vent keys (0x1A-0x1D) and nanoe (0x19), lit from the 0x31 vent bits.
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ToggleChip("Face", state.modeHead && !state.modeFoot, Modifier.weight(1f)) { press(ClimateButton.AIRFLOW_FACE) }
+            ToggleChip("Face+feet", state.modeHead && state.modeFoot, Modifier.weight(1f)) {
+                press(ClimateButton.AIRFLOW_FACE_FEET)
+            }
+            ToggleChip("Feet", state.modeFoot && !state.modeHead, Modifier.weight(1f)) { press(ClimateButton.AIRFLOW_FEET) }
+            ToggleChip("Feet+screen", state.modeFoot && state.frontDefrost, Modifier.weight(1f)) {
+                press(ClimateButton.AIRFLOW_FEET_DEFROST)
+            }
+            ToggleChip("nanoe", false, Modifier.weight(1f)) { press(ClimateButton.NANOE) }
+        }
+
         Text(
             text = "Sends the stock HVAC keys. Not yet verified on the car.",
             style = MaterialTheme.typography.labelMedium,
