@@ -40,6 +40,7 @@ class RemoteMcuOwnerTest {
         override fun setPowerKey(mode: Int) { calls += "power key $mode" }
         var saved = McuOwnerProtocol.Mode.MUSIC.code
         override fun lastSource() = saved
+        override fun setNightMode(mode: Int) { calls += "night $mode" }
     }
 
     /** bindService stand-in: the test decides when the service comes up or dies. */
@@ -148,6 +149,27 @@ class RemoteMcuOwnerTest {
 
         assertTrue("power key ${PowerKeyMode.SCREEN_OFF.raw}" in svc.calls)
         assertTrue(old.calls.none { it.startsWith("power key") })
+    }
+
+    // RAV4-169: day or night reaches a service that takes it, and a choice made before the
+    // service is up is sent on connect. An older service is never asked.
+    @Test
+    fun nightModeReplaysOnlyToANewEnoughService() {
+        remote.start()
+        assertFalse(remote.setNightMode(SystemNight.NIGHT))
+
+        val svc = FakeService(api = RemoteMcuOwner.NIGHT_API)
+        binding.connect(svc)
+        assertTrue(remote.setNightMode(SystemNight.DAY))
+        binding.die()
+        val old = FakeService(api = RemoteMcuOwner.RESUME_API)
+        binding.connect(old)
+
+        assertEquals(
+            listOf("night ${ICarService.NIGHT_MODE_NIGHT}", "night ${ICarService.NIGHT_MODE_DAY}"),
+            svc.calls.filter { it.startsWith("night") },
+        )
+        assertTrue(old.calls.none { it.startsWith("night") })
     }
 
     // RAV4-170: the source kept across boots comes from a service that stores it; an older one

@@ -255,6 +255,20 @@ reverse) never replace it. Once per boot, by `Settings.Global.BOOT_COUNT`, the l
 reads it and starts the matching suite app, then sends a play key to music and BT music.
 An ACC wake is not a boot, so it relaunches nothing.
 
+### Night mode (apiVersion 8)
+
+```aidl
+const int NIGHT_MODE_DAY = 1;  const int NIGHT_MODE_NIGHT = 2;
+void setNightMode(int mode);  // CONTROL; UiModeManager.setNightMode as system uid
+```
+
+Stock turns the whole system to night with the headlamps (`sendSysUiModeNight`,
+`EventService.java:14043-14060`). The launcher still decides day or night (the car's lamp
+signal, then the sun at the last GPS fix, then the clock window) and sends it here on every
+change and on every bind. The service sets the system mode, so the suite apps, the keyboard
+and CarPlay's night map follow. Without a service at 8 the launcher falls back to
+`cmd uimode night` through the root shell.
+
 ### IEventService compatibility (no apiVersion change)
 
 `EventCompatService` in `com.ripostelabs.car` answers the vendor's `IEventService` binder

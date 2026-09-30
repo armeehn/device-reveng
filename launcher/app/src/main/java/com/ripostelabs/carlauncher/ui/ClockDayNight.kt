@@ -1,8 +1,11 @@
 package com.ripostelabs.carlauncher.ui
 
+import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.produceState
+import androidx.compose.ui.platform.LocalContext
+import com.ripostelabs.carlauncher.data.SunNight
 import kotlinx.coroutines.delay
 import java.util.Calendar
 
@@ -13,23 +16,26 @@ import java.util.Calendar
  * headlamps actually toggle, so a session can pass without one. The unit then sits in day
  * colours at midnight, which is the one situation a head-unit theme genuinely must not be in.
  *
- * This is the crude answer, and crude on purpose: two hours, no solar maths. Real civil twilight
- * needs a date and a position, and the launcher's position comes from the same GPS that the v2.5
- * motion gate has to fail open around — no fix in a garage, none at power-on, and none at all
- * without the location grant. A calculation that is wrong exactly when it is needed is worse than
- * a window the driver set themselves.
+ * RAV4-169: sunrise and sunset from the last GPS fix come first ([SunNight]), as stock's
+ * SunTimesUtil does. The two hours the driver set are the answer only when no fix was ever
+ * seen: no location grant, or a unit that has never had the sky.
  */
 @Composable
-fun rememberClockNight(startHour: Int, endHour: Int): State<Boolean> =
-    produceState(initialValue = isNightAt(currentHour(), startHour, endHour), startHour, endHour) {
+fun rememberClockNight(startHour: Int, endHour: Int): State<Boolean> {
+    val context = LocalContext.current
+    return produceState(initialValue = clockNight(context, startHour, endHour), startHour, endHour) {
         while (true) {
-            value = isNightAt(currentHour(), startHour, endHour)
+            value = clockNight(context, startHour, endHour)
             // Re-check on the minute rather than on the hour: a tick aligned to the wall clock
             // costs nothing and means the switch happens when the driver expects it, not up to an
             // hour late because the launcher happened to start at 18:59.
             delay(TICK_MS)
         }
     }
+}
+
+private fun clockNight(context: Context, startHour: Int, endHour: Int): Boolean =
+    SunNight.isNight(context, System.currentTimeMillis()) ?: isNightAt(currentHour(), startHour, endHour)
 
 private fun currentHour(): Int = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
 
