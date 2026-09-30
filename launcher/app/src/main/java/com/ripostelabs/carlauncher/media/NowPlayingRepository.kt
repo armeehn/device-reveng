@@ -199,6 +199,13 @@ class NowPlayingRepository(private val context: Context) {
     fun next() { controller?.transportControls?.skipToNext() }
     fun prev() { controller?.transportControls?.skipToPrevious() }
 
+    /** Send the active session a custom action; false when no session is there to take it. */
+    fun customAction(action: String): Boolean {
+        val c = controller ?: return false
+        c.transportControls.sendCustomAction(action, null)
+        return true
+    }
+
     /** v0.9 — seek the active session to [positionMs] (no-op if unsupported / unbound). */
     fun seekTo(positionMs: Long) {
         controller?.transportControls?.seekTo(positionMs.coerceAtLeast(0L))

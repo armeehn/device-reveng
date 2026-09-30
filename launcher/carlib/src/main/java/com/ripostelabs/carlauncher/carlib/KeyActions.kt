@@ -22,6 +22,20 @@ enum class KeyAction {
     NAV,
     OPEN_MEDIA,
     SETTINGS,
+    /** The wheel's repeat key: the playing app steps its repeat mode ([MediaActions.REPEAT]). */
+    REPEAT,
+    /** The wheel's shuffle key: the playing app toggles shuffle ([MediaActions.SHUFFLE]). */
+    SHUFFLE,
+}
+
+/**
+ * Session custom actions the suite's media apps answer (rav4-apps `MediaCitizen.ACTION_*`).
+ * Stock eventcenter forwarded `72` codes 29/30 to the playing app (EventService.java:2695),
+ * whose music player cycled repeat and picked random (MusicPlayerService.java:544-550).
+ */
+object MediaActions {
+    const val REPEAT = "com.ripostelabs.media.REPEAT"
+    const val SHUFFLE = "com.ripostelabs.media.SHUFFLE"
 }
 
 /**
@@ -72,6 +86,8 @@ object KeyActions {
         McuOwnerProtocol.Key.VOICE -> KeyAction.VOICE            // startVoice, :2630
         McuOwnerProtocol.Key.SETUP -> KeyAction.SETTINGS         // SRC_SETUP, :2549
         PANEL_NAV -> KeyAction.NAV                               // SRC_GPS, :2423
+        McuOwnerProtocol.Key.REPEAT -> KeyAction.REPEAT          // to the playing app, :2695
+        McuOwnerProtocol.Key.RANDOM -> KeyAction.SHUFFLE         // to the playing app, :2695
         else -> null
     }
 

@@ -825,6 +825,7 @@ class MainActivity : ComponentActivity() {
             back = { if (!routeNav(NavKey.BACK)) onBackPressedDispatcher.onBackPressed() },
             openPhone = { screenState.value = Screen.Phone },
             openSettings = { screenState.value = Screen.Settings() },
+            mediaAction = { nowPlaying.customAction(it) },
         )
         lifecycleScope.launch {
             carEvents.wheelGestures.collect { gesture ->

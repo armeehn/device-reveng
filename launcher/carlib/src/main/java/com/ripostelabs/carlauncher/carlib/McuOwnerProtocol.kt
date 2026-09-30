@@ -675,6 +675,8 @@ object McuOwnerProtocol {
         const val STOP = 0x05         // MCU_KEY_STOP, :1615
         const val PLAY_PAUSE = 0x06   // MCU_KEY_PLAYPAUSE, :1579
         const val MENU = 0x09         // MCU_KEY_MENU, :1531: the vendor's HOME
+        const val REPEAT = 0x1D       // MCU_KEY_REPEAT, :1596
+        const val RANDOM = 0x1E       // MCU_KEY_RANDOM, :1593
         const val MODE = 0x10         // MCU_KEY_MODE, :1533
         const val MUTE = 0x11         // MCU_KEY_MUTE, :1537
         const val VOLUME_UP = 0x12    // MCU_KEY_VOL_ADD, :1634
