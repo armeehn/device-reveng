@@ -4,8 +4,9 @@ package com.ripostelabs.carlauncher.carlib
  * DspSound — the stock DSP app's sound blocks beyond the EQ (`com.choiceway.dsp`, chip 0, the
  * GT6 sound path). Each block is one `4F` sub-id frame and a few of the app's own rows.
  *
- *     McuSetupStore.setDspSub / setDspBass ──▶ McuSetupProtocol.dspSub / dspBass
- *                                          ──▶ `4F 15 …` / `4F 16 …` ──▶ MCU
+ *     McuSetupStore.setDspSub / setDspBass / setDspField
+ *         ──▶ McuSetupProtocol.dspSub / dspBass / dspDelay + dspChannelGain
+ *         ──▶ `4F 15 …` / `4F 16 …` / `4F 12 …` + `4F 13 …` ──▶ MCU
  *     boot and wake ──▶ McuOwnerProtocol.configBlocks re-sends the saved blocks
  *
  * Ranges are the stock controls'; paths are under the app's `model/` and `fragment/`.
@@ -57,6 +58,78 @@ object DspSound {
             freq = freq.coerceIn(0, BASS_FREQS.lastIndex),
         )
     }
+
+    /** Speaker distance 0..272 cm: the dial's 288 degrees * 34 / 36 (RotateDialScale_Two.java:198-214). */
+    const val DELAY_MAX_CM = 272
+
+    /** Sound travels 34 cm per ms; stock labels each distance with it (FieldFragment_Two.java:398). */
+    const val CM_PER_MS = 34
+
+    /** Channel gain slider 0..95 with 80 at 0 dB (layout_field_save_two.xml; Constants.java:195-199). */
+    const val GAIN_MAX = 95
+    const val GAIN_FLAT = 80
+
+    /** The five outputs in wire order (sendDelay, :108-112); [label] is stock's lbl_* text. */
+    enum class Speaker(val label: String) {
+        LEFT_FRONT("Front left"),
+        RIGHT_FRONT("Front right"),
+        LEFT_REAR("Rear left"),
+        RIGHT_REAR("Rear right"),
+        CENTRE("Centre"),
+    }
+
+    /**
+     * Stock's easy-mode seats and their `DRIVE_MODE` numbers (EasyFieldFragment_two.java:246-275).
+     * [delays] are front-left, front-right, rear-left, rear-right in cm; the centre is kept.
+     * CUSTOM (5) is what a dial move leaves (FieldFragment_Two.java:109).
+     */
+    enum class Seat(val mode: Int, val label: String, val delays: List<Int>?) {
+        DRIVER(0, "Driver", listOf(0, 0, 0, HALF_CM)),
+        PASSENGER(1, "Passenger", listOf(0, 0, HALF_CM, 0)),
+        REAR(2, "Rear seats", listOf(DELAY_MAX_CM, DELAY_MAX_CM, 0, 0)),
+        ALL(3, "All seats", listOf(0, 0, 0, 0)),
+        CUSTOM(5, "Custom", null);
+
+        companion object {
+            fun of(mode: Int): Seat = values().firstOrNull { it.mode == mode } ?: ALL
+        }
+    }
+
+    /**
+     * The listening position: a distance and a gain per [Speaker], in [Speaker] order. Boot
+     * sends it as `4F 12` (distances) and `4F 13` (gains). Defaults are stock's: 0 cm, 80
+     * (0 dB), all seats (Constants.java:189-199).
+     */
+    data class Field(
+        val delays: List<Int> = List(SPEAKERS) { 0 },
+        val gains: List<Int> = List(SPEAKERS) { GAIN_FLAT },
+        val seat: Seat = Seat.ALL,
+    ) {
+        fun clamped(): Field = copy(
+            delays = List(SPEAKERS) { delays.getOrElse(it) { 0 }.coerceIn(0, DELAY_MAX_CM) },
+            gains = List(SPEAKERS) { gains.getOrElse(it) { GAIN_FLAT }.coerceIn(0, GAIN_MAX) },
+        )
+
+        /** A stock seat loads its four delays; the centre keeps its own. CUSTOM changes nothing. */
+        fun withSeat(next: Seat): Field {
+            val set = next.delays ?: return this
+
+            return copy(delays = set + delays.getOrElse(Speaker.CENTRE.ordinal) { 0 }, seat = next)
+        }
+
+        fun withDelay(speaker: Speaker, cm: Int): Field {
+            val next = delays.toMutableList().also { it[speaker.ordinal] = cm.coerceIn(0, DELAY_MAX_CM) }
+            return copy(delays = next, seat = Seat.CUSTOM)
+        }
+
+        fun withGain(speaker: Speaker, gain: Int): Field {
+            val next = gains.toMutableList().also { it[speaker.ordinal] = gain.coerceIn(0, GAIN_MAX) }
+            return copy(gains = next)
+        }
+    }
+
+    private val SPEAKERS = Speaker.values().size
+    private const val HALF_CM = DELAY_MAX_CM / 2
 
     private const val SUB_ROW_SEPARATOR = "|"
 

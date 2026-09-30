@@ -39,6 +39,8 @@ object McuSetupProtocol {
     private const val CONFIG_DSP_LOUD = 0x0E   // :15053
     private const val CONFIG_DSP_EQ = 0x10     // DSP EqModel_Two_48.sendEq, :200-207
     private const val CONFIG_DSP_BAND = 0x11   // DSP EqModel_Two_48.sendEq(int), :162-164
+    private const val CONFIG_DSP_DELAY = 0x12  // DSP SoundFieldModel_Two.sendDelay, :85-114
+    private const val CONFIG_DSP_GAIN = 0x13   // DSP SoundFieldModel_Two.sendChannelGains, :118-147
     private const val CONFIG_DSP_SUB = 0x15    // DSP SubWoofModel_Two.sendStrongBass, :155-169
     private const val CONFIG_DSP_BASS = 0x16   // DSP BassModel_Two.sendFrequency, :126-140
 
@@ -50,6 +52,9 @@ object McuSetupProtocol {
     private val SLEEP_TABLE = mapOf(1 to 960, 2 to 1440, 3 to 2880)
 
     private const val SECONDS_PER_MINUTE = 60
+
+    /** A delay byte runs 0..100 for 0..272 cm (sendDelay's `* 100 / 272.0f`). */
+    private const val DELAY_WIRE_MAX = 100
     private const val BYTE = 0xFF
     private const val BALANCE_PAYLOAD = 2
     private const val TONE_PAYLOAD = 3
@@ -84,6 +89,20 @@ object McuSetupProtocol {
         val b = bass.clamped()
 
         return McuSerial.encode(OP_CONFIG, bytes(CONFIG_DSP_BASS, 0, b.level, b.freq))
+    }
+
+    /** `4F 12 lf rf lr rr c`: each distance in cm * 100 / 272, truncated (sendDelay, :108-112). */
+    fun dspDelay(field: DspSound.Field): ByteArray {
+        val wire = field.clamped().delays.map { it * DELAY_WIRE_MAX / DspSound.DELAY_MAX_CM }
+
+        return McuSerial.encode(OP_CONFIG, bytes(CONFIG_DSP_DELAY, *wire.toIntArray()))
+    }
+
+    /** `4F 13 00 lf rf lr rr c`: each gain - 80 as a signed byte (sendChannelGains, :141-146). */
+    fun dspChannelGain(field: DspSound.Field): ByteArray {
+        val wire = field.clamped().gains.map { (it - DspSound.GAIN_FLAT) and BYTE }
+
+        return McuSerial.encode(OP_CONFIG, bytes(CONFIG_DSP_GAIN, 0, *wire.toIntArray()))
     }
 
     /** `09 mode` (sendEQMode, :4291). The preset curves are the MCU's; 0 is the user curve. */
