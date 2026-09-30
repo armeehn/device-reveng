@@ -371,17 +371,18 @@ object McuOwnerProtocol {
 
     /**
      * The `4F` blocks alone: `reloadParam` re-sends these without the BT state (:3622-3632).
-     * They are the DSP app's boot burst (DspService.java:64-83). The EQ (`4F 10`) and loudness
-     * (`4F 0E`) carry the saved sound; with no table they are the flat defaults stock shipped.
+     * They are the DSP app's boot burst (DspService.java:64-83). The EQ (`4F 10`), loudness
+     * (`4F 0E`), subwoofer (`4F 15`) and bass boost (`4F 16`) carry the saved sound; with no
+     * table they are the flat defaults stock shipped.
      */
     private fun configBlocks(setup: McuSetup?): List<ByteArray> = listOf(
         McuSetupProtocol.dspEq(setup?.dspEq ?: DspEq.FLAT),
         McuSetupProtocol.dspLoud(setup?.dspLoud ?: false),
         McuSerial.encode(OP_CONFIG, bytes(0x14, 0x4e, 0x20, 0x00, 0x14, 0x4e, 0x20, 0x00, 0x14, 0x00, 0x00)),
-        McuSerial.encode(OP_CONFIG, bytes(0x15, 0xfa, 0x0c, 0x00, 0x00, 0x00)),
+        McuSetupProtocol.dspSub(setup?.dspSub ?: DspSound.Sub()),
         McuSerial.encode(OP_CONFIG, bytes(0x12, 0x00, 0x00, 0x00, 0x00, 0x00)),
         McuSerial.encode(OP_CONFIG, bytes(0x13, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00)),
-        McuSerial.encode(OP_CONFIG, bytes(0x16, 0x00, 0x00, 0x00)),
+        McuSetupProtocol.dspBass(setup?.dspBass ?: DspSound.Bass()),
         McuSerial.encode(OP_CONFIG, bytes(0x0f, 0x00, 0x00)),
     )
 

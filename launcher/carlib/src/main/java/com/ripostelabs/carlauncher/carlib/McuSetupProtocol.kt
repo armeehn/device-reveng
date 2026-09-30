@@ -39,6 +39,8 @@ object McuSetupProtocol {
     private const val CONFIG_DSP_LOUD = 0x0E   // :15053
     private const val CONFIG_DSP_EQ = 0x10     // DSP EqModel_Two_48.sendEq, :200-207
     private const val CONFIG_DSP_BAND = 0x11   // DSP EqModel_Two_48.sendEq(int), :162-164
+    private const val CONFIG_DSP_SUB = 0x15    // DSP SubWoofModel_Two.sendStrongBass, :155-169
+    private const val CONFIG_DSP_BASS = 0x16   // DSP BassModel_Two.sendFrequency, :126-140
 
     /** `SYS_LOUD` (EventUtils.java:1790): the system key that flips loudness; the MCU answers `7B`. */
     private const val SYSTEM_KEY_LOUDNESS = 13
@@ -66,6 +68,23 @@ object McuSetupProtocol {
     /** `4F 11 band gain+10`: one band while the user drags it (sendEq(int), :162-164). */
     fun dspEqBand(band: Int, gain: Int): ByteArray =
         McuSerial.encode(OP_CONFIG, bytes(CONFIG_DSP_BAND, band, DspEq.clamp(gain) - DspEq.GAIN_MIN))
+
+    /** `4F 15 freq gain phase amp offOn`: the DSP subwoofer, ranges clamped (sendStrongBass, :155-169). */
+    fun dspSub(sub: DspSound.Sub): ByteArray {
+        val s = sub.clamped()
+
+        return McuSerial.encode(
+            OP_CONFIG,
+            bytes(CONFIG_DSP_SUB, s.freq, s.gain, bit(s.reversePhase), bit(s.amplifier), bit(s.offOn)),
+        )
+    }
+
+    /** `4F 16 00 level freq`: the DSP bass boost (sendFrequency, :126-140). */
+    fun dspBass(bass: DspSound.Bass): ByteArray {
+        val b = bass.clamped()
+
+        return McuSerial.encode(OP_CONFIG, bytes(CONFIG_DSP_BASS, 0, b.level, b.freq))
+    }
 
     /** `09 mode` (sendEQMode, :4291). The preset curves are the MCU's; 0 is the user curve. */
     fun eqMode(mode: Int): ByteArray = McuSerial.encode(OP_EQ_MODE, bytes(mode))
@@ -202,4 +221,6 @@ object McuSetupProtocol {
     private fun at(command: McuSerial.Command, i: Int): Int = command.payload[i].toInt() and BYTE
 
     private fun bytes(vararg v: Int) = ByteArray(v.size) { v[it].coerceIn(0, BYTE).toByte() }
+
+    private fun bit(on: Boolean) = if (on) 1 else 0
 }

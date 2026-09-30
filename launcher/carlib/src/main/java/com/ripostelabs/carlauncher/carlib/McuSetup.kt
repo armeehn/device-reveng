@@ -34,6 +34,10 @@ data class McuSetup(
     val dspPreset: Int = DspEq.Preset.FLAT.index,
     /** The three custom curves, stock's sp_eq_mode_custom1..3_two. */
     val dspCustom: List<List<Int>> = List(DspEq.CUSTOM_SLOTS) { DspEq.FLAT },
+    /** The DSP subwoofer ([DspSound.Sub]); boot re-sends it as `4F 15`. */
+    val dspSub: DspSound.Sub = DspSound.Sub(),
+    /** The DSP bass boost ([DspSound.Bass]); boot re-sends it as `4F 16`. */
+    val dspBass: DspSound.Bass = DspSound.Bass(),
 ) {
     /** A preset or custom slot loads its whole curve (EqModel_Two_48.setMode, :180-188). */
     fun withDspPreset(preset: DspEq.Preset): McuSetup {
@@ -124,6 +128,12 @@ data class McuSetup(
         KEY_DSP_LOUD to flag(dspLoud),
         KEY_DSP_EQ to DspEq.row(dspEq),
         KEY_DSP_PRESET to "$dspPreset",
+        KEY_DSP_SUB to DspSound.subRow(dspSub),
+        KEY_DSP_PHASE to flag(dspSub.reversePhase),
+        KEY_DSP_AMP to flag(dspSub.amplifier),
+        KEY_DSP_OFF_ON to flag(dspSub.offOn),
+        KEY_DSP_BASS_LEVEL to "${dspBass.level}",
+        KEY_DSP_BASS_FREQ to "${dspBass.freq}",
     ) + KEY_DSP_CUSTOM.zip(dspCustom.map(DspEq::row))
 
     companion object {
@@ -168,6 +178,12 @@ data class McuSetup(
         const val KEY_DSP_EQ = "sp_eq_values_two_48"
         const val KEY_DSP_PRESET = "sp_eq_mode_index_two"
         val KEY_DSP_CUSTOM = listOf("sp_eq_mode_custom1_two", "sp_eq_mode_custom2_two", "sp_eq_mode_custom3_two")
+        const val KEY_DSP_SUB = "sp_strong_bass_values_two"
+        const val KEY_DSP_PHASE = "phase_values"
+        const val KEY_DSP_AMP = "amplifier_values"
+        const val KEY_DSP_OFF_ON = "off_on_values"
+        const val KEY_DSP_BASS_LEVEL = "bass_progress_values"
+        const val KEY_DSP_BASS_FREQ = "frequency_values"
 
         private const val TRUE = "1"
         private const val FALSE = "0"
@@ -222,6 +238,18 @@ data class McuSetup(
                 dspEq = DspEq.parse(rows[KEY_DSP_EQ]),
                 dspPreset = int(KEY_DSP_PRESET, defaults.dspPreset),
                 dspCustom = KEY_DSP_CUSTOM.map { DspEq.parse(rows[it]) },
+                dspSub = DspSound.parseSub(
+                    rows[KEY_DSP_SUB],
+                    DspSound.Sub(
+                        reversePhase = bool(KEY_DSP_PHASE, false),
+                        amplifier = bool(KEY_DSP_AMP, false),
+                        offOn = bool(KEY_DSP_OFF_ON, false),
+                    ),
+                ),
+                dspBass = DspSound.Bass(
+                    level = DspSound.number(rows[KEY_DSP_BASS_LEVEL]) ?: 0,
+                    freq = DspSound.number(rows[KEY_DSP_BASS_FREQ]) ?: 0,
+                ).clamped(),
             )
         }
     }

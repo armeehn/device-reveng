@@ -112,6 +112,20 @@ class McuSetupStore(
         send(McuSetupProtocol.dspLoud(false))
     }
 
+    /** The DSP subwoofer: cut-off, gain, phase, amplifier and the stock on/off flag, `4F 15`. */
+    fun setDspSub(sub: DspSound.Sub) {
+        val s = sub.clamped()
+        update { copy(dspSub = s) }
+        send(McuSetupProtocol.dspSub(s))
+    }
+
+    /** The DSP bass boost: level and centre frequency, `4F 16`. */
+    fun setDspBass(bass: DspSound.Bass) {
+        val b = bass.clamped()
+        update { copy(dspBass = b) }
+        send(McuSetupProtocol.dspBass(b))
+    }
+
     /** The test tone, whatever the key-beep setting says (the vendor's `beep()` gated on it). */
     fun beep() {
         send(McuSetupProtocol.beep())
