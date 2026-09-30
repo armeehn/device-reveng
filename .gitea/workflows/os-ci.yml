@@ -41,6 +41,10 @@ jobs:
         run: os/test-rc-libpath.sh
       - name: blockfix stops on a failed read
         run: os/test-blockfix.sh
+      - name: flash-0.2 parses and fetches only os/ helpers
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          os/test-flash-02.sh
       - name: touchswap compiles
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq gcc-aarch64-linux-gnu
