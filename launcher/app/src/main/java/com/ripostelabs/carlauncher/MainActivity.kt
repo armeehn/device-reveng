@@ -479,6 +479,7 @@ class MainActivity : ComponentActivity() {
             val startupConfig = carService.backlight.config(
                 McuOwnerProtocol.StartupConfig(
                     mainVolume = volumeMemory.level(),
+                    rds = radioMemory.rds(),
                     radioZone = radioMemory.zone(),
                     sleepTime = McuSetupProtocol.sleepOption(setupStore.setup.value.sleepTime),
                     setup = setupStore.setup.value,

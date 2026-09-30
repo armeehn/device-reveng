@@ -75,6 +75,15 @@ class RadioStateHolder(
         _state.value = state.copy(updatedAt = 0L)
     }
 
+    /**
+     * A new region: the plan and the zone's default presets, as `initRadioZone` reseeds
+     * `mRadioFreqList` on the change (EventService.java:4833). The MCU's own reports follow.
+     */
+    fun setZone(zone: Int) {
+        _state.value = _state.value.copy(zone = zone, stationList = RadioZone.of(zone).defaultStations)
+        onUpdate()
+    }
+
     /** Called from the owner's pump thread only, so read-modify-write needs no loop. */
     fun onRadio(event: McuOwnerProtocol.RadioEvent) {
         val current = _state.value
