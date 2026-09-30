@@ -42,6 +42,7 @@ import com.ripostelabs.carlauncher.data.NavBarMode
 import com.ripostelabs.carlauncher.data.SettingKeys // v2.8
 import com.ripostelabs.carlauncher.data.SettingsStore
 import com.ripostelabs.carlauncher.ui.collectAsStateSafe
+import com.ripostelabs.carlauncher.nav.NavRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -275,6 +276,22 @@ fun LauncherPrefsScreen(
                 onSelect = settingsStore::setDriverSideMode,
             )
             CarTypeRow(controller = controller)
+        }
+
+        // RAV4-158: stock's navigation customisation. The nav card, the wheel NAV key and the NAV
+        // gesture all open this app; Automatic keeps the vendor key, then Maps.
+        SettingsSection(title = "Navigation") {
+            var navApps by remember { mutableStateOf(emptyList<Pair<String, String>>()) }
+            LaunchedEffect(Unit) {
+                navApps = withContext(Dispatchers.IO) { NavRepository.navApps(context) }
+            }
+            PickerSetting(
+                label = "Navigation app",
+                description = "Opened by the nav card and the wheel NAV key",
+                current = settings.navAppPackage,
+                options = listOf("" to "Automatic") + navApps,
+                onSelect = settingsStore::setNavAppPackage,
+            )
         }
 
         SettingsSection(title = "Day / night mode") {
