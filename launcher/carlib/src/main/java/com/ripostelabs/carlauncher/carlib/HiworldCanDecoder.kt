@@ -53,6 +53,10 @@ object HiworldCanDecoder {
     private const val OP_TPMS = 0x48           // tyre pressures
     private const val OP_VERSION = 0xF0        // CANBOX firmware version ASCII
     private const val OP_CAR_SET = CarSettings.REPORT_OPCODE // Toyota customisation report
+    private const val OP_PANEL_BUTTON = 0x21   // car panel button, TOY:726
+    private const val OP_KNOB = 0x22           // car volume / tune knob, TOY:676
+    private const val OP_VOICE_STATUS = 0xC5   // voice button state, TOY:376
+    private const val OP_MODE_CHANGE = 0xE0    // car mode key, TOY:390
 
     /**
      * 0x32 p[4:5] "speed" scale. **NOT ROAD SPEED.** The 2026-08-29 drive capture (0→54.8 km/h vs
@@ -169,6 +173,10 @@ object HiworldCanDecoder {
         OP_RPM_GEAR_MIRROR -> decodeRpmGearMirror(payload)
         OP_VERSION -> decodeVersion(payload)
         OP_CAR_SET -> CanSignal.CarSettings(CarSettings.decode(payload))
+        OP_PANEL_BUTTON -> boxKey(CanSignal.BoxKey.Kind.PANEL, payload)
+        OP_KNOB -> boxKey(CanSignal.BoxKey.Kind.KNOB, payload)
+        OP_VOICE_STATUS -> boxKey(CanSignal.BoxKey.Kind.VOICE, payload)
+        OP_MODE_CHANGE -> boxKey(CanSignal.BoxKey.Kind.MODE, payload)
         else -> CanSignal.Unknown(opcode, payload)
     }
 
@@ -271,6 +279,9 @@ object HiworldCanDecoder {
         16 -> SwcAction.BACK
         else -> SwcAction.UNKNOWN
     }
+
+    /** Stock reads `bArr[2]` and `bArr[3]` of all four box key frames, our p[0] and p[1]. */
+    private fun boxKey(kind: CanSignal.BoxKey.Kind, p: ByteArray) = CanSignal.BoxKey(kind, u(p, 0), u(p, 1))
 
     private fun decodeBasicStatus(p: ByteArray): CanSignal.BasicStatus {
         val doorBits = u(p, 4)
@@ -944,6 +955,12 @@ sealed interface CanSignal {
     data class CarSettings(
         val state: CarSettingsState,
     ) : CanSignal
+
+    /** 0x21, 0x22, 0xC5, 0xE0 — the box's own keys; [BoxKeys] says what each one does. */
+    data class BoxKey(val kind: Kind, val code: Int, val value: Int) : CanSignal {
+        /** Panel button (id, 1 press / 0 release), knob (which, position), voice (state), mode (mode). */
+        enum class Kind { PANEL, KNOB, VOICE, MODE }
+    }
 
     /** Fallback for an opcode we don't interpret yet; raw payload preserved. */
     data class Unknown(

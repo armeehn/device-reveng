@@ -131,6 +131,7 @@ class KeyRouter(
 
     private var heldFrames = 0
     private var heldId = 0
+    private val boxKeys = BoxKeys()
 
     override fun onPanelKey(key: McuOwnerProtocol.PanelKey) {
         val slot = KeyActions.learnedSlotOf(key.code)
@@ -152,6 +153,9 @@ class KeyRouter(
     }
 
     override fun onCanSignal(signal: CanSignal, atMs: Long) {
+        // RAV4-168: the box's panel, knob, voice and mode keys.
+        boxKeys.onSignal(signal).forEach(emit)
+
         if (signal !is CanSignal.BasicStatus) {
             return
         }
