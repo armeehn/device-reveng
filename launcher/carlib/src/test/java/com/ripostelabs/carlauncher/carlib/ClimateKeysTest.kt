@@ -47,6 +47,30 @@ class ClimateKeysTest {
             ClimateButton.ECO to 0x23,
             ClimateButton.REAR_LOCK to 0x22,
             ClimateButton.SYNC to 0x03,
+            ClimateButton.NANOE to 0x19,
+            ClimateButton.AIRFLOW_FACE to 0x1A,
+            ClimateButton.AIRFLOW_FACE_FEET to 0x1B,
+            ClimateButton.AIRFLOW_FEET_DEFROST to 0x1C,
+            ClimateButton.AIRFLOW_FEET to 0x1D,
+            ClimateButton.REAR_LEFT_TEMP_UP to 0x20,
+            ClimateButton.REAR_LEFT_TEMP_DOWN to 0x21,
+            ClimateButton.MODE_RIGHT to 0x24,
+            ClimateButton.REAR_FAN_UP to 0x2A,
+            ClimateButton.REAR_FAN_DOWN to 0x2B,
+            ClimateButton.REAR_POWER to 0x2E,
+            ClimateButton.REAR_RIGHT_TEMP_UP to 0x40,
+            ClimateButton.REAR_RIGHT_TEMP_DOWN to 0x41,
+            ClimateButton.REAR_AUTO to 0x42,
+            ClimateButton.REAR_LEFT_SEAT_HEAT to 0x43,
+            ClimateButton.REAR_RIGHT_SEAT_HEAT to 0x44,
+            ClimateButton.REAR_LEFT_SEAT_COOL to 0x45,
+            ClimateButton.REAR_RIGHT_SEAT_COOL to 0x46,
+            ClimateButton.REAR_AIRFLOW_FEET to 0x51,
+            ClimateButton.REAR_AIRFLOW_FACE to 0x52,
+            ClimateButton.REAR_AIRFLOW_FACE_FEET to 0x53,
+            ClimateButton.FRONT_CENTRE_AIR to 0x54,
+            ClimateButton.MODE_UP to 0x15,
+            ClimateButton.MODE_DOWN to 0x16,
         )
 
         assertEquals(ClimateButton.entries.toSet(), vendor.keys)
@@ -71,6 +95,15 @@ class ClimateKeysTest {
 
         assertEquals(0x0D, down[3].toInt() and 0xFF)
         assertEquals("08 5A A5 02 3D 0B 01 4A", hex(down.copyOfRange(4, down.size - 2)))
+    }
+
+    /** `02 3D 1D 01` sums to 0x5D, so feet-only airflow's inner checksum is 0x5C. */
+    @Test
+    fun `feet airflow is the stock 1D key`() {
+        val press = ClimateKeys.press(ClimateButton.AIRFLOW_FEET)!!
+
+        assertArrayEquals(outer(0x08, 0x5A, 0xA5, 0x02, 0x3D, 0x1D, 0x01, 0x5C), press.down)
+        assertArrayEquals(outer(0x08, 0x5A, 0xA5, 0x02, 0x3D, 0x1D, 0x00, 0x5B), press.up)
     }
 
     /** `verticalScreen` leaves code 0 for AC MAX and sends nothing (`:1936`). */
