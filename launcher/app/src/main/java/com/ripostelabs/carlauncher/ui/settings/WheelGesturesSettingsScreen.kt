@@ -10,6 +10,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ripostelabs.carlauncher.carlib.CarEvents
+import com.ripostelabs.carlauncher.carlib.SwapMode
 import com.ripostelabs.carlauncher.carlib.WheelGesture
 import com.ripostelabs.carlauncher.carlib.WheelGestures
 import com.ripostelabs.carlauncher.carlib.WheelKey
@@ -58,6 +59,23 @@ fun WheelGesturesSettingsScreen(
                 style = MaterialTheme.typography.bodyLarge,
                 color = if (last == null) MaterialTheme.colorScheme.onSurfaceVariant
                 else MaterialTheme.colorScheme.onSurface,
+            )
+        }
+
+        // RAV4-192: stock's two swaps. They act on the wheel, the car's panel keys and its
+        // knobs, so they sit outside the gestures switch.
+        SettingsSection(title = "Swap keys") {
+            ToggleSetting(
+                label = "Swap previous and next",
+                description = "Wheel, panel and tune knob skip the other way",
+                checked = settings.keySwap.prevNext == SwapMode.SWAPPED,
+                onChange = { settingsStore.setSwapPrevNext(swapModeOf(it)) },
+            )
+            ToggleSetting(
+                label = "Swap volume up and down",
+                description = "Wheel, panel and volume knob turn the other way",
+                checked = settings.keySwap.volume == SwapMode.SWAPPED,
+                onChange = { settingsStore.setSwapVolume(swapModeOf(it)) },
             )
         }
 
@@ -125,3 +143,5 @@ private fun keyLabel(key: WheelKey): String = when (key) {
     WheelKey.MUTE -> "Mute"
     WheelKey.VOICE -> "Voice"
 }
+
+private fun swapModeOf(checked: Boolean): SwapMode = if (checked) SwapMode.SWAPPED else SwapMode.NORMAL

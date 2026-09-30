@@ -11,6 +11,8 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.ripostelabs.carlauncher.carlib.AutoAnswer
 import com.ripostelabs.carlauncher.carlib.Reconnect
 import com.ripostelabs.carlauncher.carlib.CarProfiles
+import com.ripostelabs.carlauncher.carlib.KeySwap
+import com.ripostelabs.carlauncher.carlib.SwapMode
 import com.ripostelabs.carlauncher.carlib.UsbRole
 import com.ripostelabs.carlauncher.carlib.WheelKey
 import kotlinx.coroutines.CoroutineScope
@@ -119,6 +121,8 @@ data class LauncherSettings(
      * (`WheelKeyMap`). Written by the Settings learn page; empty until a key is learned.
      */
     val wheelKeyMapJson: String = "",
+    /** RAV4-192: stock's prev/next and volume swaps (`Sys_updownset`, `Sys_addsubset`). */
+    val keySwap: KeySwap = KeySwap.NONE,
     /**
      * The accessory board, sequences and triggers, as one JSON blob (see `AccessoryConfig`).
      * Kept raw here and parsed where it is used, so a bad paste degrades in one place with a
@@ -273,6 +277,10 @@ class SettingsStore(context: Context) {
                         press = WheelGestureBindings.decode(prefs[WHEEL_PRESS_KEY], emptyMap()),
                     ),
                     wheelKeyMapJson = prefs[WHEEL_KEY_MAP_KEY] ?: "",
+                    keySwap = KeySwap(
+                        prevNext = swapMode(prefs[SWAP_PREV_NEXT_KEY]),
+                        volume = swapMode(prefs[SWAP_VOLUME_KEY]),
+                    ),
                     accessoryConfigJson = prefs[ACCESSORY_CONFIG_KEY] ?: "",
                     hideReplacedOemApps = prefs[HIDE_REPLACED_OEM_KEY] ?: true,
                     hideOemSettings = prefs[HIDE_OEM_SETTINGS_KEY] ?: false,
@@ -380,6 +388,16 @@ class SettingsStore(context: Context) {
         ds.edit { it[WHEEL_LONG_KEY] = WheelGestureBindings.encode(next) }
     }
 
+    /** RAV4-192: trade the CAN channel's next and previous keys, as stock's `Sys_updownset`. */
+    fun setSwapPrevNext(mode: SwapMode) = scope.launch {
+        ds.edit { it[SWAP_PREV_NEXT_KEY] = mode.name }
+    }
+
+    /** RAV4-192: trade the CAN channel's volume keys, as stock's `Sys_addsubset`. */
+    fun setSwapVolume(mode: SwapMode) = scope.launch {
+        ds.edit { it[SWAP_VOLUME_KEY] = mode.name }
+    }
+
     /** Riposte OS 0.2: the learn page's slot → function map, as `WheelKeyMap.toJson()`. */
     fun setWheelKeyMap(json: String) = scope.launch {
         ds.edit { it[WHEEL_KEY_MAP_KEY] = json }
@@ -448,6 +466,12 @@ class SettingsStore(context: Context) {
         val WHEEL_DOUBLE_KEY = stringPreferencesKey("wheel_gestures_double")
         val WHEEL_PRESS_KEY = stringPreferencesKey("wheel_gestures_press")
         val WHEEL_KEY_MAP_KEY = stringPreferencesKey("wheel_key_map") // Riposte OS 0.2 learn page
+        val SWAP_PREV_NEXT_KEY = stringPreferencesKey("swap_prev_next") // RAV4-192, SwapMode name
+        val SWAP_VOLUME_KEY = stringPreferencesKey("swap_volume") // RAV4-192, SwapMode name
+
+        /** A stored [SwapMode] name; anything unknown reads as the car's own direction. */
+        private fun swapMode(raw: String?): SwapMode =
+            SwapMode.values().firstOrNull { it.name == raw } ?: SwapMode.NORMAL
         val ACCESSORY_CONFIG_KEY = stringPreferencesKey("accessory_config") // AccessoryConfig blob
         val HIDE_REPLACED_OEM_KEY = booleanPreferencesKey("hide_replaced_oem_apps") // OemApps shadow
         val HIDE_OEM_SETTINGS_KEY = booleanPreferencesKey("hide_oem_settings") // OemApps shadow
