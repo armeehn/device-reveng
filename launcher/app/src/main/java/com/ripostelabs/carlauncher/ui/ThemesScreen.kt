@@ -50,6 +50,11 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog // v2.7
 import com.ripostelabs.carlauncher.data.ThemeTransfer // v2.7
+import com.ripostelabs.carlauncher.data.Phase // RAV4-196
+import com.ripostelabs.carlauncher.data.WallpaperStore // RAV4-196
+import androidx.activity.compose.rememberLauncherForActivityResult // RAV4-196
+import androidx.activity.result.contract.ActivityResultContracts // RAV4-196
+import androidx.compose.material.icons.filled.Wallpaper // RAV4-196
 import com.ripostelabs.carlauncher.ui.settings.DialogTextButton // v2.7
 import com.ripostelabs.carlauncher.ui.theme.CarTheme
 import com.ripostelabs.carlauncher.ui.theme.ThemeColors
@@ -78,6 +83,7 @@ fun ThemesScreen(
     onNew: () -> Unit,
     onBack: () -> Unit,
     onImport: (CarTheme) -> Unit = {}, // v2.7
+    wallpaperStore: WallpaperStore? = null, // RAV4-196
 ) {
     // v2.7 — theme import/export. The files live on external storage, where a stat can block for
     // tens of milliseconds on this unit's eMMC, so every read and write below runs on
@@ -86,6 +92,7 @@ fun ThemesScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var importing by remember { mutableStateOf(false) }
+    var wallpaperOpen by remember { mutableStateOf(false) } // RAV4-196
     var message by remember { mutableStateOf<String?>(null) }
     val importable by produceState(initialValue = emptyList<File>(), importing) {
         value = if (importing) withContext(Dispatchers.IO) { ThemeTransfer.listImportable(context) }
@@ -108,6 +115,14 @@ fun ThemesScreen(
                 fontWeight = FontWeight.SemiBold,
             )
             Spacer(Modifier.weight(1f))
+            if (wallpaperStore != null) {
+                IconTile(
+                    icon = Icons.Filled.Wallpaper,
+                    label = "Wallpaper",
+                    onClick = { wallpaperOpen = true },
+                )
+                Spacer(Modifier.width(8.dp))
+            }
             IconTile(
                 icon = Icons.Filled.FileDownload,
                 label = "Import theme",
@@ -166,10 +181,102 @@ fun ThemesScreen(
         )
     }
 
+    if (wallpaperOpen && wallpaperStore != null) {
+        WallpaperDialog(
+            store = wallpaperStore,
+            themeId = activeId,
+            onFailed = { message = "That image could not be read." },
+            onDismiss = { wallpaperOpen = false },
+        )
+    }
+
     message?.let { text ->
         MessageDialog(text = text, onDismiss = { message = null })
     }
 }
+
+/**
+ * RAV4-196 — pick the active theme's day and night home wallpaper.
+ *
+ * Unlike theme import this uses the system image picker: a photo can be anywhere (Pictures, a USB
+ * stick, the Photos app's folder), and the picker is the one screen that reaches all of them.
+ */
+@Composable
+private fun WallpaperDialog(
+    store: WallpaperStore,
+    themeId: String,
+    onFailed: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val version by store.version.collectAsStateSafe(initial = 0)
+    var phase by remember { mutableStateOf(Phase.DAY) }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri == null) {
+            return@rememberLauncherForActivityResult
+        }
+        scope.launch {
+            if (!store.import(themeId, phase, uri)) {
+                onFailed()
+            }
+        }
+    }
+    val pick: (Phase) -> Unit = { p ->
+        phase = p
+        picker.launch(IMAGE_MIME)
+    }
+    // Re-read on every change so the row labels follow a pick or a clear.
+    val hasDay = remember(version, themeId) { store.has(themeId, Phase.DAY) }
+    val hasNight = remember(version, themeId) { store.has(themeId, Phase.NIGHT) }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .carCard()
+                .clip(carShape(22.dp))
+                .background(MaterialTheme.colorScheme.surface)
+                .padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                text = "Home wallpaper",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                text = "For the active theme. Night borrows the day image when it has none.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            DialogTextButton(
+                label = if (hasDay) "Replace day image" else "Choose day image",
+                onClick = { pick(Phase.DAY) },
+                filled = false,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            DialogTextButton(
+                label = if (hasNight) "Replace night image" else "Choose night image",
+                onClick = { pick(Phase.NIGHT) },
+                filled = false,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            if (hasDay || hasNight) {
+                DialogTextButton(
+                    label = "Remove wallpaper",
+                    onClick = { store.clear(themeId) },
+                    filled = false,
+                    destructive = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            DialogTextButton("Done", onDismiss, filled = true, modifier = Modifier.fillMaxWidth())
+        }
+    }
+}
+
+private const val IMAGE_MIME = "image/*"
 
 /**
  * v2.7 — pick a theme file to import.
