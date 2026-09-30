@@ -83,6 +83,35 @@ class McuSetupStore(
         send(McuSetupProtocol.dspLoud(on))
     }
 
+    /** A stock preset or custom slot: the whole curve goes out as `4F 10`. */
+    fun setDspPreset(preset: DspEq.Preset) {
+        update { withDspPreset(preset) }
+        send(McuSetupProtocol.dspEq(_setup.value.dspEq))
+    }
+
+    /** One band: `4F 11`, as the DSP app sent while dragging. */
+    fun setDspBand(band: Int, gain: Int) {
+        if (band !in 0 until DspEq.BANDS) {
+            return
+        }
+
+        update { withDspBand(band, gain) }
+        send(McuSetupProtocol.dspEqBand(band, gain))
+    }
+
+    /** Save the curve to a custom slot and select it; stock re-sends the whole curve here. */
+    fun saveDspCustom(slot: Int) {
+        update { withDspCustomSaved(slot) }
+        send(McuSetupProtocol.dspEq(_setup.value.dspEq))
+    }
+
+    /** Flat EQ and DSP loudness off; the custom slots stay. */
+    fun resetDsp() {
+        update { dspReset() }
+        send(McuSetupProtocol.dspEq(DspEq.FLAT))
+        send(McuSetupProtocol.dspLoud(false))
+    }
+
     /** The test tone, whatever the key-beep setting says (the vendor's `beep()` gated on it). */
     fun beep() {
         send(McuSetupProtocol.beep())

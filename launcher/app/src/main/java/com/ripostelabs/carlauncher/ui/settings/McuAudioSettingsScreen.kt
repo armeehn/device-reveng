@@ -1,5 +1,9 @@
 package com.ripostelabs.carlauncher.ui.settings
 
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Bluetooth
@@ -15,7 +19,16 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ripostelabs.carlauncher.carlib.DspEq
 import com.ripostelabs.carlauncher.carlib.McuSetup
 import com.ripostelabs.carlauncher.carlib.McuSetupStore
 import com.ripostelabs.carlauncher.carlib.BAL_FAD_HALF
@@ -35,8 +48,49 @@ fun McuAudioSettingsScreen(
 ) {
     val setup by store.setup.collectAsStateWithLifecycle()
 
+    var editBands by remember { mutableStateOf(false) }
+
     SettingsScaffold(title = "Audio & EQ", onBack = onBack) {
-        SettingsSection(title = "Equalizer") {
+        // The GT6 sound path: the DSP app's 48-band EQ, re-sent at every boot (RAV4-154).
+        SettingsSection(title = "DSP equalizer") {
+            PickerSetting(
+                label = "Preset",
+                current = setup.dspPreset,
+                options = DSP_PRESETS,
+                onSelect = { index -> DspEq.Preset.of(index)?.let(store::setDspPreset) },
+            )
+            DspCurve(setup.dspEq)
+            ToggleSetting(
+                label = "Edit bands",
+                description = "48 bands, 16 Hz to 18 kHz, -10 to +10 dB",
+                checked = editBands,
+                onChange = { editBands = it },
+            )
+            if (editBands) {
+                setup.dspEq.forEachIndexed { band, gain ->
+                    SliderSetting(
+                        label = "${DspEq.FREQUENCIES[band]} Hz",
+                        value = gain,
+                        range = DSP_GAIN_RANGE,
+                        onChange = { store.setDspBand(band, it) },
+                        format = ::toneLabel,
+                    )
+                }
+            }
+            PickerSetting(
+                label = "Save curve to",
+                current = DspEq.EDITED,
+                options = DSP_SLOTS,
+                onSelect = store::saveDspCustom,
+            )
+            ActionRow(
+                label = "Reset sound",
+                description = "Flat EQ and DSP loudness off; custom slots stay",
+                onClick = store::resetDsp,
+            )
+        }
+
+        SettingsSection(title = "Amp equalizer") {
             PickerSetting(
                 label = "EQ preset",
                 current = setup.eqMode,
@@ -126,6 +180,38 @@ fun McuAudioSettingsScreen(
     }
 }
 
+/** The 48-band curve as a line, flat in the middle, like the stock DSP app's chart. */
+@Composable
+private fun DspCurve(curve: List<Int>) {
+    val line = MaterialTheme.colorScheme.primary
+    val axis = MaterialTheme.colorScheme.outlineVariant
+
+    Canvas(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(CURVE_HEIGHT)
+            .padding(vertical = 8.dp),
+    ) {
+        val mid = size.height / 2
+        drawLine(axis, Offset(0f, mid), Offset(size.width, mid))
+
+        // One point per band, x evenly spread, y from +10 dB (top) to -10 dB (bottom).
+        val dx = size.width / (curve.size - 1).coerceAtLeast(1)
+        val scale = mid / DspEq.GAIN_MAX
+        val path = Path()
+        curve.forEachIndexed { band, gain ->
+            val x = band * dx
+            val y = mid - gain * scale
+            if (band == 0) {
+                path.moveTo(x, y)
+            } else {
+                path.lineTo(x, y)
+            }
+        }
+        drawPath(path, line, style = Stroke(width = 3.dp.toPx()))
+    }
+}
+
 @Composable
 private fun ToneSlider(label: String, value: Int, onChange: (Int) -> Unit) {
     SliderSetting(
@@ -152,6 +238,16 @@ private val TONE_RANGE = -McuSetup.CENTRE..McuSetup.CENTRE
 
 /** The centred -10..10 the balance sliders show for the DSP's 0..20 (see BalanceFaderMappingTest). */
 private val BAL_FAD_RANGE = -BAL_FAD_HALF..BAL_FAD_HALF
+
+/** Stock DSP presets by their saved index; "Edited" is the curve after a band move. */
+private val DSP_PRESETS: List<Pair<Int, String>> =
+    listOf(DspEq.EDITED to "Edited") + DspEq.Preset.values().map { it.index to it.label }
+
+private val DSP_SLOTS: List<Pair<Int, String>> = List(DspEq.CUSTOM_SLOTS) { it to "Custom ${it + 1}" }
+
+private val DSP_GAIN_RANGE = DspEq.GAIN_MIN..DspEq.GAIN_MAX
+
+private val CURVE_HEIGHT = 96.dp
 
 /** The vendor slider's span (`ItemSeekBarView`), the same the gateway path offered. */
 private val SUBWOOFER_RANGE = 0..20

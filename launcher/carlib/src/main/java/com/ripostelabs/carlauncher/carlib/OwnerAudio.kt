@@ -24,7 +24,8 @@ data class AudioState(
  * The vendor getters returned cached fields that both its `send*` calls and its `onCmd*Event`
  * handlers wrote (sendEQMode :4292, sendBalFadValue :9441, sendSndSWVol :9543, reports
  * :2894-2990). This cache does the same. The subwoofer level has no report, so it is only
- * ever what was last sent. Loudness has no setter: the only frame is the `08 0D` toggle key.
+ * ever what was last sent. Amp loudness has no setter: the only frame is the `08 0D` toggle key.
+ * DSP loudness (`4F 0E`) is a setter; [McuSetupStore.setDspLoud] owns it.
  */
 class OwnerAudio(private val send: (ByteArray) -> Unit) : McuOwner.Listener {
 

@@ -50,7 +50,6 @@ object McuOwnerProtocol {
     private const val OP_CONFIG = 0x4F        // sendFactoryMcuSet and the other 4F sub-id blocks
     private const val OP_SYS_CONFIG = 0x49    // sendSleepTime :9361, sendVolumeGain :9662: `49 sub-id ...`
     private const val CFG_SLEEP_TIME = 0x05   // sendSleepTime's sub-id (:9370)
-    private const val CFG_FADER = 0x10        // the 48-byte fader/volume table, all 0x0a on this unit
     private const val BT_STATE_ON = 1         // sendBTState(1), sent after the config blocks
 
     /**
@@ -187,6 +186,8 @@ object McuOwnerProtocol {
         val sleepTime: SleepTime = SleepTime.H8,
         /** The setup table to re-send, as the vendor did from SysVar; null sends none ([McuSetupProtocol.boot]). */
         val setup: McuSetup? = null,
+        /** The table as it is now, read at each send so a wake carries changes since boot; wins over [setup]. */
+        val setupSource: (() -> McuSetup)? = null,
         /**
          * The SysVar rows the `0F` factory set and ACC delay are built from ([McuFactorySet.boot]),
          * read at each send so a wake re-sends what the user set since boot; null sends neither.
@@ -347,7 +348,7 @@ object McuOwnerProtocol {
         mode(Mode.MCU_VERSION),
         setup(SETUP_RDS, if (config.rds) 0 else 1),
         setup(SETUP_ZONE, config.radioZone),
-    ) + setupAndFactory(config) + vendorInit() + listOfNotNull(
+    ) + setupAndFactory(config) + vendorInit(config.currentSetup()) + listOfNotNull(
         // sendSleepTime sits between the config blocks and sendBacklight (:3797-3798).
         sleepTime(config.sleepTime),
         backlight(config.backlightDay, config.backlightNight),
@@ -366,12 +367,16 @@ object McuOwnerProtocol {
      * raises an interrupt, while 0.1 (eventcenter) is fine on the same kernel; one of these is
      * the suspected enable (RAV4-84).
      */
-    fun vendorInit(): List<ByteArray> = configBlocks() + btState(BT_STATE_ON)
+    fun vendorInit(setup: McuSetup? = null): List<ByteArray> = configBlocks(setup) + btState(BT_STATE_ON)
 
-    /** The `4F` blocks alone: `reloadParam` re-sends these without the BT state (:3622-3632). */
-    private fun configBlocks(): List<ByteArray> = listOf(
-        McuSerial.encode(OP_CONFIG, bytes(CFG_FADER) + ByteArray(48) { 0x0a }),
-        McuSerial.encode(OP_CONFIG, bytes(0x0e, 0x00)),
+    /**
+     * The `4F` blocks alone: `reloadParam` re-sends these without the BT state (:3622-3632).
+     * They are the DSP app's boot burst (DspService.java:64-83). The EQ (`4F 10`) and loudness
+     * (`4F 0E`) carry the saved sound; with no table they are the flat defaults stock shipped.
+     */
+    private fun configBlocks(setup: McuSetup?): List<ByteArray> = listOf(
+        McuSetupProtocol.dspEq(setup?.dspEq ?: DspEq.FLAT),
+        McuSetupProtocol.dspLoud(setup?.dspLoud ?: false),
         McuSerial.encode(OP_CONFIG, bytes(0x14, 0x4e, 0x20, 0x00, 0x14, 0x4e, 0x20, 0x00, 0x14, 0x00, 0x00)),
         McuSerial.encode(OP_CONFIG, bytes(0x15, 0xfa, 0x0c, 0x00, 0x00, 0x00)),
         McuSerial.encode(OP_CONFIG, bytes(0x12, 0x00, 0x00, 0x00, 0x00, 0x00)),
@@ -413,7 +418,7 @@ object McuOwnerProtocol {
     fun reload(config: StartupConfig, lastMode: Mode?): List<ByteArray> = listOf(
         mode(Mode.POWER_ON),
         mode(Mode.MCU_VERSION),
-    ) + setupAndFactory(config) + configBlocks() + listOf(
+    ) + setupAndFactory(config) + configBlocks(config.currentSetup()) + listOf(
         sleepTime(config.sleepTime),
         backlight(config.backlightDay, config.backlightNight),
         mode(Mode.POWER_ON),
@@ -456,7 +461,9 @@ object McuOwnerProtocol {
 
     /** The typed setup frames both boot and wake re-send (reloadParam, :3627-3632), when there is a table. */
     private fun setupTable(config: StartupConfig): List<ByteArray> =
-        config.setup?.let(McuSetupProtocol::boot) ?: emptyList()
+        config.currentSetup()?.let(McuSetupProtocol::boot) ?: emptyList()
+
+    private fun StartupConfig.currentSetup(): McuSetup? = setupSource?.invoke() ?: setup
 
     /** The setup table with `0F` and the ACC delay after the key beep, sendFactorySet's order (:9924-9927). */
     private fun setupAndFactory(config: StartupConfig): List<ByteArray> {

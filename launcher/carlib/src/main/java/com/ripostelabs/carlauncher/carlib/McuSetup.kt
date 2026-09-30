@@ -28,7 +28,43 @@ data class McuSetup(
     val hostDefaultVolume: Int = DEFAULT_HOST_VOLUME,
     val gains: SourceGains = SourceGains(),
     val dspLoud: Boolean = false,
+    /** The DSP app's 48-band curve in dB, -10..10 ([DspEq]); boot re-sends it as `4F 10`. */
+    val dspEq: List<Int> = DspEq.FLAT,
+    /** The stock preset index ([DspEq.Preset.index]), or [DspEq.EDITED] after a band edit. */
+    val dspPreset: Int = DspEq.Preset.FLAT.index,
+    /** The three custom curves, stock's sp_eq_mode_custom1..3_two. */
+    val dspCustom: List<List<Int>> = List(DspEq.CUSTOM_SLOTS) { DspEq.FLAT },
 ) {
+    /** A preset or custom slot loads its whole curve (EqModel_Two_48.setMode, :180-188). */
+    fun withDspPreset(preset: DspEq.Preset): McuSetup {
+        val curve = preset.curve ?: preset.slot?.let { dspCustom.getOrNull(it) } ?: DspEq.FLAT
+
+        return copy(dspEq = curve, dspPreset = preset.index)
+    }
+
+    /** One band moved; no preset is selected any more (setEqValue, :78-101). */
+    fun withDspBand(band: Int, gain: Int): McuSetup {
+        if (band !in dspEq.indices) {
+            return this
+        }
+
+        val curve = dspEq.toMutableList().also { it[band] = DspEq.clamp(gain) }
+        return copy(dspEq = curve, dspPreset = DspEq.EDITED)
+    }
+
+    /** The current curve into a custom slot, which becomes the preset (saveCustomerEqValues, :103-120). */
+    fun withDspCustomSaved(slot: Int): McuSetup {
+        if (slot !in dspCustom.indices) {
+            return this
+        }
+
+        val slots = dspCustom.toMutableList().also { it[slot] = dspEq }
+        return copy(dspCustom = slots, dspPreset = DspEq.Preset.custom(slot).index)
+    }
+
+    /** The EQ page's default button (EqFragment_two_48.java:546-551): flat, loudness off, slots kept. */
+    fun dspReset(): McuSetup = copy(dspEq = DspEq.FLAT, dspPreset = DspEq.Preset.FLAT.index, dspLoud = false)
+
     /** The key-press beep the MCU plays on a panel touch (`Set_TouchBeep`). */
     enum class Beep { ON, OFF }
 
@@ -86,7 +122,9 @@ data class McuSetup(
         KEY_GAIN_USB to "${gains.usb}",
         KEY_GAIN_OTHER to "${gains.other}",
         KEY_DSP_LOUD to flag(dspLoud),
-    )
+        KEY_DSP_EQ to DspEq.row(dspEq),
+        KEY_DSP_PRESET to "$dspPreset",
+    ) + KEY_DSP_CUSTOM.zip(dspCustom.map(DspEq::row))
 
     companion object {
         /** Tone runs 0..14 with the centre at 7 (mBassVal etc. default 7, :6718). */
@@ -125,6 +163,11 @@ data class McuSetup(
         const val KEY_GAIN_USB = "Sys_Car_USB_Volume_Gain"
         const val KEY_GAIN_OTHER = "Sys_Other_Volume_Gain"
         const val KEY_DSP_LOUD = "Set_Dsp_Loud_On_Off_Key"
+
+        // The DSP app's own ShareUtil keys (com.choiceway.dsp Constants.java:109-125).
+        const val KEY_DSP_EQ = "sp_eq_values_two_48"
+        const val KEY_DSP_PRESET = "sp_eq_mode_index_two"
+        val KEY_DSP_CUSTOM = listOf("sp_eq_mode_custom1_two", "sp_eq_mode_custom2_two", "sp_eq_mode_custom3_two")
 
         private const val TRUE = "1"
         private const val FALSE = "0"
@@ -176,6 +219,9 @@ data class McuSetup(
                     other = int(KEY_GAIN_OTHER, DEFAULT_GAIN),
                 ),
                 dspLoud = bool(KEY_DSP_LOUD, defaults.dspLoud),
+                dspEq = DspEq.parse(rows[KEY_DSP_EQ]),
+                dspPreset = int(KEY_DSP_PRESET, defaults.dspPreset),
+                dspCustom = KEY_DSP_CUSTOM.map { DspEq.parse(rows[it]) },
             )
         }
     }

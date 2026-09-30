@@ -444,6 +444,7 @@ class MainActivity : ComponentActivity() {
                     radioZone = radioMemory.zone(),
                     sleepTime = McuSetupProtocol.sleepOption(setupStore.setup.value.sleepTime),
                     setup = setupStore.setup.value,
+                    setupSource = { setupStore.setup.value },
                     factoryRows = { SysVarLocalStore.prefs(applicationContext).readAll() },
                 ),
             )

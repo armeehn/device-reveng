@@ -37,6 +37,8 @@ object McuSetupProtocol {
     private const val TIMER_ACC_DELAY = 0x17   // :3171
     private const val CONFIG_HOST_VOLUME = 0x05 // :3162
     private const val CONFIG_DSP_LOUD = 0x0E   // :15053
+    private const val CONFIG_DSP_EQ = 0x10     // DSP EqModel_Two_48.sendEq, :200-207
+    private const val CONFIG_DSP_BAND = 0x11   // DSP EqModel_Two_48.sendEq(int), :162-164
 
     /** `SYS_LOUD` (EventUtils.java:1790): the system key that flips loudness; the MCU answers `7B`. */
     private const val SYSTEM_KEY_LOUDNESS = 13
@@ -53,6 +55,17 @@ object McuSetupProtocol {
     /** `2F balance fader`, 0..20 with 10 at centre (DSP BalanceModel_two :56-69; sendBalFadValue :9440). */
     fun balanceFader(balance: Int, fader: Int): ByteArray =
         McuSerial.encode(OP_BALANCE_FADER, bytes(balance, fader))
+
+    /** `4F 10 g0..g47`: the DSP app's 48-band EQ, each band gain + 10 (sendEq, :200-207). */
+    fun dspEq(curve: List<Int>): ByteArray {
+        val wire = IntArray(DspEq.BANDS) { DspEq.clamp(curve.getOrElse(it) { 0 }) - DspEq.GAIN_MIN }
+
+        return McuSerial.encode(OP_CONFIG, bytes(CONFIG_DSP_EQ, *wire))
+    }
+
+    /** `4F 11 band gain+10`: one band while the user drags it (sendEq(int), :162-164). */
+    fun dspEqBand(band: Int, gain: Int): ByteArray =
+        McuSerial.encode(OP_CONFIG, bytes(CONFIG_DSP_BAND, band, DspEq.clamp(gain) - DspEq.GAIN_MIN))
 
     /** `09 mode` (sendEQMode, :4291). The preset curves are the MCU's; 0 is the user curve. */
     fun eqMode(mode: Int): ByteArray = McuSerial.encode(OP_EQ_MODE, bytes(mode))
