@@ -179,3 +179,16 @@ service riposte_ais /system/bin/sh /system/bin/riposte-ais.sh
 
 on property:sys.boot_completed=1 && property:ro.riposte.os.car_owner=1
     start riposte_ais
+
+# Car-owner builds: the private link to the owner's server for the launcher's uplink
+# (riposte-uplink.sh: userspace tailscaled, shields up, SOCKS5 on 127.0.0.1:1055; see
+# os/uplink/README.md). Not oneshot, so init restarts it if the daemon exits.
+service riposte_uplink /system/bin/sh /system/bin/riposte-uplink.sh
+    class main
+    user root
+    group root inet
+    seclabel u:r:su:s0
+    disabled
+
+on property:sys.boot_completed=1 && property:ro.riposte.os.car_owner=1
+    start riposte_uplink
