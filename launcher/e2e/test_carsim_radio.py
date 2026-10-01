@@ -37,7 +37,7 @@ AM_START = "530 kHz"
 STATION = "CBC R1"
 
 SUITE_RADIO = "com.ripostelabs.radio"
-HOME_CARD_IDLE = "Radio unavailable"
+HOME_CARD_IDLE = "Radio idle. Tap to tune."
 
 # What crosses the wire, as carsim logs it (McuOwnerProtocol: 02 11 seek up, 02 1F AM).
 WIRE_CLAIM = "mcu rx MODE 01"

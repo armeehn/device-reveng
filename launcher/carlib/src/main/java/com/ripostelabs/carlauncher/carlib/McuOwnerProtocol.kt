@@ -261,7 +261,8 @@ object McuOwnerProtocol {
 
         /**
          * Sub 1 and 7 (onRadioBndNum, :2786-2799): byte 2 the band, byte 3 the preset slot. Each
-         * is taken only when in range, independently, so either may be null here.
+         * is taken only when in range, independently, so either may be null here. This MCU
+         * sends the band alone (`73 01 band`), so [preset] is null on the car.
          */
         data class Band(val band: Int?, val preset: Int?) : RadioEvent()
 
@@ -638,11 +639,13 @@ object McuOwnerProtocol {
             }
 
             RADIO_BAND, RADIO_BAND_ALT -> {
-                if (p.size < 3) {
+                if (p.size < 2) {
                     return null
                 }
+                // This MCU sends `73 01 band` with no preset byte (stock: 0x73 0x01 0x00 CK);
+                // the slot comes in its own sub 2 frame. A third byte, when present, is the slot.
                 val band = at(1).takeIf { it <= RADIO_BAND_MAX }
-                val preset = at(2).takeIf { it < RADIO_PRESET_COUNT }
+                val preset = if (p.size < 3) null else at(2).takeIf { it < RADIO_PRESET_COUNT }
                 if (band == null && preset == null) {
                     return null
                 }

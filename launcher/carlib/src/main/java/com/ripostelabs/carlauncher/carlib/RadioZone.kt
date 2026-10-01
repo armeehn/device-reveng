@@ -130,6 +130,27 @@ class RadioZone private constructor(
             ),
         )
 
+        /** Below this a frequency is AM kHz: the lowest FM value any zone tunes is OIRT 65.00 MHz. */
+        private const val FM_FLOOR = 6500
+
+        /**
+         * The band the tuner is on, judged against its frequency. A band report can be missed or
+         * stale; the frequency's units cannot lie, so 530 under FM1 is AM1 and 96.30 under AM2
+         * is FM1 (the car showed "5.30 MHz" on AM on 2026-09-30). An agreeing band is kept.
+         */
+        fun bandFor(band: Int, freq: Int): Int {
+            if (freq <= 0) {
+                return band
+            }
+
+            val amFreq = freq < FM_FLOOR
+            if (amFreq == CarService.isAmBand(band)) {
+                return band
+            }
+
+            return if (amFreq) FIRST_AM_BAND else 0
+        }
+
         /** The zone for a `KEY_RADIO_ZONE_SETTINGS` value; anything off the table reads as 0, the vendor default. */
         fun of(id: Int): RadioZone = ZONES.getOrElse(id) { ZONES[0] }
 

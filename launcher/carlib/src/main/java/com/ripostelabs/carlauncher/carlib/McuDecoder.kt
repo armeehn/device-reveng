@@ -38,7 +38,7 @@ class McuDecoder(private val listener: McuOwner.Listener) {
         McuOwnerProtocol.panelKey(command)?.let { onPanelKey(it); return }
         McuOwnerProtocol.wheelKey(command)?.let { listener.onWheelKey(it); return }
         McuOwnerProtocol.wheelState(command)?.let { listener.onWheelState(it); return }
-        McuOwnerProtocol.radioEvent(command)?.let { listener.onRadio(it); return }
+        McuOwnerProtocol.radioEvent(command)?.let { onRadio(it); return }
         McuOwnerProtocol.rtcTime(command)?.let { listener.onRtc(it); return }
         McuOwnerProtocol.mcuVersion(command)?.let { listener.onMcuVersion(it); return }
         McuSetupProtocol.audioReport(command)?.let { listener.onAudio(it); return }
@@ -62,6 +62,14 @@ class McuDecoder(private val listener: McuOwner.Listener) {
                 command.opcode, command.payload.size, command.payload.joinToString(" ") { "%02X".format(it) }))
         }
         listener.onOther(command)
+    }
+
+    /** Band reports are rare (a key press each) and the car log is the only proof of the MCU's cycle. */
+    private fun onRadio(event: McuOwnerProtocol.RadioEvent) {
+        if (event is McuOwnerProtocol.RadioEvent.Band) {
+            Log.i(LOG_TAG, "radio band ${event.band} preset ${event.preset}")
+        }
+        listener.onRadio(event)
     }
 
     private fun onRelayed(inner: McuFrame.Decoded) {
