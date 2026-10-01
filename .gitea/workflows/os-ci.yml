@@ -22,7 +22,8 @@ jobs:
       - name: Syntax
         run: |
           for f in os/*.sh; do bash -n "$f"; done
-          python3 -m py_compile os/*.py
+          python3 -m py_compile os/*.py os/uplink/*.py
+          bash -n os/uplink/*.sh
       - name: edl-extents
         run: os/test-edl-extents.sh
       - name: edl-restore
@@ -55,6 +56,11 @@ jobs:
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
           os/test-car-update.sh
+      - name: uplink init script (pin, flags, key file)
+        run: os/test-uplink.sh
+      - name: car ingest service
+        run: python3 -m unittest -v
+        working-directory: os/uplink
       - name: touchswap compiles
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq gcc-aarch64-linux-gnu

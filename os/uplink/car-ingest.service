@@ -1,0 +1,24 @@
+# The car ingest service. Install with os/uplink/install-ingest.sh, which writes the
+# arguments (share folders, the tailnet address, the tailscaled socket) into
+# /etc/default/car-ingest. It binds the tailnet address only, never 0.0.0.0.
+[Unit]
+Description=Car ingest: road-noise and diag uploads over the tailnet
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=sasha
+Group=smbshare
+UMask=0002
+EnvironmentFile=/etc/default/car-ingest
+ExecStart=/usr/bin/python3 /usr/local/lib/car-ingest/ingest.py $INGEST_ARGS
+StateDirectory=car-ingest
+Restart=always
+RestartSec=5
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target
