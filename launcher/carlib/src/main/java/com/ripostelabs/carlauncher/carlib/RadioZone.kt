@@ -42,15 +42,27 @@ class RadioZone private constructor(
         (fmBank + fmBank + fmBank + amBank + amBank + List(EMPTY_TAIL) { 0 })
 
     /**
-     * The regions the vendor radio's picker steps through, in its `radio_zone` order (Europe,
-     * N. America, S. America, Russia, Japan). The settings app labels 3 and 4 the other way
-     * round, but the radio's band plans agree with this order: 3 is OIRT, 4 is 76-90 MHz.
+     * The FM station to tune after switching to this zone: the bottom of FM when coming from
+     * AM, else [freq] clamped and snapped onto this zone's FM grid.
+     */
+    fun entryFreq(onAm: Boolean, freq: Int): Int = if (onAm) fm.min else fm.snap(freq)
+
+    /**
+     * The regions the vendor radio's picker steps through, in its `radio_zone` order. The MCU
+     * takes 0..4 and nothing else (the gateway clamps), so these five are every plan it has.
+     * Labels name where each plan is right, from the band plans in radio-bands.md:
+     *
+     *     0  9 kHz AM, FM 87.5-108     ITU Regions 1 and 3 (GE75, GE84), Australia
+     *     1  10 kHz AM, FM odd tenths  US and Canada (47 CFR 73.14, 73.201)
+     *     2  10 kHz AM, FM 100 kHz     the rest of ITU Region 2
+     *     3  OIRT FM 65-74             the legacy Soviet band; modern Russian FM is zone 0
+     *     4  FM 76-90                  Japan
      */
     enum class Region(val id: Int, val label: String) {
-        EUROPE(0, "Europe"),
+        EUROPE(0, "Europe, Africa, Asia, Australia"),
         NORTH_AMERICA(1, "North America"),
-        SOUTH_AMERICA(2, "South America"),
-        RUSSIA(3, "Russia"),
+        SOUTH_AMERICA(2, "Latin America"),
+        RUSSIA(3, "Russia, OIRT 65-74 MHz"),
         JAPAN(4, "Japan"),
         ;
 
