@@ -118,6 +118,7 @@ class UiSourceAuditTest {
         "LauncherPrefsScreen.kt", // tick beside "Car Launcher is your default home."
         "MediaCard.kt", // album art and transport glyphs, each labelled by neighbouring text
         "MediaScreen.kt", // blurred art wash, album art, and the empty-art music note
+        "MicSettingsRow.kt", // chevron after the "Microphone" row's own label
         "NavCard.kt", // manoeuvre, speed and header glyphs beside their own readouts
         "OnboardingScreen.kt", // step hero icons and the glyph inside a labelled pill button
         "ParkedOnly.kt", // car glyph over the "Available when parked" heading
