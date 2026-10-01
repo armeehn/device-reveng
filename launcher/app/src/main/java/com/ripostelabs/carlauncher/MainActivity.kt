@@ -771,7 +771,9 @@ class MainActivity : ComponentActivity() {
             launch = appRepository::launch,
         )
         lifecycleScope.launch {
-            carEvents.reverse.collect { on ->
+            // inReverse, not the raw wire: with "Wire or CAN gear" and no wire, CAN reverse
+            // must close the strip too (ReverseReadersAuditTest).
+            inReverse.collect { on ->
                 if (on) {
                     navBar.hotbar?.close() // reverse owns the screen
                 }
