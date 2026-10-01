@@ -8,7 +8,8 @@ the caller's tailnet identity is the credential. Every request asks the local ta
     car (tag:car) ──tailnet──► ingest :8797 ──► <noise root>/<day>/<id>.wav + .json
                                     │              <noise root>/index.jsonl
                                     │          ──► <diag root>/<day>/<device>/<name>
-                                    └─ GET /v1/models/** read-only from <models root>
+                                    ├─ GET /v1/models/** read-only from <models root>
+                                    └─ GET /v1/releases/** the APKs the car may install
 
 Uploads are content addressed by sha256, so a capture has the same address before and
 after a reboot, and a resume needs no server-issued id:
@@ -19,6 +20,8 @@ after a reboot, and a resume needs no server-issued id:
           -> 204 + Upload-Offset, or 200 {"complete": true, "sha256"} on the last chunk
     GET   /v1/wants                   the trainer's wants.json plus have_s per band
     GET   /v1/models/<path>           Range supported
+    GET   /v1/releases/manifest.json  launcher, car service and suite: versionCode, sha256, cert
+    GET   /v1/releases/<path>.apk     a file the manifest names, Range supported
     GET   /v1/health
 
 A file reaches the share only after its sha256 matches. Partials live in the state dir,
@@ -41,6 +44,8 @@ import threading
 import time
 import urllib.parse
 
+import apkinfo
+
 KINDS = ("road-noise", "diag")
 
 # Per-file ceilings. A 30 s capture is 2.9 MB; a log ring file is a few MB.
@@ -60,6 +65,11 @@ ID_HEX = 16
 SHA_RE = re.compile(r"^[0-9a-f]{64}$")
 NAME_RE = re.compile(r"[^A-Za-z0-9._-]")
 WHOIS_TTL_S = 60
+
+RELEASES_SCHEMA = "riposte-releases/1"
+SUITE_DIR = "suite"
+LAUNCHER_RE = re.compile(r"^carlauncher-.+-vc(\d+)\.apk$")
+CARSERVICE_RE = re.compile(r"^carservice-.+-vc(\d+)\.apk$")
 
 HTTP_OK = 200
 HTTP_CREATED = 201
@@ -82,7 +92,7 @@ IP_FREEBIND = 15
 class Config:
     def __init__(self, noise_root, diag_root, models_root, state_dir, host, port,
                  allowed_tags=("tag:car",), daily_device_bytes=1024 * 1024 * 1024,
-                 min_free_bytes=20 * 1024 * 1024 * 1024):
+                 min_free_bytes=20 * 1024 * 1024 * 1024, releases_root=None, suite_root=None):
         self.noise_root = noise_root
         self.diag_root = diag_root
         self.models_root = models_root
@@ -92,6 +102,8 @@ class Config:
         self.allowed_tags = set(allowed_tags)
         self.daily_device_bytes = daily_device_bytes
         self.min_free_bytes = min_free_bytes
+        self.releases_root = releases_root
+        self.suite_root = suite_root
 
 
 class Peer:
@@ -400,6 +412,80 @@ class Store:
         return out
 
 
+class Releases:
+    """The release manifest, built from the folders `rav4 publish` fills.
+
+        <releases root>/carlauncher-<name>-vc<code>.apk   newest one is the launcher
+        <releases root>/carservice-<name>-vc<code>.apk    newest one is the car service
+        <suite root>/<package>.apk                        every suite app
+
+    Each APK is read once per (size, mtime): package, versionCode, sha256, signing cert.
+    A file that does not parse (half copied, not an APK) is left out of the manifest.
+    """
+
+    def __init__(self, cfg):
+        self.cfg = cfg
+        self.cache = {}
+        self.lock = threading.Lock()
+
+    def _info(self, path):
+        st = os.stat(path)
+        key = (path, st.st_size, st.st_mtime_ns)
+        with self.lock:
+            hit = self.cache.get(key)
+        if hit is not None:
+            return hit
+        try:
+            info = apkinfo.read(path)
+        except (apkinfo.ApkError, OSError, IndexError, struct.error) as e:
+            print(f"releases: skipped {path}: {e}", flush=True)
+            info = None
+        with self.lock:
+            self.cache = {k: v for k, v in self.cache.items() if k[0] != path}
+            self.cache[key] = info
+        return info
+
+    @staticmethod
+    def _newest(root, pattern):
+        best = None
+        for name in os.listdir(root):
+            m = pattern.match(name)
+            if m and (best is None or int(m.group(1)) > best[0]):
+                best = (int(m.group(1)), name)
+        return best[1] if best else None
+
+    def _row(self, role, path, rel):
+        info = self._info(path)
+        if info is None or not info["package"] or info["version_code"] is None:
+            return None
+        return dict(info, role=role, path=rel)
+
+    def manifest(self):
+        rows = []
+        root = self.cfg.releases_root
+        if root and os.path.isdir(root):
+            for role, pattern in (("launcher", LAUNCHER_RE), ("carservice", CARSERVICE_RE)):
+                name = self._newest(root, pattern)
+                if name:
+                    rows.append(self._row(role, os.path.join(root, name), name))
+        suite = self.cfg.suite_root
+        if suite and os.path.isdir(suite):
+            for name in sorted(os.listdir(suite)):
+                if name.endswith(".apk") and not name.startswith("."):
+                    rows.append(self._row("suite", os.path.join(suite, name), f"{SUITE_DIR}/{name}"))
+        return {"schema": RELEASES_SCHEMA, "generated": iso(utc_now()), "apps": [r for r in rows if r]}
+
+    def file_root(self, rel):
+        """(root, parts) for a requested APK path, or None if it is not one we serve."""
+        if not rel or not rel[-1].endswith(".apk"):
+            return None
+        if rel[0] == SUITE_DIR and len(rel) == 2:
+            return self.cfg.suite_root, rel[1:]
+        if len(rel) == 1 and (LAUNCHER_RE.match(rel[0]) or CARSERVICE_RE.match(rel[0])):
+            return self.cfg.releases_root, rel
+        return None
+
+
 def tailnet_whois(socket_path, binary="tailscale"):
     """Ask the local tailscaled who owns an IP. Cached, because the car sends many chunks."""
     cache = {}
@@ -500,8 +586,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if parts == ["v1", "wants"]:
             return self._send(HTTP_OK, store.wants())
         if parts[:2] == ["v1", "models"] and len(parts) > 2:
-            return self._model(parts[2:])
+            return self._file(self.server.cfg.models_root, parts[2:])
+        if parts[:2] == ["v1", "releases"] and len(parts) > 2:
+            return self._release(parts[2:])
         raise Refused(HTTP_NOT_FOUND, "no such path")
+
+    def _release(self, rel):
+        releases = self.server.releases
+        cfg = self.server.cfg
+        if not cfg.releases_root and not cfg.suite_root:
+            raise Refused(HTTP_NOT_FOUND, "no releases on this server")
+        if rel == ["manifest.json"]:
+            return self._send(HTTP_OK, releases.manifest())
+        where = releases.file_root(rel)
+        if where is None or not where[0]:
+            raise Refused(HTTP_NOT_FOUND, "no such release file")
+        self._file(where[0], where[1])
 
     def _head(self, parts):
         kind, sha = self._upload_addr(parts)
@@ -540,11 +640,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._send(HTTP_NO_CONTENT, None, {"Upload-Offset": str(cur)})
         self._send(HTTP_OK, dict(done, complete=True), {"Upload-Offset": str(cur)})
 
-    def _model(self, rel):
-        root = os.path.realpath(self.server.cfg.models_root)
+    def _file(self, root, rel):
+        """One file under [root], read-only, with Range. Nothing outside [root] is reachable."""
+        root = os.path.realpath(root)
         path = os.path.realpath(os.path.join(root, *rel))
         if not path.startswith(root + os.sep) or not os.path.isfile(path):
-            raise Refused(HTTP_NOT_FOUND, "no such model file")
+            raise Refused(HTTP_NOT_FOUND, "no such file")
 
         size = os.path.getsize(path)
         start, end, status = 0, size - 1, HTTP_OK
@@ -599,6 +700,7 @@ def serve(cfg, whois):
     srv.cfg = cfg
     srv.whois = whois
     srv.store = Store(cfg)
+    srv.releases = Releases(cfg)
     return srv
 
 
@@ -614,6 +716,8 @@ def main():
     ap.add_argument("--allow-tag", action="append", default=None)
     ap.add_argument("--daily-device-mb", type=int, default=1024)
     ap.add_argument("--min-free-gb", type=int, default=20)
+    ap.add_argument("--releases-root", help="launcher and car service APKs (rav4 publish)")
+    ap.add_argument("--suite-root", help="suite APKs, one per package")
     a = ap.parse_args()
     if a.host in ("0.0.0.0", "::", ""):
         ap.error("bind the tailnet address only")
@@ -621,7 +725,8 @@ def main():
     cfg = Config(a.noise_root, a.diag_root, a.models_root, a.state_dir, a.host, a.port,
                  allowed_tags=a.allow_tag or ["tag:car"],
                  daily_device_bytes=a.daily_device_mb * 1024 * 1024,
-                 min_free_bytes=a.min_free_gb * 1024 * 1024 * 1024)
+                 min_free_bytes=a.min_free_gb * 1024 * 1024 * 1024,
+                 releases_root=a.releases_root, suite_root=a.suite_root)
     srv = serve(cfg, tailnet_whois(a.tailscale_socket))
     print(f"car-ingest on {a.host}:{a.port} for {sorted(cfg.allowed_tags)}", flush=True)
     srv.serve_forever()

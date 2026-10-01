@@ -98,6 +98,8 @@ class UplinkService : Service() {
             }
             scope.launch { captureLoop() }
             scope.launch { uploadLoop() }
+            // RAV4-270: release updates share the endpoint, the network type and the budget.
+            OtaUpdater(this, budget, ::link) { endpoint()?.let { RawHttp.of(it) } }.start(scope)
             Log.i(TAG, "uplink started (mic ${if (micGranted()) "granted" else "not granted"})")
         }
         return START_STICKY

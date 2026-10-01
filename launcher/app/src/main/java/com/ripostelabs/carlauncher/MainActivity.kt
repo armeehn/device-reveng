@@ -41,6 +41,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.ripostelabs.carlauncher.carlib.AndroidPanLink
 import com.ripostelabs.carlauncher.carlib.BtCallMcu
 import com.ripostelabs.carlauncher.carlib.BtCarKit
+import com.ripostelabs.carlauncher.service.OtaUpdater
 import com.ripostelabs.carlauncher.service.UplinkService
 import com.ripostelabs.carlauncher.service.UplinkSignals
 import com.ripostelabs.carlauncher.carlib.PhoneInternet
@@ -711,6 +712,12 @@ class MainActivity : ComponentActivity() {
         // car through this snapshot, never through a second CarEvents.
         UplinkSignals.bind(lifecycleScope, carEvents, btCarKit)
         UplinkService.start(this)
+        // RAV4-270: after a tailnet self-update, a launcher that stays up this long is kept; the
+        // watch script rolls back one that dies twice before it gets here.
+        lifecycleScope.launch {
+            delay(OtaUpdater.HEALTHY_AFTER_MS)
+            OtaUpdater.markHealthy(applicationContext)
+        }
         // RAV4-162: a contact's Call button (DialActivity) dials on this slot's stack and shows
         // the Phone screen, where the call's state and Hang up are.
         lifecycleScope.launch {

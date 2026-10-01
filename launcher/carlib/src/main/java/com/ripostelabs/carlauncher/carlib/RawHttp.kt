@@ -22,9 +22,22 @@ class RawHttp(
     private val port: Int,
     private val proxy: Proxy = Proxy.NO_PROXY,
     private val timeoutMs: Int = TIMEOUT_MS,
-) : UplinkClient.Http {
+) : UplinkClient.Http, ApkFetch.Http {
 
     override fun send(method: String, path: String, headers: Map<String, String>, body: ByteArray?): UplinkClient.Reply {
+        val raw = exchange(method, path, headers, body)
+        return UplinkClient.Reply(raw.status, raw.headers, String(raw.body, Charsets.UTF_8))
+    }
+
+    /** Bytes [from, to] of a release file (os/uplink/ingest.py, GET /v1/releases/<path>). */
+    override fun range(path: String, from: Long, to: Long): ApkFetch.Reply {
+        val raw = exchange("GET", "$RELEASES/$path", mapOf("Range" to "bytes=$from-$to"), null)
+        return ApkFetch.Reply(raw.status, raw.body)
+    }
+
+    private class Raw(val status: Int, val headers: Map<String, String>, val body: ByteArray)
+
+    private fun exchange(method: String, path: String, headers: Map<String, String>, body: ByteArray?): Raw {
         Socket(proxy).use { socket ->
             socket.soTimeout = timeoutMs
             // The endpoint is an IP literal, so no lookup happens here or in the proxy.
@@ -46,7 +59,7 @@ class RawHttp(
         }
     }
 
-    private fun read(input: InputStream, method: String): UplinkClient.Reply {
+    private fun read(input: InputStream, method: String): Raw {
         val status = line(input) ?: throw IOException("no reply")
         val code = status.split(' ').getOrNull(1)?.toIntOrNull() ?: throw IOException("bad status: $status")
         val headers = mutableMapOf<String, String>()
@@ -61,11 +74,11 @@ class RawHttp(
             }
         }
         if (method == "HEAD" || code == NO_CONTENT) {
-            return UplinkClient.Reply(code, headers, "")
+            return Raw(code, headers, ByteArray(0))
         }
         val length = headers["content-length"]?.toIntOrNull()
         val body = if (length != null) exactly(input, length) else input.readBytes()
-        return UplinkClient.Reply(code, headers, String(body, Charsets.UTF_8))
+        return Raw(code, headers, body)
     }
 
     private fun line(input: InputStream): String? {
@@ -98,6 +111,7 @@ class RawHttp(
     companion object {
         const val TIMEOUT_MS = 30_000
         private const val NO_CONTENT = 204
+        private const val RELEASES = "/v1/releases"
 
         /** The local tailscaled's SOCKS5 port (os/overlay riposte-uplink.sh). */
         val TAILNET: Proxy = Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", 1055))
