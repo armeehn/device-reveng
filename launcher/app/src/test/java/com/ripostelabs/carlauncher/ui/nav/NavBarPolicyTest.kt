@@ -38,6 +38,28 @@ class NavBarPolicyTest {
     }
 
     @Test
+    fun projectionWithoutASessionKeepsTheBar() {
+        // No iPhone yet: CarPlay draws no Home of its own, so the bar is the only way out (car, 2026-10-01).
+        val p = NavBarPolicy(NavBarMode.AUTO_HIDE, SELF) { Projection.IDLE }
+
+        assertEquals(NavBarState.EXPANDED, p.onForeground(NavBarPolicy.PROJECTION_PACKAGE))
+        assertTrue(p.armsTimer())
+    }
+
+    @Test
+    fun aSessionStartingHidesTheBarAndADropBringsItBack() {
+        var session = Projection.IDLE
+        val p = NavBarPolicy(NavBarMode.AUTO_HIDE, SELF) { session }
+        p.onForeground(NavBarPolicy.PROJECTION_PACKAGE)
+
+        session = Projection.LIVE
+        assertEquals(NavBarState.HIDDEN, p.onPoll(NavBarPolicy.PROJECTION_PACKAGE))
+
+        session = Projection.IDLE
+        assertEquals(NavBarState.EXPANDED, p.onPoll(NavBarPolicy.PROJECTION_PACKAGE))
+    }
+
+    @Test
     fun alwaysShownStillYieldsToProjection() {
         val p = NavBarPolicy(NavBarMode.ALWAYS_SHOWN, SELF)
 

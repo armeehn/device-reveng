@@ -133,6 +133,7 @@ import com.ripostelabs.carlauncher.data.SettingsStore // v0.6
 import com.ripostelabs.carlauncher.data.SystemChrome // v2.5
 import com.ripostelabs.carlauncher.nav.NavRepository
 import com.ripostelabs.carlauncher.ui.nav.NavBar
+import com.ripostelabs.carlauncher.ui.nav.Projection
 import com.ripostelabs.carlauncher.ui.nav.ReversePicture
 import com.ripostelabs.carlauncher.ui.nav.ScreenOffWindow
 import com.ripostelabs.carlauncher.ui.nav.ScreensaverKeys // RAV4-201
@@ -680,7 +681,10 @@ class MainActivity : ComponentActivity() {
         themeStore = ThemeStore(applicationContext)
         wallpaperStore = WallpaperStore(applicationContext)
         widgetHost = HomeWidgetHost(applicationContext)
-        navBar = NavBar(applicationContext).also { it.service = mcuOwner as? CarNav }
+        navBar = NavBar(applicationContext).also {
+            it.service = mcuOwner as? CarNav
+            it.projection = { if (carEvents.carplayState.value.connected) Projection.LIVE else Projection.IDLE }
+        }
         // RAV4-158: every nav route (card, NAV key, gesture) reads the pick through NavRepository.
         lifecycleScope.launch {
             settingsStore.settings.map { it.navAppPackage }.distinctUntilChanged().collect(NavRepository::setChosenNav)

@@ -130,6 +130,9 @@ class NavBar(private val context: Context) {
             value?.onNavTouch { ui.launch { interact() } }
         }
 
+    /** Whether CarPlay has a session; while it has none the bar stays over the projection app. */
+    var projection: () -> Projection = { Projection.LIVE }
+
     /** RAV4-200: the favourites strip the star key and a 2-finger swipe open. */
     var hotbar: Hotbar? = null
 
@@ -147,7 +150,7 @@ class NavBar(private val context: Context) {
         if (!enabled || watch != null) return
         if (service == null && !ensureOverlayAllowed()) return
 
-        policy = NavBarPolicy(mode, context.packageName).also { it.onReverse(reverse) }
+        policy = NavBarPolicy(mode, context.packageName) { projection() }.also { it.onReverse(reverse) }
         watch = ui.launch {
             while (isActive) {
                 val pkg = withContext(Dispatchers.IO) { foreground() }
