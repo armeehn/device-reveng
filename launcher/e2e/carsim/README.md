@@ -62,4 +62,10 @@ throttle), which `SlcanLinkSource` sends at 2 Hz while frames are arriving.
 - The CANable path itself (USB CDC-ACM): no USB on the emulator, hence the second carrier.
 - A camera: reverse shows the "no camera" verdict, which is the gate firing.
 - ACC sleep: the vendor polls `sys.gotoSleep.state`, which nothing here writes.
+- ACC wake: `acc off` makes the launcher close the MCU port 1.5 s later
+  (`McuSleepWake`, as the vendor does), so a later `acc on` never reaches it.
+  On the car ACC on wakes the panel and the launcher reopens on that
+  (`CarAcc.onScreenOn`). Here, wake it by hand after `acc on`, or every
+  card fed by the MCU (climate, outside air, speed) stays frozen:
+  `headunit -i N shell input keyevent KEYCODE_SLEEP`, then `KEYCODE_WAKEUP`.
 - Audio, amplifier, backlight: `08`/`2E` frames are logged, nothing moves.

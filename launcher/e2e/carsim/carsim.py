@@ -136,6 +136,8 @@ SPEED_017_SCALE = 10       # raw = km/h × 10 (SPEED_017_SCALE_KMH = 0.1)
 GEAR_CODES_1A = {"D": 0, "P": 1, "N": 2, "R": 3}   # gearFromCode, 2026-08-29 drive
 COOLANT_OFFSET_C = 40
 TEMP_SCALE_HALF_C = 2      # climate setpoint byte = °C × 2 (TEMP_SCALE_C = 0.5)
+OUTSIDE_OFFSET_C = 40      # climate p[11] = (°C + 40) × 2 (HiworldCanDecoder.outsideC)
+OUTSIDE_NONE = 0xFF        # no outside sensor reading
 RADAR_STEP_CM = 30
 TPMS_NONE = 0xFE
 TRIP_NONE = 0xFFFF         # 0x13 word sentinel: the page has no such reading
@@ -261,6 +263,7 @@ class Climate:
     recirc: bool = False
     fan: int = 2
     temp_c: float = 21.0
+    outside_c: float | None = None
 
 
 @dataclass
@@ -386,7 +389,11 @@ class Vehicle:
         b0 = (0x40 if c.on else 0) | (0x08 if c.auto else 0) | 0x04   # 0x04 clear = dual; set = single
         b1 = (0x40 if c.ac else 0) | (0x10 if c.recirc else 0)
         setpoint = int(c.temp_c * TEMP_SCALE_HALF_C)
-        return self.relay(CMD_CLIMATE, bytes([b0, b1, 0, 0, 0, c.fan & 0x0F, setpoint, setpoint, 0, 0]))
+        outside = OUTSIDE_NONE
+        if c.outside_c is not None:
+            outside = int((c.outside_c + OUTSIDE_OFFSET_C) * TEMP_SCALE_HALF_C)
+        # p[10] rear-left setpoint (none), p[11] outside air.
+        return self.relay(CMD_CLIMATE, bytes([b0, b1, 0, 0, 0, c.fan & 0x0F, setpoint, setpoint, 0, 0, 0, outside]))
 
     def radar_relay(self, rear_steps: list[int], front_steps: list[int]) -> bytes:
         return self.relay(CMD_RADAR, bytes(rear_steps + front_steps))
@@ -650,6 +657,7 @@ Timeline lines: `<t> <verb> [args]`; t is seconds from start, or `+d` after the 
 The tuner needs no lines: `01 01` (SRC_RADIO) from the launcher starts the `73` reports, and
 `02 <key>` / `0C <freq>` move it (seek, step, band, direct tune).
   acc on|off                 SYS_EVENT accLine (71)        lamp on|off        illumination bit
+                             (acc off shuts the launcher's port; see README "ACC wake")
   reverse on|off             SYS_EVENT reverse bit         brake on|off       turn left|right|off
   volume <0-40>              MAIN_VOLUME (79)              mute on|off        MUTE (78)
   key <NAME>                 panel key (72): VOL_UP, VOL_DOWN, MUTE, NEXT, PREV, MENU, RETURN, POWER ...
@@ -660,7 +668,7 @@ The tuner needs no lines: `01 01` (SRC_RADIO) from the launcher starts the `73` 
   ramp <from> <to> <secs>    speed ramp, linear
   gear P|R|N|D               0x3BC on the bus, 0x1A relay
   doors <FL|FR|RL|RR|TAIL|HOOD> open|closed     0x4A5 on the bus, 0x11 relay
-  climate temp=21 fan=3 ac=on auto=off recirc=on   0x31 relay (re-sent at 1 Hz)
+  climate temp=21 fan=3 ac=on auto=off recirc=on outside=12.5   0x31 relay (re-sent at 1 Hz)
   rpm <n>                    0x32 relay (re-sent at 1 Hz, and the 0x1A mirror)
   radar rear=<a,b,c,d> front=<a,b,c,d>   steps 1-5 (30 cm each), 0 = clear; 0x41 relay
   tpms <fl,fr,rl,rr,spare>   kPa, 0 = no reading; 0x48 relay
@@ -924,6 +932,8 @@ class Simulator:
                 key, _, val = kv.partition("=")
                 if key == "temp":
                     v.climate.temp_c = float(val)
+                elif key == "outside":
+                    v.climate.outside_c = float(val)
                 elif key == "fan":
                     v.climate.fan = int(val)
                 else:
