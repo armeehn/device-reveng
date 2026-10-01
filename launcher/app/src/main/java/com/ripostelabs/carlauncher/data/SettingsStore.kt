@@ -12,6 +12,7 @@ import com.ripostelabs.carlauncher.carlib.AutoAnswer
 import com.ripostelabs.carlauncher.carlib.Reconnect
 import com.ripostelabs.carlauncher.carlib.CarProfiles
 import com.ripostelabs.carlauncher.carlib.KeySwap
+import com.ripostelabs.carlauncher.carlib.StandbyMode
 import com.ripostelabs.carlauncher.carlib.SwapMode
 import com.ripostelabs.carlauncher.carlib.UsbRole
 import com.ripostelabs.carlauncher.carlib.WheelKey
@@ -236,6 +237,16 @@ class SettingsStore(context: Context) {
 
     fun setReconnect(mode: Reconnect) = scope.launch {
         ds.edit { it[RECONNECT_KEY] = mode.name }
+    }
+
+    /** RAV4-151: suspend on ACC off ([StandbyMode]); OFF when never set, the ACC-on wake fails. */
+    val standby: StateFlow<StandbyMode> =
+        ds.data
+            .map { prefs -> StandbyMode.of(prefs[STANDBY_KEY]) }
+            .stateIn(scope, SharingStarted.Eagerly, StandbyMode.OFF)
+
+    fun setStandby(mode: StandbyMode) = scope.launch {
+        ds.edit { it[STANDBY_KEY] = mode.name }
     }
 
     /** Mark onboarding as done so it never shows again (called on Finish or Skip). */
@@ -522,5 +533,6 @@ class SettingsStore(context: Context) {
         val USB_ROLE_KEY = stringPreferencesKey("usb_role") // UsbRole.name, Riposte OS 0.2
         val AUTO_ANSWER_KEY = stringPreferencesKey("auto_answer") // AutoAnswer.name, RAV4-164
         val RECONNECT_KEY = stringPreferencesKey("bt_reconnect") // Reconnect.name, RAV4-178
+        val STANDBY_KEY = stringPreferencesKey("acc_standby") // StandbyMode.name, RAV4-151
     }
 }
