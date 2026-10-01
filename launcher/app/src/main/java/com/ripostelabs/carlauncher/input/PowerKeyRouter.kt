@@ -3,6 +3,7 @@ package com.ripostelabs.carlauncher.input
 import com.ripostelabs.carlauncher.carlib.McuOwner
 import com.ripostelabs.carlauncher.carlib.McuOwnerProtocol
 import com.ripostelabs.carlauncher.carlib.PowerKeyMode
+import com.ripostelabs.carlauncher.ui.nav.ReversePicture
 
 /**
  * The POWER key, routed by the driver's choice (RAV4-156). Stock: onPowerClicked,
@@ -24,6 +25,8 @@ class PowerKeyRouter(
     private val choice: () -> PowerKeyMode,
     private val standby: McuOwner.Listener,
     private val panel: Panel,
+    /** The reverse picture; any thread. Stock lifts the black screen while it is up. */
+    private val reverse: () -> ReversePicture = { ReversePicture.DOWN },
 ) : McuOwner.Listener {
 
     /** The black screen. Called on the owner's reader thread; the real one posts to main. */
@@ -47,8 +50,17 @@ class PowerKeyRouter(
         }
 
         when (choice()) {
-            PowerKeyMode.SCREEN_OFF -> panel.darken()
+            PowerKeyMode.SCREEN_OFF -> darkenUnlessReversing()
             PowerKeyMode.STANDBY -> standby.onPanelKey(key)
         }
+    }
+
+    /** A black window and `1F 00` over the camera would hide it: in reverse the press does nothing. */
+    private fun darkenUnlessReversing() {
+        if (reverse() == ReversePicture.UP) {
+            return
+        }
+
+        panel.darken()
     }
 }

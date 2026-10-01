@@ -515,7 +515,9 @@ class MainActivity : ComponentActivity() {
                 volumeMemory,
                 radioMemory,
                 volumeKeys,
-                PowerKeyRouter(::powerKeyChoice, McuSleepWake.PowerKeyListener { mcuSleepWake }, screenOff),
+                PowerKeyRouter(::powerKeyChoice, McuSleepWake.PowerKeyListener { mcuSleepWake }, screenOff) {
+                    if (inReverse.value) ReversePicture.UP else ReversePicture.DOWN
+                },
                 ScreensaverKeys { screensaver.activity() }, // RAV4-201: any car key is activity
                 carAcc,
                 setupStore,
