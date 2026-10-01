@@ -1,0 +1,64 @@
+#!/bin/bash
+# Collect the Recorder's road noise takes from the head unit, on every plug-in into zero.
+#
+#   road-noise-pull SERIAL DEST        (rav4-usb-update runs it with DEST=~/rav4-update/road-noise)
+#
+#   unit: /sdcard/Android/data/com.ripostelabs.recorder/files/RoadNoise/<stamp>-<tag>.wav + .json
+#     ──adb pull──▶ DEST/<name>.part ──SHA-256 matches the unit's──▶ DEST/<name>
+#
+# Only finished takes move: the app writes the JSON sidecar after it closes the WAV, so a WAV
+# with no sidecar is still recording. A take already in DEST is skipped, so a re-plug pulls only
+# what is new. Nothing on the unit is ever deleted: the app counts its minutes from the files
+# there, and a pigtail that drops mid-pull must never cost a recording.
+set -uo pipefail
+
+SERIAL=${1:?usage: road-noise-pull SERIAL DEST}
+DEST=${2:?usage: road-noise-pull SERIAL DEST}
+SRC=${ROAD_NOISE_SRC:-/sdcard/Android/data/com.ripostelabs.recorder/files/RoadNoise}
+# The app's own names, e.g. 20261001-162005-fan-high.json. Anything else is not ours.
+NAME_RE='^[0-9]{8}-[0-9]{6}-[a-z-]+\.json$'
+
+mkdir -p "$DEST"
+unit() { adb -s "$SERIAL" shell "$@" 2>/dev/null | tr -d '\r'; }
+
+# Pull one file into DEST under its own name, verified; 0 when it is there and matches.
+pull_one() {
+    local name=$1 want got
+    [ -f "$DEST/$name" ] && return 0
+
+    want=$(unit sha256sum "$SRC/$name" | cut -d' ' -f1)
+    [ -n "$want" ] || return 1
+
+    if ! adb -s "$SERIAL" pull "$SRC/$name" "$DEST/$name.part" >/dev/null 2>&1; then
+        rm -f "$DEST/$name.part"
+        return 1
+    fi
+
+    got=$(sha256sum "$DEST/$name.part" | cut -d' ' -f1)
+    if [ "$got" != "$want" ]; then
+        rm -f "$DEST/$name.part"
+        return 1
+    fi
+    mv "$DEST/$name.part" "$DEST/$name"
+}
+
+names=$(unit ls "$SRC")
+pulled=0
+failed=0
+for json in $(grep -E "$NAME_RE" <<<"$names"); do
+    base=${json%.json}
+    grep -qxF "$base.wav" <<<"$names" || continue
+    if [ -f "$DEST/$base.wav" ] && [ -f "$DEST/$json" ]; then
+        continue
+    fi
+
+    # WAV first: a sidecar in DEST then always means its WAV is complete here too.
+    if pull_one "$base.wav" && pull_one "$json"; then
+        pulled=$((pulled + 1))
+    else
+        failed=$((failed + 1))
+    fi
+done
+
+echo "road noise: $pulled new, $failed failed, $(find "$DEST" -name '*.json' | wc -l) takes on zero"
+[ "$failed" -eq 0 ]

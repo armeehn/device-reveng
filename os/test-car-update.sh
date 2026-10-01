@@ -8,6 +8,8 @@ cd "$(dirname "$0")/car-update"
 
 bash -n setup.sh
 bash -n rav4-usb-update
+bash -n road-noise-pull
+bash -n road-noise-collect
 
 # Warnings and errors only: the files are kept byte-identical to what zero already runs.
 # SC2034: the wait loop counter is unused by design. SC2011: APK names are package ids,
@@ -15,6 +17,7 @@ bash -n rav4-usb-update
 if command -v shellcheck >/dev/null; then
     shellcheck -S warning setup.sh
     shellcheck -S warning -e SC2034,SC2011 rav4-usb-update
+    shellcheck -S warning road-noise-pull road-noise-collect
 else
     echo "shellcheck not installed; syntax only"
 fi
