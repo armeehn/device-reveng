@@ -62,6 +62,8 @@ data class LauncherSettings(
     val homeClock: ClockStyle = ClockStyle.DIGITAL,
     /** RAV4-196: the suite weather app's last reading on the home clock card. */
     val showWeather: Boolean = true,
+    /** RAV4-199: one Android AppWidget card in the glance column. Off by default. */
+    val showAppWidget: Boolean = false,
     /**
      * v4.1 — float a playing video app as a freeform mini window over the home media card.
      * On by default: it is inert until a video session exists, parked-only via the motion
@@ -256,6 +258,7 @@ class SettingsStore(context: Context) {
                         ClockStyle.valueOf(prefs[HOME_CLOCK_KEY] ?: ClockStyle.DIGITAL.name)
                     }.getOrDefault(ClockStyle.DIGITAL),
                     showWeather = prefs[SHOW_WEATHER_KEY] ?: true,
+                    showAppWidget = prefs[SHOW_APP_WIDGET_KEY] ?: false, // RAV4-199
                     videoMiniScreen = prefs[VIDEO_MINI_KEY] ?: true, // v4.1
                     dayNightMode = runCatching {
                         DayNightMode.valueOf(prefs[DAY_NIGHT_MODE_KEY] ?: DayNightMode.AUTO.name)
@@ -318,6 +321,7 @@ class SettingsStore(context: Context) {
     fun setShowNav(show: Boolean) = scope.launch { ds.edit { it[SHOW_NAV_KEY] = show } }
     fun setHomeClock(style: ClockStyle) = scope.launch { ds.edit { it[HOME_CLOCK_KEY] = style.name } }
     fun setShowWeather(show: Boolean) = scope.launch { ds.edit { it[SHOW_WEATHER_KEY] = show } }
+    fun setShowAppWidget(show: Boolean) = scope.launch { ds.edit { it[SHOW_APP_WIDGET_KEY] = show } }
 
     /** v4.1 — the video mini screen on Home. */
     fun setVideoMiniScreen(enabled: Boolean) = scope.launch {
@@ -479,6 +483,7 @@ class SettingsStore(context: Context) {
         val SHOW_NAV_KEY = booleanPreferencesKey("show_nav")
         val HOME_CLOCK_KEY = stringPreferencesKey("home_clock") // ClockStyle.name, RAV4-196
         val SHOW_WEATHER_KEY = booleanPreferencesKey("show_weather") // RAV4-196
+        val SHOW_APP_WIDGET_KEY = booleanPreferencesKey("show_app_widget") // RAV4-199
         val VIDEO_MINI_KEY = booleanPreferencesKey("video_mini_screen") // v4.1
         val DAY_NIGHT_MODE_KEY = stringPreferencesKey("day_night_mode")
         val FIRST_RUN_KEY = booleanPreferencesKey("first_run") // v1.0 onboarding gate

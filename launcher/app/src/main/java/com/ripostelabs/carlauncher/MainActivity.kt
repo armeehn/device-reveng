@@ -145,6 +145,7 @@ import com.ripostelabs.carlauncher.ui.nav.VolumePopupPolicy
 import com.ripostelabs.carlauncher.data.ThemeSnapshotStore
 import com.ripostelabs.carlauncher.data.ThemeStore
 import com.ripostelabs.carlauncher.data.WallpaperStore
+import com.ripostelabs.carlauncher.data.HomeWidgetHost
 import com.ripostelabs.carlauncher.data.UpdateController // v0.7 auto-updater
 import com.ripostelabs.carlauncher.input.KeyActionDispatcher
 import com.ripostelabs.carlauncher.input.PowerKeyRouter
@@ -293,6 +294,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var nowPlaying: NowPlayingRepository
     private lateinit var themeStore: ThemeStore
     private lateinit var wallpaperStore: WallpaperStore // RAV4-196
+    private lateinit var widgetHost: HomeWidgetHost // RAV4-199
     /** The launcher-drawn Back/Home/Apps strip that stands in for the suppressed system bar. */
     private lateinit var navBar: NavBar
     private lateinit var volumePopup: VolumePopup
@@ -647,6 +649,7 @@ class MainActivity : ComponentActivity() {
         }
         themeStore = ThemeStore(applicationContext)
         wallpaperStore = WallpaperStore(applicationContext)
+        widgetHost = HomeWidgetHost(applicationContext)
         navBar = NavBar(applicationContext).also { it.service = mcuOwner as? CarNav }
         // RAV4-158: every nav route (card, NAV key, gesture) reads the pick through NavRepository.
         lifecycleScope.launch {
@@ -1304,6 +1307,7 @@ class MainActivity : ComponentActivity() {
                                     miniScreen = miniScreen, // v4.1 video mini screen
                                     wallpaperStore = wallpaperStore, // RAV4-196
                                     themeId = activeTheme.id,
+                                    widgetHost = widgetHost, // RAV4-199
                                     night = night,
                                 )
                             }
