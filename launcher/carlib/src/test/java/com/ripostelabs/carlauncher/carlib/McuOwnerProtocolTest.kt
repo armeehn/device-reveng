@@ -599,4 +599,22 @@ class McuOwnerProtocolBtTest {
     fun btMuteHangUp() {
         assertArrayEquals(bytes(0x0D, 0x0A, 0x03, 0x4C, 0x14, 0x9C, 0x00), McuOwnerProtocol.btMute(McuOwnerProtocol.BT_MUTE_HANG_UP))
     }
+    /** Audit 2026-09-30: RDS, zone, volume, sleep and backlight are read at send time too. */
+    @Test
+    fun startupAndReloadReadTheLiveRows() {
+        val config = McuOwnerProtocol.StartupConfig(
+            now = { it.copy(rds = true, radioZone = 0, mainVolume = 9, sleepTime = McuOwnerProtocol.SleepTime.H16, backlightDay = 70) },
+        )
+
+        val start = McuOwnerProtocol.startup(config)
+        val reload = McuOwnerProtocol.reload(config, null)
+
+        assertTrue(start.any { it.contentEquals(McuOwnerProtocol.rds(true)) })
+        assertTrue(start.any { it.contentEquals(McuOwnerProtocol.setup(1, 0)) })
+        assertTrue(start.any { it.contentEquals(McuOwnerProtocol.mainVolume(9)) })
+        for (frames in listOf(start, reload)) {
+            assertTrue(frames.any { it.contentEquals(McuOwnerProtocol.sleepTime(McuOwnerProtocol.SleepTime.H16)) })
+            assertTrue(frames.any { it.contentEquals(McuOwnerProtocol.backlight(70, config.backlightNight)) })
+        }
+    }
 }

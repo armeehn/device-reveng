@@ -531,6 +531,16 @@ class MainActivity : ComponentActivity() {
                     setup = setupStore.setup.value,
                     setupSource = { setupStore.setup.value },
                     factoryRows = { SysVarLocalStore.prefs(applicationContext).readAll() },
+                    now = { boot ->
+                        carService.backlight.config(
+                            boot.copy(
+                                rds = radioMemory.rds(),
+                                radioZone = radioMemory.zone(),
+                                mainVolume = volumeMemory.level(),
+                                sleepTime = McuSetupProtocol.sleepOption(setupStore.setup.value.sleepTime),
+                            ),
+                        )
+                    },
                 ),
             )
             // One owner (os/CARHAL.md): the car service when the image has one, else this process.
@@ -542,7 +552,7 @@ class MainActivity : ComponentActivity() {
                 RemoteMcuOwner.Owner.SERVICE -> RemoteMcuOwner(
                     ServiceCarBinding(applicationContext),
                     ownerListener,
-                    McuOwnerProtocol.startup(startupConfig),
+                    { McuOwnerProtocol.startup(startupConfig) },
                 )
 
                 RemoteMcuOwner.Owner.LOCAL -> McuOwner(

@@ -31,8 +31,8 @@ interface CarBinding {
 class RemoteMcuOwner(
     private val binding: CarBinding,
     private val listener: McuOwner.Listener,
-    /** The handshake frames the launcher's stores built (McuOwnerProtocol.startup). */
-    private val startup: List<ByteArray>,
+    /** The handshake frames the launcher's stores build now (McuOwnerProtocol.startup). */
+    private val startup: () -> List<ByteArray>,
 ) : McuPort, CarDecoder, CarNav {
 
     /** Which process owns the MCU link on this image. */
@@ -102,6 +102,8 @@ class RemoteMcuOwner(
             bound = true
             bindOrBlock()
         }
+        // An ACC wake: the service replays its frames on open, so they must be today's.
+        call { it.setStartup(FramePack.pack(startup())) }
         call { it.openLink() }
     }
 
@@ -244,7 +246,7 @@ class RemoteMcuOwner(
         }
 
         decoder.reset()
-        svc.setStartup(FramePack.pack(startup))
+        svc.setStartup(FramePack.pack(startup()))
         car?.let { svc.selectCar(it.id) }
         if (api >= POWER_KEY_API) {
             powerKey?.let { svc.setPowerKey(it.raw) }
