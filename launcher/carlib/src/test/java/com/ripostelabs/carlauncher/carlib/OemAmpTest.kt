@@ -125,4 +125,33 @@ class OemAmpTest {
         val expected = McuSerial.encode(0x0D, bytes(0x08, 0x5A, 0xA5, 0x03, 0x6A, 0x05, 0x01, 0xA6, 0x18))
         assertArrayEquals(expected, McuOwnerProtocol.oemAmp(OemAmp.QUERY))
     }
+    /**
+     * Audit 2026-09-30: each tap counted its presses from the last 0xA6 report, which lags the
+     * presses, so three quick taps from 20 sent 1 + 2 + 3 = 6. Presses count from the level
+     * the last press reached.
+     */
+    @Test
+    fun `quick taps send one press each`() {
+        val volume = OemAmpVolume(20)
+        val sent = mutableListOf<VolumeStep>()
+        for (target in 21..23) {
+            volume.aim(target)
+            generateSequence { volume.next() }.forEach { sent += it }
+        }
+
+        assertEquals(List(3) { VolumeStep.UP }, sent)
+        assertEquals(23, volume.at)
+    }
+
+    @Test
+    fun `a report while idle is the level again, and the top stops the presses`() {
+        val volume = OemAmpVolume(20)
+        volume.onReport(61)
+        volume.aim(OemAmp.MAX_VOLUME + 5)
+
+        assertEquals(VolumeStep.UP, volume.next())
+        assertEquals(VolumeStep.UP, volume.next())
+        assertNull(volume.next())
+        assertEquals(OemAmp.MAX_VOLUME, volume.at)
+    }
 }

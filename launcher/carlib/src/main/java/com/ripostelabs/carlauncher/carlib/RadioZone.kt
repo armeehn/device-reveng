@@ -42,15 +42,27 @@ class RadioZone private constructor(
         (fmBank + fmBank + fmBank + amBank + amBank + List(EMPTY_TAIL) { 0 })
 
     /**
-     * The regions the vendor radio's picker steps through, in its `radio_zone` order (Europe,
-     * N. America, S. America, Russia, Japan). The settings app labels 3 and 4 the other way
-     * round, but the radio's band plans agree with this order: 3 is OIRT, 4 is 76-90 MHz.
+     * The FM station to tune after switching to this zone: the bottom of FM when coming from
+     * AM, else [freq] clamped and snapped onto this zone's FM grid.
+     */
+    fun entryFreq(onAm: Boolean, freq: Int): Int = if (onAm) fm.min else fm.snap(freq)
+
+    /**
+     * The regions the vendor radio's picker steps through, in its `radio_zone` order. The MCU
+     * takes 0..4 and nothing else (the gateway clamps), so these five are every plan it has.
+     * Labels name where each plan is right, from the band plans in radio-bands.md:
+     *
+     *     0  9 kHz AM, FM 87.5-108     ITU Regions 1 and 3 (GE75, GE84), Australia
+     *     1  10 kHz AM, FM odd tenths  US and Canada (47 CFR 73.14, 73.201)
+     *     2  10 kHz AM, FM 100 kHz     the rest of ITU Region 2
+     *     3  OIRT FM 65-74             the legacy Soviet band; modern Russian FM is zone 0
+     *     4  FM 76-90                  Japan
      */
     enum class Region(val id: Int, val label: String) {
-        EUROPE(0, "Europe"),
+        EUROPE(0, "Europe, Africa, Asia, Australia"),
         NORTH_AMERICA(1, "North America"),
-        SOUTH_AMERICA(2, "South America"),
-        RUSSIA(3, "Russia"),
+        SOUTH_AMERICA(2, "Latin America"),
+        RUSSIA(3, "Russia, OIRT 65-74 MHz"),
         JAPAN(4, "Japan"),
         ;
 
@@ -117,6 +129,27 @@ class RadioZone private constructor(
                 amBank = listOf(522, 603, 999, 1404, 1710, 530),
             ),
         )
+
+        /** Below this a frequency is AM kHz: the lowest FM value any zone tunes is OIRT 65.00 MHz. */
+        private const val FM_FLOOR = 6500
+
+        /**
+         * The band the tuner is on, judged against its frequency. A band report can be missed or
+         * stale; the frequency's units cannot lie, so 530 under FM1 is AM1 and 96.30 under AM2
+         * is FM1 (the car showed "5.30 MHz" on AM on 2026-09-30). An agreeing band is kept.
+         */
+        fun bandFor(band: Int, freq: Int): Int {
+            if (freq <= 0) {
+                return band
+            }
+
+            val amFreq = freq < FM_FLOOR
+            if (amFreq == CarService.isAmBand(band)) {
+                return band
+            }
+
+            return if (amFreq) FIRST_AM_BAND else 0
+        }
 
         /** The zone for a `KEY_RADIO_ZONE_SETTINGS` value; anything off the table reads as 0, the vendor default. */
         fun of(id: Int): RadioZone = ZONES.getOrElse(id) { ZONES[0] }

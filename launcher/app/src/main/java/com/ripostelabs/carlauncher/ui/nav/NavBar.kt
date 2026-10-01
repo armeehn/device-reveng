@@ -120,6 +120,7 @@ class NavBar(private val context: Context) {
     private var policy = NavBarPolicy(mode, context.packageName)
     private var watch: Job? = null
     private var fold: Job? = null
+    private var reverse = ReversePicture.DOWN
 
     /** The car service's bar once MainActivity binds one (API 5); null keeps the overlay. */
     var service: CarNav? = null
@@ -146,13 +147,26 @@ class NavBar(private val context: Context) {
         if (!enabled || watch != null) return
         if (service == null && !ensureOverlayAllowed()) return
 
-        policy = NavBarPolicy(mode, context.packageName)
+        policy = NavBarPolicy(mode, context.packageName).also { it.onReverse(reverse) }
         watch = ui.launch {
             while (isActive) {
                 val pkg = withContext(Dispatchers.IO) { foreground() }
                 policy.onPoll(pkg)?.let(::apply)
                 delay(policy.nextPollMs())
             }
+        }
+    }
+
+    /** The reverse picture went up or down; nothing may sit over the feed (see [NavBarPolicy]). */
+    fun reverse(picture: ReversePicture) {
+        if (picture == reverse) {
+            return
+        }
+
+        reverse = picture
+        val next = policy.onReverse(picture)
+        if (picture == ReversePicture.UP) {
+            apply(next)
         }
     }
 

@@ -24,6 +24,9 @@ readonly SELINUX_PHHSU_EXEC="u:object_r:phhsu_exec:s0"   # init `exec` transitio
 # arm64 only, so the AIS client is declared for 64 alone; the stock 32-bit copy is another build
 # (it links lib_xs9922b.so) that nothing of ours loads.
 readonly AIS_PUBLIC_ENTRY="libais_camera.so 64"
+readonly SUPER_GROUP_BYTES=6438256640  # the unit's super (6 GiB) less 4 MiB metadata (lpdump 2026-09-18)
+readonly SUPER_PARTS="system system_ext product vendor"
+readonly SUPER_ALIGN=1048576   # lpmake places each partition on a 1 MiB boundary
 
 log() { printf '[os] %s\n' "$*" >&2; }
 
@@ -111,19 +114,35 @@ system_root() { # tree-of-system-image -> path
   fi
 }
 
-# Bytes a tree will need as ext4: content + 15 % metadata/slack, rounded to blocks.
-# Read-only ext4 without journal or reserved blocks needs ~2 % for inode tables and bitmaps;
-# 6 % + 16 MiB keeps four images inside the unit's 6 GiB super once the GSI's APEXes are
-# unpacked (115 % overflowed it by 0.2 GiB on 2026-09-18). mke2fs -d fails loudly if short.
+# Bytes a tree will need as ext4: content + 4 % metadata/slack + 16 MiB, rounded to blocks.
+# Read-only ext4 without journal or reserved blocks needs ~2 % for inode tables and bitmaps
+# (1.4 % measured on crDroid 12.12). 4 % keeps four images inside the unit's 6 GiB super once
+# the GSI's APEXes are unpacked: 115 % overflowed it by 0.2 GiB on 2026-09-18, 106 % by 6 MiB
+# with crDroid 12.12 on 2026-09-30. mke2fs -d fails loudly if short; super_fits guards the rest.
 ext4_size_for() { # tree
   local used
   used=$(du -sB1 --apparent-size "$1" | cut -f1)
-  echo $(( (used * 106 / 100 / BLOCK + 4096) * BLOCK ))
+  echo $(( (used * 104 / 100 / BLOCK + 4096) * BLOCK ))
 }
 
 # Rebuild an image from a tree in the same format the base used. ext4 output is
 # the plain AOSP shape (no journal, 256-byte inodes, 0 % reserved) so fastbootd
 # accepts it as a logical partition image; xattrs come from the tree.
+# Refuse an image set the unit's super cannot hold: fastbootd and lpmake only fail at the
+# bench. e.g. crDroid 12.12 came out at 6145.9 MiB against a 6140 MiB group (2026-09-30).
+super_fits() { # dir
+  local total=0 part
+  for part in $SUPER_PARTS; do
+    [ -f "$1/$part.img" ] || continue
+    total=$(( total + ($(stat -c %s "$1/$part.img") + SUPER_ALIGN - 1) / SUPER_ALIGN * SUPER_ALIGN ))
+  done
+  if [ $total -gt $SUPER_GROUP_BYTES ]; then
+    log "ERROR: images total $(( total / 1048576 )) MiB, super group holds $(( SUPER_GROUP_BYTES / 1048576 )) MiB"
+    return 1
+  fi
+  log "images total $(( total / 1048576 )) MiB of $(( SUPER_GROUP_BYTES / 1048576 )) MiB"
+}
+
 repack_image() { # kind tree out mountpoint(label, e.g. system)
   local kind=$1 tree=$2 out=$3 name=$4
   rm -f "$out"

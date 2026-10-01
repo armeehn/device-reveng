@@ -53,6 +53,7 @@ import com.ripostelabs.carlauncher.carlib.Zlink // RAV4-52
 import com.ripostelabs.carlauncher.data.AppDirectoryStore // v0.4.2 custom app directory
 import com.ripostelabs.carlauncher.data.ClockStyle // RAV4-196
 import com.ripostelabs.carlauncher.data.WallpaperStore // RAV4-196
+import com.ripostelabs.carlauncher.data.HomeWidgetHost // RAV4-199
 import com.ripostelabs.carlauncher.data.WeatherFeed // RAV4-196
 import com.ripostelabs.carlauncher.data.DriverSide // v2.8
 import com.ripostelabs.carlauncher.data.LauncherSettings // v0.6
@@ -120,6 +121,8 @@ fun HomeScreen(
     // RAV4-196: the active theme's wallpaper (null store keeps previews plain).
     wallpaperStore: WallpaperStore? = null,
     themeId: String = "",
+    // RAV4-199: the Android AppWidget slot (null keeps previews without one).
+    widgetHost: HomeWidgetHost? = null,
     night: Boolean = false,
 ) {
     val reverse by carEvents.reverse.collectAsStateSafe(initial = false)
@@ -200,11 +203,12 @@ fun HomeScreen(
     }
     // Climate controls dialog, opened from the card or CENTER on it.
     val climateOpen = remember { mutableStateOf(false) }
+    val showWidget = settings.showAppWidget && widgetHost != null // RAV4-199
     SideEffect {
         // Keep the focus model's view of the layout in sync so navigation skips hidden regions.
         focus.showMedia = settings.showMedia
         focus.showClimate = settings.showClimate
-        focus.showRadio = settings.showRadio
+        focus.showRadio = settings.showRadio && !showWidget // RAV4-199: the widget holds its slot
         focus.showNav = settings.showNav
         focus.quickCount = quick.slots.size
         // CENTER activation for the focused region (grid tiles launch via GridFocus).
@@ -450,13 +454,22 @@ fun HomeScreen(
                             .fillMaxWidth()
                             .weight(1f),
                     )
+                    // RAV4-199: the widget card takes the radio card's slot, so neither
+                    // squeezes quick launch below a touch target.
+                    if (showWidget && widgetHost != null) {
+                        Spacer(Modifier.height(16.dp))
+                        HomeWidgetCard(
+                            host = widgetHost,
+                            modifier = Modifier.fillMaxWidth().height(RADIO_CARD_HEIGHT),
+                        )
+                    }
                     // v0.6: radio card is toggleable in Settings.
-                    if (settings.showRadio) {
+                    if (settings.showRadio && !showWidget) {
                         Spacer(Modifier.height(16.dp))
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(180.dp)
+                                .height(RADIO_CARD_HEIGHT)
                                 .launcherFocusTarget(focus, FocusTarget.Radio)
                                 .clickable(onClick = withTapFeedback(onOpenRadio)), // v2.6, v2.5
                         ) {
@@ -519,6 +532,9 @@ private val QUICK_LAUNCH_PINNED = listOf(
 
 /** RAV4-196: the clock card is one line of big digits and the date beside them. */
 private val CLOCK_CARD_HEIGHT = 96.dp
+
+/** The radio card, or the Android widget card in its place (RAV4-199). */
+private val RADIO_CARD_HEIGHT = 180.dp
 
 /** The quick-launch grid is a fixed 3×2: six tiles sharing the space above the RadioCard. */
 private const val QUICK_LAUNCH_SLOTS = 6

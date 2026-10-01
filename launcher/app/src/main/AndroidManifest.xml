@@ -107,6 +107,11 @@
          signature|privileged grant: this priv-app holds it once the service is on the image. -->
     <uses-permission android:name="com.ripostelabs.car.permission.CONTROL" />
 
+    <!-- RAV4-199: bind home AppWidgets without the grant dialog. A signature|privileged
+         grant: the platform-signed launcher on Riposte OS has it, others ask the user. -->
+    <uses-permission android:name="android.permission.BIND_APPWIDGET"
+        tools:ignore="ProtectedPermissions" />
+
     <!-- Narrow visibility fallback if QUERY_ALL_PACKAGES is ever stripped. -->
     <queries>
         <intent>

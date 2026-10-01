@@ -261,7 +261,8 @@ object McuOwnerProtocol {
 
         /**
          * Sub 1 and 7 (onRadioBndNum, :2786-2799): byte 2 the band, byte 3 the preset slot. Each
-         * is taken only when in range, independently, so either may be null here.
+         * is taken only when in range, independently, so either may be null here. This MCU
+         * sends the band alone (`73 01 band`), so [preset] is null on the car.
          */
         data class Band(val band: Int?, val preset: Int?) : RadioEvent()
 
@@ -300,12 +301,15 @@ object McuOwnerProtocol {
     /**
      * A region change as the vendor radio makes it (SetView.java:99-148): stop a running preset
      * scan (key 13), leave AM (key 30, the AM grids differ per zone), then `05 01 z`
-     * (EventService.java:4822-4834).
+     * (EventService.java:4822-4834). Then one step stock does not take: tune FM onto the new
+     * zone's plan, so a station from the old grid (87.55 in Europe, 80.0 in Japan) never sits
+     * off-plan in North America. [freq] is the current one; AM goes to the FM bottom.
      */
-    fun zoneChange(zone: Int, onAm: Boolean, scanning: Boolean): List<ByteArray> = listOfNotNull(
+    fun zoneChange(zone: Int, onAm: Boolean, scanning: Boolean, freq: Int): List<ByteArray> = listOfNotNull(
         radioKey(CarService.RADIO_KEY_SCAN).takeIf { scanning },
         radioKey(CarService.RADIO_KEY_BAND_FM).takeIf { onAm },
         setup(SETUP_ZONE, zone),
+        userFreq(RadioZone.of(zone).entryFreq(onAm, freq), fm = true),
     )
 
     /**
@@ -635,11 +639,13 @@ object McuOwnerProtocol {
             }
 
             RADIO_BAND, RADIO_BAND_ALT -> {
-                if (p.size < 3) {
+                if (p.size < 2) {
                     return null
                 }
+                // This MCU sends `73 01 band` with no preset byte (stock: 0x73 0x01 0x00 CK);
+                // the slot comes in its own sub 2 frame. A third byte, when present, is the slot.
                 val band = at(1).takeIf { it <= RADIO_BAND_MAX }
-                val preset = at(2).takeIf { it < RADIO_PRESET_COUNT }
+                val preset = if (p.size < 3) null else at(2).takeIf { it < RADIO_PRESET_COUNT }
                 if (band == null && preset == null) {
                     return null
                 }

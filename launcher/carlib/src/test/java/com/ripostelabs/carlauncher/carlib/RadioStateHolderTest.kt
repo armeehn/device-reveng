@@ -18,6 +18,36 @@ class RadioStateHolderTest {
         assertEquals(0L, holder.state.value.updatedAt)
     }
 
+    /**
+     * An AM frequency under an FM band is a missed band report, not 5.30 MHz: the car showed
+     * "5.30 MHz" and "11.80 MHz" on 2026-09-30 while the MCU was on AM. The frequency's own
+     * range wins, AM1 for kHz, FM1 for an FM value.
+     */
+    @Test
+    fun amFrequencyUnderFmBandIsAm() {
+        holder.onRadio(McuOwnerProtocol.RadioEvent.Band(band = 1, preset = null))
+        holder.onRadio(McuOwnerProtocol.RadioEvent.Frequency(530))
+        assertEquals(3, holder.state.value.band)
+    }
+
+    @Test
+    fun fmFrequencyUnderAmBandIsFm() {
+        holder.onRadio(McuOwnerProtocol.RadioEvent.Band(band = 4, preset = null))
+        holder.onRadio(McuOwnerProtocol.RadioEvent.Frequency(9630))
+        assertEquals(0, holder.state.value.band)
+    }
+
+    /** A band that agrees with the frequency is kept as reported: AM2 stays AM2. */
+    @Test
+    fun agreeingBandIsKept() {
+        holder.onRadio(McuOwnerProtocol.RadioEvent.Band(band = 4, preset = null))
+        holder.onRadio(McuOwnerProtocol.RadioEvent.Frequency(1150))
+        assertEquals(4, holder.state.value.band)
+        holder.onRadio(McuOwnerProtocol.RadioEvent.Band(band = 2, preset = null))
+        holder.onRadio(McuOwnerProtocol.RadioEvent.Frequency(6590))
+        assertEquals(2, holder.state.value.band)
+    }
+
     @Test
     fun eachEventOverwritesItsFieldOnly() {
         now = 10

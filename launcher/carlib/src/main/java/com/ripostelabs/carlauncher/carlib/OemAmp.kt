@@ -131,3 +131,46 @@ object OemAmp {
 
     private fun u(a: ByteArray, i: Int): Int = a[i].toInt() and 0xFF
 }
+
+/**
+ * The amp volume a run of presses is heading for. The 0xA6 report lags the presses, so each
+ * press counts from the level the previous one reached, never from the report:
+ *
+ *     taps 21, 22, 23 from 20 ──▶ UP, UP, UP        (not 1 + 2 + 3 = 6 presses)
+ *
+ * A report counts only while no press is outstanding. Main thread only.
+ */
+class OemAmpVolume(start: Int) {
+
+    /** Where the presses sent so far have taken the amp. */
+    var at: Int = start
+        private set
+
+    private var target: Int = start
+
+    /** A new slider target; presses already sent are not repeated. */
+    fun aim(level: Int) {
+        target = level.coerceIn(0, OemAmp.MAX_VOLUME)
+    }
+
+    /** The next press toward the target, or null once there. */
+    fun next(): VolumeStep? {
+        if (at == target) {
+            return null
+        }
+
+        val step = if (target > at) VolumeStep.UP else VolumeStep.DOWN
+        at += if (step == VolumeStep.UP) 1 else -1
+        return step
+    }
+
+    /** The amp's own level, once every press has gone out. */
+    fun onReport(level: Int) {
+        if (at != target) {
+            return
+        }
+
+        at = level
+        target = level
+    }
+}

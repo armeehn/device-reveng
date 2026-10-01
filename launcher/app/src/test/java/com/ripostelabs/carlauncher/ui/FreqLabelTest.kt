@@ -55,7 +55,7 @@ class FreqLabelTest {
     fun fmIsNotRescaledByMagnitude() {
         // The old magnitude heuristic read 875 as 87.5 MHz; the tuner never sends that. A raw
         // value is 10 kHz units, full stop: 875 is 8.75 MHz and prints as such.
-        assertEquals("8.8 MHz", formatFreqLabel(fm, 875))
+        assertEquals("8.75 MHz", formatFreqLabel(fm, 875))
         assertEquals("875.0 MHz", formatFreqLabel(fm, 87500))
     }
 
