@@ -1,0 +1,26 @@
+#!/bin/bash
+# On x: copy the road noise takes zero collected from the head unit to the share.
+#
+#   zero:~/rav4-update/road-noise/ ──rsync, new files only──▶ /z1-pool/share/carlauncher/road-noise/
+#
+# x pulls rather than zero pushing: x already reaches zero over the tailnet, and zero then
+# holds no credential for x. Run by rav4-road-noise-collect.timer; a tick with zero offline
+# does nothing. Nothing is deleted on either side, and a file already on the share is kept.
+set -uo pipefail
+
+ZERO=${ZERO:-sasha@100.64.0.8}
+SRC=${SRC:-rav4-update/road-noise/}
+DEST=${DEST:-/z1-pool/share/carlauncher/road-noise}
+OWNER=${OWNER:-sasha}
+
+if ! timeout 15 ssh -o BatchMode=yes -o ConnectTimeout=8 "$ZERO" true 2>/dev/null; then
+    echo "road noise: zero offline"
+    exit 0
+fi
+
+mkdir -p "$DEST"
+# Finished files only: road-noise-pull's *.part files are its own business.
+rsync -a --ignore-existing --include='*.wav' --include='*.json' --exclude='*' \
+    -e "ssh -o BatchMode=yes" "$ZERO:$SRC" "$DEST/" || exit 1
+chown -R "$OWNER:$OWNER" "$DEST"
+echo "road noise: $(find "$DEST" -name '*.json' | wc -l) takes on the share"

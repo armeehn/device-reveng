@@ -6,6 +6,7 @@
 #
 #   launcher   newest APK here vs the unit's versionCode    (install -r keeps its settings)
 #   suite      every APK here whose SHA-256 differs from the unit's copy
+#   road noise new Recorder takes pulled to road-noise/ (road-noise-pull), never deleted
 #
 # Safe to re-run and to re-plug: it installs only what differs. It never uninstalls. A refused
 # install is reported and left for a human, because an uninstall wipes the app's settings.
@@ -152,6 +153,12 @@ if adb -s "$SERIAL" pull "$RING_DIR" "$ring" >/dev/null 2>&1 && [ -f "$ring/logc
 else
     rm -rf "$ring"
     echo "no log ring pulled from $RING_DIR (not a 0.2 slot, or the pull failed)"
+fi
+
+# The Recorder's road noise takes (rav4-apps), for tuning the CarPlay mic's RNNoise on this car.
+# x copies them on to the share (road-noise-collect). Older setups have no puller yet: skip.
+if [ -x "$DIR/road-noise-pull" ]; then
+    "$DIR/road-noise-pull" "$SERIAL" "$DIR/road-noise" || echo "some takes did not pull; the next plug-in retries"
 fi
 
 # 4. One line on the panel.

@@ -71,6 +71,9 @@ curl -sfo "$DIR/setup.sh.part" "$BASE/car-update/setup.sh" && chmod 755 "$DIR/se
 curl -sfo "$DIR/rav4-usb-update.part" "$BASE/car-update/rav4-usb-update"
 chmod 755 "$DIR/rav4-usb-update.part"
 mv "$DIR/rav4-usb-update.part" "$DIR/rav4-usb-update"
+curl -sfo "$DIR/road-noise-pull.part" "$BASE/car-update/road-noise-pull"
+chmod 755 "$DIR/road-noise-pull.part"
+mv "$DIR/road-noise-pull.part" "$DIR/road-noise-pull"
 unit_text="[Unit]
 Description=Update the RAV4 head unit from $DIR when it is plugged in
 
