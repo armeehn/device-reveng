@@ -75,6 +75,11 @@ helpers are there only shows on the car.
 A test image built with `build.sh --profile gsi --bench --system crDroid-12.12-…VANILLA…`
 sits on the build host as `0.3-candidate`, waiting for a bench session.
 
+## Mainline
+
+`mainline/README.md`: a Linux 6.18 boot image for this board that runs from RAM (panel
+console on the splash buffer, USB serial shell), the first step of the LTS path.
+
 ## Open questions for the next bench session
 
 1. `cat /proc/cmdline` – which panel ID the bootloader passes.

@@ -1,0 +1,48 @@
+#!/bin/busybox sh
+# First mainline boot on the GT6-EAU: prove the kernel runs, with no storage touched.
+# The panel shows the console (simple-framebuffer). The bench laptop sees a USB device
+# with a serial shell (ttyACM) and a network link (usb0 at 172.16.42.1).
+/bin/busybox --install -s /bin
+export PATH=/bin
+
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -t devtmpfs devtmpfs /dev
+mount -t configfs configfs /sys/kernel/config
+
+echo "riposte mainline: $(uname -r) up" > /dev/kmsg
+
+# USB gadget: one config with an ACM serial port and an NCM network function
+readonly G=/sys/kernel/config/usb_gadget/g1
+mkdir -p $G/strings/0x409 $G/configs/c.1/strings/0x409 $G/functions/acm.GS0 $G/functions/ncm.usb0
+echo 0x18d1 > $G/idVendor
+echo 0x4ee7 > $G/idProduct
+echo "Riposte" > $G/strings/0x409/manufacturer
+echo "GT6-EAU mainline" > $G/strings/0x409/product
+echo "acm+ncm" > $G/configs/c.1/strings/0x409/configuration
+ln -s $G/functions/acm.GS0 $G/configs/c.1/
+ln -s $G/functions/ncm.usb0 $G/configs/c.1/
+
+# The UDC appears once dwc3 probes; wait up to 30 s for it
+for i in $(seq 1 30); do
+  udc=$(ls /sys/class/udc 2>/dev/null | head -1)
+  if [ -n "$udc" ]; then
+    break
+  fi
+  sleep 1
+done
+if [ -n "$udc" ]; then
+  echo "$udc" > $G/UDC
+  echo "riposte mainline: gadget on $udc" > /dev/kmsg
+  ifconfig usb0 172.16.42.1 netmask 255.255.255.0 up
+  telnetd -l /bin/sh
+else
+  echo "riposte mainline: no UDC after 30 s" > /dev/kmsg
+fi
+
+# A shell on the USB serial port and one on the panel console, forever
+while true; do
+  setsid sh -c 'exec sh </dev/ttyGS0 >/dev/ttyGS0 2>&1' &
+  dmesg | tail -40 > /dev/tty0
+  wait
+done
