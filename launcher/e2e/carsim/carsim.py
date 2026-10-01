@@ -83,7 +83,7 @@ VOLUME_MAX = 40
 
 # `73` RADIO_EVENT sub-commands, first payload byte (McuOwnerProtocol.radioEvent).
 RADIO_STATE = 0       # [0, icons, flags]  icons: bit0 stereo, bit1 TP; flags: bit0 RDS, bit3 TA
-RADIO_BAND = 1        # [1, band, preset]  band 0-2 FM, 3+ AM (CarService.isAmBand)
+RADIO_BAND = 1        # [1, band]          band 0-2 FM, 3-4 AM; NO preset byte (stock: 73 01 00 87)
 RADIO_PRESET = 2      # [2, preset]
 RADIO_FREQ = 3        # [3, hi, lo]        FM in 10 kHz, AM in kHz (RadioStateHolder)
 RADIO_PTY = 5         # [5, pty]
@@ -92,6 +92,7 @@ RADIO_ICON_STEREO, RADIO_ICON_TP = 0x01, 0x02
 RADIO_FLAG_RDS = 0x01
 RADIO_PS_LEN = 8      # the RDS PS field is eight characters, space padded
 BAND_FM1, BAND_AM = 0, 3
+BAND_COUNT = 5        # FM1-FM3, AM1-AM2: the MCU seeds slots 0-17 FM and 18-29 AM
 # North American dial (RadioTuning.kt): FM 87.5-108.0 MHz by 0.2, AM 530-1710 kHz by 10.
 FM_MIN, FM_MAX, FM_STEP = 8750, 10790, 20
 AM_MIN, AM_MAX, AM_STEP = 530, 1710, 10
@@ -296,7 +297,8 @@ class Tuner:
         ps = self.ps_name.encode("ascii", "replace").ljust(RADIO_PS_LEN)[:RADIO_PS_LEN]
         return [
             (outer_encode(RX_RADIO_EVENT, bytes([RADIO_STATE, icons, flags])), f"RADIO state icons={icons:02x} flags={flags:02x}"),
-            (outer_encode(RX_RADIO_EVENT, bytes([RADIO_BAND, self.band, self.preset])), f"RADIO band={self.band} preset={self.preset}"),
+            (outer_encode(RX_RADIO_EVENT, bytes([RADIO_BAND, self.band])), f"RADIO band={self.band}"),
+            (outer_encode(RX_RADIO_EVENT, bytes([RADIO_PRESET, self.preset])), f"RADIO preset={self.preset}"),
             (outer_encode(RX_RADIO_EVENT, bytes([RADIO_FREQ]) + u16(self.freq)), f"RADIO freq={self.freq}"),
             (outer_encode(RX_RADIO_EVENT, bytes([RADIO_PTY, self.pty])), f"RADIO pty={self.pty}"),
             (outer_encode(RX_RADIO_EVENT, bytes([RADIO_PS_NAME]) + ps), f"RADIO ps={ps.decode().rstrip()!r}"),
@@ -553,7 +555,9 @@ class McuSide:
         elif key == RADIO_KEY_BAND_AM:
             t.set_band(BAND_AM)
         elif key == RADIO_KEY_BAND_CYCLE:
-            t.set_band(BAND_AM if t.fm else BAND_FM1)
+            # ASSUMED order FM1 > FM2 > FM3 > AM1 > AM2: no car log has a band frame after a
+            # key 24 yet. McuOwner now logs `radio band N`, so the next car log settles it.
+            t.set_band((t.band + 1) % BAND_COUNT)
         elif key == RADIO_KEY_SCAN:
             t.step(+1)
         else:
