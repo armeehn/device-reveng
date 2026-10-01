@@ -23,6 +23,11 @@ name: Settings hub scrolls to its end and every row has a label
     timeout: 30000
 - scrollUntilVisible:
     element:
+      text: "Games"
+    direction: DOWN
+    timeout: 30000
+- scrollUntilVisible:
+    element:
       text: "SysVar export"
     direction: DOWN
     timeout: 30000

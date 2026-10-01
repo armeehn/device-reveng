@@ -29,6 +29,8 @@ jobs:
         run: os/test-edl-restore.sh
       - name: vbmeta-flags
         run: os/test-vbmeta-flags.sh
+      - name: image set fits the super
+        run: os/test-super-fit.sh
       - name: diag check
         run: os/diag/test_check.sh
       - name: root grant + camera mode scripts

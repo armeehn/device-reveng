@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
 import com.ripostelabs.carlauncher.ui.theme.carShape
 import androidx.compose.foundation.verticalScroll
@@ -66,6 +67,7 @@ fun SettingsScaffold(
     title: String,
     onBack: () -> Unit,
     subtitle: String? = null,
+    scrollState: ScrollState = rememberScrollState(),
     content: @Composable () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
@@ -96,7 +98,7 @@ fun SettingsScaffold(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scrollState)
                 .padding(horizontal = 24.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {

@@ -244,6 +244,8 @@ and ACC comes from the MCU's own state frames. The MCU also streams a 6-byte `0x
 `ACCEPTANCE.md`: the ordered step list with expected outcomes and the undo at each step.
 `BENCH.md`: how the unit lives on a bench between car sessions, which door (adb over Wi-Fi,
 fastbootd, EDL) fits which state, and the rules that keep a flash from bricking it.
+`KERNEL.md`: what the stock kernel carries, why it caps Android at 14 QPR1, and what a
+newer Android or a replacement kernel needs.
 
 ## What the desk cannot prove
 
