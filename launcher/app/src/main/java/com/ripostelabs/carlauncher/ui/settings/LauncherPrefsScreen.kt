@@ -164,7 +164,7 @@ fun LauncherPrefsScreen(
             // RAV4-199: an Android widget card, chosen from Home.
             ToggleSetting(
                 label = "Android widget",
-                description = "A card for one app widget under the media card. Tap it on Home to choose.",
+                description = "One app widget, in place of the radio card. Tap it on Home to choose.",
                 checked = settings.showAppWidget,
                 onChange = settingsStore::setShowAppWidget,
             )
