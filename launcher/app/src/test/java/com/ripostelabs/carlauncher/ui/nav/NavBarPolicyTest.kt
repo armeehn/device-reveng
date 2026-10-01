@@ -146,4 +146,21 @@ class NavBarPolicyTest {
         assertEquals(null, p.onPoll(MAPS))
         assertEquals(NavBarState.HIDDEN, p.onPoll(NavBarPolicy.PROJECTION_PACKAGE))
     }
+    /**
+     * Audit 2026-09-30: the car service's bar is a navigation-bar panel, a system window above
+     * every app overlay, so it sat on the bottom of the reverse picture over any foreign app.
+     * While the picture is up the bar stays off; it comes back on the next poll after.
+     */
+    @Test
+    fun reversePictureKeepsTheBarOff() {
+        val p = NavBarPolicy(NavBarMode.ALWAYS_SHOWN, SELF)
+        p.onForeground(MAPS)
+
+        assertEquals(NavBarState.HIDDEN, p.onReverse(ReversePicture.UP))
+        assertEquals("a poll cannot bring it back", null, p.onPoll(MAPS))
+        assertEquals("nor a touch", NavBarState.HIDDEN, p.onInteract())
+
+        p.onReverse(ReversePicture.DOWN)
+        assertEquals(NavBarState.EXPANDED, p.onPoll(MAPS))
+    }
 }
