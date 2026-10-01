@@ -1150,16 +1150,17 @@ class CarEvents(private val appContext: Context) {
         override fun onMainVolume(volume: McuOwnerProtocol.MainVolume) {
             _volume.value = VolumeReading(
                 level = volume.level,
-                muted = _volume.value?.muted ?: false,
+                muted = MuteRule.afterLevel(volume.level),
                 showWindow = !volume.silent,
                 atMs = System.currentTimeMillis(),
             )
         }
 
         override fun onMute(mute: McuOwnerProtocol.Mute) {
+            val level = _volume.value?.level
             _volume.value = VolumeReading(
-                level = _volume.value?.level ?: 0,
-                muted = mute.muted,
+                level = level ?: 0,
+                muted = MuteRule.afterMute(mute.muted, level),
                 showWindow = !mute.silent,
                 atMs = System.currentTimeMillis(),
             )
