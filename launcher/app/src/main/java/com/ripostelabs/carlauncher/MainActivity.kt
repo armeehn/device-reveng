@@ -153,6 +153,7 @@ import com.ripostelabs.carlauncher.data.HomeWidgetHost
 import com.ripostelabs.carlauncher.data.UpdateController // v0.7 auto-updater
 import com.ripostelabs.carlauncher.input.KeyActionDispatcher
 import com.ripostelabs.carlauncher.input.PowerKeyRouter
+import com.ripostelabs.carlauncher.input.ScreenDoor
 import com.ripostelabs.carlauncher.input.KeyBridge // v2.8
 import com.ripostelabs.carlauncher.input.KeyPump // v2.8
 import com.ripostelabs.carlauncher.data.WatchHistoryStore // v2.7
@@ -351,6 +352,14 @@ class MainActivity : ComponentActivity() {
     // v0.8: hoisted top-level screen state so the Back/Home keys (handled outside Compose in
     // dispatchKeyEvent) can return to Home from a sub-screen.
     private val screenState = mutableStateOf<Screen>(Screen.Home)
+
+    // RAV4-273: key-driven screen switches go through here, so HOME, MEDIA, PHONE and SETTINGS
+    // from the panel, wheel or CAN box also raise the launcher over whatever app is in front.
+    private val screenDoor = ScreenDoor<Screen>(
+        inFront = ::launcherInFront,
+        show = { screenState.value = it },
+        toFront = ::raiseLauncher,
+    )
 
     // v2.5: eyes-free tap confirmation. Held as a field because SWC keys are handled outside
     // composition (handleNav), and that is the case §1.4 cares about most.
@@ -979,9 +988,9 @@ class MainActivity : ComponentActivity() {
             carService = carService,
             radioPresets = radioPresetsStore,
             zlinkConnected = { carEvents.zlinkConnected.value },
-            openMedia = { screenState.value = Screen.Media },
+            openMedia = { screenDoor.open(Screen.Media) },
             openRadio = ::openRadio,
-            openHome = { screenState.value = Screen.Home; launcherFocus.reset() },
+            openHome = { screenDoor.open(Screen.Home); launcherFocus.reset() },
             voiceApp = { settingsStore.settings.value.voiceAppPackage },
         )
 
@@ -1004,8 +1013,8 @@ class MainActivity : ComponentActivity() {
             zlinkConnected = { carEvents.zlinkConnected.value },
             sourceMode = { routeNav(NavKey.OPEN_MEDIA) },
             back = { if (!routeNav(NavKey.BACK)) onBackPressedDispatcher.onBackPressed() },
-            openPhone = { screenState.value = Screen.Phone },
-            openSettings = { screenState.value = Screen.Settings() },
+            openPhone = { screenDoor.open(Screen.Phone) },
+            openSettings = { screenDoor.open(Screen.Settings()) },
             mediaAction = { nowPlaying.customAction(it) },
         )
         lifecycleScope.launch {
@@ -1029,7 +1038,7 @@ class MainActivity : ComponentActivity() {
         // centre grid, so the request routes through the same screen switch every other
         // navigation uses.
         lifecycleScope.launch {
-            carEvents.openAppList.collect { screenState.value = Screen.Home }
+            carEvents.openAppList.collect { screenDoor.open(Screen.Home) }
         }
 
         // v2.8: reverse is an interruption, not navigation. The vendor composites its reverse
@@ -1708,11 +1717,24 @@ class MainActivity : ComponentActivity() {
     private fun openRadio() {
         val suite = packageManager.getLaunchIntentForPackage(RiposteSuite.RADIO_PACKAGE)
         if (suite == null) {
-            screenState.value = Screen.Radio
+            screenDoor.open(Screen.Radio)
             return
         }
 
-        runCatching { startActivity(suite) }.onFailure { screenState.value = Screen.Radio }
+        runCatching { startActivity(suite) }.onFailure { screenDoor.open(Screen.Radio) }
+    }
+
+    /** RAV4-273: the launcher is the resumed activity, not a task behind another app. */
+    private fun launcherInFront(): Boolean = lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+
+    /**
+     * RAV4-273: bring this singleTask activity's task to the front. The intent has no HOME
+     * category, so [onNewIntent] keeps the screen [screenDoor] just chose.
+     */
+    private fun raiseLauncher() {
+        val intent = Intent(this, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+        runCatching { startActivity(intent) }
     }
 
     /**
@@ -1821,17 +1843,17 @@ class MainActivity : ComponentActivity() {
         // already there toggles playback, so the transport that key used to give is still one
         // press away rather than lost.
         NavKey.OPEN_MEDIA -> {
-            if (screenState.value == Screen.Media) {
+            if (screenState.value == Screen.Media && launcherInFront()) {
                 nowPlaying.playPause()
             } else {
-                screenState.value = Screen.Media
+                screenDoor.open(Screen.Media)
             }
             true
         }
         NavKey.OPEN_RADIO -> { openRadio(); true }
-        NavKey.OPEN_PHONE -> { screenState.value = Screen.Phone; true }
+        NavKey.OPEN_PHONE -> { screenDoor.open(Screen.Phone); true }
         NavKey.HOME -> {
-            screenState.value = Screen.Home
+            screenDoor.open(Screen.Home)
             launcherFocus.reset()
             true
         }
