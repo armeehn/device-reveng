@@ -188,6 +188,7 @@ import com.ripostelabs.carlauncher.ui.rememberClockNight // v2.7
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay // v2.6
 import kotlinx.coroutines.flow.combine // v0.4.7.1 muted-aware TTS
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first // v2.9
@@ -297,6 +298,12 @@ class MainActivity : ComponentActivity() {
     private lateinit var navBar: NavBar
     private lateinit var volumePopup: VolumePopup
     private lateinit var reverseWindow: ReverseCameraWindow // Riposte OS 0.2
+
+    /**
+     * The car in reverse: the wire, or the picture the CAN gear raised on a car with no wire
+     * (#347). The panel light, the screensaver and the volume popup yield to this, not the wire.
+     */
+    private val inReverse = MutableStateFlow(false)
     private lateinit var incomingCalls: IncomingCalls // RAV4-152, Riposte OS 0.2
     private val callerNames by lazy { CallerNames(applicationContext) }
     private lateinit var settingsStore: SettingsStore // v0.6
@@ -981,7 +988,7 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             val policy = VolumePopupPolicy()
             carEvents.volume.collect { reading ->
-                val gear = if (carEvents.reverse.value) Gear.REVERSE else Gear.DRIVE
+                val gear = if (inReverse.value) Gear.REVERSE else Gear.DRIVE
                 if (reading == null || !policy.onReading(reading, gear)) {
                     return@collect
                 }
@@ -990,7 +997,7 @@ class MainActivity : ComponentActivity() {
             }
         }
         lifecycleScope.launch {
-            carEvents.reverse.collect { engaged ->
+            inReverse.collect { engaged ->
                 if (engaged) {
                     volumePopup.hide()
                 }
@@ -1000,7 +1007,7 @@ class MainActivity : ComponentActivity() {
         // RAV4-156: reverse and a wake from ACC standby always find the panel lit. ACC off is
         // left alone: lighting it there would flash the panel before standby darkens it.
         lifecycleScope.launch {
-            carEvents.reverse.collect { engaged ->
+            inReverse.collect { engaged ->
                 if (engaged) {
                     screenOff.light()
                 }
@@ -1035,6 +1042,7 @@ class MainActivity : ComponentActivity() {
                     carSettingsController.getInt(SettingKeys.BACKCAR_SPEED_THRESHOLD, 0),
                 )
                 val up = reverseTrigger.onLine(reverseBit = bit, awake = awake, speedKmh = speed, thresholdKmh = threshold)
+                inReverse.value = wire || up
                 // Evidence for the log ring pulled at the next plug-in: the edge and every input
                 // of the decision, once per edge, nothing per speed tick.
                 if (reverseTrigger.lastEdge != ReverseTrigger.Edge.NONE) {
@@ -1843,7 +1851,7 @@ class MainActivity : ComponentActivity() {
             merge(
                 carEvents.swcKeys.map { },
                 carEvents.volume.drop(1).map { },
-                carEvents.reverse.filter { it }.map { },
+                inReverse.filter { it }.map { },
                 incomingCalls.busy.filter { it }.map { },
             ).collect { screensaver.activity() }
         }
@@ -1870,7 +1878,7 @@ class MainActivity : ComponentActivity() {
                     ?: PowerOptions.SCREEN_TIMEOUT_NEVER,
                 idleMs = 0L, // filled by the window from its own clock
                 accOn = carEvents.accOn.value,
-                reverse = carEvents.reverse.value,
+                reverse = inReverse.value,
                 callUp = incomingCalls.busy.value || PhoneLogic.callChip(carEvents.vendorBt.value) != null,
                 moving = carEvents.motion.value == CarEvents.Motion.MOVING,
             )
