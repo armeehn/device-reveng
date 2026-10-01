@@ -114,14 +114,15 @@ system_root() { # tree-of-system-image -> path
   fi
 }
 
-# Bytes a tree will need as ext4: content + 15 % metadata/slack, rounded to blocks.
-# Read-only ext4 without journal or reserved blocks needs ~2 % for inode tables and bitmaps;
-# 6 % + 16 MiB keeps four images inside the unit's 6 GiB super once the GSI's APEXes are
-# unpacked (115 % overflowed it by 0.2 GiB on 2026-09-18). mke2fs -d fails loudly if short.
+# Bytes a tree will need as ext4: content + 4 % metadata/slack + 16 MiB, rounded to blocks.
+# Read-only ext4 without journal or reserved blocks needs ~2 % for inode tables and bitmaps
+# (1.4 % measured on crDroid 12.12). 4 % keeps four images inside the unit's 6 GiB super once
+# the GSI's APEXes are unpacked: 115 % overflowed it by 0.2 GiB on 2026-09-18, 106 % by 6 MiB
+# with crDroid 12.12 on 2026-09-30. mke2fs -d fails loudly if short; super_fits guards the rest.
 ext4_size_for() { # tree
   local used
   used=$(du -sB1 --apparent-size "$1" | cut -f1)
-  echo $(( (used * 106 / 100 / BLOCK + 4096) * BLOCK ))
+  echo $(( (used * 104 / 100 / BLOCK + 4096) * BLOCK ))
 }
 
 # Rebuild an image from a tree in the same format the base used. ext4 output is
