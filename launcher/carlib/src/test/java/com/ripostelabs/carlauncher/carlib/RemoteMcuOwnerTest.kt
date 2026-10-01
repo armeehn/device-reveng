@@ -45,6 +45,12 @@ class RemoteMcuOwnerTest {
         override fun setHotspot(state: Int) { calls += "hotspot $state"; held = state }
         override fun hotspotState() = held
         override fun setLanguage(tag: String?) { calls += "language $tag" }
+        val delays = mutableMapOf<Int, Int>()
+        var gain = -1
+        override fun setAecDelay(path: Int, ms: Int) { calls += "aec $path $ms"; delays[path] = ms }
+        override fun aecDelay(path: Int) = delays[path] ?: -1
+        override fun setMicGain(level: Int) { calls += "mic $level"; gain = level }
+        override fun micGain() = gain
     }
 
     /** bindService stand-in: the test decides when the service comes up or dies. */
@@ -174,6 +180,31 @@ class RemoteMcuOwnerTest {
             svc.calls.filter { it.startsWith("night") },
         )
         assertTrue(old.calls.none { it.startsWith("night") })
+    }
+
+    // RAV4-184: call audio reaches a service at 10; an older one gets nothing and reads null.
+    @Test
+    fun callAudioReachesOnlyANewEnoughService() {
+        remote.start()
+        assertFalse(remote.controlsCallAudio)
+
+        val svc = FakeService(api = RemoteMcuOwner.CALL_AUDIO_API)
+        binding.connect(svc)
+        assertTrue(remote.controlsCallAudio)
+        assertNull(remote.micGain())
+        assertTrue(remote.setAecDelay(AecPath.CARPLAY, 250))
+        assertTrue(remote.setMicGain(MicGain.G100))
+        assertEquals(250, remote.aecDelay(AecPath.CARPLAY))
+        assertEquals(MicGain.G100, remote.micGain())
+        binding.die()
+        val old = FakeService(api = RemoteMcuOwner.SYSTEM_API)
+        binding.connect(old)
+
+        assertFalse(remote.controlsCallAudio)
+        assertFalse(remote.setMicGain(MicGain.G85))
+        assertNull(remote.aecDelay(AecPath.PHONE))
+        assertEquals(listOf("aec 2 250", "mic 4"), svc.calls.filter { it.startsWith("aec") || it.startsWith("mic") })
+        assertTrue(old.calls.none { it.startsWith("aec") || it.startsWith("mic") })
     }
 
     // RAV4-216: hotspot and language reach a service at 9. Before it is up, or on an older one,

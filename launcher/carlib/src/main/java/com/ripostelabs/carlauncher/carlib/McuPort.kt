@@ -53,4 +53,20 @@ interface McuPort {
 
     /** RAV4-216: the system language, a BCP 47 tag. False where the owner cannot set it. */
     fun setLanguage(tag: String): Boolean = false
+
+    /** RAV4-184: whether the echo delays and the mic gain go through this owner. */
+    val controlsCallAudio: Boolean
+        get() = false
+
+    /** RAV4-184: the echo-cancel delay for [path] in ms. False where the owner cannot set it. */
+    fun setAecDelay(path: AecPath, ms: Int): Boolean = false
+
+    /** RAV4-184: the echo-cancel delay for [path] in ms; null when unset or the owner cannot tell. */
+    fun aecDelay(path: AecPath): Int? = null
+
+    /** RAV4-184: the mic gain step. False where the owner cannot set it. */
+    fun setMicGain(gain: MicGain): Boolean = false
+
+    /** RAV4-184: the mic gain step; null when unset or the owner cannot tell. */
+    fun micGain(): MicGain? = null
 }

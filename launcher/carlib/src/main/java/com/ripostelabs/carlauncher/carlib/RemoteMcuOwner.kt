@@ -190,6 +190,28 @@ class RemoteMcuOwner(
 
     override fun setLanguage(tag: String): Boolean = at(SYSTEM_API) { it.setLanguage(tag) }
 
+    // RAV4-184: the props persist on their own, so like the hotspot nothing is kept for [replay].
+    override val controlsCallAudio: Boolean
+        get() = service != null && api >= CALL_AUDIO_API
+
+    override fun setAecDelay(path: AecPath, ms: Int): Boolean = at(CALL_AUDIO_API) { it.setAecDelay(path.code, ms) }
+
+    override fun aecDelay(path: AecPath): Int? {
+        if (api < CALL_AUDIO_API) {
+            return null
+        }
+        return call { it.aecDelay(path.code) }?.takeIf { it >= 0 }
+    }
+
+    override fun setMicGain(gain: MicGain): Boolean = at(CALL_AUDIO_API) { it.setMicGain(gain.level) }
+
+    override fun micGain(): MicGain? {
+        if (api < CALL_AUDIO_API) {
+            return null
+        }
+        return MicGain.of(call { it.micGain() } ?: return null)
+    }
+
     override fun onNavTouch(action: () -> Unit) {
         navTouch = action
     }
@@ -306,6 +328,9 @@ class RemoteMcuOwner(
 
         /** ICarService.apiVersion that sets the hotspot and the language (RAV4-216). */
         const val SYSTEM_API = 9
+
+        /** ICarService.apiVersion that sets the echo delays and the mic gain (RAV4-184). */
+        const val CALL_AUDIO_API = 10
 
         /** [McuOwner.Status.Failed] reason while the service is down (it restarts, we rebind). */
         const val SERVICE_GONE = "car service gone"

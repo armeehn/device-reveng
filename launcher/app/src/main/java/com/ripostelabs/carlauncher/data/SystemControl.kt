@@ -1,7 +1,9 @@
 package com.ripostelabs.carlauncher.data
 
+import com.ripostelabs.carlauncher.carlib.AecPath
 import com.ripostelabs.carlauncher.carlib.Hotspot
 import com.ripostelabs.carlauncher.carlib.McuPort
+import com.ripostelabs.carlauncher.carlib.MicGain
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -43,6 +45,22 @@ class SystemControl(private val port: () -> McuPort?) {
 
     /** Sets the system language, a BCP 47 tag. False when nothing was sent. Blocking IPC. */
     fun setLanguage(tag: String): Boolean = port()?.setLanguage(tag) == true
+
+    /** RAV4-184: whether the car service takes the echo delays and the mic gain (service 10). */
+    val callAudioRouted: Boolean
+        get() = port()?.controlsCallAudio == true
+
+    /** RAV4-184: the echo-cancel delay in ms; null when unset or without the service. Blocking IPC. */
+    fun aecDelay(path: AecPath): Int? = port()?.aecDelay(path)
+
+    /** RAV4-184: sets the echo-cancel delay. False when nothing was sent. Blocking IPC. */
+    fun setAecDelay(path: AecPath, ms: Int): Boolean = port()?.setAecDelay(path, ms) == true
+
+    /** RAV4-184: the mic gain step; null when unset or without the service. Blocking IPC. */
+    fun micGain(): MicGain? = port()?.micGain()
+
+    /** RAV4-184: sets the mic gain. False when nothing was sent. Blocking IPC. */
+    fun setMicGain(gain: MicGain): Boolean = port()?.setMicGain(gain) == true
 
     companion object {
         // Tethering takes about a second to come up, so a tap shows on the next read.
