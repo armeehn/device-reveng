@@ -56,6 +56,10 @@
          the honest type: this is an app talking to attached hardware. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <!-- Automatic road-noise capture and its uploads (UplinkService). -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
 
@@ -268,6 +272,12 @@
             android:name=".service.CanCaptureService"
             android:exported="false"
             android:foregroundServiceType="connectedDevice" />
+
+        <!-- Road noise up, logs up, over the private tailnet (os/uplink). -->
+        <service
+            android:name=".service.UplinkService"
+            android:exported="false"
+            android:foregroundServiceType="microphone|dataSync" />
 
         <!--
           The reverse picture on demand for bench checks (Settings > Reverse camera). Exported

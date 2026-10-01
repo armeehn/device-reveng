@@ -131,6 +131,12 @@ class SetupDoctor(
             detail = "Needed for the Bluetooth status chip.",
             permission = android.Manifest.permission.BLUETOOTH_CONNECT,
         )
+        checks += permissionCheck(
+            id = "microphone",
+            title = "Microphone permission",
+            detail = "Needed for automatic road-noise capture (Settings > Improve noise reduction).",
+            permission = android.Manifest.permission.RECORD_AUDIO,
+        )
         // WRITE_SETTINGS is special-access (an appop, not a runtime dialog), and a reinstall
         // drops it like the rest: without it the brightness slider silently does nothing.
         checks += DoctorCheck(
