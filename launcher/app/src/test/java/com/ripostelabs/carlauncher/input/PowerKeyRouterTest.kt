@@ -3,6 +3,7 @@ package com.ripostelabs.carlauncher.input
 import com.ripostelabs.carlauncher.carlib.McuOwner
 import com.ripostelabs.carlauncher.carlib.McuOwnerProtocol
 import com.ripostelabs.carlauncher.carlib.PowerKeyMode
+import com.ripostelabs.carlauncher.ui.nav.ReversePicture
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -99,5 +100,19 @@ class PowerKeyRouterTest {
 
         assertFalse(panel.dark)
         assertTrue(standbyKeys.isEmpty())
+    }
+    /**
+     * Audit 2026-09-30 A3: stock lifts the black screen while the camera is up
+     * (BackcarEvent.startBackcarStandbyStatus :2163-2185). A POWER press in reverse must not
+     * lay the black window and `1F 00` over the picture.
+     */
+    @Test
+    fun powerInReverseNeverDarkens() {
+        val router = PowerKeyRouter({ PowerKeyMode.SCREEN_OFF }, standby, panel) { ReversePicture.UP }
+
+        router.onPanelKey(press(McuOwnerProtocol.Key.POWER))
+
+        assertFalse(panel.dark)
+        assertEquals(0, panel.darkened)
     }
 }
