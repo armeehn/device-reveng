@@ -1,11 +1,11 @@
 # The head unit's kernel
 
 What runs under Riposte OS, what a newer Android needs from it, and what a replacement
-kernel must carry. The plan this serves: `share/carlauncher/os/ANDROID-CEILING.md`.
+kernel must carry.
 
 ## Stock kernel
 
-Read from `share/carlauncher/os/base/boot.img` (sha256 `1d592152df6244fa…`), 2026-09-30.
+Read from the stock `boot.img` dumped off the unit (sha256 `1d592152df6244fa…`), 2026-09-30.
 
 | | |
 |---|---|
@@ -16,7 +16,7 @@ Read from `share/carlauncher/os/base/boot.img` (sha256 `1d592152df6244fa…`), 2
 | BPF | `CONFIG_BPF_SYSCALL`, `CGROUP_BPF`, `BPF_JIT` on. No 4.19/5.4 BPF backports. |
 | Source | none on the estate |
 
-Extracted copies sit in `share/carlauncher/os/kernel/`: the config, the 3 base DTBs and the
+The build host keeps extracted copies next to the base images: the config, the 3 base DTBs and the
 3 `dtbo` overlays as `.dts`, and the 481 source paths the kernel's strings name.
 
 ## Why it caps Android
@@ -73,7 +73,7 @@ network option that set asks for, except `NET_SCH_NETEM` and `XFRM_MIGRATE`. Whe
 helpers are there only shows on the car.
 
 A test image built with `build.sh --profile gsi --bench --system crDroid-12.12-…VANILLA…`
-sits in `share/carlauncher/os/0.3-candidate/` (`CANDIDATE.md` there says how to test it).
+sits on the build host as `0.3-candidate`, waiting for a bench session.
 
 ## Open questions for the next bench session
 
