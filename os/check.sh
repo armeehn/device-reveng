@@ -214,6 +214,9 @@ if [ "$PROFILE" = gsi ]; then
   # One property drives the USB controller's role.
   check "grep -q '^on property:persist.riposte.usb.role=\*' $S/etc/init/riposte.rc" "persist.riposte.usb.role init trigger"
   check "[ \"\$(stat -c %a $S/bin/riposte-usb-role.sh)\" = 755 ]" "riposte-usb-role.sh executable"
+  # Suspend-to-idle, as stock: the GSI's "mem" never resumed on the car.
+  check "grep -q 'riposte-sleep-mode.sh$' $S/etc/init/riposte.rc" "riposte-sleep-mode.sh run from init"
+  check "[ \"\$(stat -c %a $S/bin/riposte-sleep-mode.sh)\" = 755 ]" "riposte-sleep-mode.sh executable"
 else
   check "[ ! -f $S/bin/rw-system.sh ]" "no rw-system.sh on a stock base"
   check "grep -q '^ro.riposte.os.bt_carkit=0$' $S/build.prop" "ro.riposte.os.bt_carkit=0"

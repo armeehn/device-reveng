@@ -35,6 +35,11 @@ service riposte_mcubridge /system/bin/sh /system/bin/riposte-mcubridge.sh
 on boot && property:ro.riposte.os.car_owner=1
     start riposte_mcubridge
 
+# Suspend-to-idle, as stock does, instead of the GSI's deep "mem" (riposte-sleep-mode.sh).
+# The node is vendor_sysfs_suspend, which init itself may not write.
+on boot
+    exec_background u:r:su:s0 root -- /system/bin/sh /system/bin/riposte-sleep-mode.sh
+
 # Car-owner builds: the OEM projection daemon for CarPlay (see riposte-zlink.sh). It redials
 # the projection app every ten seconds, so the order of the two does not matter.
 service riposte_zlink /system/bin/sh /system/bin/riposte-zlink.sh

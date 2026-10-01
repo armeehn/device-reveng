@@ -43,6 +43,8 @@ jobs:
         run: os/test-usb-role.sh
       - name: init services keep their lib path
         run: os/test-rc-libpath.sh
+      - name: suspend is s2idle, as on stock
+        run: os/test-sleep-mode.sh
       - name: blockfix stops on a failed read
         run: os/test-blockfix.sh
       - name: flash-0.2 parses and fetches only os/ helpers
