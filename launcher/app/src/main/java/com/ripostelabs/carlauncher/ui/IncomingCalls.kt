@@ -21,6 +21,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
@@ -52,6 +53,10 @@ class IncomingCalls(
     private val window = IncomingCallWindow(context, onAnswer = ::answer, onDecline = ::decline)
     private val debugCall = MutableStateFlow<BtCarKitSnapshot?>(null)
 
+    // RAV4-201: a call ringing or up, for the screensaver to stay away from.
+    private val _busy = MutableStateFlow(false)
+    val busy: StateFlow<Boolean> = _busy.asStateFlow()
+
     private val debugReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             val state = intent.getIntExtra(EXTRA_STATE, HfCallState.INCOMING)
@@ -77,6 +82,9 @@ class IncomingCalls(
         val kit = carKit?.snapshot ?: flowOf(BtCarKitSnapshot())
         val source = combine(kit, debugCall) { real, fake -> fake ?: real }
 
+        scope.launch {
+            source.collect { s -> _busy.value = s.calls.any { it.state != HfCallState.TERMINATED } }
+        }
         scope.launch {
             combine(source, carPlay, front) { s, cp, f -> gate.decide(s, cp, f) }.collect { call ->
                 ringer.set(call.ring)
