@@ -161,6 +161,13 @@ fun LauncherPrefsScreen(
                 checked = settings.showWeather,
                 onChange = settingsStore::setShowWeather,
             )
+            // RAV4-199: an Android widget card, chosen from Home.
+            ToggleSetting(
+                label = "Android widget",
+                description = "A card for one app widget under the media card. Tap it on Home to choose.",
+                checked = settings.showAppWidget,
+                onChange = settingsStore::setShowAppWidget,
+            )
             ToggleSetting(
                 label = "Video mini screen",
                 description = if (rootAvailable)

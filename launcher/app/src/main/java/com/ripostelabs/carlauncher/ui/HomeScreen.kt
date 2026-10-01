@@ -53,6 +53,7 @@ import com.ripostelabs.carlauncher.carlib.Zlink // RAV4-52
 import com.ripostelabs.carlauncher.data.AppDirectoryStore // v0.4.2 custom app directory
 import com.ripostelabs.carlauncher.data.ClockStyle // RAV4-196
 import com.ripostelabs.carlauncher.data.WallpaperStore // RAV4-196
+import com.ripostelabs.carlauncher.data.HomeWidgetHost // RAV4-199
 import com.ripostelabs.carlauncher.data.WeatherFeed // RAV4-196
 import com.ripostelabs.carlauncher.data.DriverSide // v2.8
 import com.ripostelabs.carlauncher.data.LauncherSettings // v0.6
@@ -120,6 +121,8 @@ fun HomeScreen(
     // RAV4-196: the active theme's wallpaper (null store keeps previews plain).
     wallpaperStore: WallpaperStore? = null,
     themeId: String = "",
+    // RAV4-199: the Android AppWidget slot (null keeps previews without one).
+    widgetHost: HomeWidgetHost? = null,
     night: Boolean = false,
 ) {
     val reverse by carEvents.reverse.collectAsStateSafe(initial = false)
@@ -362,6 +365,16 @@ fun HomeScreen(
                                 )
                             }
                         }
+                    }
+                    // RAV4-199: the widget shares the media card's height, half each.
+                    if (settings.showAppWidget && widgetHost != null) {
+                        if (settings.showMedia) {
+                            Spacer(Modifier.height(16.dp))
+                        }
+                        HomeWidgetCard(
+                            host = widgetHost,
+                            modifier = Modifier.fillMaxWidth().weight(1f),
+                        )
                     }
                     if (settings.showClimate) {
                         if (settings.showMedia) Spacer(Modifier.height(16.dp))
