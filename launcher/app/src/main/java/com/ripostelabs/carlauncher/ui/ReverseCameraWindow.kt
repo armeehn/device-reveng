@@ -133,7 +133,10 @@ class ReverseCameraWindow(
                 WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
                 WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
             PixelFormat.TRANSLUCENT,
-        )
+        ).apply {
+            // The whole panel: a bar's inset must never shrink the feed.
+            fitInsetsTypes = 0
+        }
 
         try {
             windowManager.addView(v, params)

@@ -15,7 +15,9 @@ enum class NavBarState { HIDDEN, HANDLE, EXPANDED }
  *   foreground = launcher   ──▶ no decision yet (onPause runs before the next app resumes)
  * </pre>
  *
- * ALWAYS_SHOWN skips the timer; OFF never leaves HIDDEN. Both still yield to projection.
+ * ALWAYS_SHOWN skips the timer; OFF never leaves HIDDEN. Both still yield to projection and to
+ * the reverse picture: the car service's bar is a system window above every app overlay, so it
+ * would sit on the bottom of the camera feed.
  */
 class NavBarPolicy(private val mode: NavBarMode, private val selfPackage: String) {
 
@@ -32,9 +34,14 @@ class NavBarPolicy(private val mode: NavBarMode, private val selfPackage: String
     var state = NavBarState.HIDDEN
         private set
     private var overProjection = false
+    private var reverse = ReversePicture.DOWN
 
     /** The package in front from `dumpsys activity`; null when unknown (no root). */
     fun onForeground(pkg: String?): NavBarState {
+        if (reverse == ReversePicture.UP) {
+            state = NavBarState.HIDDEN
+            return state
+        }
         if (pkg == selfPackage) return state
 
         if (pkg == PROJECTION_PACKAGE) {
@@ -65,13 +72,22 @@ class NavBarPolicy(private val mode: NavBarMode, private val selfPackage: String
 
     /** A touch on the handle or a key: expand (again) for another [AUTO_HIDE_MS]. */
     fun onInteract(): NavBarState {
-        if (overProjection) return state
+        if (overProjection || reverse == ReversePicture.UP) return state
         state = shown()
         return state
     }
 
     fun onTimeout(): NavBarState {
         if (armsTimer()) state = NavBarState.HANDLE
+        return state
+    }
+
+    /** The reverse picture went up or down. Up hides the bar; down lets the next poll show it. */
+    fun onReverse(picture: ReversePicture): NavBarState {
+        reverse = picture
+        if (picture == ReversePicture.UP) {
+            state = NavBarState.HIDDEN
+        }
         return state
     }
 

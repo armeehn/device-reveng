@@ -132,6 +132,7 @@ import com.ripostelabs.carlauncher.data.SettingsStore // v0.6
 import com.ripostelabs.carlauncher.data.SystemChrome // v2.5
 import com.ripostelabs.carlauncher.nav.NavRepository
 import com.ripostelabs.carlauncher.ui.nav.NavBar
+import com.ripostelabs.carlauncher.ui.nav.ReversePicture
 import com.ripostelabs.carlauncher.ui.nav.ScreenOffWindow
 import com.ripostelabs.carlauncher.ui.nav.ScreensaverKeys // RAV4-201
 import com.ripostelabs.carlauncher.ui.nav.ScreensaverWindow // RAV4-201
@@ -1042,6 +1043,7 @@ class MainActivity : ComponentActivity() {
                 up
             }
             combine(picture, carEvents.radar) { up, radar -> up to radar }.collect { (up, radar) ->
+                navBar.reverse(if (up) ReversePicture.UP else ReversePicture.DOWN)
                 val verdict = ReverseCameraGate.decide(
                     reverse = up,
                     ownerActive = mcuOwner != null,
