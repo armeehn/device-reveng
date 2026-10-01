@@ -7,16 +7,20 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ripostelabs.carlauncher.carlib.CarEvents
 import com.ripostelabs.carlauncher.carlib.CarService
 import com.ripostelabs.carlauncher.carlib.OemAmp
 import com.ripostelabs.carlauncher.carlib.OemAmpKey
+import com.ripostelabs.carlauncher.carlib.OemAmpVolume
 import com.ripostelabs.carlauncher.carlib.VolumeStep
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlin.math.abs
 
 /** Pause between two volume presses, so the box sees each one (stock sends one per tap). */
 private const val VOLUME_PRESS_GAP_MS = 60L
@@ -53,13 +57,22 @@ fun OemAmpSection(carService: CarService, carEvents: CarEvents) {
         }
     }
 
-    // A slider move of N becomes N presses, each from the level the previous one reached.
+    // A slider move of N becomes N presses, each from the level the previous one reached. One
+    // run at a time: a tap during a run moves its target rather than starting a second run.
+    val volume = remember { OemAmpVolume(amp.volume) }
+    var pressing by remember { mutableStateOf<Job?>(null) }
+    LaunchedEffect(amp.volume) { volume.onReport(amp.volume) }
     fun volumeTo(target: Int) {
-        val step = if (target > amp.volume) VolumeStep.UP else VolumeStep.DOWN
-        val sign = if (step == VolumeStep.UP) 1 else -1
-        scope.launch {
-            repeat(abs(target - amp.volume)) { i ->
-                carService.stepOemAmpVolume(amp.volume + sign * i, step)
+        volume.aim(target)
+        if (pressing?.isActive == true) {
+            return
+        }
+
+        pressing = scope.launch {
+            while (true) {
+                val from = volume.at
+                val step = volume.next() ?: break
+                carService.stepOemAmpVolume(from, step)
                 delay(VOLUME_PRESS_GAP_MS)
             }
             delay(AMP_REPORT_AFTER_SET_MS)
