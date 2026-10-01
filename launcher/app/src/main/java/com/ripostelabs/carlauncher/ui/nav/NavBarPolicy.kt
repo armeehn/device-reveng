@@ -5,12 +5,16 @@ import com.ripostelabs.carlauncher.data.NavBarMode
 /** What the overlay window shows: nothing, a thin edge handle, or the 64 dp key strip. */
 enum class NavBarState { HIDDEN, HANDLE, EXPANDED }
 
+/** Whether CarPlay has a session, so its own Home is on the panel. */
+enum class Projection { LIVE, IDLE }
+
 /**
  * Decides what [NavBar] shows while a foreign app is in front. Pure, so the car's two
  * complaints (a strip over wireless CarPlay, a strip that never leaves) are JVM-tested.
  *
  * <pre>
- *   foreground = projection ──────────────▶ HIDDEN  (CarPlay carries its own Home)
+ *   foreground = projection, LIVE ────────▶ HIDDEN  (CarPlay carries its own Home)
+ *   foreground = projection, IDLE ────────▶ as any other app: no session, no Home of its own
  *   foreground = other app  ──▶ EXPANDED ──3 s──▶ HANDLE ──tap/swipe──▶ EXPANDED ──3 s──▶ …
  *   foreground = launcher   ──▶ no decision yet (onPause runs before the next app resumes)
  * </pre>
@@ -19,7 +23,11 @@ enum class NavBarState { HIDDEN, HANDLE, EXPANDED }
  * the reverse picture: the car service's bar is a system window above every app overlay, so it
  * would sit on the bottom of the camera feed.
  */
-class NavBarPolicy(private val mode: NavBarMode, private val selfPackage: String) {
+class NavBarPolicy(
+    private val mode: NavBarMode,
+    private val selfPackage: String,
+    private val session: () -> Projection = { Projection.LIVE },
+) {
 
     companion object {
         /** Riposte OS 0.2 projection suite (CarPlayActivity); see `SourceLabels.PROJECTION`. */
@@ -44,7 +52,8 @@ class NavBarPolicy(private val mode: NavBarMode, private val selfPackage: String
         }
         if (pkg == selfPackage) return state
 
-        if (pkg == PROJECTION_PACKAGE) {
+        // Over CarPlay with no iPhone the owner had no way out (car, 2026-10-01).
+        if (pkg == PROJECTION_PACKAGE && session() == Projection.LIVE) {
             overProjection = true
             state = NavBarState.HIDDEN
             return state
