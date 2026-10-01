@@ -377,11 +377,16 @@ internal fun formatFreqLabel(band: Int, freq: Int): String {
     if (CarService.isAmBand(band)) {
         return "$freq kHz"
     }
-    // FM is reported in 10 kHz units; the NA dial steps by 100 kHz, so one decimal is exact.
+    // FM is reported in 10 kHz units. One decimal is exact on a 100 kHz grid; Europe's 50 kHz
+    // grid needs the second (87.55 would read 87.6, a station that does not exist).
+    if (freq % FM_UNITS_PER_TENTH != 0) {
+        return "%.2f MHz".format(freq / FM_UNITS_PER_MHZ)
+    }
     return "%.1f MHz".format(freq / FM_UNITS_PER_MHZ)
 }
 
 private const val FM_UNITS_PER_MHZ = 100.0
+private const val FM_UNITS_PER_TENTH = 10
 
 /** Immutable snapshot of the tuner state for the card. */
 private data class RadioInfo(

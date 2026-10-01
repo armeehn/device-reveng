@@ -26,7 +26,8 @@ class RadioTuneRangeTest {
     @Test
     fun fmDialIsTenKilohertzUnits() {
         // The vendor formats getRadioFreq() as "%d.%02d MHZ": 9630 is 96.30 MHz.
-        assertEquals(TuneRange(8750, 10790, 10), RadioTuning.tuneRange(fm, 9630))
+        // North America steps 200 kHz on odd tenths (47 CFR 73.201), the MCU's zone 1 grid.
+        assertEquals(TuneRange(8750, 10790, 20), RadioTuning.tuneRange(fm, 9630))
         assertEquals("96.3 MHz", formatFreqLabel(fm, 9630))
     }
 
@@ -69,6 +70,23 @@ class RadioTuneRangeTest {
             assertEquals(preset.freq, back.freq)
             assertTrue(RadioTuning.sameBandClass(preset.band, back.band))
         }
+    }
+
+    /** The dial follows the region the MCU was given, not North America always. */
+    @Test
+    fun dialFollowsTheRegion() {
+        assertEquals(TuneRange(522, 1620, 9), RadioTuning.tuneRange(am, 999, zone = 0))
+        assertEquals(TuneRange(8750, 10800, 5), RadioTuning.tuneRange(fm, 9630, zone = 0))
+        assertEquals(TuneRange(7600, 9000, 10), RadioTuning.tuneRange(fm, 8000, zone = 4))
+        assertEquals(TuneRange(520, 1620, 10), RadioTuning.tuneRange(am, 1010, zone = 2))
+        assertEquals(TuneRange(530, 1710, 10), RadioTuning.tuneRange(am, 1150, zone = null))
+    }
+
+    /** Europe's 50 kHz grid needs the second decimal: 87.55 is not 87.6. */
+    @Test
+    fun fiftyKilohertzStationKeepsBothDecimals() {
+        assertEquals("87.55 MHz", formatFreqLabel(fm, 8755))
+        assertEquals("96.3 MHz", formatFreqLabel(fm, 9630))
     }
 
     @Test

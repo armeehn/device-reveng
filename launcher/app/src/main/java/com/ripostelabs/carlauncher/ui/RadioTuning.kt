@@ -97,16 +97,14 @@ internal object RadioTuning {
     /**
      * The scrub range for [band], in the tuner's raw units: FM in 10 kHz units (9630 = 96.30 MHz),
      * AM in kHz — the vendor radio formats `getRadioFreq()` as `%d.%02d MHZ` / `%d KHZ`. Limits
-     * are the vendor's zone 1 (North America): FM 87.5–107.9 MHz by 100 kHz, AM 530–1710 kHz by
-     * 10 kHz. A reading outside them ([sampleFreq], e.g. another zone's dial) widens the range
-     * rather than being clamped: the slider must never show a station the tuner is not on.
+     * and step are [zone]'s plan ([RadioZone]); null (the gateway path keeps the zone to itself)
+     * reads as North America, FM 87.5–107.9 by 200 kHz and AM 530–1710 by 10 kHz. A reading
+     * outside them ([sampleFreq]) widens the range rather than being clamped: the slider must
+     * never show a station the tuner is not on.
      */
-    fun tuneRange(band: Int, sampleFreq: Int): TuneRange {
-        val range = if (CarService.isAmBand(band)) {
-            TuneRange(min = AM_MIN_KHZ, max = AM_MAX_KHZ, step = AM_STEP_KHZ)
-        } else {
-            TuneRange(min = FM_MIN_10KHZ, max = FM_MAX_10KHZ, step = FM_STEP_10KHZ)
-        }
+    fun tuneRange(band: Int, sampleFreq: Int, zone: Int? = null): TuneRange {
+        val plan = RadioZone.of(zone ?: RadioZone.NORTH_AMERICA).plan(band)
+        val range = TuneRange(min = plan.min, max = plan.max, step = plan.step)
 
         if (sampleFreq <= 0) {
             return range
@@ -202,16 +200,6 @@ internal object RadioTuning {
         val flag = if (CarService.isAmBand(preset.band)) VENDOR_AM_FLAG else 0
         return ((preset.freq and VENDOR_FREQ_MASK) or flag).toString()
     }
-
-    /** Vendor zone 1 (North America) FM dial, in the tuner's 10 kHz units. */
-    private const val FM_MIN_10KHZ = 8750
-    private const val FM_MAX_10KHZ = 10790
-    private const val FM_STEP_10KHZ = 10
-
-    /** Vendor zone 1 AM dial, in kHz. */
-    private const val AM_MIN_KHZ = 530
-    private const val AM_MAX_KHZ = 1710
-    private const val AM_STEP_KHZ = 10
 
     private const val VENDOR_FREQ_MASK = 0xFFFF
     private const val VENDOR_AM_FLAG = 0x10000

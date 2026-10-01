@@ -317,7 +317,7 @@ private fun BandToggle(
  */
 @Composable
 private fun TuneSlider(tuner: TunerState, hold: Int?, onTune: (Int) -> Unit) {
-    val range = RadioTuning.tuneRange(tuner.band, tuner.freq)
+    val range = RadioTuning.tuneRange(tuner.band, tuner.freq, tuner.zone)
     var scrubbing by remember { mutableStateOf(false) }
     var scrubValue by remember { mutableFloatStateOf(0f) }
 

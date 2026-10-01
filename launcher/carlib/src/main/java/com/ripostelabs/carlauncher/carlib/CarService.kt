@@ -495,7 +495,7 @@ class CarService(private val appContext: Context) {
         val state = radioState.state.value
         radioState.setZone(zone)
         owner?.let { o ->
-            McuOwnerProtocol.zoneChange(zone, isAmBand(state.band), state.scanning).forEach(o::send)
+            McuOwnerProtocol.zoneChange(zone, isAmBand(state.band), state.scanning, state.freq).forEach(o::send)
             return
         }
 

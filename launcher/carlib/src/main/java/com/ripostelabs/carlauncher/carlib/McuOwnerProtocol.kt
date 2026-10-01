@@ -300,12 +300,15 @@ object McuOwnerProtocol {
     /**
      * A region change as the vendor radio makes it (SetView.java:99-148): stop a running preset
      * scan (key 13), leave AM (key 30, the AM grids differ per zone), then `05 01 z`
-     * (EventService.java:4822-4834).
+     * (EventService.java:4822-4834). Then one step stock does not take: tune FM onto the new
+     * zone's plan, so a station from the old grid (87.55 in Europe, 80.0 in Japan) never sits
+     * off-plan in North America. [freq] is the current one; AM goes to the FM bottom.
      */
-    fun zoneChange(zone: Int, onAm: Boolean, scanning: Boolean): List<ByteArray> = listOfNotNull(
+    fun zoneChange(zone: Int, onAm: Boolean, scanning: Boolean, freq: Int): List<ByteArray> = listOfNotNull(
         radioKey(CarService.RADIO_KEY_SCAN).takeIf { scanning },
         radioKey(CarService.RADIO_KEY_BAND_FM).takeIf { onAm },
         setup(SETUP_ZONE, zone),
+        userFreq(RadioZone.of(zone).entryFreq(onAm, freq), fm = true),
     )
 
     /**
