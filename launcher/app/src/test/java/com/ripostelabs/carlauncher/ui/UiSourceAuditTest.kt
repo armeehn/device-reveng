@@ -113,6 +113,7 @@ class UiSourceAuditTest {
         "ClimateCard.kt", // thermostat glyph on the "Climate unavailable" line
         "ContinueWatchingScreen.kt", // play glyph on a row whose title is the label
         "HomeWallpaper.kt", // the user's own photo behind Home, pure backdrop
+        "Hotbar.kt", // star glyph over the empty strip's hint
         "LauncherPrefsScreen.kt", // tick beside "Car Launcher is your default home."
         "MediaCard.kt", // album art and transport glyphs, each labelled by neighbouring text
         "MediaScreen.kt", // blurred art wash, album art, and the empty-art music note
