@@ -437,6 +437,7 @@ for part in $PASSTHROUGH; do
   [ "$part" = boot ] && [ -n "$BOOT" ] && src=$BOOT
   [ -f "$src" ] && cp --reflink=auto "$src" "$OUT/$part.img"
 done
+super_fits "$OUT" || die "the set does not fit the unit's super"
 {
   echo "version=$VERSION"; echo "profile=$PROFILE"; echo "car_owner=$CAR_OWNER"; echo "bt_carkit=$BT_CARKIT"; echo "bench=$BENCH"; echo "built=$(date -u +%FT%TZ)"
   echo "launcher=$(apk_package "$APPS/carlauncher.apk") vc$("$AAPT2" dump badging "$APPS/carlauncher.apk" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p")"
