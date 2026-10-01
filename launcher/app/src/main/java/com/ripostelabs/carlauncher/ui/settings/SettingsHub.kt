@@ -229,7 +229,7 @@ fun SettingsHub(
             SettingsCategoryCard(
                 icon = Icons.Filled.Phone,
                 title = "Phone",
-                subtitle = "Auto-answer and reconnect for the paired phone",
+                subtitle = "Auto-answer, reconnect, call audio and microphone",
                 onClick = { onOpen(SettingsRoute.Phone) },
             )
             SettingsCategoryCard(

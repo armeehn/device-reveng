@@ -94,6 +94,7 @@ private fun CallAudioSection() {
     }
 
     SettingsSection(title = "Call audio") {
+        MicSettingsRow() // RAV4-255: the Projection app's noise reduction
         SliderSetting(
             label = "Echo delay, phone calls",
             value = phoneMs,
