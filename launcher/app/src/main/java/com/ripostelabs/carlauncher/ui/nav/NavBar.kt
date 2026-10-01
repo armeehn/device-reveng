@@ -22,6 +22,7 @@ import androidx.compose.material.icons.automirrored.filled.VolumeDown
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
@@ -32,7 +33,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -126,9 +130,13 @@ class NavBar(private val context: Context) {
             value?.onNavTouch { ui.launch { interact() } }
         }
 
+    /** RAV4-200: the favourites strip the star key and a 2-finger swipe open. */
+    var hotbar: Hotbar? = null
+
     /** Theme and whether the system bars are suppressed; only then is there a bar to replace. */
     fun update(colors: ThemeColors, enabled: Boolean, mode: NavBarMode) {
         this.colors = colors
+        hotbar?.update(colors)
         this.enabled = enabled
         this.mode = mode
         if (!enabled) hide()
@@ -163,6 +171,7 @@ class NavBar(private val context: Context) {
     }
 
     fun hide() {
+        hotbar?.close() // RAV4-200: the launcher is in front, the strip has nothing to sit over
         watch?.cancel()
         watch = null
         policy.onHide()
@@ -302,7 +311,10 @@ class NavBar(private val context: Context) {
     @Composable
     private fun Keys(c: ThemeColors) {
         Box(
-            modifier = Modifier.fillMaxSize().background(Color(c.surface).copy(alpha = BAR_ALPHA)),
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(c.surface).copy(alpha = BAR_ALPHA))
+                .hotbarSwipe(),
             contentAlignment = Alignment.Center,
         ) {
             Row(
@@ -315,6 +327,10 @@ class NavBar(private val context: Context) {
                 Key(Icons.Filled.Home, "Home", Color(c.primary), ::home)
                 Key(Icons.Filled.Apps, "Apps", Color(c.onSurface), ::recents)
                 Key(Icons.AutoMirrored.Filled.VolumeUp, "Volume up", Color(c.onSurface)) { volume(NavVolume.Step.UP) }
+                // RAV4-200: the favourites strip, at the end nearest the edge it slides from.
+                if (hotbar != null) {
+                    Key(Icons.Filled.Star, "Favourites", Color(c.onSurface), ::toggleHotbar)
+                }
             }
         }
     }
@@ -326,7 +342,8 @@ class NavBar(private val context: Context) {
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color(c.surface).copy(alpha = BAR_ALPHA))
-                .pointerInput(Unit) { detectTapGestures(onPress = { interact() }) },
+                .pointerInput(Unit) { detectTapGestures(onPress = { interact() }) }
+                .hotbarSwipe(),
             contentAlignment = Alignment.Center,
         ) {
             Box(
@@ -334,6 +351,34 @@ class NavBar(private val context: Context) {
                     .size(PILL_WIDTH_DP.dp, PILL_HEIGHT_DP.dp)
                     .background(Color(c.primary).copy(alpha = PILL_ALPHA), RoundedCornerShape(PILL_HEIGHT_DP.dp / 2)),
             )
+        }
+    }
+
+    private fun toggleHotbar() {
+        hotbar?.toggle()
+    }
+
+    /**
+     * RAV4-200: two fingers dragged right across the bar open the hotbar, as stock's 2-finger
+     * edge swipe does. Read on the Initial pass and never consumed, so taps on keys still work.
+     */
+    private fun Modifier.hotbarSwipe(): Modifier = pointerInput(Unit) {
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false)
+            var fingers = 1
+            while (true) {
+                val event = awaitPointerEvent(PointerEventPass.Initial)
+                val pressed = event.changes.count { it.pressed }
+                if (pressed == 0) {
+                    break
+                }
+                fingers = maxOf(fingers, pressed)
+                val dxDp = (event.changes.first().position.x - down.position.x) / density
+                if (HotbarPolicy.swipeOpens(fingers, dxDp)) {
+                    hotbar?.open()
+                    break
+                }
+            }
         }
     }
 

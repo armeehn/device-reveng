@@ -177,6 +177,7 @@ import com.ripostelabs.carlauncher.ui.ShadeOverlay // v2.5 shade
 import com.ripostelabs.carlauncher.ui.RadarSideStrip // v2.8
 import com.ripostelabs.carlauncher.ui.ReverseCameraGate
 import com.ripostelabs.carlauncher.ui.ReverseCameraWindow
+import com.ripostelabs.carlauncher.ui.nav.Hotbar
 import com.ripostelabs.carlauncher.ui.settings.TyreWarningPopup
 import com.ripostelabs.carlauncher.ui.DoorPopupOverlay
 import com.ripostelabs.carlauncher.ui.IncomingCalls
@@ -755,6 +756,21 @@ class MainActivity : ComponentActivity() {
 
         // v3.0: driver profiles + the vendor-gateway UIMODE channel.
         favoritesStore = FavoritesStore(applicationContext, lifecycleScope)
+        // RAV4-200: the nav bar's favourites strip, fed from the drawer's stars.
+        navBar.hotbar = Hotbar(
+            context = applicationContext,
+            // Stars pinned before the rename are keyed com.reveng.*, as the drawer maps them.
+            favorites = { favoritesStore.favorites.value.mapTo(mutableSetOf(), RiposteSuite::liveTwin) },
+            resolve = appRepository::resolveApp,
+            launch = appRepository::launch,
+        )
+        lifecycleScope.launch {
+            carEvents.reverse.collect { on ->
+                if (on) {
+                    navBar.hotbar?.close() // reverse owns the screen
+                }
+            }
+        }
         appOrderStore = AppOrderStore(applicationContext, lifecycleScope)
         // One instance per DataStore file, owned here. The drawer, Home and the app-directory
         // screen used to `remember` their own, and each duplicate starts its own eager collector
