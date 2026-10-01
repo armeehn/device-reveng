@@ -16,6 +16,17 @@ import android.util.Log
  *               2026-09-30 10:46:12). The stored role (persist.riposte.usb.role) is untouched.
  *     leave()   sys.usb_power 0 (:3470) and the peripheral role back, then the camera gates, then [decoder], then Utils.accOn (:165-175): airplane
  *               off, location on, BT on; wifi only if it was on (setAccWakeUp, :3456-3460)
+ *     recover() at launcher start: the radios a standby turned off and no leave turned back on
+ *
+ * The radio states persist. A wake that fails (the owner presses RST) or a B+ cut skips leave,
+ * and every later boot had Wi-Fi and BT off, so wireless CarPlay never came up (car,
+ * 2026-10-01). So enter saves what it found in [MARKER_PROP] before switching anything off:
+ *
+ *     enter    read wifi, bt, location, airplane ─▶ marker "1,1,3,0" ─▶ RADIOS_OFF
+ *     leave    restore from the states in memory ─▶ clear the marker
+ *     recover  marker set? restore from it        ─▶ clear the marker
+ *
+ * Restore turns back on only what was on. A radio the owner had off stays off.
  *     darken()  a sleep key: PowerManager.goToSleep, a no-op on a dark panel
  *
  * [decoder] re-arms the PR2000: a kernel suspend holds it in reset and its resume drops the
@@ -26,15 +37,24 @@ class AccStandby(
     private val decoder: () -> Unit = {},
 ) : McuSleepWake.Standby {
 
+    /** The radios as enter found them; null outside standby. */
     @Volatile
-    private var wifiWasOn = true
+    private var saved: Radios? = null
 
     /** The port's role before [enter]; [leave] puts PERIPHERAL back once. */
     @Volatile
     private var usbWas = UsbRole.UNKNOWN
 
     override fun enter() {
-        wifiWasOn = shell(WIFI_STATE).out.firstOrNull()?.trim() != WIFI_OFF
+        // A marker already set means the radios are off from a standby never left: keep the
+        // owner's states it holds, not the off states read now.
+        val held = Radios.decode(read(MARKER_GET))
+        val radios = held ?: readRadios()
+        saved = radios
+        if (held == null) {
+            run(MARKER_SET + RootShell.quote(radios.encode()))
+        }
+
         run(RADIOS_OFF)
         run(CAMERA_OFF)
         usbSleep()
@@ -44,13 +64,67 @@ class AccStandby(
         usbWake()
         run(CAMERA_ON)
         decoder()
-        run(RADIOS_ON)
-        if (wifiWasOn) {
-            run(WIFI_ON)
+
+        val radios = saved
+        if (radios == null) {
+            recover()
+            return
         }
+
+        saved = null
+        restore(radios)
+    }
+
+    /** At launcher start: put back the radios of a standby that was never left, then forget it. */
+    fun recover() {
+        val text = read(MARKER_GET)
+        if (text.isEmpty()) {
+            return
+        }
+
+        // Junk in the marker restores nothing; clearing it stops a retry on every boot.
+        val radios = Radios.decode(text)
+        if (radios == null) {
+            Log.w(LOG_TAG, "unreadable marker '$text'")
+            run(MARKER_CLEAR)
+            return
+        }
+
+        Log.i(LOG_TAG, "standby was never left; restoring $radios")
+        restore(radios)
     }
 
     override fun darken() = run(DARKEN)
+
+    /** Each radio back as it was before standby, airplane mode first so the others can start. */
+    private fun restore(radios: Radios) {
+        if (!radios.airplane) {
+            run(AIRPLANE_OFF)
+        }
+
+        if (radios.location != LOCATION_OFF) {
+            run("$LOCATION_PUT ${radios.location}")
+        }
+
+        if (radios.bluetooth) {
+            run(BT_ON)
+        }
+
+        if (radios.wifi) {
+            run(WIFI_ON)
+        }
+
+        run(MARKER_CLEAR)
+    }
+
+    private fun readRadios() = Radios(
+        wifi = read(WIFI_STATE) != SETTING_OFF,
+        bluetooth = read(BT_STATE) != SETTING_OFF,
+        location = read(LOCATION_STATE).toIntOrNull() ?: LOCATION_ON,
+        airplane = read(AIRPLANE_STATE) == SETTING_ON,
+    )
+
+    private fun read(command: String): String = shell(command).out.firstOrNull()?.trim().orEmpty()
 
     /** The port faces host with its power cut, so its wakeup source lets go. */
     private fun usbSleep() {
@@ -78,12 +152,48 @@ class AccStandby(
         Log.i(LOG_TAG, "$command -> ${result.code}")
     }
 
+    /** The radios before standby. Wire form "wifi,bt,location,airplane", e.g. "1,1,3,0". */
+    private data class Radios(val wifi: Boolean, val bluetooth: Boolean, val location: Int, val airplane: Boolean) {
+        fun encode(): String = listOf(wifi.bit(), bluetooth.bit(), location, airplane.bit()).joinToString(SEP)
+
+        companion object {
+            private const val SEP = ","
+            private const val FIELDS = 4
+
+            fun decode(text: String): Radios? {
+                val f = text.split(SEP)
+                if (f.size != FIELDS) {
+                    return null
+                }
+
+                val location = f[2].toIntOrNull() ?: return null
+                return Radios(f[0] == SETTING_ON, f[1] == SETTING_ON, location, f[3] == SETTING_ON)
+            }
+
+            private fun Boolean.bit() = if (this) SETTING_ON else SETTING_OFF
+        }
+    }
+
     companion object {
         private const val LOG_TAG = "AccStandby"
 
         /** Stock's SYS_WIFI_STATE memory (:3527-3532); "0" is off. */
         const val WIFI_STATE = "settings get global wifi_on"
-        private const val WIFI_OFF = "0"
+        const val BT_STATE = "settings get global bluetooth_on"
+        const val LOCATION_STATE = "settings get secure location_mode"
+        const val AIRPLANE_STATE = "settings get global airplane_mode_on"
+        private const val SETTING_OFF = "0"
+        private const val SETTING_ON = "1"
+
+        /** Settings.Secure.LOCATION_MODE_OFF and _HIGH_ACCURACY (stock's accOn value). */
+        private const val LOCATION_OFF = 0
+        private const val LOCATION_ON = 3
+
+        /** Persist, so it outlives the RST or B+ cut that skipped leave. Empty is no marker. */
+        const val MARKER_PROP = "persist.riposte.standby.radios"
+        const val MARKER_GET = "getprop $MARKER_PROP"
+        const val MARKER_SET = "setprop $MARKER_PROP "
+        const val MARKER_CLEAR = "setprop $MARKER_PROP ''"
 
         const val RADIOS_OFF = "svc wifi disable; svc bluetooth disable; " +
             "settings put secure location_mode 0; cmd connectivity airplane-mode enable"
@@ -91,8 +201,9 @@ class AccStandby(
             "echo PowerManagerService.Display > /sys/power/wake_unlock"
         const val CAMERA_ON = "echo PowerManagerService.Display > /sys/power/wake_lock; " +
             "setprop sys.acc.state 1"
-        const val RADIOS_ON = "cmd connectivity airplane-mode disable; " +
-            "settings put secure location_mode 3; svc bluetooth enable"
+        const val AIRPLANE_OFF = "cmd connectivity airplane-mode disable"
+        private const val LOCATION_PUT = "settings put secure location_mode"
+        const val BT_ON = "svc bluetooth enable"
         const val WIFI_ON = "svc wifi enable"
         const val DARKEN = "input keyevent KEYCODE_SLEEP"
 
