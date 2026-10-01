@@ -1,0 +1,37 @@
+appId: com.ripostelabs.carlauncher
+name: A picked Reverse camera option shows on its row at once
+# The farm pass picked "Wire or CAN gear" and the row went on showing "Reverse wire" until the
+# page was reopened. The rows read the settings once, so the page never redrew them. Pick, then
+# read the row with the dialog gone; then pick the default back, so the next run starts clean.
+---
+- launchApp
+- extendedWaitUntil:
+    visible: "Search apps"
+    timeout: 20000
+- tapOn: { point: "96%,7%" }        # Settings
+- extendedWaitUntil:
+    visible: "(Read-only: root not detected.*|Car & launcher configuration)"
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      text: "Reverse camera"
+    direction: DOWN
+    timeout: 30000
+- tapOn: "Reverse camera"
+- scrollUntilVisible:
+    element:
+      text: "Reverse signal"
+    direction: DOWN
+    timeout: 30000
+- tapOn: "Reverse signal"
+- tapOn: "Wire or CAN gear"
+- extendedWaitUntil:
+    visible: "Wire or CAN gear"
+    timeout: 5000
+- assertNotVisible: "Reverse wire"
+- tapOn: "Reverse signal"
+- tapOn: "Reverse wire"
+- extendedWaitUntil:
+    visible: "Reverse wire"
+    timeout: 5000
+- assertNotVisible: "Wire or CAN gear"
