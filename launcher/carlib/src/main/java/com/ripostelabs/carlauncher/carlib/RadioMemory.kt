@@ -5,7 +5,8 @@ import android.content.Context
 /**
  * RadioMemory — the last station and preset list across boots.
  *
- *     MCU ──73──▶ onRadio ──▶ saved here ──▶ next boot: RadioStateHolder.seed ──▶ tuner screen
+ *     MCU ──73──▶ onRadio ──▶ band, freq saved here ──▶ next boot: RadioStateHolder.seed ──▶ tuner screen
+ *     RadioStateHolder.stationList ──▶ saveStations ──▶ the same seed
  *
  * The vendor keeps them in the gateway's `mRadio*` fields, a process that never restarts, and
  * seeds the preset list from `initRadioZone` (EventService.java:6484) before the MCU has said
@@ -39,17 +40,23 @@ class RadioMemory(context: Context) : McuOwner.Listener {
         stations = prefs.getString(KEY_STATIONS, null),
     )
 
+    /**
+     * The preset list as [RadioStateHolder] holds it, the one store: a long press and an
+     * auto-store change it there, and a list report it refused never reaches the disk.
+     */
+    fun saveStations(list: List<Int>) {
+        if (list.size != McuOwnerProtocol.RADIO_FREQ_LIST_SIZE) {
+            return
+        }
+
+        prefs.edit().putString(KEY_STATIONS, encodeStations(list)).apply()
+    }
+
     override fun onRadio(event: McuOwnerProtocol.RadioEvent) {
         val edit = prefs.edit()
         when (event) {
             is McuOwnerProtocol.RadioEvent.Band -> event.band?.let { edit.putInt(KEY_BAND, it) }
             is McuOwnerProtocol.RadioEvent.Frequency -> edit.putInt(KEY_FREQ, event.freq)
-            is McuOwnerProtocol.RadioEvent.FreqList -> {
-                val list = (decodeStations(prefs.getString(KEY_STATIONS, null) ?: "")
-                    ?: RadioZone.of(zone()).defaultStations).toMutableList()
-                list[event.index] = event.freq
-                edit.putString(KEY_STATIONS, encodeStations(list))
-            }
             else -> return
         }
         edit.apply()

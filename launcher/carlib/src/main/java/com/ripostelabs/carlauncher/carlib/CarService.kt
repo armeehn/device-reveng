@@ -483,6 +483,8 @@ class CarService(private val appContext: Context) {
 
     /** Store the current station into slot 0..41 (`02 65 slot`); owner path only. */
     fun radioStorePreset(slot: Int) {
+        // Ours first: the list the suite shows and RadioMemory saves must not wait on an MCU echo.
+        owner?.let { radioState.store(slot) }
         owner?.send(McuOwnerProtocol.radioPresetStore(slot))
     }
 

@@ -3,6 +3,7 @@ package com.ripostelabs.carlauncher.carlib
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 
 /**
  * What the tuner last reported, as the vendor's `mRadio*` fields hold it (EventService.java:241-258).
@@ -11,7 +12,8 @@ import kotlinx.coroutines.flow.asStateFlow
  * reason: [CarService] answers null from an owner that has heard nothing yet.
  *
  * [stationList] is the vendor's `mRadioFreqList` (sub 4/8), 42 slots, 0 = empty; the suite radio's
- * preset list reads it through the tuner binder (RAV4-97).
+ * preset list reads it through the tuner binder (RAV4-97). It is the one preset store: a long
+ * press writes it ([RadioStateHolder.store]) and [RadioMemory] keeps it across boots.
  */
 data class RadioState(
     val band: Int = 0,
@@ -62,6 +64,10 @@ class RadioStateHolder(
     private val _state = MutableStateFlow(RadioState())
     val state: StateFlow<RadioState> = _state.asStateFlow()
 
+    /** Clock time of the last report that auto-store (AMS) was running; null until one comes. */
+    @Volatile
+    private var autoStoreSeenAt: Long? = null
+
     /**
      * Fill the cache before the MCU has reported, as `initRadioZone` fills `mRadioFreqList`
      * (EventService.java:6484) and [RadioMemory] remembers the last station. A report always
@@ -84,15 +90,40 @@ class RadioStateHolder(
         onUpdate()
     }
 
-    /** Called from the owner's pump thread only, so read-modify-write needs no loop. */
-    fun onRadio(event: McuOwnerProtocol.RadioEvent) {
-        val current = _state.value
-        val next = current.apply(event, clock())
-        if (next === current) {
+    /**
+     * A long press on a preset (`02 65 slot`): the station on air goes into [slot] now. Stock
+     * waits for the MCU to echo the slot as a list report. Nothing proves this MCU sends one,
+     * and the car (2026-10-01) showed the zone defaults again after a reboot.
+     * Nothing on air (freq 0) or a slot past the 42 stores nothing.
+     */
+    fun store(slot: Int) {
+        var changed = false
+        _state.update { current ->
+            if (current.freq <= 0) {
+                return@update current
+            }
+            current.slot(slot, current.freq, clock()).also { changed = it !== current }
+        }
+        if (!changed) {
             return
         }
 
-        _state.value = next
+        onUpdate()
+    }
+
+    /** From the owner's pump thread; [store] comes from a binder thread, hence the CAS update. */
+    fun onRadio(event: McuOwnerProtocol.RadioEvent) {
+        val now = clock()
+        if (event is McuOwnerProtocol.RadioEvent.State) {
+            noteAutoStore(event.ams, now)
+        }
+
+        var changed = false
+        _state.update { current -> current.apply(event, now).also { changed = it !== current } }
+        if (!changed) {
+            return
+        }
+
         onUpdate()
     }
 
@@ -127,7 +158,28 @@ class RadioStateHolder(
         )
         is McuOwnerProtocol.RadioEvent.Pty -> copy(ptyNumber = event.pty, updatedAt = now)
         is McuOwnerProtocol.RadioEvent.StationName -> copy(stationName = event.name, updatedAt = now)
-        is McuOwnerProtocol.RadioEvent.FreqList -> slot(event.index, event.freq, now)
+        is McuOwnerProtocol.RadioEvent.FreqList -> if (takesListReport(now)) slot(event.index, event.freq, now) else this
+    }
+
+    /** AMS running, or just ended: its last slot reports trail the flag. */
+    private fun noteAutoStore(running: Boolean, now: Long) {
+        if (running || _state.value.autoStoring) {
+            autoStoreSeenAt = now
+        }
+    }
+
+    /**
+     * The MCU may rewrite the list only during auto-store, the one time it picks the stations.
+     * Any other list report (its table after the boot-time `05 01 z`, say) would put the zone
+     * defaults back over what the driver stored, so it is dropped.
+     */
+    private fun RadioState.takesListReport(now: Long): Boolean {
+        if (autoStoring) {
+            return true
+        }
+
+        val seen = autoStoreSeenAt ?: return false
+        return now - seen <= AUTO_STORE_TAIL_MS
     }
 
     /** A slot outside the vendor's 42 is dropped, as `onRadioFreqList` drops it. */
@@ -137,5 +189,10 @@ class RadioStateHolder(
         }
 
         return copy(stationList = stationList.toMutableList().also { it[index] = freq }, updatedAt = now)
+    }
+
+    private companion object {
+        /** How long after AMS clears its slot reports still count; the sweep ends within a frame or two. */
+        const val AUTO_STORE_TAIL_MS = 5_000L
     }
 }
