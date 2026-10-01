@@ -88,14 +88,18 @@ class RadioStateHolderTest {
         assertEquals(5, holder.state.value.presetNumber)
     }
 
-    /** Sub 4/8 fill one of the 42 slots (RAV4-97 preset list); an out-of-range slot is dropped. */
+    /**
+     * During auto-store (AMS) sub 4/8 fill one of the 42 slots (RAV4-97 preset list); an
+     * out-of-range slot is dropped.
+     */
     @Test
     fun freqListFillsItsSlot() {
         now = 5
+        holder.onRadio(autoStore(running = true))
         holder.onRadio(McuOwnerProtocol.RadioEvent.FreqList(index = 2, freq = 9630))
         holder.onRadio(McuOwnerProtocol.RadioEvent.FreqList(index = McuOwnerProtocol.RADIO_FREQ_LIST_SIZE, freq = 1))
 
-        assertEquals(1, ticks)
+        assertEquals(2, ticks)
         assertEquals(McuOwnerProtocol.RADIO_FREQ_LIST_SIZE, holder.state.value.stationList.size)
         assertEquals(9630, holder.state.value.stationList[2])
         assertEquals(5L, holder.state.value.updatedAt)
@@ -148,4 +152,70 @@ class RadioStateHolderTest {
         assertEquals(1010, holder.state.value.freq)
         assertEquals(1, holder.state.value.zone)
     }
+
+    /**
+     * A long press stores the station on air into its slot at once. The car (2026-10-01) never
+     * logged a list report after `02 65`, so waiting for the MCU's echo left the slot on the
+     * zone default and the saved station was gone after a reboot.
+     */
+    @Test
+    fun storeKeepsTheStationOnAir() {
+        holder.seed(RadioState(zone = 1, stationList = RadioZone.of(1).defaultStations))
+        now = 5
+        holder.onRadio(McuOwnerProtocol.RadioEvent.Frequency(8970))
+
+        holder.store(slot = 6)
+
+        assertEquals(8970, holder.state.value.stationList[6])
+        assertEquals(2, ticks)
+    }
+
+    /** Nothing on air yet (freq 0) is no station to keep; a slot past the 42 is dropped. */
+    @Test
+    fun storeWithoutStationIsIgnored() {
+        holder.store(slot = 0)
+        holder.onRadio(McuOwnerProtocol.RadioEvent.Frequency(8970))
+        holder.store(slot = McuOwnerProtocol.RADIO_FREQ_LIST_SIZE)
+
+        assertEquals(0, holder.state.value.stationList[0])
+        assertEquals(1, ticks)
+    }
+
+    /**
+     * The saved list is the truth across boots. A list report outside auto-store, such as the
+     * MCU's table after the boot-time region frame (`05 01 z`), must not put the zone defaults
+     * back over a stored preset.
+     */
+    @Test
+    fun listReportOutsideAutoStoreKeepsSavedPreset() {
+        val saved = RadioZone.of(1).defaultStations.toMutableList().also { it[0] = 8970; it[18] = 1150 }
+        holder.seed(RadioState(zone = 1, stationList = saved))
+
+        now = 5
+        holder.onRadio(McuOwnerProtocol.RadioEvent.FreqList(index = 0, freq = 8750))
+        holder.onRadio(McuOwnerProtocol.RadioEvent.FreqList(index = 18, freq = 530))
+
+        assertEquals(saved, holder.state.value.stationList)
+    }
+
+    /** The MCU's slot reports trail the AMS flag: a short tail after it clears still counts. */
+    @Test
+    fun autoStoreTailIsAcceptedThenClosed() {
+        now = 1_000
+        holder.onRadio(autoStore(running = true))
+        now = 2_000
+        holder.onRadio(autoStore(running = false))
+
+        now = 3_000
+        holder.onRadio(McuOwnerProtocol.RadioEvent.FreqList(index = 1, freq = 9050))
+        now = 60_000
+        holder.onRadio(McuOwnerProtocol.RadioEvent.FreqList(index = 1, freq = 8750))
+
+        assertEquals(9050, holder.state.value.stationList[1])
+    }
+
+    private fun autoStore(running: Boolean) = McuOwnerProtocol.RadioEvent.State(
+        stereoIcon = false, tpIcon = false, traffic = false, noPty = false, rds = false, pty = false,
+        af = false, ta = false, stMono = false, loc = false, ams = running, aps = false,
+    )
 }

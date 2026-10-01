@@ -484,6 +484,12 @@ class MainActivity : ComponentActivity() {
             val volumeMemory = VolumeMemory(applicationContext)
             val radioMemory = RadioMemory(applicationContext)
             carService.radioState.seed(radioMemory.restore())
+            // The presets live in the holder; the disk follows it, after the seed so the first
+            // write is the remembered list, not the empty one.
+            lifecycleScope.launch {
+                carService.radioState.state.map { it.stationList }.distinctUntilChanged()
+                    .collect(radioMemory::saveStations)
+            }
             // The MCU setup table (EQ, gains, beep, sleep): persisted here, re-sent at boot.
             val setupStore = McuSetupStore(applicationContext) { frame -> mcuOwner?.send(frame) }
             mcuSetupStore = setupStore
