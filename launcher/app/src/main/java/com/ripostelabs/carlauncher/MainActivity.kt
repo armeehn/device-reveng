@@ -605,7 +605,10 @@ class MainActivity : ComponentActivity() {
                 // RAV4-151: standby is opt-in until the MCU wakes the SoC at ACC on (StandbyOptIn).
                 val optIn = StandbyOptIn { settingsStore.standby.value }
                 val acc = optIn.acc(carAcc)
-                val standby = optIn.standby(AccStandby(decoder = { DecoderSignal.redetect(); DecoderSignal.locked() }))
+                val accStandby = AccStandby(decoder = { DecoderSignal.redetect(); DecoderSignal.locked() })
+                // A standby never left (RST, B+ cut) kept Wi-Fi and BT off on every boot since.
+                lifecycleScope.launch(Dispatchers.IO) { accStandby.recover() }
+                val standby = optIn.standby(accStandby)
                 mcuSleepWake = McuSleepWake.forOwner(it, acc, startupConfig, standby).also { sw -> sw.start() }
                 // The GSI dozes the panel on its own (README "Doze and dreams"); wake it unless
                 // the machine above, or ACC, asked for the dark.

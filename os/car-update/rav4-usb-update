@@ -1,0 +1,171 @@
+#!/bin/bash
+# Update the head unit from ~/rav4-update the moment it is plugged into this laptop. No
+# network needed: everything it installs was downloaded by setup.sh beforehand.
+#
+#   head unit ──USB──> zero: udev sees an adb interface ──> rav4-usb-update.service ──> this
+#
+#   launcher   newest APK here vs the unit's versionCode    (install -r keeps its settings)
+#   suite      every APK here whose SHA-256 differs from the unit's copy
+#
+# Safe to re-run and to re-plug: it installs only what differs. It never uninstalls. A refused
+# install is reported and left for a human, because an uninstall wipes the app's settings.
+# The result is posted as a notification on the head unit's screen and kept in last.log.
+set -uo pipefail
+
+DIR="${RAV4_UPDATE_DIR:-$HOME/rav4-update}"
+PKG=com.ripostelabs.carlauncher
+PANEL="1920x720"   # the GT6 panel: tells the head unit apart from a phone on the same port
+FIND_WAIT_S=120    # time to tap "Allow USB debugging" on the panel the first time
+POLL_S=3
+LOG="$DIR/last.log"
+RING_DIR=/data/riposte/log   # Riposte OS 0.2's logcat ring (riposte-logring.sh), shell-readable
+
+mkdir -p "$DIR"
+exec 9>"$DIR/.lock"
+flock -n 9 || { echo "already running"; exit 0; }
+exec > >(tee "$LOG") 2>&1
+
+say() { printf '\n== %s\n' "$*"; }
+car() { adb -s "$SERIAL" shell "$@" 2>/dev/null | tr -d '\r'; }
+
+# The pigtail drops the link with USB protocol errors (-71); a port reset brings it back.
+# Seen 2026-09-22: every read failed until `usbreset`, then a 7 MB install went through.
+UNIT_USB="18d1:4ee7"   # the unit in adb mode
+TRIES=4
+
+relink() {
+    usbreset "$UNIT_USB" >/dev/null 2>&1
+    timeout 30 adb -s "$SERIAL" wait-for-usb-device >/dev/null 2>&1
+}
+
+# install -r with a relink between attempts; prints adb's last line, exits 0 on Success.
+install_apk() {
+    local out i
+    for i in $(seq "$TRIES"); do
+        out=$(timeout 180 adb -s "$SERIAL" install -r "$1" 2>&1 | tail -1)
+        if [[ "$out" == Success* ]]; then
+            echo "$out"
+            return 0
+        fi
+        # A key mismatch will not change on a retry.
+        if [[ "$out" == *INCOMPATIBLE* ]]; then
+            break
+        fi
+        relink
+    done
+    echo "$out"
+    return 1
+}
+
+# Show the outcome on the panel, where the driver is looking.
+post() {
+    car cmd notification post -S bigtext -t "RAV4 update" rav4-usb-update "'$*'" >/dev/null
+    echo "$*"
+}
+
+# The head unit is the adb device whose screen is the car panel.
+find_unit() {
+    local s
+    for s in $(adb devices | awk 'NR>1 && $2=="device"{print $1}'); do
+        if adb -s "$s" shell wm size 2>/dev/null | grep -q "$PANEL"; then
+            echo "$s"
+            return 0
+        fi
+    done
+    return 1
+}
+
+say "$(date '+%F %T') looking for the head unit"
+adb start-server >/dev/null 2>&1
+deadline=$((SECONDS + FIND_WAIT_S))
+until SERIAL=$(find_unit); do
+    if adb devices | grep -q unauthorized; then
+        echo "tap Allow on the head unit's USB debugging prompt"
+    fi
+    if [ "$SECONDS" -ge "$deadline" ]; then
+        echo "no head unit on USB after ${FIND_WAIT_S}s"
+        exit 1
+    fi
+    sleep "$POLL_S"
+done
+echo "found $SERIAL"
+
+failures=()
+changes=()
+
+# 1. Launcher, by versionCode. Equal or newer on the unit is left alone.
+say "launcher"
+apk=$(ls "$DIR"/carlauncher-*-vc*.apk 2>/dev/null | sed 's/.*-vc\([0-9]*\)\.apk/\1 &/' | sort -n | tail -1)
+want=${apk%% *}
+apk=${apk#* }
+have=$(car dumpsys package "$PKG" | sed -n 's/.*versionCode=\([0-9]*\).*/\1/p' | head -1)
+
+if [ -z "$want" ]; then
+    echo "no launcher APK in $DIR"
+elif [ "${have:-0}" -ge "$want" ]; then
+    echo "current (vc$have)"
+else
+    out=$(install_apk "$apk")
+    case "$out" in
+        Success*)
+            echo "vc${have:-none} -> vc$want"; changes+=("launcher vc$want")
+            # An update kills the running launcher and Android does not reopen Home on its own,
+            # which left the panel on an empty recents screen with no nav bar (2026-10-01).
+            adb -s "$SERIAL" shell am start -a android.intent.action.MAIN -c android.intent.category.HOME >/dev/null 2>&1;;
+        *) echo "refused: $out"; failures+=("launcher ($out)");;
+    esac
+fi
+
+# 2. Suite, by bytes: every app has versionCode 1, so the hash is the only honest test.
+say "suite"
+pkgs=$(ls "$DIR"/suite/*.apk 2>/dev/null | xargs -rn1 basename | sed 's/\.apk$//')
+on_unit=$(car "for p in $(echo $pkgs); do a=\$(pm path \$p 2>/dev/null | sed -n 's/^package://p' | head -1); [ -n \"\$a\" ] && echo \"\$p \$(sha256sum \$a | cut -d' ' -f1)\"; done")
+
+for p in $pkgs; do
+    sha=$(sha256sum "$DIR/suite/$p.apk" | cut -d' ' -f1)
+    if [ "$(awk -v p="$p" '$1==p{print $2}' <<<"$on_unit")" = "$sha" ]; then
+        continue
+    fi
+    if install_apk "$DIR/suite/$p.apk" >/dev/null; then
+        echo "$p installed"
+        changes+=("${p#com.ripostelabs.}")
+    else
+        echo "$p refused"
+        failures+=("${p#com.ripostelabs.}")
+    fi
+done
+[ ${#changes[@]} -gt 0 ] || echo "current ($(echo $pkgs | wc -w) apps)"
+
+# 3. Evidence for the desk: every plug-in leaves what the unit was doing, no typing needed.
+say "diagnostics"
+stamp=$(date +%Y%m%d-%H%M%S)
+diag="$DIR/diag-$stamp.log"
+car "getprop; dumpsys audio; dumpsys media.audio_flinger; dumpsys media_session; logcat -d -b all" > "$diag"
+echo "saved $diag ($(wc -l < "$diag") lines)"
+
+# The log ring Riposte OS keeps on flash between plug-ins (riposte-logring.sh: logcat.txt,
+# logcat.txt.1.., boots.txt), so what was tried at the car with nobody watching is here too.
+# Best effort: a 0.1 slot has no ring, and a marginal pigtail can drop a 100 MB pull.
+ring="$DIR/diag-$stamp-ring"
+if adb -s "$SERIAL" pull "$RING_DIR" "$ring" >/dev/null 2>&1 && [ -f "$ring/logcat.txt" ]; then
+    echo "saved $ring ($(ls "$ring" | wc -l) files, $(du -sh "$ring" | cut -f1))"
+else
+    rm -rf "$ring"
+    echo "no log ring pulled from $RING_DIR (not a 0.2 slot, or the pull failed)"
+fi
+
+# 4. One line on the panel.
+say "result"
+if [ ${#failures[@]} -gt 0 ]; then
+    post "Update incomplete. Refused: ${failures[*]}. Nothing was uninstalled. Log: $LOG on zero."
+    exit 1
+fi
+if [ ${#changes[@]} -eq 0 ]; then
+    post "Already up to date: launcher vc${have:-?}, suite current."
+    exit 0
+fi
+if [ ${#changes[@]} -gt 3 ]; then
+    post "Updated ${#changes[@]} apps. You can unplug."
+    exit 0
+fi
+post "Updated: ${changes[*]}. You can unplug."
