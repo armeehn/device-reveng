@@ -120,7 +120,11 @@ class RadioStateHolder(
         )
 
         is McuOwnerProtocol.RadioEvent.Preset -> copy(presetNumber = event.preset, updatedAt = now)
-        is McuOwnerProtocol.RadioEvent.Frequency -> copy(freq = event.freq, updatedAt = now)
+        is McuOwnerProtocol.RadioEvent.Frequency -> copy(
+            band = RadioZone.bandFor(band, event.freq),
+            freq = event.freq,
+            updatedAt = now,
+        )
         is McuOwnerProtocol.RadioEvent.Pty -> copy(ptyNumber = event.pty, updatedAt = now)
         is McuOwnerProtocol.RadioEvent.StationName -> copy(stationName = event.name, updatedAt = now)
         is McuOwnerProtocol.RadioEvent.FreqList -> slot(event.index, event.freq, now)

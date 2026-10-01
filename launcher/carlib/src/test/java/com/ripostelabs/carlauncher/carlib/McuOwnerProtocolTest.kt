@@ -343,6 +343,23 @@ class McuOwnerProtocolTest {
         assertEquals(McuOwnerProtocol.RadioEvent.Band(band = 3, preset = 2), wire(0x0D, 0x0A, 0x05, 0x73, 0x01, 0x03, 0x02, 0x81, 0x00))
     }
 
+    /**
+     * The band report this MCU sends is two bytes, sub and band, no preset: stock logged
+     * `onCmdRadioEvent: 0x73 0x01 0x00 0x87` (rav4-probe 2026-09-18, the vendor bArr keeps
+     * CK), and the car logged `unhandled opcode 0x73 (2 bytes): 01 00` on 0.2. The preset
+     * follows in its own sub 2 frame. 04+73+01+00 = 0x78 → ~78 = 87, stock's own CK.
+     */
+    @Test
+    fun bandReportWithoutPresetIsTheBand() {
+        assertEquals(McuOwnerProtocol.RadioEvent.Band(band = 0, preset = null), wire(0x0D, 0x0A, 0x04, 0x73, 0x01, 0x00, 0x87, 0x00))
+    }
+
+    /** The same two-byte report on AM1. 04+73+01+03 = 0x7B → ~7B = 84. */
+    @Test
+    fun bandReportOnAmIsTheAmBand() {
+        assertEquals(McuOwnerProtocol.RadioEvent.Band(band = 3, preset = null), wire(0x0D, 0x0A, 0x04, 0x73, 0x01, 0x03, 0x84, 0x00))
+    }
+
     /** Sub 7 is the same handler; band 9 is out of the 0..6 range and dropped, the slot kept. 05+73+07+09+05 = 0x8D → ~8D = 72. */
     @Test
     fun bandAltDropsOutOfRangeBandKeepsPreset() {
