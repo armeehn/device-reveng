@@ -51,6 +51,10 @@ jobs:
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
           os/test-flash-02.sh
+      - name: car USB updater parses and fetches only car-update/ files
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          os/test-car-update.sh
       - name: touchswap compiles
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq gcc-aarch64-linux-gnu
