@@ -10,10 +10,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ripostelabs.carlauncher.BuildConfig
 import com.ripostelabs.carlauncher.carlib.RootShell
+import com.ripostelabs.carlauncher.data.OtaPrefs
 import com.ripostelabs.carlauncher.data.UpdateController
 import com.ripostelabs.carlauncher.data.UpdateStatus
 import com.ripostelabs.carlauncher.ui.LocalParkedOnlyLock
@@ -50,11 +52,14 @@ fun UpdatesScreen(
     }
 
     var confirmInstall by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val ota = remember { OtaPrefs.get(context) }
+    val tailnet by ota.status.collectAsStateWithLifecycle()
 
     SettingsScaffold(
         title = "Updates",
         onBack = onBack,
-        subtitle = "Pulls tagged CI builds from GitHub",
+        subtitle = "From your server over the tailnet, or tagged CI builds from GitHub",
     ) {
         SettingsSection(title = "This build") {
             InfoRow("Installed", "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
@@ -63,6 +68,21 @@ fun UpdatesScreen(
                 true -> "Available"
                 false -> "Not available — install disabled"
             })
+        }
+
+        // RAV4-270: OtaUpdater, inside the uplink service. Automatic; this is its readout.
+        SettingsSection(title = "From your server (tailnet)") {
+            InfoRow("Now", tailnet.state)
+            InfoRow("Last check", if (tailnet.lastCheckMs == 0L) "Never" else formatWhen(tailnet.lastCheckMs))
+            InfoRow("Available", tailnet.available.ifEmpty { "Nothing newer" })
+            if (tailnet.lastResult.isNotEmpty()) {
+                InfoRow("Last update", tailnet.lastResult)
+            }
+            ActionRow(
+                label = "Check now",
+                description = "Suite apps, car service and launcher install by themselves when parked",
+                onClick = ota::requestCheck,
+            )
         }
 
         SettingsSection(title = "Latest release") {

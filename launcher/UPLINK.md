@@ -88,6 +88,43 @@ are listed in [the fixtures notice](carlib/src/test/resources/vad/NOTICE.md).
 The switch, the monthly phone-data budget, and status: now, last upload, waiting to upload,
 phone data this month, road noise kept, speech discarded, files uploaded.
 
+## Updates from the server
+
+The same link brings releases back. `OtaUpdater` runs inside `UplinkService` and needs no tap.
+
+```
+ ACC on, or a day since the last check ──▶ GET /v1/releases/manifest.json
+   ──▶ a newer build of a package already on the unit, not refused before
+   ──▶ download, resumable (files/ota/apk/<package>-<code>.part), budget shared with uploads
+   ──▶ size + sha256 from the manifest, signer against the pin in the launcher
+   ──▶ wait: parked, a minute after ACC on, no call, no CarPlay session, not in reverse
+   ──▶ root pm install -r: suite apps, then the car service, the launcher last
+```
+
+- **The signer is pinned in the launcher** (`ReleasePin`), one certificate per role. The
+  manifest carries a `cert_sha256` too, but the car never reads it. An APK signed by anyone else
+  is refused and that version is never tried again. A new signing key needs the USB updater.
+- **The car service pin is weak on purpose.** It must be signed with the image's platform key,
+  and that is AOSP's public test key. For the car service the sha256 from the server, fetched
+  over the authenticated tailnet, is what vouches for the file.
+- **Only packages already installed** are updated. A suite app the owner never installed stays
+  off the unit. The launcher and the car service update on a higher versionCode. Suite apps
+  all sit at versionCode 1, so for them other bytes at the same versionCode count too, as in
+  the USB updater.
+- **Parked** means gear P when the CAN box reports the gear, or standing still when it does
+  not. Downloads run while driving and stop in reverse or in a call, like the uploads.
+- **The launcher goes last, through a watch script.** `pm install` ends the running launcher,
+  so it writes `OtaWatch`'s script and starts it detached through the root shell. The script
+  installs the APK, reopens Home (`am start -c HOME`), and polls the launcher's process for two
+  minutes. A launcher that runs 20 s writes `healthy-<code>` and is kept. One that dies twice
+  first is rolled back: Android's own rollback (`pm rollback-app`), else the previous APK kept
+  in `files/ota/rollback/` with `pm install -r -d`. The next launcher reads the result, and a
+  rolled-back version is never offered again.
+- **Settings > Updates** shows the state, the last check, what is waiting, and the last result.
+  "Check now" asks on the next minute's tick.
+
+The USB updater (`os/car-update`) stays the fallback for anything this refuses.
+
 ## Setup on a unit
 
 The unit needs the tailnet link and the server address once, from `os/uplink/enroll.sh`
@@ -105,3 +142,9 @@ is granted through the root shell on first start; Setup Doctor checks it too.
 | `carlib/.../RawHttp.kt` | HTTP over the SOCKS port | `RawHttpTest` |
 | `carlib/.../RoadNoiseFile.kt` | WAV, sidecar, silence | `RoadNoiseFileTest` |
 | `app/.../service/UplinkService.kt` | the two loops | emulator farm, end to end |
+| `carlib/.../ReleaseManifest.kt` | the release manifest, bad rows dropped | `ReleaseManifestTest` |
+| `carlib/.../ApkCert.kt`, `ReleasePin.kt` | the signer an APK names; the pins; size, sha256, signer | `ApkCertTest`: a wrong signer is refused although the manifest names the pinned one |
+| `carlib/.../OtaPlan.kt` | when to check, what to take, install order, when to install | `OtaPlanTest`: every hold, order, refused versions, daily and ACC-on checks |
+| `carlib/.../ApkFetch.kt` | resumable download, verify, one candidate per app | `ApkFetchTest`: resume, pause, corrupt, cleanup |
+| `carlib/.../OtaWatch.kt` | the launcher's install and rollback script | `OtaWatchTest`: the script under `sh` with fake `pm`, `am`, `pidof` |
+| `app/.../service/OtaUpdater.kt` | the update loop | emulator farm, end to end |

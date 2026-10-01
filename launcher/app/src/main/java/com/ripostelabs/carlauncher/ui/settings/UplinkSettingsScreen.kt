@@ -39,7 +39,8 @@ fun UplinkSettingsScreen(onBack: () -> Unit) {
                 current = status.budgetMb,
                 options = UplinkPrefs.BUDGET_CHOICES.map { it to if (it == 0L) "Wi-Fi only" else "$it MB" },
                 onSelect = prefs::setBudgetMb,
-                description = "Uploads over Bluetooth tethering or a phone hotspot stop at this. Home Wi-Fi is not counted.",
+                description = "Uploads and app updates over Bluetooth tethering or a phone hotspot stop at this. " +
+                    "Home Wi-Fi is not counted.",
             )
         }
         SettingsSection(title = "Status") {

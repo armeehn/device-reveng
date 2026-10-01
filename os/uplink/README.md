@@ -47,9 +47,9 @@ tagged `tag:car`. The network policy lets `tag:car` reach the ingest port and no
 
 ## The ingest service
 
-`ingest.py` is one file, Python standard library only. `install-ingest.sh SHARE_ROOT
-TAILNET_IP TAILSCALE_SOCKET` installs it as `car-ingest.service`, running as the share's
-owner. It binds the tailnet address only; `IP_FREEBIND` lets it start before the address
+`ingest.py` is Python standard library only, with `apkinfo.py` beside it. `install-ingest.sh
+SHARE_ROOT TAILNET_IP TAILSCALE_SOCKET [SUITE_ROOT]` installs both as `car-ingest.service`,
+running as the share's owner. It binds the tailnet address only; `IP_FREEBIND` lets it start before the address
 exists.
 
 Identity: each request's source address goes to the local `tailscaled` (`tailscale whois`).
@@ -68,6 +68,8 @@ the server:
 | sha256 or WAV check fails | `422`; the partial is dropped, start again |
 | `GET /v1/wants` | the trainer's per-band targets with `have_s` summed from the index |
 | `GET /v1/models/<path>` | the models folder, read-only, `Range` supported |
+| `GET /v1/releases/manifest.json` | the APKs the car may install (below) |
+| `GET /v1/releases/<path>.apk` | one APK the manifest names, read-only, `Range` supported |
 
 Kinds: `road-noise` (48 kHz mono PCM16 WAV plus a `road-noise/1` sidecar in `meta`) and
 `diag` (any file). Limits: 64 MB per capture, 32 MB per log file, 8 MB per chunk, 1 GB per
@@ -77,9 +79,31 @@ name and renamed, so a reader never sees half of one. Then a line goes into `ind
 The client deletes its local copy only after a `complete` answer whose sha256 equals its
 own.
 
+## Releases
+
+The car updates its launcher, car service and suite apps from the same service and port, so
+the network policy needs no new rule. `--releases-root` is the folder the release publisher
+fills with `carlauncher-<name>-vc<code>.apk` and `carservice-<name>-vc<code>.apk`; the newest of
+each is offered. `--suite-root` holds one `<package>.apk` per suite app. `apkinfo.py` reads each
+file once per size and modification time, with the standard library only:
+
+```json
+{"schema": "riposte-releases/1", "generated": "2026-10-01T18:00:00Z", "apps": [
+  {"role": "launcher", "package": "com.ripostelabs.carlauncher", "version_code": 975,
+   "version_name": "0.7", "path": "carlauncher-0.7-vc975.apk", "sha256": "...", "size": 8150240,
+   "cert_sha256": "..."},
+  {"role": "suite", "package": "com.ripostelabs.clock", "version_code": 3, "path":
+   "suite/com.ripostelabs.clock.apk", "...": "..."}]}
+```
+
+A file that does not parse (half copied, not an APK) is left out. Only `.apk` names in those
+two folders are served. `cert_sha256` is for people: the car checks the signer against its own
+pins. What the car does with this is in the launcher's `UPLINK.md`.
+
 ## Tests
 
 - `python3 -m unittest -v` in this folder: the server end to end on localhost with a fake
-  `whois`. It covers resume, conflicts, verify, quotas, identity, wants and models.
+  `whois`. It covers resume, conflicts, verify, quotas, identity, wants and models, and
+  (`test_releases.py`, on APKs built byte by byte) the release manifest and its files.
 - `os/test-uplink.sh`: the init script with fakes for the device. It covers the owner gate,
   the sha256 pin, the daemon flags, and that the key file goes only after a login.

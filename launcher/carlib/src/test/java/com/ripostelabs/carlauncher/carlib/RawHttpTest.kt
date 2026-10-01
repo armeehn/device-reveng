@@ -68,6 +68,19 @@ class RawHttpTest {
     }
 
     @Test
+    fun `a release range comes back as exact bytes`() {
+        // Every byte value, including ones that are not valid UTF-8: an APK must not be decoded.
+        val bytes = String(ByteArray(256) { it.toByte() }, Charsets.ISO_8859_1)
+        val seen = StringBuilder()
+        val port = serveOnce("HTTP/1.1 206 Partial Content\r\nContent-Length: 256\r\n\r\n$bytes", seen)
+        val reply = RawHttp("127.0.0.1", port, Proxy.NO_PROXY).range("suite/com.ripostelabs.clock.apk", 10, 265)
+        assertEquals(206, reply.status)
+        assertEquals((0 until 256).map { it.toByte() }, reply.body.toList())
+        assertEquals("GET /v1/releases/suite/com.ripostelabs.clock.apk HTTP/1.1", seen.lines().first())
+        assert(seen.contains("Range: bytes=10-265")) { seen }
+    }
+
+    @Test
     fun `the endpoint file must be a plain http URL with a port`() {
         assertEquals(null, RawHttp.of("not a url"))
         assertNull(RawHttp.of("https://example.org"))
