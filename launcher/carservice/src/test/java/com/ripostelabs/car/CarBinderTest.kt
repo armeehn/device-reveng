@@ -93,6 +93,14 @@ class CarBinderTest {
         override fun setLanguage(tag: String) { calls += "language $tag" }
     }
 
+    /** Call audio props: what the service set, and what getprop answers. */
+    private class FakeCallAudio : CallAudioSettings {
+        val props = mutableMapOf<String, String>()
+        override fun set(prop: String, value: String) { props[prop] = value }
+        override fun get(prop: String) = props[prop].orEmpty()
+    }
+
+    private val callAudio = FakeCallAudio()
     private val system = FakeSystem()
     private val nav = FakeNav()
     private val uiMode = FakeUiMode()
@@ -102,11 +110,11 @@ class CarBinderTest {
     private val link = FakeLink()
 
     private fun binder(vararg held: String) =
-        CarBinder(Gate { it in held }, listeners, power, systemUid, link, decoder, nav, uiMode, system)
+        CarBinder(Gate { it in held }, listeners, power, systemUid, link, decoder, nav, uiMode, system, callAudio)
 
     @Test
-    fun apiVersionIsNine() {
-        assertEquals(9, binder().apiVersion())
+    fun apiVersionIsTen() {
+        assertEquals(10, binder().apiVersion())
     }
 
     @Test
@@ -230,6 +238,39 @@ class CarBinderTest {
         assertThrows(SecurityException::class.java) { binder(READ_PERMISSION).setNightMode(ICarService.NIGHT_MODE_DAY) }
         assertThrows(IllegalArgumentException::class.java) { binder(CONTROL_PERMISSION).setNightMode(0) }
         assertEquals(2, uiMode.modes.size)
+    }
+
+    // RAV4-184: the echo delays and the mic gain become stock's persist.blinkbt.* values.
+    @Test
+    fun callAudioSetsStockProps() {
+        val b = binder(CONTROL_PERMISSION, READ_PERMISSION)
+        b.setAecDelay(ICarService.AEC_PATH_PHONE, 400)
+        b.setAecDelay(ICarService.AEC_PATH_CARPLAY, 0)
+        b.setMicGain(5)
+
+        assertEquals("400", callAudio.props["persist.blinkbt.aec.delay"])
+        assertEquals("0", callAudio.props["persist.blinkbt.carplay.aecdelay"])
+        assertEquals("112", callAudio.props["persist.blinkbt.aec.gain"])
+        assertEquals(400, b.aecDelay(ICarService.AEC_PATH_PHONE))
+        assertEquals(5, b.micGain())
+    }
+
+    @Test
+    fun callAudioReadsUnsetAsMinusOne() {
+        val b = binder(READ_PERMISSION)
+        assertEquals(-1, b.aecDelay(ICarService.AEC_PATH_PHONE))
+        assertEquals(-1, b.micGain())
+    }
+
+    @Test
+    fun callAudioNeedsControlAndStockRanges() {
+        assertThrows(SecurityException::class.java) { binder(READ_PERMISSION).setMicGain(3) }
+        assertThrows(SecurityException::class.java) { binder(READ_PERMISSION).setAecDelay(ICarService.AEC_PATH_PHONE, 10) }
+        assertThrows(SecurityException::class.java) { binder().micGain() }
+        assertThrows(IllegalArgumentException::class.java) { binder(CONTROL_PERMISSION).setMicGain(6) }
+        assertThrows(IllegalArgumentException::class.java) { binder(CONTROL_PERMISSION).setAecDelay(3, 10) }
+        assertThrows(IllegalArgumentException::class.java) { binder(CONTROL_PERMISSION).setAecDelay(ICarService.AEC_PATH_PHONE, 1001) }
+        assertTrue(callAudio.props.isEmpty())
     }
 
     // RAV4-216: the hotspot is a change, so CONTROL; only on and off pass.

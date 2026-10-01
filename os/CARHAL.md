@@ -286,6 +286,24 @@ toggle through here and show the state the service reads back. System & about li
 unit's languages and sets one in place. Without a service at 9, all three open Android's
 pages as before. The service lives in `/system`, so the unit gets it only with a new image.
 
+### Call audio (apiVersion 10)
+
+```aidl
+const int AEC_PATH_PHONE = 1;  const int AEC_PATH_CARPLAY = 2;
+void setAecDelay(int path, int ms);  // CONTROL; 0..1000 ms
+int aecDelay(int path);              // READ; ms, -1 when unset
+void setMicGain(int level);          // CONTROL; 1..5 = 85, 90, 96, 100, 112
+int micGain();                       // READ; 1..5, -1 when unset
+```
+
+The BT module's echo canceller reads three props: `persist.blinkbt.aec.delay` (the vendor
+audio HAL), and `persist.blinkbt.carplay.aecdelay` and `persist.blinkbt.aec.gain`
+(`libblinkAec` in the system image). Stock eventcenter writes them as the system uid
+(`EventService.onSetMicGain`, `SystemUtils.initSysBTLaunchSound`). The launcher cannot, so the
+service runs `setprop` for it. The props persist, so nothing is replayed at boot. Settings >
+Phone > Call audio shows the values read back; without a service at 10 the rows are disabled.
+The service lives in `/system`, so the unit gets it only with a new image.
+
 ### IEventService compatibility (no apiVersion change)
 
 `EventCompatService` in `com.ripostelabs.car` answers the vendor's `IEventService` binder

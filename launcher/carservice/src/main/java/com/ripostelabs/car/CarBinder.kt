@@ -2,7 +2,10 @@ package com.ripostelabs.car
 
 import android.os.RemoteException
 import java.util.Locale
+import com.ripostelabs.carlauncher.carlib.AecPath
+import com.ripostelabs.carlauncher.carlib.CallTuning
 import com.ripostelabs.carlauncher.carlib.McuOwner
+import com.ripostelabs.carlauncher.carlib.MicGain
 import com.ripostelabs.carlauncher.carlib.McuOwnerProtocol
 
 /** The listeners a client registered; RemoteCallbackList on the unit, a list in tests. */
@@ -76,6 +79,14 @@ interface SystemSettings {
     fun setLanguage(tag: String)
 }
 
+/** RAV4-184: system props the call audio lives in: [CallAudioProps] on the unit, a fake in tests. */
+interface CallAudioSettings {
+    fun set(prop: String, value: String)
+
+    /** The prop's value, empty when unset. */
+    fun get(prop: String): String
+}
+
 interface Link {
     fun status(): McuOwner.Status
     fun open()
@@ -113,6 +124,7 @@ class CarBinder(
     private val nav: NavPanel,
     private val uiMode: UiMode,
     private val system: SystemSettings,
+    private val callAudio: CallAudioSettings,
 ) : ICarService.Stub() {
 
     /** The `71` reverse bit while the link runs; only [publish] and [publishStatus] move it. */
@@ -242,6 +254,29 @@ class CarBinder(
         system.setLanguage(language)
     }
 
+    override fun setAecDelay(path: Int, ms: Int) {
+        gate.enforce(Access.CONTROL)
+        callAudio.set(aecPath(path).prop, CallTuning.delayValue(ms))
+    }
+
+    override fun aecDelay(path: Int): Int {
+        gate.enforce(Access.READ)
+        return CallTuning.parseDelay(callAudio.get(aecPath(path).prop)) ?: UNSET
+    }
+
+    override fun setMicGain(level: Int) {
+        gate.enforce(Access.CONTROL)
+        val gain = requireNotNull(MicGain.of(level)) { "unknown mic gain level $level" }
+        callAudio.set(CallTuning.MIC_GAIN_PROP, gain.value.toString())
+    }
+
+    override fun micGain(): Int {
+        gate.enforce(Access.READ)
+        return MicGain.parse(callAudio.get(CallTuning.MIC_GAIN_PROP))?.level ?: UNSET
+    }
+
+    private fun aecPath(code: Int) = requireNotNull(AecPath.of(code)) { "unknown echo path $code" }
+
     override fun lastSource(): Int {
         gate.enforce(Access.READ)
         return link.lastSource()
@@ -311,9 +346,12 @@ class CarBinder(
 
     private companion object {
         // 1 was the skeleton; 2 adds the MCU link calls; 3 power (factoryReset); 4 reverse and
-        // decoder; 5 the nav bar; 6 the POWER key choice; 9 hotspot and language. Additions to ICarService bump it. The manifest's com.ripostelabs.car.API
+        // decoder; 5 the nav bar; 6 the POWER key choice; 9 hotspot and language; 10 call audio. Additions to ICarService bump it. The manifest's com.ripostelabs.car.API
         // meta-data must say the same.
-        const val API_VERSION = 9
+        const val API_VERSION = 10
+
+        /** A call audio read with no value set. */
+        const val UNSET = -1
 
         /** surface, onSurface, primary. */
         const val NAV_COLORS = 3

@@ -62,4 +62,13 @@ interface ICarService {
     void setHotspot(int state);                 // CONTROL
     int hotspotState();                         // READ: HOTSPOT_*
     void setLanguage(String tag);               // CONTROL: a BCP 47 tag, "fr-CA"
+
+    // 10: call audio. The BT module's echo canceller reads persist.blinkbt.* props that only the
+    // system uid may set, as stock eventcenter does (CallTuning in carlib names them).
+    const int AEC_PATH_PHONE = 1;               // persist.blinkbt.aec.delay
+    const int AEC_PATH_CARPLAY = 2;             // persist.blinkbt.carplay.aecdelay
+    void setAecDelay(int path, int ms);         // CONTROL: 0..1000 ms
+    int aecDelay(int path);                     // READ: ms, -1 when unset
+    void setMicGain(int level);                 // CONTROL: 1..5 = 85, 90, 96, 100, 112
+    int micGain();                              // READ: 1..5, -1 when unset
 }

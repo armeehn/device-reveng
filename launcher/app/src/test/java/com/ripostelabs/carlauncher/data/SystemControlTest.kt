@@ -1,10 +1,12 @@
 package com.ripostelabs.carlauncher.data
 
+import com.ripostelabs.carlauncher.carlib.AecPath
 import com.ripostelabs.carlauncher.carlib.CarProfile
 import com.ripostelabs.carlauncher.carlib.Hotspot
 import com.ripostelabs.carlauncher.carlib.McuOwner
 import com.ripostelabs.carlauncher.carlib.McuOwnerProtocol
 import com.ripostelabs.carlauncher.carlib.McuPort
+import com.ripostelabs.carlauncher.carlib.MicGain
 import java.util.Locale
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -44,6 +46,42 @@ class SystemControlTest {
             sent += "language $tag"
             return true
         }
+        override val controlsCallAudio: Boolean
+            get() = routed
+        override fun setAecDelay(path: AecPath, ms: Int): Boolean {
+            if (!routed) {
+                return false
+            }
+            sent += "aec $path $ms"
+            return true
+        }
+        override fun micGain(): MicGain? = if (routed) MicGain.G96 else null
+        override fun setMicGain(gain: MicGain): Boolean {
+            if (!routed) {
+                return false
+            }
+            sent += "mic $gain"
+            return true
+        }
+    }
+
+    // RAV4-184: call audio goes through a service at 10; without one nothing is sent.
+    @Test
+    fun callAudioGoesOnlyThroughTheService() {
+        val port = FakePort(routed = true)
+        val control = SystemControl { port }
+        assertTrue(control.callAudioRouted)
+        assertEquals(MicGain.G96, control.micGain())
+        assertTrue(control.setAecDelay(AecPath.PHONE, 120))
+        assertTrue(control.setMicGain(MicGain.G112))
+        assertEquals(listOf("aec PHONE 120", "mic G112"), port.sent)
+
+        val old = FakePort(routed = false)
+        val none = SystemControl { old }
+        assertFalse(none.callAudioRouted)
+        assertFalse(none.setMicGain(MicGain.G85))
+        assertTrue(old.sent.isEmpty())
+        assertFalse(SystemControl { null }.setAecDelay(AecPath.CARPLAY, 0))
     }
 
     @Test
