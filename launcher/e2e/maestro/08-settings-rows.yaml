@@ -1,9 +1,14 @@
 appId: com.ripostelabs.carlauncher
 name: Every Settings row opens a screen that names itself
 # One row, one screen, one Back. A row that opens nothing, or a screen that does not carry the
-# row's name, is a dead route or a naming drift. The hub returns to the top after each visit,
-# so every row is scrolled to again; a parenthetical qualifier on a row ("All settings
-# (advanced)" -> "All settings") is not part of the name the screen must carry.
+# row's name, is a dead route or a naming drift. A parenthetical qualifier on a row
+# ("All settings (advanced)" -> "All settings") is not part of the name the screen must carry.
+#
+# The hub's subtitle is the only text on the hub and on no page, so it marks where we are: gone
+# means the page opened, back means Back returned to the hub. The row's own name cannot do that,
+# because the hub shows it too. Back keeps the hub where it was, so the next row is at most a
+# swipe away. When the hub came back at the top, every row was a scroll from the top against the
+# same 30 s budget, and the low rows ran out of it on the slower CI emulator (2026-09-30).
 ---
 - launchApp
 - extendedWaitUntil:
@@ -11,7 +16,7 @@ name: Every Settings row opens a screen that names itself
     timeout: 20000
 - tapOn: { point: "96%,7%" }        # Settings
 - extendedWaitUntil:
-    visible: "Launcher"
+    visible: "(Read-only: root not detected.*|Car & launcher configuration)"
     timeout: 20000
 - scrollUntilVisible:
     element:
@@ -20,11 +25,14 @@ name: Every Settings row opens a screen that names itself
     timeout: 30000
 - tapOn: "Launcher"
 - extendedWaitUntil:
+    notVisible: "(Read-only: root not detected.*|Car & launcher configuration)"
+    timeout: 20000
+- extendedWaitUntil:
     visible: "Launcher"
     timeout: 20000
 - back
 - extendedWaitUntil:
-    visible: "App directory"
+    visible: "(Read-only: root not detected.*|Car & launcher configuration)"
     timeout: 20000
 - scrollUntilVisible:
     element:
@@ -33,11 +41,14 @@ name: Every Settings row opens a screen that names itself
     timeout: 30000
 - tapOn: "App directory"
 - extendedWaitUntil:
+    notVisible: "(Read-only: root not detected.*|Car & launcher configuration)"
+    timeout: 20000
+- extendedWaitUntil:
     visible: "App directory"
     timeout: 20000
 - back
 - extendedWaitUntil:
-    visible: "App directory"
+    visible: "(Read-only: root not detected.*|Car & launcher configuration)"
     timeout: 20000
 - scrollUntilVisible:
     element:
@@ -46,11 +57,14 @@ name: Every Settings row opens a screen that names itself
     timeout: 30000
 - tapOn: "Display & Illumination"
 - extendedWaitUntil:
+    notVisible: "(Read-only: root not detected.*|Car & launcher configuration)"
+    timeout: 20000
+- extendedWaitUntil:
     visible: "Display & Illumination"
     timeout: 20000
 - back
 - extendedWaitUntil:
-    visible: "App directory"
+    visible: "(Read-only: root not detected.*|Car & launcher configuration)"
     timeout: 20000
 - scrollUntilVisible:
     element:
@@ -59,11 +73,14 @@ name: Every Settings row opens a screen that names itself
     timeout: 30000
 - tapOn: "Reverse camera"
 - extendedWaitUntil:
+    notVisible: "(Read-only: root not detected.*|Car & launcher configuration)"
+    timeout: 20000
+- extendedWaitUntil:
     visible: "Reverse camera"
     timeout: 20000
 - back
 - extendedWaitUntil:
-    visible: "App directory"
+    visible: "(Read-only: root not detected.*|Car & launcher configuration)"
     timeout: 20000
 - scrollUntilVisible:
     element:
@@ -72,11 +89,14 @@ name: Every Settings row opens a screen that names itself
     timeout: 30000
 - tapOn: "Parking radar"
 - extendedWaitUntil:
+    notVisible: "(Read-only: root not detected.*|Car & launcher configuration)"
+    timeout: 20000
+- extendedWaitUntil:
     visible: "Parking radar"
     timeout: 20000
 - back
 - extendedWaitUntil:
-    visible: "App directory"
+    visible: "(Read-only: root not detected.*|Car & launcher configuration)"
     timeout: 20000
 - scrollUntilVisible:
     element:
@@ -85,11 +105,14 @@ name: Every Settings row opens a screen that names itself
     timeout: 30000
 - tapOn: "Audio & EQ"
 - extendedWaitUntil:
+    notVisible: "(Read-only: root not detected.*|Car & launcher configuration)"
+    timeout: 20000
+- extendedWaitUntil:
     visible: "Audio & EQ"
     timeout: 20000
 - back
 - extendedWaitUntil:
-    visible: "App directory"
+    visible: "(Read-only: root not detected.*|Car & launcher configuration)"
     timeout: 20000
 - scrollUntilVisible:
     element:
@@ -98,11 +121,14 @@ name: Every Settings row opens a screen that names itself
     timeout: 30000
 - tapOn: "Climate"
 - extendedWaitUntil:
+    notVisible: "(Read-only: root not detected.*|Car & launcher configuration)"
+    timeout: 20000
+- extendedWaitUntil:
     visible: "Climate"
     timeout: 20000
 - back
 - extendedWaitUntil:
-    visible: "App directory"
+    visible: "(Read-only: root not detected.*|Car & launcher configuration)"
     timeout: 20000
 - scrollUntilVisible:
     element:
@@ -111,11 +137,14 @@ name: Every Settings row opens a screen that names itself
     timeout: 30000
 - tapOn: "Radio"
 - extendedWaitUntil:
+    notVisible: "(Read-only: root not detected.*|Car & launcher configuration)"
+    timeout: 20000
+- extendedWaitUntil:
     visible: "Radio"
     timeout: 20000
 - back
 - extendedWaitUntil:
-    visible: "App directory"
+    visible: "(Read-only: root not detected.*|Car & launcher configuration)"
     timeout: 20000
 - scrollUntilVisible:
     element:
@@ -124,11 +153,14 @@ name: Every Settings row opens a screen that names itself
     timeout: 30000
 - tapOn: "Steering wheel"
 - extendedWaitUntil:
+    notVisible: "(Read-only: root not detected.*|Car & launcher configuration)"
+    timeout: 20000
+- extendedWaitUntil:
     visible: "Steering wheel"
     timeout: 20000
 - back
 - extendedWaitUntil:
-    visible: "App directory"
+    visible: "(Read-only: root not detected.*|Car & launcher configuration)"
     timeout: 20000
 - scrollUntilVisible:
     element:
@@ -137,11 +169,14 @@ name: Every Settings row opens a screen that names itself
     timeout: 30000
 - tapOn: "Wheel gestures"
 - extendedWaitUntil:
+    notVisible: "(Read-only: root not detected.*|Car & launcher configuration)"
+    timeout: 20000
+- extendedWaitUntil:
     visible: "Wheel gestures"
     timeout: 20000
 - back
 - extendedWaitUntil:
-    visible: "App directory"
+    visible: "(Read-only: root not detected.*|Car & launcher configuration)"
     timeout: 20000
 - scrollUntilVisible:
     element:
@@ -150,11 +185,14 @@ name: Every Settings row opens a screen that names itself
     timeout: 30000
 - tapOn: "Power & sleep"
 - extendedWaitUntil:
+    notVisible: "(Read-only: root not detected.*|Car & launcher configuration)"
+    timeout: 20000
+- extendedWaitUntil:
     visible: "Power & sleep"
     timeout: 20000
 - back
 - extendedWaitUntil:
-    visible: "App directory"
+    visible: "(Read-only: root not detected.*|Car & launcher configuration)"
     timeout: 20000
 - scrollUntilVisible:
     element:
@@ -163,11 +201,14 @@ name: Every Settings row opens a screen that names itself
     timeout: 30000
 - tapOn: "Root tier"
 - extendedWaitUntil:
+    notVisible: "(Read-only: root not detected.*|Car & launcher configuration)"
+    timeout: 20000
+- extendedWaitUntil:
     visible: "Root tier"
     timeout: 20000
 - back
 - extendedWaitUntil:
-    visible: "App directory"
+    visible: "(Read-only: root not detected.*|Car & launcher configuration)"
     timeout: 20000
 - scrollUntilVisible:
     element:
@@ -176,11 +217,14 @@ name: Every Settings row opens a screen that names itself
     timeout: 30000
 - tapOn: "Setup doctor"
 - extendedWaitUntil:
+    notVisible: "(Read-only: root not detected.*|Car & launcher configuration)"
+    timeout: 20000
+- extendedWaitUntil:
     visible: "Setup doctor"
     timeout: 20000
 - back
 - extendedWaitUntil:
-    visible: "App directory"
+    visible: "(Read-only: root not detected.*|Car & launcher configuration)"
     timeout: 20000
 - scrollUntilVisible:
     element:
@@ -189,11 +233,14 @@ name: Every Settings row opens a screen that names itself
     timeout: 30000
 - tapOn: "Backup & restore"
 - extendedWaitUntil:
+    notVisible: "(Read-only: root not detected.*|Car & launcher configuration)"
+    timeout: 20000
+- extendedWaitUntil:
     visible: "Backup & restore"
     timeout: 20000
 - back
 - extendedWaitUntil:
-    visible: "App directory"
+    visible: "(Read-only: root not detected.*|Car & launcher configuration)"
     timeout: 20000
 - scrollUntilVisible:
     element:
@@ -202,11 +249,14 @@ name: Every Settings row opens a screen that names itself
     timeout: 30000
 - tapOn: "Updates"
 - extendedWaitUntil:
+    notVisible: "(Read-only: root not detected.*|Car & launcher configuration)"
+    timeout: 20000
+- extendedWaitUntil:
     visible: "Updates"
     timeout: 20000
 - back
 - extendedWaitUntil:
-    visible: "App directory"
+    visible: "(Read-only: root not detected.*|Car & launcher configuration)"
     timeout: 20000
 - scrollUntilVisible:
     element:
@@ -215,11 +265,14 @@ name: Every Settings row opens a screen that names itself
     timeout: 30000
 - tapOn: "System & about"
 - extendedWaitUntil:
+    notVisible: "(Read-only: root not detected.*|Car & launcher configuration)"
+    timeout: 20000
+- extendedWaitUntil:
     visible: "System & about"
     timeout: 20000
 - back
 - extendedWaitUntil:
-    visible: "App directory"
+    visible: "(Read-only: root not detected.*|Car & launcher configuration)"
     timeout: 20000
 - scrollUntilVisible:
     element:
@@ -228,11 +281,14 @@ name: Every Settings row opens a screen that names itself
     timeout: 30000
 - tapOn: "Vehicle"
 - extendedWaitUntil:
+    notVisible: "(Read-only: root not detected.*|Car & launcher configuration)"
+    timeout: 20000
+- extendedWaitUntil:
     visible: "Vehicle"
     timeout: 20000
 - back
 - extendedWaitUntil:
-    visible: "App directory"
+    visible: "(Read-only: root not detected.*|Car & launcher configuration)"
     timeout: 20000
 - scrollUntilVisible:
     element:
@@ -241,11 +297,14 @@ name: Every Settings row opens a screen that names itself
     timeout: 30000
 - tapOn: "CAN box"
 - extendedWaitUntil:
+    notVisible: "(Read-only: root not detected.*|Car & launcher configuration)"
+    timeout: 20000
+- extendedWaitUntil:
     visible: "CAN box"
     timeout: 20000
 - back
 - extendedWaitUntil:
-    visible: "App directory"
+    visible: "(Read-only: root not detected.*|Car & launcher configuration)"
     timeout: 20000
 - scrollUntilVisible:
     element:
@@ -254,11 +313,14 @@ name: Every Settings row opens a screen that names itself
     timeout: 30000
 - tapOn: "USB port"
 - extendedWaitUntil:
+    notVisible: "(Read-only: root not detected.*|Car & launcher configuration)"
+    timeout: 20000
+- extendedWaitUntil:
     visible: "USB port"
     timeout: 20000
 - back
 - extendedWaitUntil:
-    visible: "App directory"
+    visible: "(Read-only: root not detected.*|Car & launcher configuration)"
     timeout: 20000
 - scrollUntilVisible:
     element:
@@ -267,11 +329,14 @@ name: Every Settings row opens a screen that names itself
     timeout: 30000
 - tapOn: "Diagnostics"
 - extendedWaitUntil:
+    notVisible: "(Read-only: root not detected.*|Car & launcher configuration)"
+    timeout: 20000
+- extendedWaitUntil:
     visible: "Diagnostics"
     timeout: 20000
 - back
 - extendedWaitUntil:
-    visible: "App directory"
+    visible: "(Read-only: root not detected.*|Car & launcher configuration)"
     timeout: 20000
 - scrollUntilVisible:
     element:
@@ -280,11 +345,14 @@ name: Every Settings row opens a screen that names itself
     timeout: 30000
 - tapOn: "Accessories"
 - extendedWaitUntil:
+    notVisible: "(Read-only: root not detected.*|Car & launcher configuration)"
+    timeout: 20000
+- extendedWaitUntil:
     visible: "Accessories"
     timeout: 20000
 - back
 - extendedWaitUntil:
-    visible: "App directory"
+    visible: "(Read-only: root not detected.*|Car & launcher configuration)"
     timeout: 20000
 - scrollUntilVisible:
     element:
@@ -293,11 +361,14 @@ name: Every Settings row opens a screen that names itself
     timeout: 30000
 - tapOn: "Games"
 - extendedWaitUntil:
+    notVisible: "(Read-only: root not detected.*|Car & launcher configuration)"
+    timeout: 20000
+- extendedWaitUntil:
     visible: "Games"
     timeout: 20000
 - back
 - extendedWaitUntil:
-    visible: "App directory"
+    visible: "(Read-only: root not detected.*|Car & launcher configuration)"
     timeout: 20000
 - scrollUntilVisible:
     element:
@@ -306,11 +377,14 @@ name: Every Settings row opens a screen that names itself
     timeout: 30000
 - tapOn: "Guided car tests"
 - extendedWaitUntil:
+    notVisible: "(Read-only: root not detected.*|Car & launcher configuration)"
+    timeout: 20000
+- extendedWaitUntil:
     visible: "Guided car tests"
     timeout: 20000
 - back
 - extendedWaitUntil:
-    visible: "App directory"
+    visible: "(Read-only: root not detected.*|Car & launcher configuration)"
     timeout: 20000
 - scrollUntilVisible:
     element:
@@ -319,11 +393,14 @@ name: Every Settings row opens a screen that names itself
     timeout: 30000
 - tapOn: "CAN frame capture"
 - extendedWaitUntil:
+    notVisible: "(Read-only: root not detected.*|Car & launcher configuration)"
+    timeout: 20000
+- extendedWaitUntil:
     visible: "CAN frame capture"
     timeout: 20000
 - back
 - extendedWaitUntil:
-    visible: "App directory"
+    visible: "(Read-only: root not detected.*|Car & launcher configuration)"
     timeout: 20000
 - scrollUntilVisible:
     element:
@@ -332,11 +409,14 @@ name: Every Settings row opens a screen that names itself
     timeout: 30000
 - tapOn: "Radio info capture"
 - extendedWaitUntil:
+    notVisible: "(Read-only: root not detected.*|Car & launcher configuration)"
+    timeout: 20000
+- extendedWaitUntil:
     visible: "Radio info capture"
     timeout: 20000
 - back
 - extendedWaitUntil:
-    visible: "App directory"
+    visible: "(Read-only: root not detected.*|Car & launcher configuration)"
     timeout: 20000
 - scrollUntilVisible:
     element:
@@ -345,11 +425,14 @@ name: Every Settings row opens a screen that names itself
     timeout: 30000
 - tapOn: "Vehicle data capture"
 - extendedWaitUntil:
+    notVisible: "(Read-only: root not detected.*|Car & launcher configuration)"
+    timeout: 20000
+- extendedWaitUntil:
     visible: "Vehicle data capture"
     timeout: 20000
 - back
 - extendedWaitUntil:
-    visible: "App directory"
+    visible: "(Read-only: root not detected.*|Car & launcher configuration)"
     timeout: 20000
 - scrollUntilVisible:
     element:
@@ -358,11 +441,14 @@ name: Every Settings row opens a screen that names itself
     timeout: 30000
 - tapOn: "All settings (advanced)"
 - extendedWaitUntil:
+    notVisible: "(Read-only: root not detected.*|Car & launcher configuration)"
+    timeout: 20000
+- extendedWaitUntil:
     visible: "All settings"
     timeout: 20000
 - back
 - extendedWaitUntil:
-    visible: "App directory"
+    visible: "(Read-only: root not detected.*|Car & launcher configuration)"
     timeout: 20000
 - scrollUntilVisible:
     element:
@@ -371,9 +457,12 @@ name: Every Settings row opens a screen that names itself
     timeout: 30000
 - tapOn: "SysVar export"
 - extendedWaitUntil:
+    notVisible: "(Read-only: root not detected.*|Car & launcher configuration)"
+    timeout: 20000
+- extendedWaitUntil:
     visible: "SysVar export"
     timeout: 20000
 - back
 - extendedWaitUntil:
-    visible: "App directory"
+    visible: "(Read-only: root not detected.*|Car & launcher configuration)"
     timeout: 20000
