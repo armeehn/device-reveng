@@ -93,4 +93,14 @@ class IncomingCallGateTest {
         assertEquals(HfAudio.OFF, HfAudio.of(0))
         assertEquals(HfAudio.OFF, HfAudio.of(1))
     }
+    /**
+     * Audit 2026-09-30 B1: the card is a window over every app, the reverse camera's too.
+     * Stock's card (type 2003) sits under the camera (2021); here it waits, the ring does not.
+     */
+    @Test
+    fun `ringing in reverse rings but keeps the card off the camera`() {
+        val v = IncomingCallGate().decide(ringing, noCarPlay, LauncherFront.REVERSE_PICTURE)
+        assertFalse(v.show)
+        assertTrue(v.ring)
+    }
 }

@@ -41,7 +41,7 @@ class IncomingCallGate {
         }
 
         return IncomingCallView(
-            show = front != LauncherFront.PHONE_SCREEN,
+            show = front == LauncherFront.ELSEWHERE,
             ring = ringing.state == HfCallState.INCOMING && s.hfAudio == HfAudio.OFF,
             number = ringing.number,
         )
@@ -63,8 +63,11 @@ data class IncomingCallView(
     }
 }
 
-/** What the launcher has in front, as far as the window cares. */
-enum class LauncherFront { PHONE_SCREEN, ELSEWHERE }
+/**
+ * What the launcher has in front, as far as the window cares. The reverse picture wins: the card
+ * waits until it is down, as stock's sits under the camera window.
+ */
+enum class LauncherFront { PHONE_SCREEN, REVERSE_PICTURE, ELSEWHERE }
 
 /** The HF client's SCO link: ON while the phone streams call audio or an in-band ring. */
 enum class HfAudio {

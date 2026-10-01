@@ -679,8 +679,12 @@ class MainActivity : ComponentActivity() {
                 screenState.value = Screen.Phone
             }
         }
-        val front = combine(lifecycle.currentStateFlow, snapshotFlow { screenState.value }) { st, sc ->
-            if (st.isAtLeast(Lifecycle.State.RESUMED) && sc == Screen.Phone) LauncherFront.PHONE_SCREEN else LauncherFront.ELSEWHERE
+        val front = combine(lifecycle.currentStateFlow, snapshotFlow { screenState.value }, inReverse) { st, sc, reversing ->
+            when {
+                reversing -> LauncherFront.REVERSE_PICTURE
+                st.isAtLeast(Lifecycle.State.RESUMED) && sc == Screen.Phone -> LauncherFront.PHONE_SCREEN
+                else -> LauncherFront.ELSEWHERE
+            }
         }
         incomingCalls.start(lifecycleScope, carEvents.carplayState, front)
 
