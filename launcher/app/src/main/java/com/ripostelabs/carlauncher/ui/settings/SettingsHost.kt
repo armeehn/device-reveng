@@ -252,12 +252,17 @@ fun SettingsHost(
             )
 
             SettingsRoute.Audio -> if (mcuSetup != null) {
-                McuAudioSettingsScreen(store = mcuSetup, onBack = ::pop)
+                McuAudioSettingsScreen(
+                    store = mcuSetup,
+                    onBack = ::pop,
+                    oemAmp = { OemAmpSection(carService, carEvents) },
+                )
             } else {
                 AudioSettingsScreen(
                     controller = controller,
                     carService = carService,
                     onBack = ::pop,
+                    oemAmp = { OemAmpSection(carService, carEvents) },
                 )
             }
 

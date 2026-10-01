@@ -35,6 +35,7 @@ import com.ripostelabs.carlauncher.carlib.HiworldCanDecoder
 import com.ripostelabs.carlauncher.carlib.McuCommand
 import com.ripostelabs.carlauncher.carlib.McuTapSource
 import com.ripostelabs.carlauncher.carlib.ObdPid
+import com.ripostelabs.carlauncher.carlib.OemAmp
 import com.ripostelabs.carlauncher.carlib.RadarCapture
 import com.ripostelabs.carlauncher.ui.collectAsStateSafe
 import com.ripostelabs.carlauncher.ui.theme.carShape
@@ -629,6 +630,14 @@ private fun decodedRows(sig: CanSignal): Map<String, String> = when (sig) {
     )
     is CanSignal.Version -> mapOf("CANBOX firmware" to sig.text)
     is CanSignal.CarSettings -> CarSetting.entries.associate { it.name to (sig.state[it]?.toString() ?: "—") }
+    is CanSignal.OemAmp -> with(sig.state) {
+        mapOf(
+            "Amp volume" to "$volume",
+            "Amp balance / fade" to "${OemAmp.balanceLabel(balance)} / ${OemAmp.fadeLabel(fade)}",
+            "Amp bass / mid / treble" to listOf(bass, mid, treble).joinToString(" / ", transform = OemAmp::toneLabel),
+            "Amp ASL / surround" to "$asl / $surround",
+        )
+    }
     is CanSignal.BoxKey -> mapOf("Box key (${sig.kind.name.lowercase()})" to "${sig.code} / ${sig.value}")
     // Exhaustive on purpose: no `else`. A new CanSignal type must fail to compile here until
     // someone decides how to show it. Both SideCamera and SysEvent were decoded and shipped while

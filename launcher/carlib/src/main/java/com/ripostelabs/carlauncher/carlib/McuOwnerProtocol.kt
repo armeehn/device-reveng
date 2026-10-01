@@ -481,6 +481,9 @@ object McuOwnerProtocol {
     /** RAV4-182: one cluster line (station, track text, phone, clock) through the box; see [ClusterText]. */
     fun cluster(frame: ClusterFrame): ByteArray = canBox(frame.payload)
 
+    /** RAV4-187: one factory-amp frame, the `6A 05 01 A6` poll or a `02 AD` write ([OemAmp]). */
+    fun oemAmp(payload: IntArray): ByteArray = canBox(payload)
+
     /** `6A 05 01 62`: ask the box for its car settings report. */
     fun carSettingsQuery(): ByteArray = canBox(CarSettings.QUERY)
 
