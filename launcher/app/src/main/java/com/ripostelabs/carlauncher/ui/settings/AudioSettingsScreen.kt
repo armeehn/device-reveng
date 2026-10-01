@@ -51,6 +51,7 @@ fun AudioSettingsScreen(
     controller: CarSettingsController,
     carService: CarService,
     onBack: () -> Unit,
+    oemAmp: @Composable () -> Unit = {},
 ) {
     val connected by carService.connected.collectAsStateWithLifecycle()
     val snap by controller.snapshot.collectAsStateWithLifecycle()
@@ -92,6 +93,9 @@ fun AudioSettingsScreen(
         onBack = onBack,
         subtitle = if (connected) null else "Waiting for the vendor audio service…",
     ) {
+        // RAV4-187: the factory amp, drawn only on a car that reports one.
+        oemAmp()
+
         SettingsSection(title = "Equalizer") {
             PickerSetting(
                 label = "EQ preset",

@@ -133,6 +133,12 @@ import com.ripostelabs.carlauncher.data.SystemChrome // v2.5
 import com.ripostelabs.carlauncher.nav.NavRepository
 import com.ripostelabs.carlauncher.ui.nav.NavBar
 import com.ripostelabs.carlauncher.ui.nav.ScreenOffWindow
+import com.ripostelabs.carlauncher.ui.nav.ScreensaverKeys // RAV4-201
+import com.ripostelabs.carlauncher.ui.nav.ScreensaverWindow // RAV4-201
+import com.ripostelabs.carlauncher.data.IdleClock // RAV4-201
+import com.ripostelabs.carlauncher.data.PowerOptions // RAV4-201
+import com.ripostelabs.carlauncher.data.SaverInputs // RAV4-201
+import com.ripostelabs.carlauncher.ui.PhoneLogic // RAV4-201
 import com.ripostelabs.carlauncher.ui.nav.VolumePopup
 import com.ripostelabs.carlauncher.ui.nav.VolumePopupPolicy
 import com.ripostelabs.carlauncher.data.ThemeSnapshotStore
@@ -185,6 +191,9 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first // v2.9
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.drop // RAV4-201
+import kotlinx.coroutines.flow.filter // RAV4-201
+import kotlinx.coroutines.flow.merge // RAV4-201
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.ripostelabs.carlauncher.ui.OnboardingScreen // v1.0
@@ -297,6 +306,8 @@ class MainActivity : ComponentActivity() {
     // RAV4-156: the black screen, from the POWER key and the shade. Lazy: the owner's key
     // listener is built before the rest of onCreate runs.
     private val screenOff by lazy { ScreenOffWindow(applicationContext) { carService.sendBlackScreen(it) } }
+    // RAV4-201: our own screensaver, on images without the vendor one. Monotonic idle clock.
+    private val screensaver by lazy { ScreensaverWindow(applicationContext, IdleClock(SystemClock::elapsedRealtime)) }
 
     // What each learned wheel slot means, from SysVar `wheel_key_learn_custom`. Held as a
     // field because the SWC collector runs per press and must not re-parse JSON each time.
@@ -478,7 +489,10 @@ class MainActivity : ComponentActivity() {
             }
             val router = KeyRouter(
                 map = { learn.state.value.map },
-                emit = { action -> runOnUiThread { dispatchKey(action) } },
+                emit = { action ->
+                    screensaver.activity() // RAV4-201: learned wheel and CAN box keys
+                    runOnUiThread { dispatchKey(action) }
+                },
                 swap = { settingsStore.settings.value.keySwap },
             ).also { keyRouter = it }
             val ownerListener = McuOwner.FanOut(
@@ -494,6 +508,7 @@ class MainActivity : ComponentActivity() {
                 radioMemory,
                 volumeKeys,
                 PowerKeyRouter(::powerKeyChoice, McuSleepWake.PowerKeyListener { mcuSleepWake }, screenOff),
+                ScreensaverKeys { screensaver.activity() }, // RAV4-201: any car key is activity
                 carAcc,
                 setupStore,
                 // Backlight: the headlamp bit picks the side a level lands on; the DIM key steps it.
@@ -700,6 +715,7 @@ class MainActivity : ComponentActivity() {
         }
         localRows?.let { rows -> lifecycleScope.launch(Dispatchers.IO) { rows.republish() } }
         carSettingsController = CarSettingsController(applicationContext, lifecycleScope, carService, localStore = localRows) // v1.1
+        startScreensaver() // RAV4-201: reads the timeout from the controller above
 
         // RAV4-156: the owner skips its power-off burst when the POWER key blacks the screen.
         mcuOwner?.let { owner ->
@@ -1806,8 +1822,62 @@ class MainActivity : ComponentActivity() {
         if (!isFinishing) navBar.show()
     }
 
+    /** RAV4-201: the launcher's own input also counts as activity for the screensaver. */
+    override fun onUserInteraction() {
+        super.onUserInteraction()
+        screensaver.activity()
+    }
+
+    /**
+     * RAV4-201: run the launcher's screensaver where no vendor gateway runs its own. Wheel keys
+     * (both routes), volume changes, reverse and calls count as activity, so the saver drops at
+     * once for each rather than on its next one-second sample.
+     */
+    private fun startScreensaver() {
+        if (runCatching { packageManager.getPackageInfo(VENDOR_GATEWAY_PACKAGE, 0) }.isSuccess) {
+            return
+        }
+        lifecycleScope.launch {
+            merge(
+                carEvents.swcKeys.map { },
+                carEvents.volume.drop(1).map { },
+                carEvents.reverse.filter { it }.map { },
+                incomingCalls.busy.filter { it }.map { },
+            ).collect { screensaver.activity() }
+        }
+        lifecycleScope.launch {
+            settingsStore.settings.map { it.homeClock }.distinctUntilChanged().collect(screensaver::update)
+        }
+        // A debug build takes the timeout from the shell too: the farm has no root, so the
+        // SysVar write from Power & sleep rolls back there.
+        // `am broadcast -a com.ripostelabs.carlauncher.debug.SCREENSAVER --ei seconds 60`
+        var debugTimeoutS: Int? = null
+        if (BuildConfig.DEBUG) {
+            val receiver = object : BroadcastReceiver() {
+                override fun onReceive(c: Context, i: Intent) {
+                    debugTimeoutS = i.getIntExtra(EXTRA_SAVER_SECONDS, 0)
+                }
+            }
+            registerReceiver(receiver, IntentFilter(ACTION_DEBUG_SAVER), Context.RECEIVER_EXPORTED)
+        }
+        screensaver.start(lifecycleScope) {
+            val stored = carSettingsController.snapshot.value[SettingKeys.AUTO_SCREENSAVER_TIME].orEmpty()
+            SaverInputs(
+                timeoutS = debugTimeoutS
+                    ?: PowerOptions.rawOrNull(stored, PowerOptions.SCREEN_TIMEOUT)
+                    ?: PowerOptions.SCREEN_TIMEOUT_NEVER,
+                idleMs = 0L, // filled by the window from its own clock
+                accOn = carEvents.accOn.value,
+                reverse = carEvents.reverse.value,
+                callUp = incomingCalls.busy.value || PhoneLogic.callChip(carEvents.vendorBt.value) != null,
+                moving = carEvents.motion.value == CarEvents.Motion.MOVING,
+            )
+        }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
+        screensaver.stop()
         navBar.hide()
         reverseWindow.hide()
         incomingCalls.stop()
@@ -1901,3 +1971,8 @@ private const val VENDOR_PRESET_SLOTS = 6
  * which is deliberate — the multi-storey car park where GPS has no fix is exactly where this helps.
  */
 private const val MANEUVER_MAX_KMH = 15
+
+/** RAV4-201: the vendor gateway draws its own screensaver; ours runs only where it is absent. */
+private const val VENDOR_GATEWAY_PACKAGE = "com.szchoiceway.eventcenter"
+private const val ACTION_DEBUG_SAVER = "com.ripostelabs.carlauncher.debug.SCREENSAVER"
+private const val EXTRA_SAVER_SECONDS = "seconds"

@@ -403,6 +403,27 @@ class CarService(private val appContext: Context) {
         o.send(McuOwnerProtocol.tpmsQuery())
     }
 
+    /** RAV4-187: ask the box for the factory amp's report; it arrives as [CarEvents.oemAmp]. */
+    fun requestOemAmp() = sendOemAmp(OemAmp.QUERY)
+
+    /** RAV4-187: set one factory-amp key; the next 0xA6 report shows whether it took. */
+    fun setOemAmp(key: OemAmpKey, value: Int) = sendOemAmp(OemAmp.setPayload(key, value))
+
+    /** RAV4-187: one factory-amp volume press from [current]; nothing past 0 or 63, as stock. */
+    fun stepOemAmpVolume(current: Int, step: VolumeStep) {
+        OemAmp.volumeStep(current, step)?.let(::sendOemAmp)
+    }
+
+    private fun sendOemAmp(payload: IntArray) {
+        val o = owner
+        if (o == null) {
+            broadcastCanBox(payload)
+            return
+        }
+
+        o.send(McuOwnerProtocol.oemAmp(payload))
+    }
+
     /** Vendor path: the same `0D 08 5A A5 ...` broadcast canbus2 hands the port owner ([McuCommand]). */
     private fun broadcastCanBox(payload: IntArray) {
         val intent = Intent(McuCommand.ACTION).putExtra(McuCommand.EXTRA_DATA, McuCommand.framed(payload))
