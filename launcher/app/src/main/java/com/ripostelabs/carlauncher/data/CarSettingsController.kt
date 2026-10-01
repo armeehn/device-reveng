@@ -121,13 +121,9 @@ class CarSettingsController(
 
     fun getString(key: String, def: String = ""): String = _snapshot.value[key] ?: def
 
-    fun getInt(key: String, def: Int = 0): Int =
-        _snapshot.value[key]?.trim()?.toIntOrNull() ?: def
+    fun getInt(key: String, def: Int = 0): Int = _snapshot.value.intOf(key, def)
 
-    fun getBoolean(key: String, def: Boolean = false): Boolean {
-        val v = _snapshot.value[key]?.trim() ?: return def
-        return v == "1" || v.equals("true", ignoreCase = true)
-    }
+    fun getBoolean(key: String, def: Boolean = false): Boolean = _snapshot.value.boolOf(key, def)
 
     /** True once we have any values at all (used to show a "reading…" state). */
     fun isLoaded(): Boolean = _snapshot.value.isNotEmpty()
@@ -221,4 +217,18 @@ class CarSettingsController(
     private companion object {
         const val TAG = "CarSettingsController"
     }
+}
+
+/**
+ * RAV4-274: typed reads off one [CarSettingsController.snapshot] value. A screen that reads its
+ * rows through these, from the snapshot it collected, redraws a row the moment it is written.
+ * Reading through the controller's getters instead is not observed by Compose, so the row keeps
+ * its old value until the page is reopened.
+ */
+fun Map<String, String>.intOf(key: String, def: Int = 0): Int = this[key]?.trim()?.toIntOrNull() ?: def
+
+/** "1" or "true" (any case) is on; anything else is off; no value is [def]. */
+fun Map<String, String>.boolOf(key: String, def: Boolean = false): Boolean {
+    val v = this[key]?.trim() ?: return def
+    return v == "1" || v.equals("true", ignoreCase = true)
 }

@@ -10,6 +10,8 @@ import com.ripostelabs.carlauncher.carlib.ReverseSource
 import com.ripostelabs.carlauncher.data.CarSettingsController
 import com.ripostelabs.carlauncher.data.ReverseCameraDecoder
 import com.ripostelabs.carlauncher.data.SettingKeys
+import com.ripostelabs.carlauncher.data.boolOf
+import com.ripostelabs.carlauncher.data.intOf
 import com.ripostelabs.carlauncher.ui.CameraTestActivity
 import com.ripostelabs.carlauncher.ui.SurroundCameraActivity
 
@@ -27,6 +29,7 @@ fun ReverseCameraSettingsScreen(
     controller: CarSettingsController,
     onBack: () -> Unit,
 ) {
+    // RAV4-274: every row reads [snap], so a pick redraws its row at once (see [intOf]).
     val snap by controller.snapshot.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
@@ -50,27 +53,27 @@ fun ReverseCameraSettingsScreen(
             PickerSetting(
                 label = "Reverse type",
                 description = "Which reverse hardware is fitted, as stock tells the MCU",
-                current = controller.getInt(McuFactorySet.KEY_BACKCAR_TYPE, BACKCAR_TYPE_HD_CAMERA),
+                current = snap.intOf(McuFactorySet.KEY_BACKCAR_TYPE, BACKCAR_TYPE_HD_CAMERA),
                 options = REVERSE_TYPE_OPTIONS,
                 onSelect = { controller.setInt(McuFactorySet.KEY_BACKCAR_TYPE, it) },
             )
             PickerSetting(
                 label = "Video input type",
-                current = controller.getInt(SettingKeys.BACKCAR_VIDEO_TYPE, 0),
+                current = snap.intOf(SettingKeys.BACKCAR_VIDEO_TYPE, 0),
                 options = ReverseCameraDecoder.VIDEO_TYPES,
                 onSelect = { controller.setInt(SettingKeys.BACKCAR_VIDEO_TYPE, it) },
             )
             PickerSetting(
                 label = "TW6752 decoder input",
                 description = "Only used on units with the TW6752 video decoder",
-                current = controller.getInt(SettingKeys.BACKCAR_6752_VIDEO_TYPE, 0),
+                current = snap.intOf(SettingKeys.BACKCAR_6752_VIDEO_TYPE, 0),
                 options = ReverseCameraDecoder.VIDEO_TYPES,
                 onSelect = { controller.setInt(SettingKeys.BACKCAR_6752_VIDEO_TYPE, it) },
             )
             ToggleSetting(
                 label = "Mirror image",
                 description = "Flip the reverse image horizontally",
-                checked = controller.getBoolean(SettingKeys.BACKCAR_CAMERA_MIRRORING, true),
+                checked = snap.boolOf(SettingKeys.BACKCAR_CAMERA_MIRRORING, true),
                 onChange = { controller.setBoolean(SettingKeys.BACKCAR_CAMERA_MIRRORING, it) },
             )
             // The picture without reversing: a bench check of the feed and the input type above.
@@ -90,12 +93,12 @@ fun ReverseCameraSettingsScreen(
         SettingsSection(title = "Display") {
             ToggleSetting(
                 label = "Full screen",
-                checked = controller.getBoolean(SettingKeys.BACKCAR_FULLSCREEN, false),
+                checked = snap.boolOf(SettingKeys.BACKCAR_FULLSCREEN, false),
                 onChange = { controller.setBoolean(SettingKeys.BACKCAR_FULLSCREEN, it) },
             )
             PickerSetting(
                 label = "Window layout",
-                current = controller.getInt(SettingKeys.BACKCAR_WINDOW_TYPE, 0),
+                current = snap.intOf(SettingKeys.BACKCAR_WINDOW_TYPE, 0),
                 options = listOf(
                     0 to "Full",
                     1 to "Split (camera + radar)",
@@ -105,7 +108,7 @@ fun ReverseCameraSettingsScreen(
             ToggleSetting(
                 label = "Show radar overlay",
                 description = "Draw parking-sensor distances over the camera",
-                checked = controller.getBoolean(SettingKeys.BACKCAR_DISPLAY_RADAR, true),
+                checked = snap.boolOf(SettingKeys.BACKCAR_DISPLAY_RADAR, true),
                 onChange = { controller.setBoolean(SettingKeys.BACKCAR_DISPLAY_RADAR, it) },
             )
         }
@@ -113,13 +116,13 @@ fun ReverseCameraSettingsScreen(
         SettingsSection(title = "Guide lines") {
             ToggleSetting(
                 label = "Static guide lines",
-                checked = controller.getBoolean(SettingKeys.REVERSE_ASSIST_LINE, true),
+                checked = snap.boolOf(SettingKeys.REVERSE_ASSIST_LINE, true),
                 onChange = { controller.setBoolean(SettingKeys.REVERSE_ASSIST_LINE, it) },
             )
             PickerSetting(
                 label = "Dynamic trajectory",
                 description = "Steering-linked trajectory line",
-                current = controller.getInt(SettingKeys.TRACK_LINE_TYPE, 0),
+                current = snap.intOf(SettingKeys.TRACK_LINE_TYPE, 0),
                 options = listOf(
                     0 to "Off",
                     1 to "Static",
@@ -134,7 +137,7 @@ fun ReverseCameraSettingsScreen(
             PickerSetting(
                 label = "Reverse signal",
                 description = "Use the CAN gear when the reverse wire is not connected",
-                current = controller.getInt(SettingKeys.REVERSE_SOURCE, ReverseSource.DEFAULT.setting),
+                current = snap.intOf(SettingKeys.REVERSE_SOURCE, ReverseSource.DEFAULT.setting),
                 options = listOf(
                     ReverseSource.WIRE.setting to "Reverse wire",
                     ReverseSource.WIRE_OR_CAN.setting to "Wire or CAN gear",
@@ -144,7 +147,7 @@ fun ReverseCameraSettingsScreen(
             PickerSetting(
                 label = "Auto-exit speed",
                 description = "Leave reverse view above this speed",
-                current = controller.getInt(SettingKeys.BACKCAR_SPEED_THRESHOLD, 0),
+                current = snap.intOf(SettingKeys.BACKCAR_SPEED_THRESHOLD, 0),
                 options = listOf(
                     0 to "Off",
                     1 to "30 km/h",
