@@ -240,6 +240,8 @@ fun SettingsHost(
                 onBack = ::pop,
             )
 
+            SettingsRoute.Uplink -> UplinkSettingsScreen(onBack = ::pop)
+
             SettingsRoute.CanCapture -> CanCaptureScreen(
                 carEvents = carEvents,
                 onBack = ::pop,
@@ -412,4 +414,5 @@ sealed interface SettingsRoute {
     data object Advanced : SettingsRoute
     data object SysVarExport : SettingsRoute // v0.4.7
     data object Updates : SettingsRoute // v0.7 auto-updater
+    data object Uplink : SettingsRoute // RAV4-271 automatic road-noise capture
 }

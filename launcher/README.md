@@ -205,6 +205,12 @@ RetroArch). The folder is not media, so the first visit asks for "All files acce
 homebrew that its authors publish for free redistribution is staged; the `SOURCES.md` next to
 the ROMs records origin, licence and checksum for every file.
 
+## Improve noise reduction (automatic uplink)
+
+While the car drives, the launcher keeps short clips of road noise and deletes any clip with a
+voice in it on the unit. It uploads the rest with the log ring to the owner's server, which
+retrains the microphone's noise filter. See [`UPLINK.md`](UPLINK.md).
+
 ## Settings suite (v1.1 → v2.0)
 
 A full, reskinned mirror of the vendor GT6 settings — see

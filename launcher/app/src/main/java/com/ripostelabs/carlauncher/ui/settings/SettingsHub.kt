@@ -197,6 +197,12 @@ fun SettingsHub(
                 onClick = { onOpen(SettingsRoute.Updates) },
             )
             SettingsCategoryCard(
+                icon = Icons.Filled.Tune,
+                title = "Improve noise reduction",
+                subtitle = "Road noise from drives, speech removed on the unit; data budget",
+                onClick = { onOpen(SettingsRoute.Uplink) },
+            )
+            SettingsCategoryCard(
                 icon = Icons.Filled.Info,
                 title = "System & about",
                 subtitle = "Versions, car profile, screen, reset & reboot",

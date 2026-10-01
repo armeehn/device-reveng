@@ -41,6 +41,8 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.ripostelabs.carlauncher.carlib.AndroidPanLink
 import com.ripostelabs.carlauncher.carlib.BtCallMcu
 import com.ripostelabs.carlauncher.carlib.BtCarKit
+import com.ripostelabs.carlauncher.service.UplinkService
+import com.ripostelabs.carlauncher.service.UplinkSignals
 import com.ripostelabs.carlauncher.carlib.PhoneInternet
 import com.ripostelabs.carlauncher.carlib.CarEvents
 import com.ripostelabs.carlauncher.carlib.ClusterFeed
@@ -696,6 +698,10 @@ class MainActivity : ComponentActivity() {
         reverseWindow = ReverseCameraWindow(applicationContext) { on -> settingsStore.setReverseGuideLines(on) }
         // RAV4-152: the ringing window over any app; the Phone screen carries its own buttons.
         incomingCalls = IncomingCalls(applicationContext, btCarKit, callerNames)
+        // RAV4-271: automatic road-noise capture and the uplink run in a service that reads the
+        // car through this snapshot, never through a second CarEvents.
+        UplinkSignals.bind(lifecycleScope, carEvents, btCarKit)
+        UplinkService.start(this)
         // RAV4-162: a contact's Call button (DialActivity) dials on this slot's stack and shows
         // the Phone screen, where the call's state and Hang up are.
         lifecycleScope.launch {
