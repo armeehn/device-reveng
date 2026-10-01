@@ -303,6 +303,7 @@ fun SettingsHost(
                 carEvents = carEvents,
                 onBack = ::pop,
                 mcuSetup = mcuSetup,
+                settingsStore = settingsStore,
             )
 
             // v2.9: root-only capabilities, including the one destructive action in the app.

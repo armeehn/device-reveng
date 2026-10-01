@@ -7,9 +7,11 @@ import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ripostelabs.carlauncher.carlib.CarEvents
 import com.ripostelabs.carlauncher.carlib.McuSetupStore
+import com.ripostelabs.carlauncher.carlib.StandbyMode
 import com.ripostelabs.carlauncher.data.CarSettingsController
 import com.ripostelabs.carlauncher.data.PowerOptions
 import com.ripostelabs.carlauncher.data.SettingKeys
+import com.ripostelabs.carlauncher.data.SettingsStore
 
 /**
  * v1.9 — Power & sleep. Mirrors the vendor ACC/sleep timing page, reskinned, with a live ACC
@@ -25,6 +27,8 @@ fun PowerSettingsScreen(
     onBack: () -> Unit,
     // Riposte OS 0.2: the sleep option lives in the MCU setup store and goes out as `49 05`.
     mcuSetup: McuSetupStore? = null,
+    // RAV4-151: the launcher's own standby switch; absent in previews.
+    settingsStore: SettingsStore? = null,
 ) {
     val snap by controller.snapshot.collectAsStateWithLifecycle()
     snap
@@ -76,6 +80,16 @@ fun PowerSettingsScreen(
         }
 
         SettingsSection(title = "Sleep") {
+            // RAV4-151: standby suspends the SoC, and the MCU does not wake it yet; opt-in until it does.
+            if (settingsStore != null) {
+                val standby by settingsStore.standby.collectAsStateWithLifecycle()
+                ToggleSetting(
+                    label = "Standby when the car is off",
+                    description = "Suspend instead of a cold boot. Experimental: the screen may stay black at the next start.",
+                    checked = standby == StandbyMode.ON,
+                    onChange = { on -> settingsStore.setStandby(if (on) StandbyMode.ON else StandbyMode.OFF) },
+                )
+            }
             ToggleSetting(
                 label = "Enable sleep",
                 description = "Let the unit sleep instead of powering off",

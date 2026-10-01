@@ -84,6 +84,7 @@ import com.ripostelabs.carlauncher.carlib.KeyRouter
 import com.ripostelabs.carlauncher.carlib.McuOwnerProtocol
 import com.ripostelabs.carlauncher.carlib.McuStateExport
 import com.ripostelabs.carlauncher.carlib.SlcanLinkSource
+import com.ripostelabs.carlauncher.carlib.StandbyOptIn
 import com.ripostelabs.carlauncher.carlib.SysVarMirror
 import com.ripostelabs.carlauncher.carlib.UsbRole
 import com.ripostelabs.carlauncher.carlib.VendorBroadcastReemitter
@@ -594,11 +595,14 @@ class MainActivity : ComponentActivity() {
                 // ACC from the MCU line; standby is stock's accOff/accOn plus a PR2000 re-arm, so
                 // the first reverse after a suspend opens at once (AccStandby).
                 carAcc.start(applicationContext)
-                val standby = AccStandby(decoder = { DecoderSignal.redetect(); DecoderSignal.locked() })
-                mcuSleepWake = McuSleepWake.forOwner(it, carAcc, startupConfig, standby).also { sw -> sw.start() }
+                // RAV4-151: standby is opt-in until the MCU wakes the SoC at ACC on (StandbyOptIn).
+                val optIn = StandbyOptIn { settingsStore.standby.value }
+                val acc = optIn.acc(carAcc)
+                val standby = optIn.standby(AccStandby(decoder = { DecoderSignal.redetect(); DecoderSignal.locked() }))
+                mcuSleepWake = McuSleepWake.forOwner(it, acc, startupConfig, standby).also { sw -> sw.start() }
                 // The GSI dozes the panel on its own (README "Doze and dreams"); wake it unless
                 // the machine above, or ACC, asked for the dark.
-                dozeGuard = DozeGuard({ mcuSleepWake }, carAcc).also { g -> g.start(applicationContext) }
+                dozeGuard = DozeGuard({ mcuSleepWake }, acc).also { g -> g.start(applicationContext) }
                 ampVolumeKeys = volumeKeys.also { keys -> keys.start(applicationContext) }
 
                 // Android sound, media players, BT audio and CarPlay reach the amp only once the
