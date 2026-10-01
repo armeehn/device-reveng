@@ -82,7 +82,7 @@ class RemoteMcuOwnerTest {
     private val startup = listOf(byteArrayOf(1, 2), byteArrayOf(3))
     private val binding = FakeBinding()
     private val recorder = Recorder()
-    private val remote = RemoteMcuOwner(binding, recorder, startup)
+    private val remote = RemoteMcuOwner(binding, recorder, { startup })
 
     @Test
     fun serviceWithTheLinkApiIsChosen() {
@@ -119,7 +119,7 @@ class RemoteMcuOwnerTest {
 
             override fun unbind() = Unit
         }
-        val r = RemoteMcuOwner(refusing, recorder, startup)
+        val r = RemoteMcuOwner(refusing, recorder, { startup })
 
         r.start()
 
@@ -411,5 +411,25 @@ class RemoteMcuOwnerTest {
         svc.listener!!.onMcuEvent(McuEvent(McuEvent.Kind.UNKNOWN, 0x71, byteArrayOf(1, 2)))
 
         assertTrue(recorder.seen.isEmpty())
+    }
+    /**
+     * Audit 2026-09-30: the frames were built once at launcher start, and the service replays
+     * them on every open, so an ACC wake sent the boot-time RDS, zone, volume and sleep time
+     * back to the MCU. Each start now hands the service the frames as they are now.
+     */
+    @Test
+    fun aWakeSendsTheStartupAsItIsNow() {
+        var frames = listOf(byteArrayOf(1))
+        val r = RemoteMcuOwner(binding, recorder, { frames })
+        r.start()
+        val svc = FakeService()
+        binding.connect(svc)
+        r.stop()
+        svc.calls.clear()
+
+        frames = listOf(byteArrayOf(1), byteArrayOf(2), byteArrayOf(3))
+        r.start()
+
+        assertEquals(listOf("startup 3", "open"), svc.calls)
     }
 }

@@ -197,7 +197,14 @@ object McuOwnerProtocol {
          * read at each send so a wake re-sends what the user set since boot; null sends neither.
          */
         val factoryRows: (() -> Map<String, String>)? = null,
-    )
+        /**
+         * The fixed fields above as they are now (RDS, zone, volume, sleep, backlight), applied at
+         * each send so a wake carries what the driver changed since the launcher started.
+         */
+        val now: ((StartupConfig) -> StartupConfig)? = null,
+    ) {
+        fun live(): StartupConfig = now?.invoke(this) ?: this
+    }
 
     /**
      * The `71` SYS_EVENT bits, byte 1 then byte 2 (onCmdSysEvent, EventService.java:2290-2397).
@@ -361,7 +368,9 @@ object McuOwnerProtocol {
      * afterwards with [ACK_ATTEMPTS] tries of [ACK_TIMEOUT_MS] each, and continues either way,
      * as the vendor does.
      */
-    fun startup(config: StartupConfig): List<ByteArray> = listOf(
+    fun startup(config: StartupConfig): List<ByteArray> = handshake(config.live())
+
+    private fun handshake(config: StartupConfig): List<ByteArray> = listOf(
         mode(Mode.POWER_ON),
         mode(Mode.MCU_VERSION),
         setup(SETUP_RDS, if (config.rds) 0 else 1),
@@ -444,7 +453,9 @@ object McuOwnerProtocol {
      * to SRC_NONE at sleep (:3556), and relies on the mode's activity to switch source later
      * (msg 290); we resume the last mode set, or NONE when none was.
      */
-    fun reload(config: StartupConfig, lastMode: Mode?): List<ByteArray> = listOf(
+    fun reload(config: StartupConfig, lastMode: Mode?): List<ByteArray> = reloadOf(config.live(), lastMode)
+
+    private fun reloadOf(config: StartupConfig, lastMode: Mode?): List<ByteArray> = listOf(
         mode(Mode.POWER_ON),
         mode(Mode.MCU_VERSION),
     ) + setupAndFactory(config) + configBlocks(config.currentSetup()) + listOf(
