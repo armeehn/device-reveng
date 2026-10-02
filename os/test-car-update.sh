@@ -10,6 +10,7 @@ bash -n setup.sh
 bash -n rav4-usb-update
 bash -n road-noise-pull
 bash -n road-noise-collect
+python3 -m py_compile road-noise-file
 
 # Warnings and errors only: the files are kept byte-identical to what zero already runs.
 # SC2034: the wait loop counter is unused by design. SC2011: APK names are package ids,

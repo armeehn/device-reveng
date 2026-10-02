@@ -82,4 +82,64 @@ DEST="$T/share" bash "$COLLECT" > "$T/out" 2>&1 || fail "collect exited $?: $(ca
 grep -q "zero offline" "$T/out" || fail "collect summary: $(cat "$T/out")"
 [ ! -e "$T/share" ] || fail "collect made the share folder with zero offline"
 
+echo "== manual takes are filed into the contract layout, once, originals kept"
+FILE=$HERE/car-update/road-noise-file
+S=$T/road
+mkdir -p "$S/2026-10-01"
+flat() {  # flat NAME TAG STARTED SECONDS BYTES: a Recorder take as zero hands it over
+    head -c "$5" /dev/urandom > "$S/$1.wav"
+    printf '{"file":"%s.wav","tag":"%s","source":"VOICE_COMMUNICATION","processing":"none","rate_hz":48000,"channels":1,"bits":16,"started":"%s","seconds":%s,"speed_kmh_per_second":null}\n' \
+        "$1" "$2" "$3" "$4" > "$S/$1.json"
+    touch -d "2026-10-01T22:24:00Z" "$S/$1.wav" "$S/$1.json"
+}
+flat 20261001-151300-city city 2026-10-01T22:13:00Z 116.44 3000
+flat 20261001-151517-fan-high fan-high 2026-10-01T22:15:17Z 120.34 3100
+flat 20261001-181000-highway highway 2026-10-02T01:10:00Z 30 3200
+# The same audio already came in over the uplink: its row must not be doubled.
+flat 20261001-151724-city city 2026-10-01T22:17:24Z 239 3300
+up=$(sha256sum "$S/20261001-151724-city.wav" | cut -c1-64)
+cp "$S/20261001-151724-city.wav" "$S/2026-10-01/${up:0:16}.wav"
+echo "{\"id\":\"${up:0:16}\",\"path\":\"2026-10-01/${up:0:16}.wav\",\"sha256\":\"$up\",\"device\":\"rav4\",\"source\":\"auto\"}" > "$S/index.jsonl"
+echo "{\"started_at\":\"2026-10-01T22:17:24Z\",\"device\":\"rav4\",\"band\":\"city\"}" > "$S/2026-10-01/${up:0:16}.json"
+
+python3 "$FILE" "$S" > "$T/out" 2>&1 || fail "file exited $?: $(cat "$T/out")"
+grep -q "road noise: filed 3, already 1" "$T/out" || fail "file summary: $(cat "$T/out")"
+[ "$(wc -l < "$S/index.jsonl")" -eq 4 ] || fail "index rows: $(cat "$S/index.jsonl")"
+city=$(sha256sum "$S/inbox-done/20261001-151300-city.wav" | cut -c1-64)
+[ -f "$S/2026-10-01/${city:0:16}.wav" ] || fail "city wav not at <day>/<sha16>.wav"
+cmp -s "$S/inbox-done/20261001-151300-city.wav" "$S/2026-10-01/${city:0:16}.wav" || fail "city copy differs"
+ls "$S"/*.wav >/dev/null 2>&1 && fail "flat takes left in the root: $(ls "$S")"
+[ "$(ls "$S/inbox-done" | wc -l)" -eq 8 ] || fail "inbox-done: $(ls "$S/inbox-done")"
+
+# Sidecar and row: contract shape, owner's unit, manual source, bands, one drive per 30 min gap.
+row() { python3 -c 'import json,sys; [print(json.loads(l)[sys.argv[2]]) for l in open(sys.argv[1]) if sys.argv[3] in l]' "$S/index.jsonl" "$1" "$2"; }
+side() { python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))[sys.argv[2]])' "$1" "$2"; }
+fan=$(sha256sum "$S/inbox-done/20261001-151517-fan-high.wav" | cut -c1-64)
+hwy=$(sha256sum "$S/inbox-done/20261001-181000-highway.wav" | cut -c1-64)
+[ "$(row source "$city")" = recorder-manual ] || fail "city source: $(row source "$city")"
+[ "$(row device "$city")" = rav4 ] || fail "city device: $(row device "$city")"
+[ "$(row band "$city")" = city ] || fail "city band"
+[ "$(row band "$fan")" = city-fan ] || fail "fan-high band: $(row band "$fan")"
+[ "$(row band "$hwy")" = highway ] || fail "highway band"
+[ "$(row tags "$fan")" = "['City', 'Fan']" ] || fail "fan-high tags: $(row tags "$fan")"
+[ "$(row tags "$city")" = "['City']" ] || fail "city tags: $(row tags "$city")"
+[ "$(row duration_s "$fan")" = 120.34 ] || fail "fan duration: $(row duration_s "$fan")"
+[ "$(row drive "$city")" = "$(row drive "$fan")" ] || fail "city and fan-high are one drive"
+[ "$(row drive "$city")" = rav4-2026-10-01T2213Z ] || fail "drive id: $(row drive "$city")"
+[ "$(row drive "$hwy")" = rav4-2026-10-02T0110Z ] || fail "a 3 h gap is a new drive: $(row drive "$hwy")"
+j=$S/2026-10-01/${fan:0:16}.json
+[ "$(side "$j" schema)" = road-noise/1 ] || fail "schema"
+[ "$(side "$j" started_at)" = 2026-10-01T22:15:17Z ] || fail "started_at"
+[ "$(side "$j" sample_rate)" = 48000 ] || fail "sample_rate"
+[ "$(side "$j" mic_source)" = VOICE_COMMUNICATION ] || fail "mic_source"
+[ "$(side "$j" sha256)" = "$fan" ] || fail "sidecar sha"
+[ "$(side "$S/2026-10-01/${hwy:0:16}.json" received_at)" = 2026-10-01T22:24:00Z ] || fail "received_at is not the share arrival"
+
+echo "== a second run, and the same take handed over again, file nothing twice"
+cp "$S/inbox-done/20261001-151300-city.wav" "$S/inbox-done/20261001-151300-city.json" "$S/"
+python3 "$FILE" "$S" > "$T/out" 2>&1 || fail "re-file exited $?: $(cat "$T/out")"
+grep -q "road noise: filed 0, already 1" "$T/out" || fail "re-file summary: $(cat "$T/out")"
+[ "$(wc -l < "$S/index.jsonl")" -eq 4 ] || fail "re-file doubled rows: $(cat "$S/index.jsonl")"
+[ ! -e "$S/20261001-151300-city.wav" ] || fail "re-handed take left in the root"
+
 echo "ROAD-NOISE PASS"

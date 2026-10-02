@@ -1,0 +1,227 @@
+#!/usr/bin/env python3
+"""On x: file Voice Recorder's manual road noise takes into the uplink contract layout.
+
+    road-noise/20261001-151300-city.wav + .json      flat take, as road-noise-collect copies it
+        │ sha256, sidecar mapped to road-noise/1
+        ▼
+    road-noise/<day>/<sha16>.wav + .json             what the trainer reads (CONTRACT.md)
+    road-noise/index.jsonl                           one row, appended under flock
+    road-noise/inbox-done/20261001-151300-city.*     the original, moved, never deleted
+
+Idempotent by sha256: a take whose sha is already in the index (filed before, or sent over
+the uplink) gets no second row; its flat original still moves to inbox-done/. A take whose
+sidecar is missing or unreadable stays where it is for the next run.
+
+Usage: road-noise-file ROAD_DIR    (ROAD_NOISE_DEVICE overrides the unit name, default rav4)
+"""
+import fcntl
+import hashlib
+import json
+import os
+import re
+import shutil
+import sys
+from datetime import datetime, timezone
+
+SCHEMA = "road-noise/1"
+SOURCE = "recorder-manual"
+ID_HEX = 16
+DONE_DIR = "inbox-done"
+# The owner's head unit: the tailnet node name the uplink files its captures under.
+DEVICE = os.environ.get("ROAD_NOISE_DEVICE", "rav4")
+# Takes further apart than this are different drives (ns_data.py DRIVE_GAP_S).
+DRIVE_GAP_S = 30 * 60
+# Recorder tag -> contract band. fan-high takes the road band of its drive (section 2).
+ROAD_BANDS = {"city": "city", "highway": "highway"}
+FAN_TAG = "fan-high"
+FAN_LABEL = "Fan"
+DEFAULT_ROAD = "city"
+# Flat take names: 20261001-151300-city.wav
+FLAT = re.compile(r"^\d{8}-\d{6}-[a-z-]+\.wav$")
+
+
+def iso(t):
+    return datetime.fromtimestamp(t, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def epoch(s):
+    """ISO 8601 to epoch seconds; None when it does not parse."""
+    if not isinstance(s, str):
+        return None
+    try:
+        return datetime.fromisoformat(s.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
+
+
+def sha256(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
+def known(root):
+    """Index rows by sha, plus this device's takes as {t, band, drive} for drive clustering."""
+    shas, takes = set(), []
+    index = os.path.join(root, "index.jsonl")
+    for line in open(index) if os.path.exists(index) else []:
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        shas.add(row.get("sha256"))
+        if row.get("device") != DEVICE:
+            continue
+        try:
+            meta = dict(row, **json.load(open(os.path.join(root, row["path"][:-4] + ".json"))))
+        except (OSError, ValueError, KeyError):
+            meta = row
+        t = epoch(meta.get("started_at"))
+        if t is None:
+            continue
+        takes.append({"t": t, "band": meta.get("band"), "drive": meta.get("drive")})
+    return shas, takes
+
+
+def pending(root):
+    """Flat takes with a readable sidecar, oldest first."""
+    out = []
+    for name in sorted(os.listdir(root)):
+        if not FLAT.match(name):
+            continue
+        wav = os.path.join(root, name)
+        try:
+            flat = json.load(open(wav[:-4] + ".json"))
+        except (OSError, ValueError):
+            continue
+        t = epoch(flat.get("started"))
+        if t is None:
+            continue
+        tag = str(flat.get("tag", "other"))
+        out.append({"wav": wav, "flat": flat, "t": t, "tag": tag, "band": ROAD_BANDS.get(tag)})
+    return sorted(out, key=lambda c: c["t"])
+
+
+def cluster(takes):
+    """Give every take a drive: a run with no gap over DRIVE_GAP_S keeps the first drive id
+    it already has, else gets <device>-<first start> (ns_data.py names drives the same way)."""
+    takes.sort(key=lambda c: c["t"])
+    runs = []
+    for c in takes:
+        if runs and c["t"] - runs[-1][-1]["t"] <= DRIVE_GAP_S:
+            runs[-1].append(c)
+            continue
+        runs.append([c])
+
+    for run in runs:
+        named = [c["drive"] for c in run if c.get("drive")]
+        drive = named[0] if named else f"{DEVICE}-{datetime.fromtimestamp(run[0]['t'], timezone.utc):%Y-%m-%dT%H%MZ}"
+        for c in run:
+            c["drive"] = c.get("drive") or drive
+
+
+def fan_band(c, takes):
+    """fan-high: the road band of the nearest city or highway take in its drive, plus -fan."""
+    roads = [o for o in takes if o["drive"] == c["drive"] and o.get("band") in ROAD_BANDS.values()]
+    if not roads:
+        return f"{DEFAULT_ROAD}-fan"
+    return min(roads, key=lambda o: abs(o["t"] - c["t"]))["band"] + "-fan"
+
+
+def labels(c):
+    """Contract tags, capitalised as the launcher writes them: fan-high in a city drive is
+    ["City", "Fan"], rain is ["Rain"]."""
+    if c["tag"] != FAN_TAG:
+        return [c["tag"].capitalize()]
+    return [c["band"].split("-")[0].capitalize(), FAN_LABEL]
+
+
+def sidecar(c, sha, size, received):
+    flat = c["flat"]
+    speeds = flat.get("speed_kmh_per_second")
+    speed = sum(speeds) / len(speeds) if isinstance(speeds, list) and speeds else None
+    return {"schema": SCHEMA, "started_at": iso(c["t"]), "duration_s": flat.get("seconds"),
+            "sample_rate": flat.get("rate_hz"), "channels": flat.get("channels"),
+            "source": SOURCE, "band": c["band"], "tags": c["tags"], "speed_kmh": speed,
+            "mic_source": flat.get("source"), "processing": flat.get("processing"),
+            "drive": c["drive"], "original": os.path.basename(c["wav"]),
+            "device": DEVICE, "received_at": received, "sha256": sha, "bytes": size,
+            "id": sha[:ID_HEX]}
+
+
+def publish(src, dest):
+    """Copy under a dot name, then rename: a file in a day folder is always complete."""
+    tmp = os.path.join(os.path.dirname(dest), "." + os.path.basename(dest) + ".tmp")
+    shutil.copyfile(src, tmp)
+    os.replace(tmp, dest)
+
+
+def write_json(obj, dest):
+    tmp = os.path.join(os.path.dirname(dest), "." + os.path.basename(dest) + ".tmp")
+    with open(tmp, "w") as f:
+        json.dump(obj, f, indent=1, sort_keys=True)
+    os.replace(tmp, dest)
+
+
+def file_take(root, c, sha):
+    """Place one take as <day>/<sha16>.wav + .json and append its row. Day = arrival on x."""
+    arrived = os.stat(c["wav"]).st_mtime
+    day = datetime.fromtimestamp(arrived, timezone.utc).strftime("%Y-%m-%d")
+    rel = f"{day}/{sha[:ID_HEX]}.wav"
+    dest = os.path.join(root, rel)
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+
+    meta = sidecar(c, sha, os.path.getsize(c["wav"]), iso(arrived))
+    publish(c["wav"], dest)
+    write_json(meta, dest[:-4] + ".json")
+
+    row = {"id": meta["id"], "path": rel, "sha256": sha, "bytes": meta["bytes"],
+           "duration_s": meta["duration_s"], "band": meta["band"], "tags": meta["tags"],
+           "device": DEVICE, "received_at": meta["received_at"], "source": SOURCE,
+           "drive": meta["drive"]}
+    with open(os.path.join(root, "index.jsonl"), "a") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        f.write(json.dumps(row, sort_keys=True) + "\n")
+
+
+def retire(root, wav):
+    """Move the flat original (wav + json) into inbox-done/, replacing an older copy."""
+    done = os.path.join(root, DONE_DIR)
+    os.makedirs(done, exist_ok=True)
+    for path in (wav, wav[:-4] + ".json"):
+        os.replace(path, os.path.join(done, os.path.basename(path)))
+
+
+def main():
+    if len(sys.argv) != 2:
+        sys.exit(__doc__)
+    root = sys.argv[1]
+    if not os.path.isdir(root):
+        print("road noise: no share folder")
+        return
+
+    shas, takes = known(root)
+    batch = pending(root)
+    cluster(takes + batch)
+    for c in batch:
+        if c["tag"] == FAN_TAG:
+            c["band"] = fan_band(c, takes + batch)
+        c["tags"] = labels(c)
+
+    filed = already = 0
+    for c in batch:
+        sha = sha256(c["wav"])
+        if sha in shas:
+            already += 1
+        else:
+            file_take(root, c, sha)
+            shas.add(sha)
+            filed += 1
+        retire(root, c["wav"])
+    print(f"road noise: filed {filed}, already {already}")
+
+
+if __name__ == "__main__":
+    main()
