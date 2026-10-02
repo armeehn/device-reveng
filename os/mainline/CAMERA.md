@@ -1,0 +1,58 @@
+# Cameras on mainline
+
+How the reverse and 360 cameras reach mainline Linux on this unit. Facts come from the
+unit's live device tree and its stock kernel (2026-10-01 pull); nothing here has run yet.
+
+    AHD camera ──► PR2000 / XS9922B ──CSI-2──► CSIPHY ─► CSID ─► ISPIF ─► VFE ─► /dev/videoN
+                   (decoder, on CCI)            camss on mainline (SDM660 generation)
+
+## The SoC side: camss
+
+SM6125's camera blocks are the SDM660 generation that mainline `camss` already drives. The
+stock kernel names the same versions SDM660's downstream kernel does: CSIPHY v3.5, CSID
+v5.0, ISPIF v3.0, VFE 4.8. Mainline has no SM6125 entry; adding one is a resource table
+and a DT node, not new hardware code.
+
+| Block | Stock node | Registers | IRQ (SPI) |
+|---|---|---|---|
+| CSIPHY 0-2 | `qcom,csiphy-v3.5` | `0x1628000`, `0x1629000`, `0x162a000` (0x1000 each); clk mux `0x5c00120`+4n | 72, 73, 74 |
+| CSID 0-3 | `qcom,csid-v5.0` | `0x5c30000` + 0x400 n | 208-211 |
+| ISPIF | `qcom,ispif-v3.0` | `0x5c31000` (0xc00); csi clk mux `0x5c00020` | 212 |
+| VFE 0-1 | `qcom,vfe48` | `0x5c10000`, `0x5c14000` (0x4000); VBIF `0x5c40000` | 214, 215 |
+| CCI | `qcom,cci` | `0x5c0c000` (0x4000) | 207 |
+
+The difference from SDM660: the clocks live in GCC, not a multimedia clock controller.
+Mainline's `gcc-sm6125` has all of them (`GCC_CAMSS_*`, 78 entries) and the power domains
+`CAMSS_TOP_GDSC`, `CAMSS_VFE0_GDSC`, `CAMSS_VFE1_GDSC`. The CCI is the v2 controller
+mainline's `i2c-qcom-cci` supports. Stock clock rates: CSI 311 MHz, CSIPHY timer 200 MHz,
+VFE 404/480/576 MHz, CCI 19.2/37.5 MHz.
+
+## The unit side: two camera slots
+
+| Slot | CSIPHY | CSID | CCI master |
+|---|---|---|---|
+| `qcom,camera@1` | 1 | 1 | 1 |
+| `qcom,camera@2` | 2 | 2 | 0 |
+
+The decoders are not on the general I2C buses; they sit behind CCI. Which decoder is in
+which slot, their CCI addresses and lane counts come from the stock camera HAL's sensor
+configs; that is the open question for the next pull.
+
+## The decoders
+
+Both register sets are decoded from the stock kernel (pull folder, `FINDINGS.md`):
+
+- **XS9922B**: one 503-write init table, 16-bit registers, 8-bit values.
+- **PR2000**: one ~204-write table per input mode (NTSC, PAL, PAL60, AHD 720p 25/30/60,
+  AHD 1080p 25/30), 8-bit registers with page select `0xff`.
+
+Each becomes a V4L2 subdevice driver: init on stream-on, the mode table chosen from the
+detected signal, a fixed `MEDIA_BUS_FMT_UYVY8_1X16` output.
+
+## Order of work
+
+1. SM6125 in `camss` and the board DT: CSIPHY/CSID/ISPIF/VFE nodes, CCI. Proof on the
+   bench: `media-ctl -p` lists the pipeline.
+2. Slot map from the unit: decoder per slot, CCI address, lanes.
+3. PR2000 driver (reverse camera first: one input, simplest table).
+4. XS9922B driver (four AHD inputs, virtual channels).
