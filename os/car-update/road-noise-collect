@@ -6,21 +6,28 @@
 # x pulls rather than zero pushing: x already reaches zero over the tailnet, and zero then
 # holds no credential for x. Run by rav4-road-noise-collect.timer; a tick with zero offline
 # does nothing. Nothing is deleted on either side, and a file already on the share is kept.
+# Each new flat take is then filed as <day>/<sha16>.wav + index row, original to inbox-done/.
 set -uo pipefail
 
 ZERO=${ZERO:-sasha@100.64.0.8}
 SRC=${SRC:-rav4-update/road-noise/}
 DEST=${DEST:-/z1-pool/share/carlauncher/road-noise}
 OWNER=${OWNER:-sasha}
+# Files each flat take into the contract layout the trainer reads (road-noise-file).
+FILER=${FILER:-/usr/local/sbin/rav4-road-noise-file}
 
 if ! timeout 15 ssh -o BatchMode=yes -o ConnectTimeout=8 "$ZERO" true 2>/dev/null; then
     echo "road noise: zero offline"
     exit 0
 fi
 
-mkdir -p "$DEST"
-# Finished files only: road-noise-pull's *.part files are its own business.
-rsync -a --ignore-existing --include='*.wav' --include='*.json' --exclude='*' \
-    -e "ssh -o BatchMode=yes" "$ZERO:$SRC" "$DEST/" || exit 1
+mkdir -p "$DEST/inbox-done"
+# Finished files only: road-noise-pull's *.part files are its own business. Takes already
+# filed sit in inbox-done/, so they are excluded by name or every tick would copy them again.
+done_list=$(mktemp)
+trap 'rm -f "$done_list"' EXIT
+find "$DEST/inbox-done" -maxdepth 1 -type f -printf '/%f\n' > "$done_list"
+rsync -a --ignore-existing --exclude-from="$done_list" --include='*.wav' --include='*.json' \
+    --exclude='*' -e "ssh -o BatchMode=yes" "$ZERO:$SRC" "$DEST/" || exit 1
+python3 "$FILER" "$DEST" || exit 1
 chown -R "$OWNER:$OWNER" "$DEST"
-echo "road noise: $(find "$DEST" -name '*.json' | wc -l) takes on the share"
