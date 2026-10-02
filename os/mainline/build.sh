@@ -26,9 +26,15 @@ cp "$HERE/gt6eau.config" "$TREE/arch/arm64/configs/"
 MK="$TREE/arch/arm64/boot/dts/qcom/Makefile"
 grep -q "$BOARD.dtb" "$MK" || echo "dtb-\$(CONFIG_ARCH_QCOM)	+= $BOARD.dtb" >> "$MK"
 
-# 1b. the panel: our variant of the S6D7AA0 driver. --forward skips a tree that already has it.
-patch -d "$TREE" -p1 --forward --silent -r - < "$HERE/panel-s6d7aa0-yuntang.patch" || \
-  grep -q yuntang "$TREE/drivers/gpu/drm/panel/panel-samsung-s6d7aa0.c"
+# 1b. our driver patches (panel variant, PM6125 PWM). A patch already in the tree is skipped
+# (a reverse dry run applies cleanly); --forward alone would re-apply the hunks it cannot
+# match as reversed and duplicate them. One that neither applies nor is in fails the build.
+for p in "$HERE"/*.patch; do
+  if patch -d "$TREE" -p1 -R --dry-run --silent < "$p" >/dev/null 2>&1; then
+    continue
+  fi
+  patch -d "$TREE" -p1 --forward --silent --no-backup-if-mismatch -r - < "$p" || { echo "$p does not apply"; exit 1; }
+done
 
 # 2. kernel and DTB
 make -C "$TREE" -s ARCH=arm64 LLVM="$LLVM_SUFFIX" O="$KBUILD" defconfig gt6eau.config
