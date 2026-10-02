@@ -26,6 +26,10 @@ cp "$HERE/gt6eau.config" "$TREE/arch/arm64/configs/"
 MK="$TREE/arch/arm64/boot/dts/qcom/Makefile"
 grep -q "$BOARD.dtb" "$MK" || echo "dtb-\$(CONFIG_ARCH_QCOM)	+= $BOARD.dtb" >> "$MK"
 
+# 1b. the panel: our variant of the S6D7AA0 driver. --forward skips a tree that already has it.
+patch -d "$TREE" -p1 --forward --silent -r - < "$HERE/panel-s6d7aa0-yuntang.patch" || \
+  grep -q yuntang "$TREE/drivers/gpu/drm/panel/panel-samsung-s6d7aa0.c"
+
 # 2. kernel and DTB
 make -C "$TREE" -s ARCH=arm64 LLVM="$LLVM_SUFFIX" O="$KBUILD" defconfig gt6eau.config
 make -C "$TREE" -s ARCH=arm64 LLVM="$LLVM_SUFFIX" O="$KBUILD" -j"$(nproc)" Image "qcom/$BOARD.dtb"

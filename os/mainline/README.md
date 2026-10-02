@@ -10,7 +10,8 @@ unit, so a failed boot costs a reboot, not a flash.
 
 | File | What |
 |---|---|
-| `sm6125-choiceway-gt6eau.dts` | the board, from mainline's Xiaomi ginkgo (same SoC, same PMIC rails): QCM6125 msm-id, the stock board IDs, the bootloader's 1920x720 splash buffer as a `simple-framebuffer`, USB in device mode |
+| `sm6125-choiceway-gt6eau.dts` | the board, from mainline's Xiaomi ginkgo (same SoC, same PMIC rails): QCM6125 msm-id, the stock board IDs, the bootloader's splash buffer as a `simple-framebuffer`, USB in device mode, and the panel on DSI0 |
+| `panel-s6d7aa0-yuntang.patch` | the unit's panel as a variant of mainline's Samsung S6D7AA0 driver: init and timings decoded from the unit's own device tree (`yuntang,s6d7aa0-720x1920`) |
 | `gt6eau.config` | what arm64 `defconfig` leaves out for this board |
 | `init` | busybox init: USB gadget (ACM + NCM), telnetd, dmesg on the panel |
 | `mkboot_v2.py` | packs a header-v2 boot image with the stock image's addresses |
@@ -30,9 +31,21 @@ fastboot boot boot-mainline.img      # RAM only; a power cycle returns to the in
 Pass: the panel shows kernel messages, then the laptop sees `18d1:4ee7`
 (`lsusb`), `screen /dev/ttyACM0` gives a shell, `dmesg` there lists what probed.
 
+## The panel
+
+The unit's panel is "yuntang", a 720x1920 MIPI DSI panel on a Samsung S6D7AA0-family
+controller, run rotated to landscape; there is no bridge chip (the stock kernel's GM8775 and
+LT9211C probes fail on this unit). The init (32 commands), reset timing and the three enable
+GPIOs come from the live device tree pulled off the unit on 2026-10-01. The vendor driver
+replaces the node's 768x1024 timings with 720x1920 at boot; the porches are the node's.
+The backlight is on/off on GPIO 97: the stock PWM dimming sits on a PMIC channel mainline
+has no node for.
+
+The splash buffer stays as the first console: if the DSI path fails, the panel should still
+show the bootloader's picture with kernel text over it.
+
 ## What is not there yet
 
-Display beyond the splash buffer (GM8775C bridge has no driver), touch, audio, Wi-Fi, the
-MCU UART node, GPU (no upstream SM6125 GPU node). The splash buffer is an assumption:
-ABL must leave the panel lit and the format must be `a8r8g8b8`. A black panel with a
-working USB gadget means the assumption is wrong, not the kernel.
+Backlight dimming, touch (Goodix GT9xx at i2c-1 0x14: mainline `goodix` driver, needs the
+i2c node), audio, Wi-Fi, the MCU UART node (`0x4c80000`), cameras, GPU (no upstream SM6125
+GPU node).

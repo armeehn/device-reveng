@@ -18,10 +18,10 @@
 	compatible = "choiceway,gt6-eau", "qcom,sm6125";
 	chassis-type = "embedded";
 
+	/* required for bootloader to select correct board */
 	/*
-	 * Required for ABL to pick this DTB. The SoC reports QCM6125 (0x1d3), not SM6125
-	 * (394). The board IDs are the stock base DTBs' (boot.img, 2026-09-30), so ABL takes
-	 * this DTB whichever base it would have picked.
+	 * The SoC reports QCM6125 (0x1d3), not SM6125 (394). The board IDs are the stock base
+	 * DTBs' (boot.img, 2026-09-30), so ABL takes this DTB whichever base it would have picked.
 	 */
 	qcom,msm-id = <0x1d3 0>;
 	qcom,board-id = <0 0>, <0 1>, <0 2>;
@@ -39,6 +39,29 @@
 			stride = <(1920 * 4)>;
 			format = "a8r8g8b8";
 		};
+	};
+
+	panel_avdd: regulator-panel-avdd {
+		compatible = "regulator-fixed";
+		regulator-name = "panel_avdd";
+		gpio = <&tlmm 95 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		startup-delay-us = <5000>;
+	};
+
+	panel_vmipi: regulator-panel-vmipi {
+		compatible = "regulator-fixed";
+		regulator-name = "panel_vmipi";
+		gpio = <&tlmm 84 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		startup-delay-us = <5000>;
+	};
+
+	/* on/off only: the stock PWM dimming sits on a PMIC channel mainline has no node for */
+	backlight: backlight {
+		compatible = "gpio-backlight";
+		gpios = <&tlmm 97 GPIO_ACTIVE_HIGH>;
+		default-on;
 	};
 
 	reserved-memory {
@@ -241,4 +264,39 @@
 &usb3_dwc3 {
 	/* the bench laptop is the host: adb and the boot gadget */
 	dr_mode = "peripheral";
+};
+
+&mdss {
+	status = "okay";
+};
+
+&mdss_dsi0 {
+	vdda-supply = <&vreg_l18a>;
+	status = "okay";
+
+	panel@0 {
+		compatible = "yuntang,s6d7aa0-720x1920";
+		reg = <0>;
+
+		reset-gpios = <&tlmm 90 GPIO_ACTIVE_LOW>;
+		power-supply = <&panel_avdd>;
+		vmipi-supply = <&panel_vmipi>;
+		backlight = <&backlight>;
+		rotation = <90>;
+
+		port {
+			panel_in: endpoint {
+				remote-endpoint = <&mdss_dsi0_out>;
+			};
+		};
+	};
+};
+
+&mdss_dsi0_out {
+	remote-endpoint = <&panel_in>;
+	data-lanes = <0 1 2 3>;
+};
+
+&mdss_dsi0_phy {
+	status = "okay";
 };
