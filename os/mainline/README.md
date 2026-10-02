@@ -49,7 +49,7 @@ show the bootloader's picture with kernel text over it.
 
 ## What is not there yet
 
-Audio, Wi-Fi, cameras, GPU (no upstream SM6125 GPU node).
+Audio, Wi-Fi, cameras (plan: `CAMERA.md`), GPU (no upstream SM6125 GPU node).
 
 ## Touch and the MCU link
 
