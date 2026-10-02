@@ -169,6 +169,14 @@ class BtCarKit(
         worker.shutdown()
     }
 
+    /** RAV4-278: CarPlay came or went; re-read, so HFP parks or returns at once ([HfpYield]). */
+    fun onCarPlay() {
+        if (!started) {
+            return
+        }
+        worker.execute { refresh() }
+    }
+
     /**
      * Ask the A2DP sink to connect to the phone (`BluetoothA2dpSink.connect`, privileged). A
      * wireless CarPlay phone keeps AVRCP up but drops A2DP, and the stack publishes the track
@@ -349,6 +357,7 @@ class BtCarKit(
 
         // The phone that got on is the one to go back to next boot.
         hfDevice?.let { prefs.edit().putString(KEY_LAST_PHONE, it.address).apply() }
+        hf?.let { yieldHfp(it, hfDevice) }
 
         val hfp = BtCarKitMap.hfp(next)
         callMcu?.onHfp(hfp, carPlay().inCall)
@@ -358,6 +367,40 @@ class BtCarKit(
             connectLastPhone()
         }
     }
+
+    /**
+     * RAV4-278: while CarPlay is up the HF client lets go of the phone ([HfpYield]), so Telecom
+     * never turns the phone's cellular call into a SIM call that silences the CarPlay mic. The
+     * parked addresses are saved: a park left by a crash or reboot is undone without CarPlay.
+     */
+    private fun yieldHfp(hf: BluetoothProfile, hfDevice: BluetoothDevice?) {
+        val parked = prefs.getStringSet(KEY_PARKED, null).orEmpty()
+        val step = HfpYield.step(carPlay().connected, hfDevice?.address, parked)
+        if (step == HfpYield.Step.PARK && hfDevice != null) {
+            if (setPolicy(hf, hfDevice, POLICY_FORBIDDEN)) {
+                Log.i(TAG, "HFP parked for CarPlay: ${hfDevice.address}")
+                prefs.edit().putStringSet(KEY_PARKED, parked + hfDevice.address).apply()
+            }
+            return
+        }
+        if (step != HfpYield.Step.RESTORE) {
+            return
+        }
+
+        // ALLOWED makes the stack connect the phone again (HeadsetClientService.setConnectionPolicy).
+        val kept = parked.filterNot { address ->
+            val phone = runCatching { adapter?.getRemoteDevice(address) }.getOrNull()
+            phone != null && setPolicy(hf, phone, POLICY_ALLOWED)
+        }
+        Log.i(TAG, "HFP back after CarPlay: ${parked - kept.toSet()}")
+        prefs.edit().putStringSet(KEY_PARKED, kept.toSet()).apply()
+    }
+
+    /** `BluetoothHeadsetClient.setConnectionPolicy` (system API, BLUETOOTH_PRIVILEGED). */
+    private fun setPolicy(hf: BluetoothProfile, device: BluetoothDevice, policy: Int): Boolean = runCatching {
+        hf.method("setConnectionPolicy", BluetoothDevice::class.java, Int::class.javaPrimitiveType!!)
+            .invoke(hf, device, policy) as Boolean
+    }.onFailure { Log.w(TAG, "HF connection policy $policy for ${device.address} failed", it) }.getOrDefault(false)
 
     /** RAV4-164: a fresh ring arms the driver's auto-answer delay ([AutoAnswer]). */
     private fun armAutoAnswer(prev: Int?, lead: Int?) {
@@ -462,5 +505,11 @@ class BtCarKit(
 
         private const val PREFS = "bt_carkit"
         private const val KEY_LAST_PHONE = "last_phone"
+        /** RAV4-278: the phones whose HF link is parked for CarPlay. */
+        private const val KEY_PARKED = "hfp_parked_for_carplay"
+
+        /** `BluetoothProfile.CONNECTION_POLICY_FORBIDDEN / _ALLOWED` (android-14.0.0_r1). */
+        private const val POLICY_FORBIDDEN = 0
+        private const val POLICY_ALLOWED = 100
     }
 }
