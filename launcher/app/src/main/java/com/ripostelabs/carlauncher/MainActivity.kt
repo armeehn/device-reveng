@@ -663,6 +663,10 @@ class MainActivity : ComponentActivity() {
                 reconnect = { settingsStore.reconnect.value },
             ).also { kit ->
                 kit.start()
+                // RAV4-278: CarPlay coming or going decides whether HFP may hold the phone.
+                lifecycleScope.launch {
+                    carEvents.carplayState.map { s -> s.connected }.distinctUntilChanged().collect { kit.onCarPlay() }
+                }
                 // Only an app the driver let near Bluetooth (BLUETOOTH_CONNECT) may send it.
                 registerReceiver(
                     btDeviceReceiver,
