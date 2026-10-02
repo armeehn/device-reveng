@@ -46,6 +46,15 @@ show the bootloader's picture with kernel text over it.
 
 ## What is not there yet
 
-Backlight dimming, touch (Goodix GT9xx at i2c-1 0x14: mainline `goodix` driver, needs the
-i2c node), audio, Wi-Fi, the MCU UART node (`0x4c80000`), cameras, GPU (no upstream SM6125
-GPU node).
+Backlight dimming, audio, Wi-Fi, cameras, GPU (no upstream SM6125 GPU node).
+
+## Touch and the MCU link
+
+Touch is the stock Goodix GT9xx on SE2 (`i2c2`, 0x14, irq GPIO 88, reset GPIO 87) under
+mainline's `goodix` driver. It reports in the panel's portrait coordinates; a rotated
+desktop may need `touchscreen-swapped-x-y` once the bench shows which way it is off.
+
+The MCU link is SE5 as a 2-wire UART on GPIO 24/25 (`/dev/ttyHS1` on stock). Mainline only
+describes SE5 as `i2c5`/`spi5`, so the board DTS adds the `geni-uart` node; the `serial1`
+alias makes it `/dev/ttyMSM1`. From the bench shell: `stty -F /dev/ttyMSM1 115200 raw` and
+`cat /dev/ttyMSM1 | od -An -tx1` should show the MCU's 10 Hz `0x8E` frames.

@@ -26,6 +26,10 @@
 	qcom,msm-id = <0x1d3 0>;
 	qcom,board-id = <0 0>, <0 1>, <0 2>;
 
+	aliases {
+		serial1 = &mcu_uart;
+	};
+
 	chosen {
 		#address-cells = <2>;
 		#size-cells = <2>;
@@ -299,4 +303,50 @@
 
 &mdss_dsi0_phy {
 	status = "okay";
+};
+
+/* Touch: Goodix GT9xx on SE2 (stock: i2c-1 0x14, irq GPIO 88, reset GPIO 87) */
+&qupv3_id_0 {
+	status = "okay";
+};
+
+&i2c2 {
+	clock-frequency = <400000>;
+	status = "okay";
+
+	touchscreen@14 {
+		compatible = "goodix,gt911";
+		reg = <0x14>;
+
+		interrupts-extended = <&tlmm 88 IRQ_TYPE_LEVEL_LOW>;
+		irq-gpios = <&tlmm 88 GPIO_ACTIVE_HIGH>;
+		reset-gpios = <&tlmm 87 GPIO_ACTIVE_HIGH>;
+	};
+};
+
+/*
+ * The MCU link: SE5 as a 2-wire UART on GPIO 24/25 (stock /dev/ttyHS1, qupv3_se5_2uart).
+ * Mainline only describes SE5 as i2c5/spi5, so the UART node lives here.
+ */
+&qupv3_id_1 {
+	status = "okay";
+
+	mcu_uart: serial@4c80000 {
+		compatible = "qcom,geni-uart";
+		reg = <0x04c80000 0x4000>;
+		clocks = <&gcc GCC_QUPV3_WRAP1_S0_CLK>;
+		clock-names = "se";
+		interrupts = <GIC_SPI 308 IRQ_TYPE_LEVEL_HIGH>;
+		pinctrl-0 = <&mcu_uart_default>;
+		pinctrl-names = "default";
+	};
+};
+
+&tlmm {
+	mcu_uart_default: mcu-uart-default-state {
+		pins = "gpio24", "gpio25";
+		function = "qup10";
+		drive-strength = <2>;
+		bias-disable;
+	};
 };
