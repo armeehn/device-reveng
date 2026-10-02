@@ -34,6 +34,7 @@ DRIVE_GAP_S = 30 * 60
 # Recorder tag -> contract band. fan-high takes the road band of its drive (section 2).
 ROAD_BANDS = {"city": "city", "highway": "highway"}
 FAN_TAG = "fan-high"
+FAN_LABEL = "Fan"
 DEFAULT_ROAD = "city"
 # Flat take names: 20261001-151300-city.wav
 FLAT = re.compile(r"^\d{8}-\d{6}-[a-z-]+\.wav$")
@@ -129,13 +130,21 @@ def fan_band(c, takes):
     return min(roads, key=lambda o: abs(o["t"] - c["t"]))["band"] + "-fan"
 
 
+def labels(c):
+    """Contract tags, capitalised as the launcher writes them: fan-high in a city drive is
+    ["City", "Fan"], rain is ["Rain"]."""
+    if c["tag"] != FAN_TAG:
+        return [c["tag"].capitalize()]
+    return [c["band"].split("-")[0].capitalize(), FAN_LABEL]
+
+
 def sidecar(c, sha, size, received):
     flat = c["flat"]
     speeds = flat.get("speed_kmh_per_second")
     speed = sum(speeds) / len(speeds) if isinstance(speeds, list) and speeds else None
     return {"schema": SCHEMA, "started_at": iso(c["t"]), "duration_s": flat.get("seconds"),
             "sample_rate": flat.get("rate_hz"), "channels": flat.get("channels"),
-            "source": SOURCE, "band": c["band"], "tags": [c["tag"]], "speed_kmh": speed,
+            "source": SOURCE, "band": c["band"], "tags": c["tags"], "speed_kmh": speed,
             "mic_source": flat.get("source"), "processing": flat.get("processing"),
             "drive": c["drive"], "original": os.path.basename(c["wav"]),
             "device": DEVICE, "received_at": received, "sha256": sha, "bytes": size,
@@ -199,6 +208,7 @@ def main():
     for c in batch:
         if c["tag"] == FAN_TAG:
             c["band"] = fan_band(c, takes + batch)
+        c["tags"] = labels(c)
 
     filed = already = 0
     for c in batch:
