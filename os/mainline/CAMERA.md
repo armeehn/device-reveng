@@ -51,8 +51,11 @@ detected signal, a fixed `MEDIA_BUS_FMT_UYVY8_1X16` output.
 
 ## Order of work
 
-1. SM6125 in `camss` and the board DT: CSIPHY/CSID/ISPIF/VFE nodes, CCI. Proof on the
-   bench: `media-ctl -p` lists the pipeline.
+1. SM6125 in `camss` and the board DT: CSIPHY/CSID/ISPIF/VFE nodes, CCI. **Built
+   2026-10-02** (`camss-sm6125.patch`, board DTS). Proof on the bench: `media-ctl -p`
+   lists 3 CSIPHY, 4 CSID, ISPIF and 2 VFE entities, and `i2cdetect` sees the CCI buses.
+   Assumption to check there: the `ahb` clock maps to `GCC_CAMSS_AHB_CLK_SRC` (SM6125 has
+   no gated camss AHB clock in mainline's GCC).
 2. Slot map from the unit: decoder per slot, CCI address, lanes.
 3. PR2000 driver (reverse camera first: one input, simplest table).
 4. XS9922B driver (four AHD inputs, virtual channels).

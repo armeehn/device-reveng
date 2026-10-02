@@ -1,0 +1,102 @@
+diff --git a/drivers/media/platform/qcom/camss/camss.c b/drivers/media/platform/qcom/camss/camss.c
+index 2fbcd0e34..2835ca5e6 100644
+--- a/drivers/media/platform/qcom/camss/camss.c
++++ b/drivers/media/platform/qcom/camss/camss.c
+@@ -708,6 +708,71 @@ static const struct camss_subdev_resources csiphy_res_660[] = {
+ 	}
+ };
+ 
++/*
++ * SM6125 runs the SDM660-generation blocks (stock: csiphy-v3.5, csid-v5.0, ispif-v3.0,
++ * vfe48) with its clocks in GCC. The PHYs differ from SDM660: each has its own
++ * GCC_CAMSS_CSIPHYn_CLK, and there is no CSIPHY_AHB2CRIF clock.
++ */
++static const struct camss_subdev_resources csiphy_res_6125[] = {
++	/* CSIPHY0 */
++	{
++		.regulators = {},
++		.clock = { "top_ahb", "ispif_ahb", "ahb", "csiphy0_timer",
++			   "csi0_phy", "csiphy0" },
++		.clock_rate = { { 0 },
++				{ 0 },
++				{ 0 },
++				{ 100000000, 200000000, 269333333 },
++				{ 0 },
++				{ 0 } },
++		.reg = { "csiphy0", "csiphy0_clk_mux" },
++		.interrupt = { "csiphy0" },
++		.csiphy = {
++			.id = 0,
++			.hw_ops = &csiphy_ops_3ph_1_0,
++			.formats = &csiphy_formats_8x96
++		}
++	},
++	/* CSIPHY1 */
++	{
++		.regulators = {},
++		.clock = { "top_ahb", "ispif_ahb", "ahb", "csiphy1_timer",
++			   "csi1_phy", "csiphy1" },
++		.clock_rate = { { 0 },
++				{ 0 },
++				{ 0 },
++				{ 100000000, 200000000, 269333333 },
++				{ 0 },
++				{ 0 } },
++		.reg = { "csiphy1", "csiphy1_clk_mux" },
++		.interrupt = { "csiphy1" },
++		.csiphy = {
++			.id = 1,
++			.hw_ops = &csiphy_ops_3ph_1_0,
++			.formats = &csiphy_formats_8x96
++		}
++	},
++	/* CSIPHY2 */
++	{
++		.regulators = {},
++		.clock = { "top_ahb", "ispif_ahb", "ahb", "csiphy2_timer",
++			   "csi2_phy", "csiphy2" },
++		.clock_rate = { { 0 },
++				{ 0 },
++				{ 0 },
++				{ 100000000, 200000000, 269333333 },
++				{ 0 },
++				{ 0 } },
++		.reg = { "csiphy2", "csiphy2_clk_mux" },
++		.interrupt = { "csiphy2" },
++		.csiphy = {
++			.id = 2,
++			.hw_ops = &csiphy_ops_3ph_1_0,
++			.formats = &csiphy_formats_8x96
++		}
++	},
++};
++
+ static const struct camss_subdev_resources csid_res_660[] = {
+ 	/* CSID0 */
+ 	{
+@@ -4377,6 +4442,17 @@ static const struct camss_resources sdm660_resources = {
+ 	.vfe_num = ARRAY_SIZE(vfe_res_660),
+ };
+ 
++static const struct camss_resources sm6125_resources = {
++	.version = CAMSS_660,
++	.csiphy_res = csiphy_res_6125,
++	.csid_res = csid_res_660,
++	.ispif_res = &ispif_res_660,
++	.vfe_res = vfe_res_660,
++	.csiphy_num = ARRAY_SIZE(csiphy_res_6125),
++	.csid_num = ARRAY_SIZE(csid_res_660),
++	.vfe_num = ARRAY_SIZE(vfe_res_660),
++};
++
+ static const struct camss_resources sdm670_resources = {
+ 	.version = CAMSS_845,
+ 	.csiphy_res = csiphy_res_670,
+@@ -4478,6 +4554,7 @@ static const struct of_device_id camss_dt_match[] = {
+ 	{ .compatible = "qcom,sdm660-camss", .data = &sdm660_resources },
+ 	{ .compatible = "qcom,sdm670-camss", .data = &sdm670_resources },
+ 	{ .compatible = "qcom,sdm845-camss", .data = &sdm845_resources },
++	{ .compatible = "qcom,sm6125-camss", .data = &sm6125_resources },
+ 	{ .compatible = "qcom,sm8250-camss", .data = &sm8250_resources },
+ 	{ .compatible = "qcom,sm8550-camss", .data = &sm8550_resources },
+ 	{ .compatible = "qcom,x1e80100-camss", .data = &x1e80100_resources },
