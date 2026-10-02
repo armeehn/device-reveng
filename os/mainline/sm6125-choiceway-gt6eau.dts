@@ -61,11 +61,17 @@
 		startup-delay-us = <5000>;
 	};
 
-	/* on/off only: the stock PWM dimming sits on a PMIC channel mainline has no node for */
+	/*
+	 * Stock: 12-bit levels on the PM6125 LPG, 100 us period, enable on GPIO 97.
+	 * The default is half brightness; the stock 102/4095 reads as off in daylight.
+	 */
 	backlight: backlight {
-		compatible = "gpio-backlight";
-		gpios = <&tlmm 97 GPIO_ACTIVE_HIGH>;
-		default-on;
+		compatible = "pwm-backlight";
+		pwms = <&pm6125_pwm 0 100000>;
+		enable-gpios = <&tlmm 97 GPIO_ACTIVE_HIGH>;
+		brightness-levels = <0 4095>;
+		num-interpolated-steps = <4095>;
+		default-brightness-level = <2048>;
 	};
 
 	reserved-memory {
@@ -348,5 +354,16 @@
 		function = "qup10";
 		drive-strength = <2>;
 		bias-disable;
+	};
+};
+
+/* pm6125.dtsi leaves USID 1 empty; the backlight PWM lives there */
+&{/soc@0/spmi@1c40000/pmic@1} {
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	pm6125_pwm: pwm {
+		compatible = "qcom,pm6125-pwm";
+		#pwm-cells = <2>;
 	};
 };
