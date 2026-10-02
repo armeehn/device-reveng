@@ -40,6 +40,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.ripostelabs.carlauncher.carlib.AndroidPanLink
 import com.ripostelabs.carlauncher.carlib.BtCallMcu
+import com.ripostelabs.carlauncher.carlib.CallSound
 import com.ripostelabs.carlauncher.carlib.BtCarKit
 import com.ripostelabs.carlauncher.service.OtaUpdater
 import com.ripostelabs.carlauncher.service.UplinkService
@@ -675,6 +676,15 @@ class MainActivity : ComponentActivity() {
                     kit.vendorView.collect { v ->
                         val name = withContext(Dispatchers.IO) { callerNames.lookup(v.callerNumber) }
                         carEvents.feedVendorBt(v.copy(callerName = name))
+                    }
+                }
+                // A call plays through the DSP as speech; the saved sound returns after it.
+                mcuOwner?.let { owner ->
+                    val callSound = CallSound(owner::send) { mcuSetupStore?.setup?.value }
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        combine(carEvents.carplayState, kit.snapshot) { cp, bt -> cp.inCall || bt.calls.any { c -> c.inProgress } }
+                            .distinctUntilChanged()
+                            .collect(callSound::onCall)
                     }
                 }
                 // The A2DP stream is SRC_BTMUSIC, as btsuite selected it.

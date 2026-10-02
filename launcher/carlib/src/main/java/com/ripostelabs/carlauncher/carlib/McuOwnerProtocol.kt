@@ -405,18 +405,10 @@ object McuOwnerProtocol {
      * They are the DSP app's boot burst (DspService.java:64-83). The EQ (`4F 10`), loudness
      * (`4F 0E`), crossover (`4F 14`), subwoofer (`4F 15`), listening position (`4F 12`, `4F 13`),
      * bass boost (`4F 16`) and surround (`4F 0F`) carry the saved sound: every block is the
-     * user's. With no table they are the flat defaults stock shipped.
+     * user's. With no table they are the flat defaults stock shipped. [CallSound] re-sends the
+     * same list when a call ends.
      */
-    private fun configBlocks(setup: McuSetup?): List<ByteArray> = listOf(
-        McuSetupProtocol.dspEq(setup?.dspEq ?: DspEq.FLAT),
-        McuSetupProtocol.dspLoud(setup?.dspLoud ?: false),
-        McuSetupProtocol.dspCrossover(setup?.dspCrossover ?: DspSound.Crossover()),
-        McuSetupProtocol.dspSub(setup?.dspSub ?: DspSound.Sub()),
-        McuSetupProtocol.dspDelay(setup?.dspField ?: DspSound.Field()),
-        McuSetupProtocol.dspChannelGain(setup?.dspField ?: DspSound.Field()),
-        McuSetupProtocol.dspBass(setup?.dspBass ?: DspSound.Bass()),
-        McuSetupProtocol.dspSurround(setup?.dspSurround ?: DspSound.Surround()),
-    )
+    private fun configBlocks(setup: McuSetup?): List<ByteArray> = CallSound.saved(setup)
 
     /**
      * `49 05 hh ll`, minutes big-endian (sendSleepTime, EventService.java:9361-9375). Not seen in
