@@ -112,6 +112,7 @@ import com.ripostelabs.carlauncher.carlib.WheelLearn
 import com.ripostelabs.carlauncher.carlib.Zlink // RAV4-52 CarPlay deep link
 import com.ripostelabs.carlauncher.data.AutoStart
 import com.ripostelabs.carlauncher.data.CallPopupGuard
+import com.ripostelabs.carlauncher.data.CallUiGuard
 import com.ripostelabs.carlauncher.data.ColdBootResume
 import com.ripostelabs.carlauncher.data.DecoderSignal
 import com.ripostelabs.carlauncher.data.ReverseCameraDecoder
@@ -202,6 +203,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first // v2.9
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.drop // RAV4-201
 import kotlinx.coroutines.flow.filter // RAV4-201
 import kotlinx.coroutines.flow.merge // RAV4-201
@@ -996,6 +998,23 @@ class MainActivity : ComponentActivity() {
                     if (!wanted) return@collect
                     delay(CallPopupGuard.SETTLE_MS)
                     withContext(Dispatchers.IO) { vendorBtService.hideFloatWnd() }
+                }
+            }
+        }
+
+        // RAV4-278: Android's call screen (Siri or FaceTime Audio over HFP) must not cover
+        // CarPlay. Polled like the nav bar, and only while a CarPlay session is up.
+        lifecycleScope.launch {
+            val guard = CallUiGuard()
+            carEvents.carplayState.map { it.connected }.distinctUntilChanged().collectLatest { live ->
+                if (!live) return@collectLatest
+                while (true) {
+                    val line = withContext(Dispatchers.IO) { RootShell.exec(CallUiGuard.TOP_QUERY).stdout }
+                    if (guard.onTop(line, CallUiGuard.Session.LIVE)) {
+                        Log.i(CALL_UI_TAG, "call screen over CarPlay: CarPlay back to the front")
+                        Zlink.openAny(applicationContext)
+                    }
+                    delay(CallUiGuard.POLL_MS)
                 }
             }
         }
@@ -2067,6 +2086,9 @@ private const val STARTUP_TAG = "Startup"
 
 /** The reverse path logs under the camera screen's tag: `logcat -s ReverseCamera` is the whole story. */
 private const val REVERSE_TAG = "ReverseCamera"
+
+/** RAV4-278: each reclaim of the panel from the call screen: `logcat -s CallUiGuard`. */
+private const val CALL_UI_TAG = "CallUiGuard"
 
 /** Reverse camera settings, "Dynamic trajectory": 0 off, 1 static, 2 dynamic (steering). */
 private const val TRACK_LINE_DYNAMIC = 2
