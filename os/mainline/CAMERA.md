@@ -83,5 +83,17 @@ detected signal, a fixed `MEDIA_BUS_FMT_UYVY8_1X16` output.
    user-space AIS driver, which is what streams on the stock unit; the kernel driver's own
    INIT0 table is a different, unused-at-stream configuration. Assumptions to check: the
    750 MHz link frequency (the PLL registers are not decoded) and the 2 ms per-write delay.
-5. camss CSID 4.7 routes only virtual channel 0 (`vc = 0` in `camss-csid-4-7.c`), so on
-   mainline the XS9922B shows camera 0 alone until CSID 4.7 maps VC 1..3 to RDI 1..3.
+5. Virtual channels: mainline camss read VC 0 only on CSID 4.7. **Built 2026-10-03**
+   (`camss-vc-per-rdi.patch`, SM6125 only via `vc_per_rdi`): CSID enables the LUT for
+   VC 0-3 and each ISPIF line reads its own VC.
+
+   | Camera | VC | Route |
+   |---|---|---|
+   | 0 | 0 | csid2 -> ispif -> vfe0_rdi0 |
+   | 1 | 1 | csid2 -> ispif -> vfe0_rdi1 |
+   | 2 | 2 | csid2 -> ispif -> vfe0_rdi2 |
+   | 3 | 3 | csid2 -> ispif -> vfe1_rdi0 |
+
+   Assumption to check: the XS9922B tags camera n as VC n (the stock AIS config lists four
+   links on one CSI port, which only VCs can carry). The PR2000 on VFE0 would then share
+   RDI lines with these; run one decoder at a time on the bench.
