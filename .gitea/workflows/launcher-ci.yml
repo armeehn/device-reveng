@@ -135,7 +135,8 @@ jobs:
       # the same commit that legitimately grows the app, and say why.
       - name: Check APK size budget
         run: |
-          budget=8388608   # 8 MiB
+          # 9 MiB since the tyre radio: rtl_433 (460 KB, ~210 KB packed) took the APK past 8 MiB.
+          budget=9437184   # 9 MiB
           apk=app/build/outputs/apk/release/app-release.apk
           size=$(stat -c%s "$apk")
           echo "release APK: $size bytes (budget $budget)"

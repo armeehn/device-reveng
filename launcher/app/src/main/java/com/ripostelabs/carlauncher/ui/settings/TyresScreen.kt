@@ -13,6 +13,11 @@ import com.ripostelabs.carlauncher.carlib.CanSignal
 import com.ripostelabs.carlauncher.carlib.CarEvents
 import com.ripostelabs.carlauncher.carlib.CarService
 import com.ripostelabs.carlauncher.carlib.TpmsAlert
+import com.ripostelabs.carlauncher.carlib.TyreRadioState
+import com.ripostelabs.carlauncher.carlib.TyreState
+import com.ripostelabs.carlauncher.data.TyreSensorView
+import com.ripostelabs.carlauncher.data.TyreSensors
+import java.util.Locale
 
 /**
  * Tyres: the box's 0x48 report as the stock TPMS page shows it.
@@ -28,6 +33,7 @@ fun TyresScreen(
     carService: CarService,
     carEvents: CarEvents,
     onBack: () -> Unit,
+    tyreSensors: TyreSensors? = null,
 ) {
     val report by carEvents.tpms.collectAsStateWithLifecycle()
 
@@ -39,6 +45,10 @@ fun TyresScreen(
         subtitle = "Tyre pressures as the car reports them",
         onBack = onBack,
     ) {
+        if (tyreSensors != null) {
+            RadioSensors(tyreSensors)
+        }
+
         val r = report
         if (r == null) {
             SettingsSection(title = "No tyre report") {
@@ -100,3 +110,58 @@ fun TyreWarningPopup(carEvents: CarEvents) {
 }
 
 private fun kpa(v: Int?): String = v?.let { "$it kPa" } ?: "—"
+
+/**
+ * The sensors the USB radio heard, learned as this car's own. Each row shows psi, kPa and
+ * temperature; tapping it moves the sensor to the next wheel, since Toyota sensors do not say
+ * where they sit.
+ */
+@Composable
+private fun RadioSensors(tyreSensors: TyreSensors) {
+    val view by tyreSensors.view.collectAsStateWithLifecycle()
+
+    SettingsSection(title = "Sensors (radio)") {
+        InfoRow("Receiver", receiverLabel(view.receiver))
+
+        if (view.sensors.isEmpty() && view.receiver == TyreRadioState.LISTENING) {
+            Text(
+                text = "Learning this car's sensors. They appear after a few minutes of driving.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        view.sensors.forEach { sensor ->
+            SettingRow(
+                label = sensor.position?.label ?: "Sensor ${sensor.reading.id.takeLast(4)} (tap to place)",
+                description = sensorDetail(sensor),
+                onClick = { tyreSensors.cyclePosition(sensor.reading.id) },
+            ) {
+                ValueBadge(String.format(Locale.ROOT, "%.1f psi", sensor.reading.psi))
+            }
+        }
+    }
+}
+
+private fun receiverLabel(state: TyreRadioState): String = when (state) {
+    TyreRadioState.STARTING -> "Starting"
+    TyreRadioState.LISTENING -> "Listening on 315 MHz"
+    TyreRadioState.NO_RECEIVER -> "Not plugged in"
+}
+
+/** "219 kPa · 17 °C · Soft: lower than the other tyres · 2 min ago" */
+private fun sensorDetail(sensor: TyreSensorView): String {
+    val r = sensor.reading
+    val parts = mutableListOf(String.format(Locale.ROOT, "%.0f kPa", r.kpa))
+
+    r.tempC?.let { parts += String.format(Locale.ROOT, "%.0f °C", it) }
+    when (sensor.state) {
+        TyreState.LOW -> parts += "Low: add air"
+        TyreState.SOFT -> parts += "Soft: lower than the other tyres"
+        TyreState.OK -> Unit
+    }
+    val minutes = (System.currentTimeMillis() - r.atMs) / 60_000
+    parts += if (minutes < 1) "just now" else "$minutes min ago"
+
+    return parts.joinToString(" · ")
+}
