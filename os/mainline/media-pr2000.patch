@@ -1,0 +1,408 @@
+diff --git a/drivers/media/i2c/Kconfig b/drivers/media/i2c/Kconfig
+index cdd7ba5da..accfa0297 100644
+--- a/drivers/media/i2c/Kconfig
++++ b/drivers/media/i2c/Kconfig
+@@ -1276,6 +1276,19 @@ config VIDEO_SAA711X
+ 	  To compile this driver as a module, choose M here: the
+ 	  module will be called saa7115.
+ 
++config VIDEO_PR2000
++	tristate "Pixelplus PR2000 AHD video decoder"
++	depends on GPIOLIB && I2C && VIDEO_DEV
++	select MEDIA_CONTROLLER
++	select VIDEO_V4L2_SUBDEV_API
++	select V4L2_FWNODE
++	help
++	  Support for the Pixelplus PR2000 AHD/CVBS video decoder with MIPI CSI-2
++	  output, as used for the reverse camera of some car head units.
++
++	  To compile this driver as a module, choose M here: the
++	  module will be called pr2000.
++
+ config VIDEO_TC358743
+ 	tristate "Toshiba TC358743 decoder"
+ 	depends on VIDEO_DEV && I2C
+diff --git a/drivers/media/i2c/Makefile b/drivers/media/i2c/Makefile
+index 57cdd8dc9..0bd53c092 100644
+--- a/drivers/media/i2c/Makefile
++++ b/drivers/media/i2c/Makefile
+@@ -135,6 +135,7 @@ obj-$(CONFIG_VIDEO_SAA717X) += saa717x.o
+ obj-$(CONFIG_VIDEO_SAA7185) += saa7185.o
+ obj-$(CONFIG_VIDEO_SONY_BTF_MPX) += sony-btf-mpx.o
+ obj-$(CONFIG_VIDEO_ST_MIPID02) += st-mipid02.o
++obj-$(CONFIG_VIDEO_PR2000) += pr2000.o
+ obj-$(CONFIG_VIDEO_TC358743) += tc358743.o
+ obj-$(CONFIG_VIDEO_TC358746) += tc358746.o
+ obj-$(CONFIG_VIDEO_TDA1997X) += tda1997x.o
+diff --git a/drivers/media/i2c/pr2000.c b/drivers/media/i2c/pr2000.c
+new file mode 100644
+index 000000000..3d7e99965
+--- /dev/null
++++ b/drivers/media/i2c/pr2000.c
+@@ -0,0 +1,366 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * Pixelplus PR2000 AHD/CVBS video decoder, MIPI CSI-2 output.
++ *
++ * Written for the Choiceway GT6-EAU car head unit, where a PR2000 carries the reverse camera
++ * into CSIPHY 1 over four lanes. The mode tables are the ones the unit's stock kernel writes
++ * (pr2000_tables.h); this driver selects one by output size and loads it on stream on.
++ *
++ *     camera ──AHD──► PR2000 ──CSI-2, 4 lanes, UYVY──► camss
++ *                       ▲
++ *                 CCI (I2C) 0x5c, reset GPIO
++ */
++
++#include <linux/delay.h>
++#include <linux/gpio/consumer.h>
++#include <linux/i2c.h>
++#include <linux/module.h>
++#include <linux/of.h>
++
++#include <media/v4l2-ctrls.h>
++#include <media/v4l2-device.h>
++#include <media/v4l2-fwnode.h>
++#include <media/v4l2-subdev.h>
++
++/* Page 0 registers */
++#define PR2000_REG_PAGE		0xff	/* page select, on every page */
++#define PR2000_REG_CHIP_ID_H	0xfc
++#define PR2000_REG_CHIP_ID_L	0xfd
++#define PR2000_CHIP_ID		0x2000
++
++/* AHD 720p and 1080p at 25/30 fps all run a 74.25 MHz pixel clock */
++#define PR2000_PIXEL_RATE	74250000
++#define PR2000_LANES		4
++#define PR2000_BPP		16
++/* CSI-2 DDR: link frequency = pixel rate * bpp / (2 * lanes) */
++#define PR2000_LINK_FREQ	(PR2000_PIXEL_RATE * PR2000_BPP / (2 * PR2000_LANES))
++
++/* Stock reset pulse (reset_pr2000): high 50 ms, low 100 ms, high 50 ms */
++#define PR2000_RESET_SETTLE_MS	50
++#define PR2000_RESET_ASSERT_MS	100
++
++struct pr2000_reg {
++	u8 reg;
++	u8 val;
++};
++
++#include "pr2000_tables.h"
++
++struct pr2000_mode {
++	u32 width;
++	u32 height;
++	u32 fps;
++	const struct pr2000_reg *regs;
++	unsigned int num_regs;
++};
++
++#define PR2000_MODE(w, h, f, t) \
++	{ .width = w, .height = h, .fps = f, .regs = t, .num_regs = ARRAY_SIZE(t) }
++
++/* The first entry is the default: the stock camera config runs the reverse camera at 720p */
++static const struct pr2000_mode pr2000_modes[] = {
++	PR2000_MODE(1280, 720, 25, pr2000_ahd_720p25),
++	PR2000_MODE(1280, 720, 30, pr2000_ahd_720p30),
++	PR2000_MODE(1920, 1080, 25, pr2000_ahd_1080p25),
++	PR2000_MODE(1920, 1080, 30, pr2000_ahd_1080p30),
++};
++
++static const s64 pr2000_link_freqs[] = { PR2000_LINK_FREQ };
++
++struct pr2000 {
++	struct i2c_client *client;
++	struct v4l2_subdev sd;
++	struct media_pad pad;
++	struct v4l2_ctrl_handler ctrls;
++	struct gpio_desc *reset_gpio;
++	const struct pr2000_mode *mode;
++};
++
++static inline struct pr2000 *to_pr2000(struct v4l2_subdev *sd)
++{
++	return container_of(sd, struct pr2000, sd);
++}
++
++static int pr2000_write(struct pr2000 *pr, u8 reg, u8 val)
++{
++	int ret = i2c_smbus_write_byte_data(pr->client, reg, val);
++
++	if (ret < 0) {
++		dev_err(&pr->client->dev, "write 0x%02x=0x%02x: %d\n", reg, val, ret);
++	}
++	return ret;
++}
++
++static int pr2000_write_table(struct pr2000 *pr, const struct pr2000_reg *regs,
++			      unsigned int n)
++{
++	unsigned int i;
++	int ret;
++
++	for (i = 0; i < n; i++) {
++		ret = pr2000_write(pr, regs[i].reg, regs[i].val);
++		if (ret < 0) {
++			return ret;
++		}
++	}
++	return 0;
++}
++
++/* The stock reset pulse; a missing GPIO means the board holds the chip out of reset */
++static void pr2000_reset(struct pr2000 *pr)
++{
++	if (!pr->reset_gpio) {
++		return;
++	}
++
++	gpiod_set_value_cansleep(pr->reset_gpio, 0);
++	msleep(PR2000_RESET_SETTLE_MS);
++	gpiod_set_value_cansleep(pr->reset_gpio, 1);
++	msleep(PR2000_RESET_ASSERT_MS);
++	gpiod_set_value_cansleep(pr->reset_gpio, 0);
++	msleep(PR2000_RESET_SETTLE_MS);
++}
++
++static int pr2000_detect(struct pr2000 *pr)
++{
++	int hi, lo;
++
++	if (pr2000_write(pr, PR2000_REG_PAGE, 0) < 0) {
++		return -ENODEV;
++	}
++
++	hi = i2c_smbus_read_byte_data(pr->client, PR2000_REG_CHIP_ID_H);
++	lo = i2c_smbus_read_byte_data(pr->client, PR2000_REG_CHIP_ID_L);
++	if (hi < 0 || lo < 0) {
++		return -ENODEV;
++	}
++
++	if (((hi << 8) | lo) != PR2000_CHIP_ID) {
++		dev_err(&pr->client->dev, "chip id 0x%04x, expected 0x%04x\n",
++			(hi << 8) | lo, PR2000_CHIP_ID);
++		return -ENODEV;
++	}
++	return 0;
++}
++
++static void pr2000_fill_fmt(const struct pr2000_mode *mode, struct v4l2_mbus_framefmt *fmt)
++{
++	fmt->width = mode->width;
++	fmt->height = mode->height;
++	fmt->code = MEDIA_BUS_FMT_UYVY8_1X16;
++	fmt->field = V4L2_FIELD_NONE;
++	fmt->colorspace = V4L2_COLORSPACE_REC709;
++	fmt->ycbcr_enc = V4L2_YCBCR_ENC_DEFAULT;
++	fmt->quantization = V4L2_QUANTIZATION_DEFAULT;
++	fmt->xfer_func = V4L2_XFER_FUNC_DEFAULT;
++}
++
++/* Sizes are the only choice a format can make; the first mode of that size wins */
++static const struct pr2000_mode *pr2000_find_mode(u32 width, u32 height)
++{
++	unsigned int i;
++
++	for (i = 0; i < ARRAY_SIZE(pr2000_modes); i++) {
++		if (pr2000_modes[i].width == width && pr2000_modes[i].height == height) {
++			return &pr2000_modes[i];
++		}
++	}
++	return &pr2000_modes[0];
++}
++
++static int pr2000_enum_mbus_code(struct v4l2_subdev *sd, struct v4l2_subdev_state *state,
++				 struct v4l2_subdev_mbus_code_enum *code)
++{
++	if (code->index > 0) {
++		return -EINVAL;
++	}
++
++	code->code = MEDIA_BUS_FMT_UYVY8_1X16;
++	return 0;
++}
++
++static int pr2000_enum_frame_size(struct v4l2_subdev *sd, struct v4l2_subdev_state *state,
++				  struct v4l2_subdev_frame_size_enum *fse)
++{
++	/* one entry per distinct size: 720p and 1080p */
++	static const u32 sizes[][2] = { { 1280, 720 }, { 1920, 1080 } };
++
++	if (fse->index >= ARRAY_SIZE(sizes) || fse->code != MEDIA_BUS_FMT_UYVY8_1X16) {
++		return -EINVAL;
++	}
++
++	fse->min_width = fse->max_width = sizes[fse->index][0];
++	fse->min_height = fse->max_height = sizes[fse->index][1];
++	return 0;
++}
++
++static int pr2000_set_fmt(struct v4l2_subdev *sd, struct v4l2_subdev_state *state,
++			  struct v4l2_subdev_format *format)
++{
++	struct pr2000 *pr = to_pr2000(sd);
++	const struct pr2000_mode *mode;
++
++	mode = pr2000_find_mode(format->format.width, format->format.height);
++	pr2000_fill_fmt(mode, &format->format);
++	*v4l2_subdev_state_get_format(state, 0) = format->format;
++
++	if (format->which == V4L2_SUBDEV_FORMAT_ACTIVE) {
++		pr->mode = mode;
++	}
++	return 0;
++}
++
++static int pr2000_init_state(struct v4l2_subdev *sd, struct v4l2_subdev_state *state)
++{
++	pr2000_fill_fmt(&pr2000_modes[0], v4l2_subdev_state_get_format(state, 0));
++	return 0;
++}
++
++static int pr2000_s_stream(struct v4l2_subdev *sd, int enable)
++{
++	struct pr2000 *pr = to_pr2000(sd);
++
++	if (!enable) {
++		/* the stock driver leaves the chip running; a reset is the clean stop */
++		pr2000_reset(pr);
++		return 0;
++	}
++
++	dev_dbg(&pr->client->dev, "%ux%u@%u, %u writes\n", pr->mode->width,
++		pr->mode->height, pr->mode->fps, pr->mode->num_regs);
++	return pr2000_write_table(pr, pr->mode->regs, pr->mode->num_regs);
++}
++
++static const struct v4l2_subdev_video_ops pr2000_video_ops = {
++	.s_stream = pr2000_s_stream,
++};
++
++static const struct v4l2_subdev_pad_ops pr2000_pad_ops = {
++	.enum_mbus_code = pr2000_enum_mbus_code,
++	.enum_frame_size = pr2000_enum_frame_size,
++	.get_fmt = v4l2_subdev_get_fmt,
++	.set_fmt = pr2000_set_fmt,
++};
++
++static const struct v4l2_subdev_ops pr2000_ops = {
++	.video = &pr2000_video_ops,
++	.pad = &pr2000_pad_ops,
++};
++
++static const struct v4l2_subdev_internal_ops pr2000_internal_ops = {
++	.init_state = pr2000_init_state,
++};
++
++/* camss reads both to program the PHY: pixel rate, and the one link frequency */
++static int pr2000_init_ctrls(struct pr2000 *pr)
++{
++	struct v4l2_ctrl *link_freq;
++
++	v4l2_ctrl_handler_init(&pr->ctrls, 2);
++	v4l2_ctrl_new_std(&pr->ctrls, NULL, V4L2_CID_PIXEL_RATE, PR2000_PIXEL_RATE,
++			  PR2000_PIXEL_RATE, 1, PR2000_PIXEL_RATE);
++	link_freq = v4l2_ctrl_new_int_menu(&pr->ctrls, NULL, V4L2_CID_LINK_FREQ,
++					   ARRAY_SIZE(pr2000_link_freqs) - 1, 0,
++					   pr2000_link_freqs);
++	if (link_freq) {
++		link_freq->flags |= V4L2_CTRL_FLAG_READ_ONLY;
++	}
++
++	if (pr->ctrls.error) {
++		return pr->ctrls.error;
++	}
++	pr->sd.ctrl_handler = &pr->ctrls;
++	return 0;
++}
++
++static int pr2000_probe(struct i2c_client *client)
++{
++	struct device *dev = &client->dev;
++	struct pr2000 *pr;
++	int ret;
++
++	pr = devm_kzalloc(dev, sizeof(*pr), GFP_KERNEL);
++	if (!pr) {
++		return -ENOMEM;
++	}
++	pr->client = client;
++	pr->mode = &pr2000_modes[0];
++
++	pr->reset_gpio = devm_gpiod_get_optional(dev, "reset", GPIOD_OUT_LOW);
++	if (IS_ERR(pr->reset_gpio)) {
++		return dev_err_probe(dev, PTR_ERR(pr->reset_gpio), "reset gpio\n");
++	}
++
++	pr2000_reset(pr);
++	ret = pr2000_detect(pr);
++	if (ret) {
++		return dev_err_probe(dev, ret, "no PR2000 at 0x%02x\n", client->addr);
++	}
++
++	v4l2_i2c_subdev_init(&pr->sd, client, &pr2000_ops);
++	pr->sd.internal_ops = &pr2000_internal_ops;
++	pr->sd.flags |= V4L2_SUBDEV_FL_HAS_DEVNODE;
++	pr->sd.entity.function = MEDIA_ENT_F_VID_IF_BRIDGE;
++	pr->pad.flags = MEDIA_PAD_FL_SOURCE;
++
++	ret = pr2000_init_ctrls(pr);
++	if (ret) {
++		goto err_ctrls;
++	}
++
++	ret = media_entity_pads_init(&pr->sd.entity, 1, &pr->pad);
++	if (ret) {
++		goto err_ctrls;
++	}
++
++	ret = v4l2_subdev_init_finalize(&pr->sd);
++	if (ret) {
++		goto err_entity;
++	}
++
++	ret = v4l2_async_register_subdev(&pr->sd);
++	if (ret) {
++		goto err_state;
++	}
++
++	dev_info(dev, "PR2000 at 0x%02x\n", client->addr);
++	return 0;
++
++err_state:
++	v4l2_subdev_cleanup(&pr->sd);
++err_entity:
++	media_entity_cleanup(&pr->sd.entity);
++err_ctrls:
++	v4l2_ctrl_handler_free(&pr->ctrls);
++	return ret;
++}
++
++static void pr2000_remove(struct i2c_client *client)
++{
++	struct v4l2_subdev *sd = i2c_get_clientdata(client);
++	struct pr2000 *pr = to_pr2000(sd);
++
++	v4l2_async_unregister_subdev(sd);
++	v4l2_subdev_cleanup(sd);
++	media_entity_cleanup(&sd->entity);
++	v4l2_ctrl_handler_free(&pr->ctrls);
++}
++
++static const struct of_device_id pr2000_of_match[] = {
++	{ .compatible = "pixelplus,pr2000" },
++	{ }
++};
++MODULE_DEVICE_TABLE(of, pr2000_of_match);
++
++static struct i2c_driver pr2000_driver = {
++	.driver = {
++		.name = "pr2000",
++		.of_match_table = pr2000_of_match,
++	},
++	.probe = pr2000_probe,
++	.remove = pr2000_remove,
++};
++module_i2c_driver(pr2000_driver);
++
++MODULE_DESCRIPTION("Pixelplus PR2000 AHD video decoder");
++MODULE_LICENSE("GPL");

@@ -12,6 +12,7 @@ unit, so a failed boot costs a reboot, not a flash.
 |---|---|
 | `sm6125-choiceway-gt6eau.dts` | the board, from mainline's Xiaomi ginkgo (same SoC, same PMIC rails): QCM6125 msm-id, the stock board IDs, the bootloader's splash buffer as a `simple-framebuffer`, USB in device mode, and the panel on DSI0 |
 | `panel-s6d7aa0-yuntang.patch` | the unit's panel as a variant of mainline's Samsung S6D7AA0 driver: init and timings decoded from the unit's own device tree (`yuntang,s6d7aa0-720x1920`) |
+| `media-pr2000.patch`, `pr2000-tables.py`, `pr2000/` | the reverse camera's decoder: V4L2 driver, and its mode tables as decoded from the stock kernel (`test-pr2000-tables.sh` keeps the generated header honest) |
 | `camss-sm6125.patch` | SM6125 in mainline `camss`: SDM660's CSID/ISPIF/VFE tables, own CSIPHY table (per-PHY clock, no AHB2CRIF) |
 | `pwm-lpg-pm6125.patch` | the PM6125's single LPG PWM channel (`qcom,pm6125-pwm`, base 0xb300) for the backlight |
 | `gt6eau.config` | what arm64 `defconfig` leaves out for this board |
