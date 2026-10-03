@@ -134,6 +134,7 @@ import com.ripostelabs.carlauncher.data.DayNightMode // v0.6
 import com.ripostelabs.carlauncher.data.DriverSide // v2.8
 import com.ripostelabs.carlauncher.data.NotificationFilterStore // v2.7
 import com.ripostelabs.carlauncher.data.RadioPresetsStore // v0.9
+import com.ripostelabs.carlauncher.data.TyreSensors
 import com.ripostelabs.carlauncher.data.Reachability // v2.8
 import com.ripostelabs.carlauncher.data.RootTierController // v2.9
 import com.ripostelabs.carlauncher.data.SettingKeys // v2.5 touch beep
@@ -234,6 +235,7 @@ import com.ripostelabs.carlauncher.ui.theme.CarTheme
 class MainActivity : ComponentActivity() {
 
     private lateinit var carEvents: CarEvents
+    private lateinit var tyreSensors: TyreSensors
 
     /** Riposte OS 0.2 only: our MCU port owner. Null on a stock or 0.1 slot. */
     private var mcuOwner: McuPort? = null
@@ -742,6 +744,8 @@ class MainActivity : ComponentActivity() {
         // car through this snapshot, never through a second CarEvents.
         UplinkSignals.bind(lifecycleScope, carEvents, btCarKit)
         UplinkService.start(this)
+        // Tyre sensors over the USB radio: one rtl_433 per process, kept across recreations.
+        tyreSensors = TyreSensors.shared(applicationContext, carEvents)
         // RAV4-270: after a tailnet self-update, a launcher that stays up this long is kept; the
         // watch script rolls back one that dies twice before it gets here.
         lifecycleScope.launch {
@@ -1554,6 +1558,7 @@ class MainActivity : ComponentActivity() {
                                 mcuSetup = mcuSetupStore,
                                 wheelLearn = wheelLearn,
                                 mcuDiagnostics = mcuDiagnostics,
+                                tyreSensors = tyreSensors,
                             )
 
                             Screen.Themes -> ThemesScreen(

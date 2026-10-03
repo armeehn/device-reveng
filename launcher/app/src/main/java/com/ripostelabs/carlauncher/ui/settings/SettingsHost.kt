@@ -33,6 +33,7 @@ import com.ripostelabs.carlauncher.carlib.McuDiagnostics
 import com.ripostelabs.carlauncher.carlib.McuOwner
 import com.ripostelabs.carlauncher.carlib.McuSetupStore
 import com.ripostelabs.carlauncher.carlib.WheelLearn
+import com.ripostelabs.carlauncher.data.TyreSensors
 import com.ripostelabs.carlauncher.data.AppDirectoryStore
 import com.ripostelabs.carlauncher.data.CarSettingsController
 import com.ripostelabs.carlauncher.data.RadioPresetsStore
@@ -78,6 +79,8 @@ fun SettingsHost(
     wheelLearn: WheelLearn? = null,
     // Riposte OS 0.2: the owner's relay and signal log for Diagnostics; null = vendor binder.
     mcuDiagnostics: McuDiagnostics? = null,
+    // The USB radio tyre sensors (rtl_433); null = CAN box report only.
+    tyreSensors: TyreSensors? = null,
 ) {
     // A deep link (the top bar's power chip) opens its page alone: the driver came from Home
     // and one Back goes back there. The hub under it left them a second Back away (Maestro
@@ -232,6 +235,7 @@ fun SettingsHost(
                 carService = carService,
                 carEvents = carEvents,
                 onBack = ::pop,
+                tyreSensors = tyreSensors,
             )
 
             SettingsRoute.CarSettings -> CarCustomizeScreen(
