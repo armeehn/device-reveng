@@ -51,8 +51,12 @@ until [ -x "$BIN/tailscaled" ] && [ -x "$BIN/tailscale" ]; do
 done
 
 # 2. The daemon. State on /data, so the node keeps its identity across reboots.
+# init gives no HOME and a read-only cwd, where tailscaled panics ("no safe place found to
+# store log state"); TS_LOGS_DIR must already exist. Its logs stay on the car.
+export TS_LOGS_DIR=$DIR/logs
+mkdir -p "$TS_LOGS_DIR"
 "$BIN/tailscaled" --tun=userspace-networking --statedir="$DIR/state" --socket="$SOCK" \
-  --socks5-server="$SOCKS" --port=0 &
+  --socks5-server="$SOCKS" --port=0 --no-logs-no-support &
 DAEMON=$!
 
 # 3. First login, once. The key is single use; it goes the moment the node is in.
