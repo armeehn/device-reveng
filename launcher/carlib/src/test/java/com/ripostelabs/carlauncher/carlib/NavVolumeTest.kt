@@ -6,10 +6,16 @@ import org.junit.Test
 
 class NavVolumeTest {
 
-    // RAV4-177: a nav bar key is one Android volume step, which AmpVolumeKeys turns into one
-    // amp level. Raise and lower, never a mute toggle or an absolute level.
+    // RAV4-177: a nav bar key is one amp level. Raise and lower, never a mute toggle or a level.
     @Test
     fun eachKeyIsOneStep() {
+        assertEquals(1, NavVolume.delta(NavVolume.Step.UP))
+        assertEquals(-1, NavVolume.delta(NavVolume.Step.DOWN))
+    }
+
+    // Stock routes the stream to the amp itself, so there the key stays one Android step.
+    @Test
+    fun theStockRouteIsOneStreamStep() {
         assertEquals(AudioManager.ADJUST_RAISE, NavVolume.direction(NavVolume.Step.UP))
         assertEquals(AudioManager.ADJUST_LOWER, NavVolume.direction(NavVolume.Step.DOWN))
     }

@@ -5,28 +5,40 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.media.AudioManager
+import android.os.Handler
+import android.os.HandlerThread
 
 /**
- * AmpVolumeKeys — Android's volume (keys, the system dialog, `input keyevent`) as amp steps.
+ * AmpVolumeKeys — the launcher's volume keys as amp steps, with Android's stream held still.
  *
- *     key ──▶ AudioService: STREAM_MUSIC 24 → 25 ──▶ VOLUME_CHANGED ──▶ amp 12 + 1 ──▶ 05 05 13
- *                                                                  └──▶ STREAM_MUSIC back to 24
+ *     nav bar, car service bar, wheel ──▶ NavVolume.ACTION_STEP ±1 ──▶ amp 12 + 1 ──▶ 05 05 13
+ *     anything else ──▶ STREAM_MUSIC 24 → 25 ──▶ VOLUME_CHANGED ──▶ STREAM_MUSIC back to 24
  *
  * The amp behind the MCU is the car's only volume; Android's stream stays pinned one step below
- * its top so it barely attenuates, and each move away from the pin is one amp level per index.
- * One below, not the top: at the top a VOLUME_UP changes nothing and AudioService broadcasts
- * nothing. A move that lands on the pin is never a step, so the reset cannot loop. The base is
+ * its top so it barely attenuates. A stream move is never an amp step: the iPhone's AVRCP
+ * absolute volume sets it on its own and raised the amp a level (car, 2026-10-02 07:09:30).
+ * A move that lands on the pin needs no reset, so the reset cannot loop. Both receivers run on
+ * their own thread, so the pin comes back at once and not behind the launcher's UI. The base is
  * the MCU's last `79`, so the Quick controls slider and these keys share one level.
  */
 class AmpVolumeKeys(private val setAmp: (Int) -> Unit, startLevel: Int) : McuOwner.Listener {
 
     private val lock = Any()
     private var level = startLevel
-    private var audio: AudioManager? = null
 
-    private val receiver = object : BroadcastReceiver() {
+    @Volatile
+    private var audio: AudioManager? = null
+    private var thread: HandlerThread? = null
+
+    private val streamReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             onVolumeChanged(intent)
+        }
+    }
+
+    private val stepReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            step(intent.getIntExtra(NavVolume.EXTRA_DELTA, 0))
         }
     }
 
@@ -35,7 +47,13 @@ class AmpVolumeKeys(private val setAmp: (Int) -> Unit, startLevel: Int) : McuOwn
         val manager = context.getSystemService(AudioManager::class.java) ?: return
         audio = manager
         manager.setStreamVolume(AudioManager.STREAM_MUSIC, pinIndex(manager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)), 0)
-        context.registerReceiver(receiver, IntentFilter(VOLUME_CHANGED_ACTION), Context.RECEIVER_NOT_EXPORTED)
+
+        val worker = HandlerThread(THREAD_NAME).apply { start() }
+        thread = worker
+        val handler = Handler(worker.looper)
+        context.registerReceiver(streamReceiver, IntentFilter(VOLUME_CHANGED_ACTION), null, handler, Context.RECEIVER_NOT_EXPORTED)
+        // Not exported: this app and the system uid (the car service's bar) only.
+        context.registerReceiver(stepReceiver, IntentFilter(NavVolume.ACTION_STEP), null, handler, Context.RECEIVER_NOT_EXPORTED)
     }
 
     fun stop(context: Context) {
@@ -43,7 +61,10 @@ class AmpVolumeKeys(private val setAmp: (Int) -> Unit, startLevel: Int) : McuOwn
             return
         }
 
-        context.unregisterReceiver(receiver)
+        context.unregisterReceiver(streamReceiver)
+        context.unregisterReceiver(stepReceiver)
+        thread?.quitSafely()
+        thread = null
         audio = null
     }
 
@@ -52,22 +73,21 @@ class AmpVolumeKeys(private val setAmp: (Int) -> Unit, startLevel: Int) : McuOwn
         synchronized(lock) { level = volume.level }
     }
 
-    /**
-     * One STREAM_MUSIC move [from] → [to] on a stream of [max] steps. Sends the amp level and
-     * returns true when the stream must go back to the pin.
-     */
-    fun onStreamMoved(from: Int, to: Int, max: Int): Boolean {
-        if (to == pinIndex(max)) {
-            return false
+    /** One key press: [delta] amp levels from the last known one. */
+    fun step(delta: Int) {
+        if (delta == 0) {
+            return
         }
 
         val target = synchronized(lock) {
-            level = (level + to - from).coerceIn(0, CarService.MAX_VOLUME)
+            level = (level + delta).coerceIn(0, CarService.MAX_VOLUME)
             level
         }
         setAmp(target)
-        return true
     }
+
+    /** One STREAM_MUSIC move [from] → [to] on a stream of [max] steps: true when it must go back to the pin. */
+    fun onStreamMoved(from: Int, to: Int, max: Int): Boolean = from != to && to != pinIndex(max)
 
     private fun onVolumeChanged(intent: Intent) {
         val manager = audio ?: return
@@ -94,6 +114,7 @@ class AmpVolumeKeys(private val setAmp: (Int) -> Unit, startLevel: Int) : McuOwn
         private const val EXTRA_VALUE = "android.media.EXTRA_VOLUME_STREAM_VALUE"
         private const val EXTRA_PREV_VALUE = "android.media.EXTRA_PREV_VOLUME_STREAM_VALUE"
         private const val NO_VALUE = -1
+        private const val THREAD_NAME = "amp-volume"
 
         fun pinIndex(max: Int): Int = max - 1
     }

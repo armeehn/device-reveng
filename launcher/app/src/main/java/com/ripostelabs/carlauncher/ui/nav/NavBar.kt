@@ -89,7 +89,10 @@ import kotlinx.coroutines.withContext
  * driver picked [NavBarMode.ALWAYS_SHOWN]. The package in front comes from the same root
  * `dumpsys activity` read the wheel-gamepad gate uses (`MainActivity.gameInFront`).
  */
-class NavBar(private val context: Context) {
+class NavBar(
+    private val context: Context,
+    private val volumeRoute: () -> NavVolume.Route = { NavVolume.Route.STREAM },
+) {
 
     private companion object {
         const val TAG = "NavBar"
@@ -288,7 +291,7 @@ class NavBar(private val context: Context) {
 
     private fun recents() = inject(KEYCODE_APP_SWITCH)
 
-    private fun volume(step: NavVolume.Step) = NavVolume.step(context, step)
+    private fun volume(step: NavVolume.Step) = NavVolume.step(context, step, volumeRoute())
 
     private fun home() {
         val intent = Intent(context, MainActivity::class.java).addFlags(

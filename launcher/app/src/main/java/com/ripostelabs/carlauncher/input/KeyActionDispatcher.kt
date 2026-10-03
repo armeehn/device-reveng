@@ -1,22 +1,21 @@
 package com.ripostelabs.carlauncher.input
 
-import android.media.AudioManager
 import com.ripostelabs.carlauncher.carlib.BtCarKit
 import com.ripostelabs.carlauncher.carlib.KeyAction
 import com.ripostelabs.carlauncher.carlib.MediaActions
+import com.ripostelabs.carlauncher.carlib.NavVolume
 import com.ripostelabs.carlauncher.data.WheelGestureAction
 
 /**
  * Riposte OS 0.2: one [KeyAction] from [com.ripostelabs.carlauncher.carlib.KeyRouter] to the
  * launcher's existing calls. The table is in carlib; this is only the last hop.
  *
- * Volume goes through Android on purpose: `adjustStreamVolume` moves STREAM_MUSIC off the pin
- * [com.ripostelabs.carlauncher.carlib.AmpVolumeKeys] holds, and that listener sends the amp
- * its `05 05 v` step, the one frame verified in the car (2026-09-22). The vendor's `08 xx`
- * echo for the same keys is unverified, so it is not used here.
+ * Volume is one [NavVolume] step, the nav bar's path: [com.ripostelabs.carlauncher.carlib.AmpVolumeKeys]
+ * sends the amp its `05 05 v` step, the one frame verified in the car (2026-09-22). The vendor's
+ * `08 xx` echo for the same keys is unverified, so it is not used here.
  */
 class KeyActionDispatcher(
-    private val audio: AudioManager?,
+    private val volume: (NavVolume.Step) -> Unit,
     private val gestures: WheelGestureDispatcher,
     private val carKit: () -> BtCarKit?,
     private val zlinkConnected: () -> Boolean,
@@ -30,8 +29,8 @@ class KeyActionDispatcher(
     /** Run [action]; false when nothing could act on it, so feedback stays quiet. */
     fun run(action: KeyAction): Boolean {
         when (action) {
-            KeyAction.VOLUME_UP -> return adjustVolume(AudioManager.ADJUST_RAISE)
-            KeyAction.VOLUME_DOWN -> return adjustVolume(AudioManager.ADJUST_LOWER)
+            KeyAction.VOLUME_UP -> volume(NavVolume.Step.UP)
+            KeyAction.VOLUME_DOWN -> volume(NavVolume.Step.DOWN)
             KeyAction.MUTE -> gestures.run(WheelGestureAction.MUTE_TOGGLE)
             KeyAction.NEXT -> gestures.run(WheelGestureAction.NEXT_TRACK)
             KeyAction.PREV -> gestures.run(WheelGestureAction.PREV_TRACK)
@@ -49,12 +48,6 @@ class KeyActionDispatcher(
             KeyAction.REPEAT -> return mediaAction(MediaActions.REPEAT)
             KeyAction.SHUFFLE -> return mediaAction(MediaActions.SHUFFLE)
         }
-        return true
-    }
-
-    private fun adjustVolume(direction: Int): Boolean {
-        val manager = audio ?: return false
-        manager.adjustStreamVolume(AudioManager.STREAM_MUSIC, direction, AudioManager.FLAG_SHOW_UI)
         return true
     }
 

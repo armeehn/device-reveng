@@ -5,7 +5,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Android STREAM_MUSIC moves as amp steps: the volume keys, the dialog, `input keyevent`. */
+/** The launcher's volume keys as amp steps; every other STREAM_MUSIC move only goes back to the pin. */
 class AmpVolumeKeysTest {
 
     private companion object {
@@ -26,19 +26,28 @@ class AmpVolumeKeysTest {
     }
 
     @Test
-    fun upStepsTheAmpAndAsksForThePinBack() {
-        assertTrue(keys.onStreamMoved(from = PIN, to = STREAM_MAX, max = STREAM_MAX))
+    fun upStepsTheAmp() {
+        keys.step(NavVolume.delta(NavVolume.Step.UP))
         assertEquals(listOf(START_LEVEL + 1), sent)
     }
 
     @Test
     fun downStepsTheAmp() {
-        assertTrue(keys.onStreamMoved(from = PIN, to = PIN - 1, max = STREAM_MAX))
+        keys.step(NavVolume.delta(NavVolume.Step.DOWN))
         assertEquals(listOf(START_LEVEL - 1), sent)
     }
 
+    // Car, 2026-10-02 07:09:30: the iPhone's AVRCP absolute volume moved the stream 24 → 25 and
+    // the amp rose a level on its own. Only the launcher's keys may move the amp.
     @Test
-    fun theMoveBackToThePinIsNotAStep() {
+    fun aPhoneVolumeMoveIsNotAStep() {
+        assertTrue(keys.onStreamMoved(from = PIN, to = STREAM_MAX, max = STREAM_MAX))
+        assertTrue(keys.onStreamMoved(from = PIN, to = PIN - 3, max = STREAM_MAX))
+        assertEquals(emptyList<Int>(), sent)
+    }
+
+    @Test
+    fun theMoveBackToThePinNeedsNoReset() {
         assertFalse(keys.onStreamMoved(from = STREAM_MAX, to = PIN, max = STREAM_MAX))
         assertFalse(keys.onStreamMoved(from = 8, to = PIN, max = STREAM_MAX))
         assertEquals(emptyList<Int>(), sent)
@@ -46,29 +55,23 @@ class AmpVolumeKeysTest {
 
     @Test
     fun quickPressesBeforeTheReportAccumulate() {
-        keys.onStreamMoved(from = PIN, to = STREAM_MAX, max = STREAM_MAX)
-        keys.onStreamMoved(from = PIN, to = STREAM_MAX, max = STREAM_MAX)
+        keys.step(1)
+        keys.step(1)
         assertEquals(listOf(START_LEVEL + 1, START_LEVEL + 2), sent)
     }
 
     @Test
     fun theMcuReportIsTheBase() {
         report(20)
-        keys.onStreamMoved(from = PIN, to = PIN - 1, max = STREAM_MAX)
+        keys.step(-1)
         assertEquals(listOf(19), sent)
-    }
-
-    @Test
-    fun aDialogDragMovesByItsDistance() {
-        keys.onStreamMoved(from = PIN, to = PIN - 3, max = STREAM_MAX)
-        assertEquals(listOf(START_LEVEL - 3), sent)
     }
 
     @Test
     fun theLevelStopsAtTheAmpRange() {
         report(CarService.MAX_VOLUME)
-        keys.onStreamMoved(from = PIN, to = STREAM_MAX, max = STREAM_MAX)
-        keys.onStreamMoved(from = PIN, to = PIN - 1, max = STREAM_MAX)
+        keys.step(1)
+        keys.step(-1)
         assertEquals(listOf(CarService.MAX_VOLUME, CarService.MAX_VOLUME - 1), sent)
     }
 }

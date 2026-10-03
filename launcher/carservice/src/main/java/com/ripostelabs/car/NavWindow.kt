@@ -180,7 +180,7 @@ class NavWindow(private val context: Context, private val onTouch: () -> Unit) :
     }
 
     private fun volume(step: NavVolume.Step) {
-        runCatching { NavVolume.step(context, step) }.onFailure { Log.w(TAG, "volume $step failed", it) }
+        runCatching { NavVolume.step(context, step, NavVolume.Route.AMP, LAUNCHER.packageName) }.onFailure { Log.w(TAG, "volume $step failed", it) }
     }
 
     // `input keyevent` as system uid, which holds INJECT_EVENTS: no root shell.
