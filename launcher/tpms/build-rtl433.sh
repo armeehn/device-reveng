@@ -50,13 +50,22 @@ cp rtl-sdr-2.0.2/include/*.h "$PFX/include/"
 # Bionic has no pthread_cancel; only the rtl_tcp output server uses it, and the car never does.
 sed -i 's/int r = pthread_cancel(srv->thread);/int r = 0; (void)srv;/' rtl_433-25.02/src/output_rtltcp.c
 
+# Tyre sensors only: keep the decoders that report "type": "TPMS" (25 of 276), so each packet in
+# the car no longer runs through 250 weather-station and doorbell decoders.
+H=rtl_433-25.02/include/rtl_433_devices.h
+KEEP=$(grep -lE '"type",.*"TPMS"' rtl_433-25.02/src/devices/*.c | xargs grep -hoE 'r_device const [A-Za-z0-9_]+' | awk '{print $3}')
+awk -v keep="$KEEP" 'BEGIN { n = split(keep, a, /[ \n]+/); for (i = 1; i <= n; i++) k[a[i]] = 1 }
+  /^ *DECL\(/ { m = $0; sub(/^ *DECL\(/, "", m); sub(/\).*/, "", m); if (!(m in k)) next }
+  { print }' "$H" > "$H.tpms" && mv "$H.tpms" "$H"
+echo "decoders kept: $(grep -c '^ *DECL(' "$H")"
+
 cmake -S rtl_433-25.02 -B b-rtl433 -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
   -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-$API -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_FIND_ROOT_PATH="$PFX" -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+  -DCMAKE_C_FLAGS_RELEASE="-Os -DNDEBUG -ffunction-sections -fdata-sections" -DCMAKE_FIND_ROOT_PATH="$PFX" -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
   -DENABLE_RTLSDR=ON -DENABLE_SOAPYSDR=OFF -DENABLE_OPENSSL=OFF -DBUILD_TESTING=OFF \
   -DBUILD_DOCUMENTATION=OFF -DLIBRTLSDR_INCLUDE_DIRS="$PFX/include" \
   -DLIBRTLSDR_LIBRARIES="$PFX/lib/librtlsdr.a;$PFX/lib/libusb-1.0.a" \
-  -DCMAKE_EXE_LINKER_FLAGS="-static-libstdc++ $PFX/lib/libusb-1.0.a" >/dev/null
+  -DCMAKE_EXE_LINKER_FLAGS="-static-libstdc++ -Wl,--gc-sections $PFX/lib/libusb-1.0.a" >/dev/null
 cmake --build b-rtl433 -j"$(nproc)" --target rtl_433 >/dev/null
 "$TC/bin/llvm-strip" b-rtl433/src/rtl_433
 
