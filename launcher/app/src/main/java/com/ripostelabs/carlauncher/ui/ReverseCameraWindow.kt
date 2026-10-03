@@ -5,6 +5,7 @@ import android.graphics.PixelFormat
 import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
+import android.view.View
 import android.view.WindowManager
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -23,6 +24,7 @@ import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.ripostelabs.carlauncher.carlib.RadarState
 import com.ripostelabs.carlauncher.carlib.RootShell
+import com.ripostelabs.carlauncher.data.SurroundScreen
 import com.ripostelabs.carlauncher.ui.theme.BuiltInThemes
 import com.ripostelabs.carlauncher.ui.theme.CarLauncherTheme
 import com.ripostelabs.carlauncher.ui.theme.CarTheme
@@ -44,16 +46,48 @@ import com.ripostelabs.carlauncher.ui.theme.CarTheme
  * over whatever was up; so does this. It stacks above [com.ripostelabs.carlauncher.ui.nav.NavBar]
  * because both are overlays and this one is added later. Removing the window disposes the
  * composition, which is what releases the camera.
+ *
+ * While ACC is on the window stays, invisible and untouchable, with the feed running ([Warmth]).
+ * The first reverse after a cold boot spent ~15 s finding the camera signal (AisCameraWorker's
+ * warm-up); now that happens at ACC on, and reverse only makes the window visible:
+ *
+ *     ACC on ──▶ WARM (alpha 0, feed open) ──reverse──▶ FULL ──out of reverse──▶ WARM
+ *     ACC off ─▶ NONE (window removed, camera released before standby)
+ *
+ * The overlays added later (screensaver, call card, hotbar, nav bars) all step aside on reverse.
  */
 class ReverseCameraWindow(
     private val context: Context,
     private val onToggleGuideLines: (Boolean) -> Unit = {},
 ) {
 
-    private companion object {
-        const val TAG = "ReverseCameraWindow"
-        const val OVERLAY_APPOP = "SYSTEM_ALERT_WINDOW"
+    companion object {
+        private const val TAG = "ReverseCameraWindow"
+        private const val OVERLAY_APPOP = "SYSTEM_ALERT_WINDOW"
+        private const val INVISIBLE = 0f
+
+        /** The window for [verdict]: a picture is always FULL; no picture keeps the feed while WARM. */
+        fun plan(verdict: ReverseCameraGate.Verdict, warmth: Warmth): Layout = when {
+            verdict != ReverseCameraGate.Verdict.HIDDEN -> Layout.FULL
+            warmth == Warmth.WARM -> Layout.WARM
+            else -> Layout.NONE
+        }
     }
+
+    /** Whether the feed stays open between pictures. */
+    enum class Warmth {
+        WARM,
+        COLD;
+
+        companion object {
+            /** The 360 view takes the AIS client while it is shown ([SurroundScreen]). */
+            fun of(accOn: Boolean, ownerActive: Boolean, permissionGranted: Boolean, surroundShown: Boolean): Warmth =
+                if (accOn && ownerActive && permissionGranted && !surroundShown) WARM else COLD
+        }
+    }
+
+    /** No window, an invisible one with the feed running, or the picture. */
+    enum class Layout { NONE, WARM, FULL }
 
     /** The vendor's two decorations of the feed and our guide lines, read once per picture (see [render]). */
     data class Options(
@@ -73,6 +107,9 @@ class ReverseCameraWindow(
     private var radar by mutableStateOf<RadarState?>(null)
     private var options by mutableStateOf(Options(showRadar = true, mirrored = false))
     private var steeringDeg by mutableStateOf<Double?>(null)
+    private var warmth = Warmth.COLD
+    private var layout = Layout.NONE
+    private var wanted = ReverseCameraGate.Verdict.HIDDEN
 
     /** The CAN box's latest steering angle (null = no reading); the dynamic lines follow it. */
     fun steer(deg: Double?) {
@@ -86,23 +123,20 @@ class ReverseCameraWindow(
     }
 
     /**
-     * One frame of state. HIDDEN removes the window; anything else adds it once and updates it.
-     * [optionsAtShow] runs only as the window is added, as the vendor reads its provider at
-     * startBackcar, so a setting flipped mid-reverse waits for the next picture.
+     * One frame of state, laid out by [plan]. [optionsAtShow] runs only as the picture appears,
+     * as the vendor reads its provider at startBackcar, so a setting flipped mid-reverse waits
+     * for the next picture.
      */
     fun render(verdict: ReverseCameraGate.Verdict, radar: RadarState?, optionsAtShow: () -> Options) {
-        this.verdict = verdict
+        wanted = verdict
         this.radar = radar
+        apply(plan(verdict, warmth), optionsAtShow)
+    }
 
-        if (verdict == ReverseCameraGate.Verdict.HIDDEN) {
-            hide()
-            return
-        }
-
-        if (view == null) {
-            options = optionsAtShow()
-        }
-        show()
+    /** ACC on: keep the feed open between pictures. COLD lets it go unless a picture is up. */
+    fun keepWarm(warmth: Warmth) {
+        this.warmth = warmth
+        apply(plan(wanted, warmth)) { options }
     }
 
     fun hide() {
@@ -110,11 +144,84 @@ class ReverseCameraWindow(
         host.pause()
         runCatching { windowManager.removeViewImmediate(v) }
         view = null
+        layout = Layout.NONE
+        verdict = ReverseCameraGate.Verdict.HIDDEN
         Log.i(TAG, "reverse window removed")
     }
 
-    private fun show() {
-        if (view != null) return
+    private fun apply(next: Layout, optionsAtShow: () -> Options) {
+        when (next) {
+            Layout.NONE -> hide()
+            // The composition keeps PREVIEW, so the camera it holds stays open.
+            Layout.WARM -> {
+                verdict = ReverseCameraGate.Verdict.PREVIEW
+                place(Layout.WARM)
+            }
+            Layout.FULL -> {
+                if (layout != Layout.FULL) {
+                    options = optionsAtShow()
+                }
+                verdict = wanted
+                place(Layout.FULL)
+            }
+        }
+    }
+
+    /** Adds the window in [next], or moves an existing one to it without touching the feed. */
+    private fun place(next: Layout) {
+        val v = view
+        if (v != null) {
+            if (layout != next) {
+                v.importantForAccessibility = accessibility(next)
+                runCatching { windowManager.updateViewLayout(v, params(next)) }
+                    .onFailure { Log.w(TAG, "cannot move the reverse window to $next", it) }
+                layout = next
+                Log.i(TAG, "reverse window $next: $verdict")
+            }
+            return
+        }
+
+        show(next)
+    }
+
+    /**
+     * Full panel, over the bars too; not focusable, so the wheel and fascia keys keep their
+     * route. FULL stops touches rather than letting them reach the app underneath; WARM is
+     * invisible (SurfaceFlinger skips a zero-alpha layer) and lets every touch through.
+     */
+    private fun params(layout: Layout): WindowManager.LayoutParams {
+        val flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+        val shown = if (layout == Layout.FULL) {
+            flags or WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+        } else {
+            flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+        }
+
+        return WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            shown,
+            PixelFormat.TRANSLUCENT,
+        ).apply {
+            // The whole panel: a bar's inset must never shrink the feed.
+            fitInsetsTypes = 0
+            if (layout != Layout.FULL) {
+                alpha = INVISIBLE
+            }
+        }
+    }
+
+    /** An unseen window is not on screen for accessibility (or uiautomator) either. */
+    private fun accessibility(layout: Layout): Int = if (layout == Layout.FULL) {
+        View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
+    } else {
+        View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+    }
+
+    private fun show(next: Layout) {
         if (!ensureOverlayAllowed()) return
 
         val v = ComposeView(context).apply {
@@ -122,31 +229,17 @@ class ReverseCameraWindow(
             setViewTreeSavedStateRegistryOwner(host)
             setContent { Picture() }
         }
-        // Full panel, over the bars too; not focusable, so the wheel and fascia keys keep their
-        // route, but touches stop here rather than reaching the app underneath.
-        val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
-                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
-            PixelFormat.TRANSLUCENT,
-        ).apply {
-            // The whole panel: a bar's inset must never shrink the feed.
-            fitInsetsTypes = 0
-        }
-
+        v.importantForAccessibility = accessibility(next)
         try {
-            windowManager.addView(v, params)
+            windowManager.addView(v, params(next))
         } catch (e: RuntimeException) {
             Log.w(TAG, "cannot add the reverse window", e)
             return
         }
         host.resume()
         view = v
-        Log.i(TAG, "reverse window added: $verdict radar=${options.showRadar} mirrored=${options.mirrored}")
+        layout = next
+        Log.i(TAG, "reverse window added $next: $verdict radar=${options.showRadar} mirrored=${options.mirrored}")
     }
 
     @androidx.compose.runtime.Composable

@@ -1,5 +1,6 @@
 package com.ripostelabs.carlauncher
 
+import com.ripostelabs.carlauncher.data.SurroundScreen
 import com.ripostelabs.carlauncher.data.SystemControl
 import com.ripostelabs.carlauncher.ui.LocalSystemControl
 import android.Manifest // v2.5
@@ -1188,6 +1189,19 @@ class MainActivity : ComponentActivity() {
                     )
                 }
             }
+        }
+
+        // The feed stays open, unseen, while ACC is on: the camera signal is found at ACC on, not
+        // at the first reverse. ACC off closes it before standby gates the camera.
+        lifecycleScope.launch {
+            combine(carEvents.accOn, snapshotFlow { cameraGranted }, SurroundScreen.isShown) { acc, granted, surround ->
+                ReverseCameraWindow.Warmth.of(
+                    accOn = acc,
+                    ownerActive = mcuOwner != null,
+                    permissionGranted = granted,
+                    surroundShown = surround,
+                )
+            }.distinctUntilChanged().collect(reverseWindow::keepWarm)
         }
 
         // The main thread's share of the launch, readable off the car with `logcat -s Startup`
