@@ -1,0 +1,149 @@
+--- a/drivers/media/platform/qcom/camss/camss.h
++++ b/drivers/media/platform/qcom/camss/camss.h
+@@ -110,6 +110,12 @@
+ 	const unsigned int csiphy_num;
+ 	const unsigned int csid_num;
+ 	const unsigned int vfe_num;
++	/*
++	 * Gen1 CSID/ISPIF: give each RDI line its own CSI-2 virtual channel (VFE0 RDI0-2 take
++	 * VC 0-2, VFE1 RDI0 takes VC 3) instead of VC 0 on every line. For multi-channel
++	 * decoders that put one camera on each VC.
++	 */
++	const bool vc_per_rdi;
+ };
+ 
+ struct camss {
+--- a/drivers/media/platform/qcom/camss/camss.c
++++ b/drivers/media/platform/qcom/camss/camss.c
+@@ -4445,6 +4445,7 @@
+ static const struct camss_resources sm6125_resources = {
+ 	.version = CAMSS_660,
+ 	.csiphy_res = csiphy_res_6125,
++	.vc_per_rdi = true,
+ 	.csid_res = csid_res_660,
+ 	.ispif_res = &ispif_res_660,
+ 	.vfe_res = vfe_res_660,
+--- a/drivers/media/platform/qcom/camss/camss-ispif.c
++++ b/drivers/media/platform/qcom/camss/camss-ispif.c
+@@ -790,6 +790,42 @@
+ 	}
+ }
+ 
++/* RDI lines per VFE that can carry their own virtual channel (RDI0..2) */
++#define ISPIF_VC_RDI_PER_VFE	3
++#define ISPIF_VC_MAX		3	/* CSI-2 VC is two bits */
++
++/*
++ * ispif_line_vc - CSI-2 virtual channel an ISPIF line reads
++ *
++ * VC 0 everywhere, unless the SoC sets vc_per_rdi: then VFE0 RDI0..2 read VC 0..2 and
++ * VFE1 RDI0 reads VC 3. PIX lines and anything past VC 3 stay on VC 0.
++ */
++static u8 ispif_line_vc(struct ispif_device *ispif, enum ispif_intf intf, u8 vfe)
++{
++	u8 rdi;
++
++	if (!ispif->camss->res->vc_per_rdi) {
++		return 0;
++	}
++
++	switch (intf) {
++	case RDI0:
++		rdi = 0;
++		break;
++	case RDI1:
++		rdi = 1;
++		break;
++	case RDI2:
++		rdi = 2;
++		break;
++	default:
++		return 0;
++	}
++
++	rdi += vfe * ISPIF_VC_RDI_PER_VFE;
++	return rdi <= ISPIF_VC_MAX ? rdi : 0;
++}
++
+ /*
+  * ispif_set_stream - Enable/disable streaming on ISPIF module
+  * @sd: ISPIF V4L2 subdevice
+@@ -807,7 +843,7 @@
+ 	enum ispif_intf intf = line->interface;
+ 	u8 csid = line->csid_id;
+ 	u8 vfe = line->vfe_id;
+-	u8 vc = 0; /* Virtual Channel 0 */
++	u8 vc = ispif_line_vc(ispif, intf, vfe);
+ 	u8 cid = vc * 4; /* id of Virtual Channel and Data Type set */
+ 	int ret;
+ 
+--- a/drivers/media/platform/qcom/camss/camss-csid-4-7.c
++++ b/drivers/media/platform/qcom/camss/camss-csid-4-7.c
+@@ -53,8 +53,9 @@
+ 	if (enable) {
+ 		struct v4l2_mbus_framefmt *input_format;
+ 		const struct csid_format_info *format;
+-		u8 vc = 0; /* Virtual Channel 0 */
+-		u8 cid = vc * 4; /* id of Virtual Channel and Data Type set */
++		/* VC 0, or VC 0..3 when each RDI line reads its own (camss_resources.vc_per_rdi) */
++		u8 num_vc = csid->camss->res->vc_per_rdi ? 4 : 1;
++		u8 vc, cid;
+ 		u8 dt_shift;
+ 
+ 		if (tg->enabled) {
+@@ -105,31 +106,33 @@
+ 			writel_relaxed(val, csid->base + CAMSS_CSID_CORE_CTRL_1);
+ 		}
+ 
+-		/* Config LUT */
++		/* Config LUT, one data type per VC, CID = 4 * VC */
++		for (vc = 0; vc < num_vc; vc++) {
++			cid = vc * 4;
++			dt_shift = (cid % 4) * 8;
++
++			val = readl_relaxed(csid->base + CAMSS_CSID_CID_LUT_VC_n(vc));
++			val &= ~(0xff << dt_shift);
++			val |= format->data_type << dt_shift;
++			writel_relaxed(val, csid->base + CAMSS_CSID_CID_LUT_VC_n(vc));
++
++			val = CAMSS_CSID_CID_n_CFG_ISPIF_EN;
++			val |= CAMSS_CSID_CID_n_CFG_RDI_EN;
++			val |= format->decode_format << CAMSS_CSID_CID_n_CFG_DECODE_FORMAT_SHIFT;
++			val |= CAMSS_CSID_CID_n_CFG_RDI_MODE_RAW_DUMP;
++
++			if ((sink_code == MEDIA_BUS_FMT_SBGGR10_1X10 &&
++			     src_code == MEDIA_BUS_FMT_SBGGR10_2X8_PADHI_LE) ||
++			    (sink_code == MEDIA_BUS_FMT_Y10_1X10 &&
++			     src_code == MEDIA_BUS_FMT_Y10_2X8_PADHI_LE)) {
++				val |= CAMSS_CSID_CID_n_CFG_RDI_MODE_PLAIN_PACKING;
++				val |= CAMSS_CSID_CID_n_CFG_PLAIN_FORMAT_16;
++				val |= CAMSS_CSID_CID_n_CFG_PLAIN_ALIGNMENT_LSB;
++			}
+ 
+-		dt_shift = (cid % 4) * 8;
+-
+-		val = readl_relaxed(csid->base + CAMSS_CSID_CID_LUT_VC_n(vc));
+-		val &= ~(0xff << dt_shift);
+-		val |= format->data_type << dt_shift;
+-		writel_relaxed(val, csid->base + CAMSS_CSID_CID_LUT_VC_n(vc));
+-
+-		val = CAMSS_CSID_CID_n_CFG_ISPIF_EN;
+-		val |= CAMSS_CSID_CID_n_CFG_RDI_EN;
+-		val |= format->decode_format << CAMSS_CSID_CID_n_CFG_DECODE_FORMAT_SHIFT;
+-		val |= CAMSS_CSID_CID_n_CFG_RDI_MODE_RAW_DUMP;
+-
+-		if ((sink_code == MEDIA_BUS_FMT_SBGGR10_1X10 &&
+-		     src_code == MEDIA_BUS_FMT_SBGGR10_2X8_PADHI_LE) ||
+-		    (sink_code == MEDIA_BUS_FMT_Y10_1X10 &&
+-		     src_code == MEDIA_BUS_FMT_Y10_2X8_PADHI_LE)) {
+-			val |= CAMSS_CSID_CID_n_CFG_RDI_MODE_PLAIN_PACKING;
+-			val |= CAMSS_CSID_CID_n_CFG_PLAIN_FORMAT_16;
+-			val |= CAMSS_CSID_CID_n_CFG_PLAIN_ALIGNMENT_LSB;
++			writel_relaxed(val, csid->base + CAMSS_CSID_CID_n_CFG(cid));
+ 		}
+ 
+-		writel_relaxed(val, csid->base + CAMSS_CSID_CID_n_CFG(cid));
+-
+ 		if (tg->enabled) {
+ 			val = CAMSS_CSID_TG_CTRL_ENABLE;
+ 			writel_relaxed(val, csid->base + CAMSS_CSID_TG_CTRL);

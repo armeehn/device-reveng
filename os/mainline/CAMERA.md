@@ -34,13 +34,26 @@ VFE 404/480/576 MHz, CCI 19.2/37.5 MHz.
 | `qcom,camera@1` | 1 | 1 | 1 |
 | `qcom,camera@2` | 2 | 2 | 0 |
 
-The decoders are not on the general I2C buses; they sit behind CCI. Which decoder is in
-which slot, their CCI addresses and lane counts come from the stock camera HAL's sensor
-configs; that is the open question for the next pull.
+The decoders are not on the general I2C buses; they sit behind CCI. The stock AIS camera
+config (`/vendor/etc/camera/ais_camera_config.xml`, pulled 2026-10-02) maps them:
+
+| Decoder | Slot | CCI bus | CSIPHY | Lanes | Inputs |
+|---|---|---|---|---|---|
+| XS9922B | `camera@2` | 0 (GPIO 37/38) | 2 | 2, `laneAssign 0x20` | 4 x 1920x1080 AHD |
+| PR2000 | `camera@1` | 1 (GPIO 39/40) | 1 | 4, `laneAssign 0x4320` | 1 x 1280x720 (reverse) |
+
+The stock AIS user-space drivers (`libais_pr2000.so`, `libais_xs9922b.so`) carry the rest:
+
+| Decoder | CCI address (7-bit) | Chip ID | Reset |
+|---|---|---|---|
+| XS9922B | 0x30 | reg 0x40F0 = 0x9999 | |
+| PR2000 | 0x5C | reg 0xFC (word) = 0x2000 | GPIO 115, active low: 50 ms high, 100 ms low, 50 ms high |
 
 ## The decoders
 
-Both register sets are decoded from the stock kernel (pull folder, `FINDINGS.md`):
+Both register sets are decoded from the stock kernel the unit runs, build #328 of
+2025-03-08 (pull folder `20261002-1843`, `FINDINGS.md`). An older dump, build #64, differs
+only in the PR2000 NTSC table:
 
 - **XS9922B**: one 503-write init table, 16-bit registers, 8-bit values.
 - **PR2000**: one ~204-write table per input mode (NTSC, PAL, PAL60, AHD 720p 25/30/60,
@@ -56,6 +69,31 @@ detected signal, a fixed `MEDIA_BUS_FMT_UYVY8_1X16` output.
    lists 3 CSIPHY, 4 CSID, ISPIF and 2 VFE entities, and `i2cdetect` sees the CCI buses.
    Assumption to check there: the `ahb` clock maps to `GCC_CAMSS_AHB_CLK_SRC` (SM6125 has
    no gated camss AHB clock in mainline's GCC).
-2. Slot map from the unit: decoder per slot, CCI address, lanes.
-3. PR2000 driver (reverse camera first: one input, simplest table).
-4. XS9922B driver (four AHD inputs, virtual channels).
+2. Slot map from the unit: decoder per slot, lanes, CCI addresses, chip IDs **(done,
+   tables above)**.
+3. PR2000 driver (reverse camera first: one input, simplest table). **Built 2026-10-02**
+   (`media-pr2000.patch`): reset, chip-ID check, AHD 720p/1080p at 25/30 fps from the
+   stock tables, UYVY over 4 lanes at a 148.5 MHz link. Bench proof: `dmesg` shows
+   "PR2000 at 0x5c"; then `media-ctl` links pr2000 -> csiphy1 -> csid1 -> ispif ->
+   vfe0_rdi0 and `v4l2-ctl --stream-mmap` on that video node captures frames. The 4-lane
+   `data-lanes <0 1 2 3>` mapping of stock `laneAssign 0x4320` is an assumption to check.
+4. XS9922B driver (four AHD inputs, virtual channels). **Built 2026-10-03**
+   (`media-xs9922b.patch`): chip ID 0x9999, the stock AIS start-stream sequence (pre +
+   resolution + all-channel start, 1080p default, 720p), 2 lanes. The tables come from the
+   user-space AIS driver, which is what streams on the stock unit; the kernel driver's own
+   INIT0 table is a different, unused-at-stream configuration. Assumptions to check: the
+   750 MHz link frequency (the PLL registers are not decoded) and the 2 ms per-write delay.
+5. Virtual channels: mainline camss read VC 0 only on CSID 4.7. **Built 2026-10-03**
+   (`camss-vc-per-rdi.patch`, SM6125 only via `vc_per_rdi`): CSID enables the LUT for
+   VC 0-3 and each ISPIF line reads its own VC.
+
+   | Camera | VC | Route |
+   |---|---|---|
+   | 0 | 0 | csid2 -> ispif -> vfe0_rdi0 |
+   | 1 | 1 | csid2 -> ispif -> vfe0_rdi1 |
+   | 2 | 2 | csid2 -> ispif -> vfe0_rdi2 |
+   | 3 | 3 | csid2 -> ispif -> vfe1_rdi0 |
+
+   Assumption to check: the XS9922B tags camera n as VC n (the stock AIS config lists four
+   links on one CSI port, which only VCs can carry). The PR2000 on VFE0 would then share
+   RDI lines with these; run one decoder at a time on the bench.

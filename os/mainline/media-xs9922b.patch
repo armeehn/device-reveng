@@ -1,0 +1,398 @@
+--- a/drivers/media/i2c/Kconfig
++++ b/drivers/media/i2c/Kconfig
+@@ -1289,6 +1289,19 @@
+ 	  To compile this driver as a module, choose M here: the
+ 	  module will be called pr2000.
+ 
++config VIDEO_XS9922B
++	tristate "Xinshi XS9922B four-channel AHD video decoder"
++	depends on I2C && VIDEO_DEV
++	select MEDIA_CONTROLLER
++	select VIDEO_V4L2_SUBDEV_API
++	select REGMAP_I2C
++	help
++	  Support for the Xinshi XS9922B four-channel AHD video decoder with MIPI
++	  CSI-2 output, as used for the 360 cameras of some car head units.
++
++	  To compile this driver as a module, choose M here: the
++	  module will be called xs9922b.
++
+ config VIDEO_TC358743
+ 	tristate "Toshiba TC358743 decoder"
+ 	depends on VIDEO_DEV && I2C
+--- a/drivers/media/i2c/Makefile
++++ b/drivers/media/i2c/Makefile
+@@ -137,6 +137,7 @@
+ obj-$(CONFIG_VIDEO_ST_MIPID02) += st-mipid02.o
+ obj-$(CONFIG_VIDEO_PR2000) += pr2000.o
+ obj-$(CONFIG_VIDEO_TC358743) += tc358743.o
++obj-$(CONFIG_VIDEO_XS9922B) += xs9922b.o
+ obj-$(CONFIG_VIDEO_TC358746) += tc358746.o
+ obj-$(CONFIG_VIDEO_TDA1997X) += tda1997x.o
+ obj-$(CONFIG_VIDEO_TDA7432) += tda7432.o
+diff --git a/drivers/media/i2c/xs9922b.c b/drivers/media/i2c/xs9922b.c
+new file mode 100644
+index 000000000..0ffbeee6d
+--- /dev/null
++++ b/drivers/media/i2c/xs9922b.c
+@@ -0,0 +1,360 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * Xinshi XS9922B four-channel AHD video decoder, MIPI CSI-2 output.
++ *
++ * Written for the Choiceway GT6-EAU car head unit, where an XS9922B carries the four 360
++ * cameras into CSIPHY 2 over two lanes, one CSI-2 virtual channel per camera. The register
++ * sequences are the ones the unit's stock AIS camera driver writes when it starts streaming
++ * (xs9922b_tables.h).
++ *
++ *     cam 0..3 ──AHD──► XS9922B ──CSI-2, 2 lanes, VC 0..3, UYVY──► camss
++ *                          ▲
++ *                    CCI (I2C) 0x30, 16-bit registers
++ */
++
++#include <linux/delay.h>
++#include <linux/i2c.h>
++#include <linux/module.h>
++#include <linux/of.h>
++#include <linux/regmap.h>
++
++#include <media/v4l2-ctrls.h>
++#include <media/v4l2-device.h>
++#include <media/v4l2-subdev.h>
++
++#define XS9922B_REG_CHIP_ID_H	0x40f0
++#define XS9922B_REG_CHIP_ID_L	0x40f1
++#define XS9922B_CHIP_ID		0x9999
++
++/* Channel n enable is 0x0e08 + 0x1000 n (stream-all sets all four, the pre tables clear them) */
++#define XS9922B_REG_CH_EN(n)	(0x0e08 + 0x1000 * (n))
++#define XS9922B_CHANNELS	4
++
++/* Each camera is AHD 720p or 1080p at 25 fps: a 74.25 MHz pixel clock per channel */
++#define XS9922B_PIXEL_RATE	74250000
++/*
++ * Assumption, not decoded: the PLL registers that set the CSI-2 rate are in the stock tables
++ * but their meaning is not. 750 MHz (1.5 Gb/s per lane) carries four 1080p25 UYVY streams
++ * on two lanes; camss only uses it for the PHY settle time.
++ */
++#define XS9922B_LINK_FREQ	750000000
++
++struct xs9922b_reg {
++	u16 reg;
++	u8 val;
++	u8 delay_ms;	/* the stock tables' per-write delay, honoured as milliseconds */
++};
++
++#include "xs9922b_tables.h"
++
++struct xs9922b_mode {
++	u32 width;
++	u32 height;
++	const struct xs9922b_reg *pre;
++	unsigned int num_pre;
++	const struct xs9922b_reg *res;
++	unsigned int num_res;
++};
++
++/* The first entry is the default: the stock camera config runs all four inputs at 1080p */
++static const struct xs9922b_mode xs9922b_modes[] = {
++	{ 1920, 1080, xs9922b_pre_1080p, ARRAY_SIZE(xs9922b_pre_1080p),
++	  xs9922b_res_1080p, ARRAY_SIZE(xs9922b_res_1080p) },
++	{ 1280, 720, xs9922b_pre_720p, ARRAY_SIZE(xs9922b_pre_720p),
++	  xs9922b_res_720p, ARRAY_SIZE(xs9922b_res_720p) },
++};
++
++static const s64 xs9922b_link_freqs[] = { XS9922B_LINK_FREQ };
++
++static const struct regmap_config xs9922b_regmap = {
++	.reg_bits = 16,
++	.val_bits = 8,
++	.max_register = 0xffff,
++};
++
++struct xs9922b {
++	struct regmap *map;
++	struct v4l2_subdev sd;
++	struct media_pad pad;
++	struct v4l2_ctrl_handler ctrls;
++	const struct xs9922b_mode *mode;
++};
++
++static inline struct xs9922b *to_xs9922b(struct v4l2_subdev *sd)
++{
++	return container_of(sd, struct xs9922b, sd);
++}
++
++static int xs9922b_write_table(struct xs9922b *xs, const struct xs9922b_reg *regs,
++			       unsigned int n)
++{
++	unsigned int i;
++	int ret;
++
++	for (i = 0; i < n; i++) {
++		ret = regmap_write(xs->map, regs[i].reg, regs[i].val);
++		if (ret) {
++			dev_err(xs->sd.dev, "write 0x%04x=0x%02x: %d\n", regs[i].reg,
++				regs[i].val, ret);
++			return ret;
++		}
++		if (regs[i].delay_ms) {
++			usleep_range(regs[i].delay_ms * USEC_PER_MSEC,
++				     regs[i].delay_ms * USEC_PER_MSEC + 500);
++		}
++	}
++	return 0;
++}
++
++static int xs9922b_detect(struct xs9922b *xs, struct device *dev)
++{
++	unsigned int hi, lo;
++
++	if (regmap_read(xs->map, XS9922B_REG_CHIP_ID_H, &hi) ||
++	    regmap_read(xs->map, XS9922B_REG_CHIP_ID_L, &lo)) {
++		return -ENODEV;
++	}
++
++	if (((hi << 8) | lo) != XS9922B_CHIP_ID) {
++		dev_err(dev, "chip id 0x%04x, expected 0x%04x\n", (hi << 8) | lo,
++			XS9922B_CHIP_ID);
++		return -ENODEV;
++	}
++	return 0;
++}
++
++static void xs9922b_fill_fmt(const struct xs9922b_mode *mode, struct v4l2_mbus_framefmt *fmt)
++{
++	fmt->width = mode->width;
++	fmt->height = mode->height;
++	fmt->code = MEDIA_BUS_FMT_UYVY8_1X16;
++	fmt->field = V4L2_FIELD_NONE;
++	fmt->colorspace = V4L2_COLORSPACE_REC709;
++	fmt->ycbcr_enc = V4L2_YCBCR_ENC_DEFAULT;
++	fmt->quantization = V4L2_QUANTIZATION_DEFAULT;
++	fmt->xfer_func = V4L2_XFER_FUNC_DEFAULT;
++}
++
++static const struct xs9922b_mode *xs9922b_find_mode(u32 width, u32 height)
++{
++	unsigned int i;
++
++	for (i = 0; i < ARRAY_SIZE(xs9922b_modes); i++) {
++		if (xs9922b_modes[i].width == width && xs9922b_modes[i].height == height) {
++			return &xs9922b_modes[i];
++		}
++	}
++	return &xs9922b_modes[0];
++}
++
++static int xs9922b_enum_mbus_code(struct v4l2_subdev *sd, struct v4l2_subdev_state *state,
++				  struct v4l2_subdev_mbus_code_enum *code)
++{
++	if (code->index > 0) {
++		return -EINVAL;
++	}
++
++	code->code = MEDIA_BUS_FMT_UYVY8_1X16;
++	return 0;
++}
++
++static int xs9922b_enum_frame_size(struct v4l2_subdev *sd, struct v4l2_subdev_state *state,
++				   struct v4l2_subdev_frame_size_enum *fse)
++{
++	if (fse->index >= ARRAY_SIZE(xs9922b_modes) || fse->code != MEDIA_BUS_FMT_UYVY8_1X16) {
++		return -EINVAL;
++	}
++
++	fse->min_width = fse->max_width = xs9922b_modes[fse->index].width;
++	fse->min_height = fse->max_height = xs9922b_modes[fse->index].height;
++	return 0;
++}
++
++static int xs9922b_set_fmt(struct v4l2_subdev *sd, struct v4l2_subdev_state *state,
++			   struct v4l2_subdev_format *format)
++{
++	struct xs9922b *xs = to_xs9922b(sd);
++	const struct xs9922b_mode *mode;
++
++	mode = xs9922b_find_mode(format->format.width, format->format.height);
++	xs9922b_fill_fmt(mode, &format->format);
++	*v4l2_subdev_state_get_format(state, 0) = format->format;
++
++	if (format->which == V4L2_SUBDEV_FORMAT_ACTIVE) {
++		xs->mode = mode;
++	}
++	return 0;
++}
++
++static int xs9922b_init_state(struct v4l2_subdev *sd, struct v4l2_subdev_state *state)
++{
++	xs9922b_fill_fmt(&xs9922b_modes[0], v4l2_subdev_state_get_format(state, 0));
++	return 0;
++}
++
++/* Stop: every channel off, as the stock pre tables do before reconfiguring */
++static int xs9922b_stop(struct xs9922b *xs)
++{
++	unsigned int n;
++	int ret;
++
++	for (n = 0; n < XS9922B_CHANNELS; n++) {
++		ret = regmap_write(xs->map, XS9922B_REG_CH_EN(n), 0);
++		if (ret) {
++			return ret;
++		}
++	}
++	return 0;
++}
++
++/* Start: the stock xs9922b_sensor_start_stream sequence, pre + resolution + all channels */
++static int xs9922b_s_stream(struct v4l2_subdev *sd, int enable)
++{
++	struct xs9922b *xs = to_xs9922b(sd);
++	int ret;
++
++	if (!enable) {
++		return xs9922b_stop(xs);
++	}
++
++	ret = xs9922b_write_table(xs, xs->mode->pre, xs->mode->num_pre);
++	if (ret) {
++		return ret;
++	}
++	ret = xs9922b_write_table(xs, xs->mode->res, xs->mode->num_res);
++	if (ret) {
++		return ret;
++	}
++	return xs9922b_write_table(xs, xs9922b_stream_all, ARRAY_SIZE(xs9922b_stream_all));
++}
++
++static const struct v4l2_subdev_video_ops xs9922b_video_ops = {
++	.s_stream = xs9922b_s_stream,
++};
++
++static const struct v4l2_subdev_pad_ops xs9922b_pad_ops = {
++	.enum_mbus_code = xs9922b_enum_mbus_code,
++	.enum_frame_size = xs9922b_enum_frame_size,
++	.get_fmt = v4l2_subdev_get_fmt,
++	.set_fmt = xs9922b_set_fmt,
++};
++
++static const struct v4l2_subdev_ops xs9922b_ops = {
++	.video = &xs9922b_video_ops,
++	.pad = &xs9922b_pad_ops,
++};
++
++static const struct v4l2_subdev_internal_ops xs9922b_internal_ops = {
++	.init_state = xs9922b_init_state,
++};
++
++static int xs9922b_init_ctrls(struct xs9922b *xs)
++{
++	struct v4l2_ctrl *link_freq;
++
++	v4l2_ctrl_handler_init(&xs->ctrls, 2);
++	v4l2_ctrl_new_std(&xs->ctrls, NULL, V4L2_CID_PIXEL_RATE, XS9922B_PIXEL_RATE,
++			  XS9922B_PIXEL_RATE, 1, XS9922B_PIXEL_RATE);
++	link_freq = v4l2_ctrl_new_int_menu(&xs->ctrls, NULL, V4L2_CID_LINK_FREQ,
++					   ARRAY_SIZE(xs9922b_link_freqs) - 1, 0,
++					   xs9922b_link_freqs);
++	if (link_freq) {
++		link_freq->flags |= V4L2_CTRL_FLAG_READ_ONLY;
++	}
++
++	if (xs->ctrls.error) {
++		return xs->ctrls.error;
++	}
++	xs->sd.ctrl_handler = &xs->ctrls;
++	return 0;
++}
++
++static int xs9922b_probe(struct i2c_client *client)
++{
++	struct device *dev = &client->dev;
++	struct xs9922b *xs;
++	int ret;
++
++	xs = devm_kzalloc(dev, sizeof(*xs), GFP_KERNEL);
++	if (!xs) {
++		return -ENOMEM;
++	}
++	xs->mode = &xs9922b_modes[0];
++
++	xs->map = devm_regmap_init_i2c(client, &xs9922b_regmap);
++	if (IS_ERR(xs->map)) {
++		return dev_err_probe(dev, PTR_ERR(xs->map), "regmap\n");
++	}
++
++	ret = xs9922b_detect(xs, dev);
++	if (ret) {
++		return dev_err_probe(dev, ret, "no XS9922B at 0x%02x\n", client->addr);
++	}
++
++	v4l2_i2c_subdev_init(&xs->sd, client, &xs9922b_ops);
++	xs->sd.internal_ops = &xs9922b_internal_ops;
++	xs->sd.flags |= V4L2_SUBDEV_FL_HAS_DEVNODE;
++	xs->sd.entity.function = MEDIA_ENT_F_VID_IF_BRIDGE;
++	xs->pad.flags = MEDIA_PAD_FL_SOURCE;
++
++	ret = xs9922b_init_ctrls(xs);
++	if (ret) {
++		goto err_ctrls;
++	}
++
++	ret = media_entity_pads_init(&xs->sd.entity, 1, &xs->pad);
++	if (ret) {
++		goto err_ctrls;
++	}
++
++	ret = v4l2_subdev_init_finalize(&xs->sd);
++	if (ret) {
++		goto err_entity;
++	}
++
++	ret = v4l2_async_register_subdev(&xs->sd);
++	if (ret) {
++		goto err_state;
++	}
++
++	dev_info(dev, "XS9922B at 0x%02x\n", client->addr);
++	return 0;
++
++err_state:
++	v4l2_subdev_cleanup(&xs->sd);
++err_entity:
++	media_entity_cleanup(&xs->sd.entity);
++err_ctrls:
++	v4l2_ctrl_handler_free(&xs->ctrls);
++	return ret;
++}
++
++static void xs9922b_remove(struct i2c_client *client)
++{
++	struct v4l2_subdev *sd = i2c_get_clientdata(client);
++	struct xs9922b *xs = to_xs9922b(sd);
++
++	v4l2_async_unregister_subdev(sd);
++	v4l2_subdev_cleanup(sd);
++	media_entity_cleanup(&sd->entity);
++	v4l2_ctrl_handler_free(&xs->ctrls);
++}
++
++static const struct of_device_id xs9922b_of_match[] = {
++	{ .compatible = "xinshi,xs9922b" },
++	{ }
++};
++MODULE_DEVICE_TABLE(of, xs9922b_of_match);
++
++static struct i2c_driver xs9922b_driver = {
++	.driver = {
++		.name = "xs9922b",
++		.of_match_table = xs9922b_of_match,
++	},
++	.probe = xs9922b_probe,
++	.remove = xs9922b_remove,
++};
++module_i2c_driver(xs9922b_driver);
++
++MODULE_DESCRIPTION("Xinshi XS9922B four-channel AHD video decoder");
++MODULE_LICENSE("GPL");

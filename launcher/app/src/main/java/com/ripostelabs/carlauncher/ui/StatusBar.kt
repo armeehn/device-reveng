@@ -113,9 +113,11 @@ fun StatusBar(
             color = MaterialTheme.colorScheme.onBackground,
         )
 
+        // RAV4-151: weighted so it takes what the clock leaves, right-aligned as before.
         Row(
-            horizontalArrangement = Arrangement.spacedBy(20.dp),
+            horizontalArrangement = Arrangement.spacedBy(20.dp, Alignment.End),
             verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.weight(1f),
         ) {
             // v3.1: always-visible Wi-Fi / BT / volume / brightness chips. Display-only;
             // tapping the group opens the same Quick Controls panel as the Tune icon, and
@@ -123,6 +125,10 @@ fun StatusBar(
             var quickOpen by remember { mutableStateOf(false) }
             var quickClosed by remember { mutableIntStateOf(0) }
             StatusIndicators(
+                // RAV4-151: a Row measures weighted children last, so the chips get only the
+                // width the icons leave. Unweighted, extra car chips (volume, outside air, USB,
+                // CarPlay, a call) pushed Phone and Settings off the end at zero width.
+                modifier = Modifier.weight(1f, fill = false),
                 carService = carService,
                 carEvents = carEvents, // v0.4.9 vendor BT status
                 refreshKey = quickClosed,

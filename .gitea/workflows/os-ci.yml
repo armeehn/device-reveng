@@ -34,6 +34,10 @@ jobs:
         run: os/test-super-fit.sh
       - name: mainline boot image packer
         run: os/mainline/test-mkboot.sh
+      - name: PR2000 tables match their source
+        run: os/mainline/test-pr2000-tables.sh
+      - name: XS9922B tables match their source
+        run: os/mainline/test-xs9922b-tables.sh
       - name: diag check
         run: os/diag/test_check.sh
       - name: root grant + camera mode scripts
