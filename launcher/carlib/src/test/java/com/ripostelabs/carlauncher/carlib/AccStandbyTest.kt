@@ -98,6 +98,16 @@ class AccStandbyTest {
         assertEquals(listOf(AccStandby.AIRPLANE_OFF, AccStandby.BT_ON), shell.radios())
     }
 
+    // StandbyFallback reads this with the power-on reason: RST after it means the wake failed.
+    @Test
+    fun recoverSaysWhetherAStandbyWasLeft() {
+        val shell = FakeShell(wifiOn = "1")
+        AccStandby(shell::run).enter()
+
+        assertEquals(StandbyFallback.Left.NEVER, AccStandby(shell::run).recover())
+        assertEquals(StandbyFallback.Left.YES, AccStandby(shell::run).recover())
+    }
+
     @Test
     fun aBootWithoutTheMarkerTouchesNothing() {
         val shell = FakeShell(wifiOn = "1")
