@@ -80,12 +80,12 @@ fun PowerSettingsScreen(
         }
 
         SettingsSection(title = "Sleep") {
-            // RAV4-151: standby suspends the SoC; one wake that ends in RST turns it off (StandbyFallback).
+            // RAV4-151: standby suspends the SoC, and the MCU does not wake it yet; opt-in until it does.
             if (settingsStore != null) {
                 val standby by settingsStore.standby.collectAsStateWithLifecycle()
                 ToggleSetting(
                     label = "Standby when the car is off",
-                    description = "Suspend instead of a cold boot. If the screen stays black at a start, press RST: standby turns itself off.",
+                    description = "Suspend instead of a cold boot. Experimental: if the screen stays black at a start, press RST and standby turns itself off.",
                     checked = standby == StandbyMode.ON,
                     onChange = { on -> settingsStore.setStandby(if (on) StandbyMode.ON else StandbyMode.OFF) },
                 )

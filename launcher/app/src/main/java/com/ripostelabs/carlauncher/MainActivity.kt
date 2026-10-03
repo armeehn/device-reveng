@@ -619,7 +619,8 @@ class MainActivity : ComponentActivity() {
                 // ACC from the MCU line; standby is stock's accOff/accOn plus a PR2000 re-arm, so
                 // the first reverse after a suspend opens at once (AccStandby).
                 carAcc.start(applicationContext)
-                // RAV4-151: standby is on unless turned off; a failed wake turns it off (StandbyFallback).
+                // RAV4-151: standby is opt-in until the MCU wakes the SoC at ACC on (StandbyOptIn);
+                // a wake that ends in RST turns it back off (StandbyFallback).
                 val optIn = StandbyOptIn { settingsStore.standby.value }
                 val acc = optIn.acc(carAcc)
                 val accStandby = AccStandby(decoder = { DecoderSignal.redetect(); DecoderSignal.locked() })

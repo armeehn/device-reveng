@@ -1,23 +1,23 @@
 package com.ripostelabs.carlauncher.carlib
 
-/** Settings → Power & sleep → "Standby when the car is off". On unless turned off. */
+/** Settings → Power & sleep → "Standby when the car is off". Off unless chosen. */
 enum class StandbyMode {
     OFF,
     ON;
 
     companion object {
-        /** A stored name; anything unknown or unset is ON. A failed wake stores OFF ([StandbyFallback]). */
-        fun of(name: String?): StandbyMode = entries.firstOrNull { it.name == name } ?: ON
+        /** A stored name; anything unknown or unset is OFF until the ACC-on wake works (RAV4-151). */
+        fun of(name: String?): StandbyMode = entries.firstOrNull { it.name == name } ?: OFF
     }
 }
 
 /**
  * StandbyOptIn — the one switch in front of [McuSleepWake] for ACC standby.
  *
- * Standby suspends the SoC. The first deep suspend never woke at ACC on (car, vc946): the owner
- * heard the tuner over a black panel, with only RST to recover. The image now suspends to idle
- * as stock does (#404), so standby is on by default, and [StandbyFallback] turns it off after one
- * wake that ends in RST. With [StandbyMode.OFF] the unit behaves as it did before standby:
+ * Standby suspends the SoC, and the MCU does not yet wake it at ACC on: the owner hears the
+ * tuner over a black panel, with no power button to recover. Until that path works, standby
+ * is opt-in, and [StandbyFallback] turns it back off after a wake that ends in RST. With
+ * [StandbyMode.OFF] the unit behaves as it did before standby:
  *
  *     CarAcc ──▶ acc() ──▶ McuSleepWake, DozeGuard      OFF: reads null, so no ACC-off sleep,
  *                                                            no BT 0, no port close, and

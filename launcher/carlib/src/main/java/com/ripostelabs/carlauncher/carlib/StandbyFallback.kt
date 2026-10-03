@@ -1,7 +1,7 @@
 package com.ripostelabs.carlauncher.carlib
 
 /**
- * StandbyFallback — standby is on by default; one failed wake turns it off again.
+ * StandbyFallback — one failed standby wake turns the opt-in back off.
  *
  * A wake that fails leaves a black panel over the tuner, and the owner's only way out is RST.
  * At the next launcher start two facts tell that apart from a normal cold boot:

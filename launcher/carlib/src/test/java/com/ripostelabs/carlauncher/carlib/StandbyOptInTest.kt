@@ -53,10 +53,10 @@ class StandbyOptInTest {
         McuSleepWake(rec, gate.acc(acc), standby = gate.standby(rec))
 
     @Test
-    fun defaultIsOn() {
-        assertEquals(StandbyMode.ON, StandbyMode.of(null))
-        assertEquals(StandbyMode.ON, StandbyMode.of("garbage"))
-        assertEquals(StandbyMode.OFF, StandbyMode.of("OFF"))
+    fun defaultIsOff() {
+        assertEquals(StandbyMode.OFF, StandbyMode.of(null))
+        assertEquals(StandbyMode.OFF, StandbyMode.of("garbage"))
+        assertEquals(StandbyMode.ON, StandbyMode.of("ON"))
     }
 
     @Test
