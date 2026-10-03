@@ -519,6 +519,17 @@
 		ports {
 			#address-cells = <1>;
 			#size-cells = <0>;
+
+			/* CSIPHY 1: the PR2000, four lanes (stock laneAssign 0x4320) */
+			port@1 {
+				reg = <1>;
+
+				camss_csiphy1_ep: endpoint {
+					clock-lanes = <7>;
+					data-lanes = <0 1 2 3>;
+					remote-endpoint = <&pr2000_ep>;
+				};
+			};
 		};
 	};
 
@@ -551,6 +562,21 @@
 			clock-frequency = <400000>;
 			#address-cells = <1>;
 			#size-cells = <0>;
+
+			/* the reverse camera's decoder (stock: AIS slave 0xb8, ID 0x2000) */
+			video-decoder@5c {
+				compatible = "pixelplus,pr2000";
+				reg = <0x5c>;
+				reset-gpios = <&tlmm 115 GPIO_ACTIVE_LOW>;
+
+				port {
+					pr2000_ep: endpoint {
+						data-lanes = <1 2 3 4>;
+						link-frequencies = /bits/ 64 <148500000>;
+						remote-endpoint = <&camss_csiphy1_ep>;
+					};
+				};
+			};
 		};
 	};
 };

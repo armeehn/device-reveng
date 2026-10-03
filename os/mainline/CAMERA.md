@@ -71,5 +71,10 @@ detected signal, a fixed `MEDIA_BUS_FMT_UYVY8_1X16` output.
    no gated camss AHB clock in mainline's GCC).
 2. Slot map from the unit: decoder per slot, lanes, CCI addresses, chip IDs **(done,
    tables above)**.
-3. PR2000 driver (reverse camera first: one input, simplest table).
+3. PR2000 driver (reverse camera first: one input, simplest table). **Built 2026-10-02**
+   (`media-pr2000.patch`): reset, chip-ID check, AHD 720p/1080p at 25/30 fps from the
+   stock tables, UYVY over 4 lanes at a 148.5 MHz link. Bench proof: `dmesg` shows
+   "PR2000 at 0x5c"; then `media-ctl` links pr2000 -> csiphy1 -> csid1 -> ispif ->
+   vfe0_rdi0 and `v4l2-ctl --stream-mmap` on that video node captures frames. The 4-lane
+   `data-lanes <0 1 2 3>` mapping of stock `laneAssign 0x4320` is an assumption to check.
 4. XS9922B driver (four AHD inputs, virtual channels).
