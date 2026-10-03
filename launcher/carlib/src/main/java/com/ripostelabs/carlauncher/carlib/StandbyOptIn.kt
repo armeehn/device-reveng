@@ -16,7 +16,8 @@ enum class StandbyMode {
  *
  * Standby suspends the SoC, and the MCU does not yet wake it at ACC on: the owner hears the
  * tuner over a black panel, with no power button to recover. Until that path works, standby
- * is opt-in. With [StandbyMode.OFF] the unit behaves as it did before standby:
+ * is opt-in, and [StandbyFallback] turns it back off after a wake that ends in RST. With
+ * [StandbyMode.OFF] the unit behaves as it did before standby:
  *
  *     CarAcc ──▶ acc() ──▶ McuSleepWake, DozeGuard      OFF: reads null, so no ACC-off sleep,
  *                                                            no BT 0, no port close, and

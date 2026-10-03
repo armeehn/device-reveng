@@ -88,6 +88,8 @@ import com.ripostelabs.carlauncher.carlib.KeyRouter
 import com.ripostelabs.carlauncher.carlib.McuOwnerProtocol
 import com.ripostelabs.carlauncher.carlib.McuStateExport
 import com.ripostelabs.carlauncher.carlib.SlcanLinkSource
+import com.ripostelabs.carlauncher.carlib.StandbyFallback
+import com.ripostelabs.carlauncher.carlib.StandbyMode
 import com.ripostelabs.carlauncher.carlib.StandbyOptIn
 import com.ripostelabs.carlauncher.carlib.SysVarMirror
 import com.ripostelabs.carlauncher.carlib.UsbRole
@@ -617,12 +619,19 @@ class MainActivity : ComponentActivity() {
                 // ACC from the MCU line; standby is stock's accOff/accOn plus a PR2000 re-arm, so
                 // the first reverse after a suspend opens at once (AccStandby).
                 carAcc.start(applicationContext)
-                // RAV4-151: standby is opt-in until the MCU wakes the SoC at ACC on (StandbyOptIn).
+                // RAV4-151: standby is opt-in until the MCU wakes the SoC at ACC on (StandbyOptIn);
+                // a wake that ends in RST turns it back off (StandbyFallback).
                 val optIn = StandbyOptIn { settingsStore.standby.value }
                 val acc = optIn.acc(carAcc)
                 val accStandby = AccStandby(decoder = { DecoderSignal.redetect(); DecoderSignal.locked() })
                 // A standby never left (RST, B+ cut) kept Wi-Fi and BT off on every boot since.
-                lifecycleScope.launch(Dispatchers.IO) { accStandby.recover() }
+                lifecycleScope.launch(Dispatchers.IO) {
+                    val left = accStandby.recover()
+                    if (StandbyFallback.failedWake(left, StandbyFallback.PowerOn.read())) {
+                        Log.w(STANDBY_TAG, "RST after a standby never left: the wake failed, standby off")
+                        settingsStore.setStandby(StandbyMode.OFF)
+                    }
+                }
                 val standby = optIn.standby(accStandby)
                 mcuSleepWake = McuSleepWake.forOwner(it, acc, startupConfig, standby).also { sw -> sw.start() }
                 // The GSI dozes the panel on its own (README "Doze and dreams"); wake it unless
@@ -2089,6 +2098,7 @@ private const val REVERSE_TAG = "ReverseCamera"
 
 /** RAV4-278: each reclaim of the panel from the call screen: `logcat -s CallUiGuard`. */
 private const val CALL_UI_TAG = "CallUiGuard"
+private const val STANDBY_TAG = "StandbyFallback"
 
 /** Reverse camera settings, "Dynamic trajectory": 0 off, 1 static, 2 dynamic (steering). */
 private const val TRACK_LINE_DYNAMIC = 2

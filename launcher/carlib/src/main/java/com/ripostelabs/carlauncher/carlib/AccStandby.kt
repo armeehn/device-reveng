@@ -16,7 +16,8 @@ import android.util.Log
  *               2026-09-30 10:46:12). The stored role (persist.riposte.usb.role) is untouched.
  *     leave()   sys.usb_power 0 (:3470) and the peripheral role back, then the camera gates, then [decoder], then Utils.accOn (:165-175): airplane
  *               off, location on, BT on; wifi only if it was on (setAccWakeUp, :3456-3460)
- *     recover() at launcher start: the radios a standby turned off and no leave turned back on
+ *     recover() at launcher start: the radios a standby turned off and no leave turned back on;
+ *               says whether the last standby was left, for [StandbyFallback]
  *
  * The radio states persist. A wake that fails (the owner presses RST) or a B+ cut skips leave,
  * and every later boot had Wi-Fi and BT off, so wireless CarPlay never came up (car,
@@ -76,10 +77,10 @@ class AccStandby(
     }
 
     /** At launcher start: put back the radios of a standby that was never left, then forget it. */
-    fun recover() {
+    fun recover(): StandbyFallback.Left {
         val text = read(MARKER_GET)
         if (text.isEmpty()) {
-            return
+            return StandbyFallback.Left.YES
         }
 
         // Junk in the marker restores nothing; clearing it stops a retry on every boot.
@@ -87,11 +88,12 @@ class AccStandby(
         if (radios == null) {
             Log.w(LOG_TAG, "unreadable marker '$text'")
             run(MARKER_CLEAR)
-            return
+            return StandbyFallback.Left.NEVER
         }
 
         Log.i(LOG_TAG, "standby was never left; restoring $radios")
         restore(radios)
+        return StandbyFallback.Left.NEVER
     }
 
     override fun darken() = run(DARKEN)

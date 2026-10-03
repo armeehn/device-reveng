@@ -85,7 +85,7 @@ fun PowerSettingsScreen(
                 val standby by settingsStore.standby.collectAsStateWithLifecycle()
                 ToggleSetting(
                     label = "Standby when the car is off",
-                    description = "Suspend instead of a cold boot. Experimental: the screen may stay black at the next start.",
+                    description = "Suspend instead of a cold boot. Experimental: if the screen stays black at a start, press RST and standby turns itself off.",
                     checked = standby == StandbyMode.ON,
                     onChange = { on -> settingsStore.setStandby(if (on) StandbyMode.ON else StandbyMode.OFF) },
                 )
