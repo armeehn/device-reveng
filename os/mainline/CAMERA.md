@@ -42,7 +42,12 @@ config (`/vendor/etc/camera/ais_camera_config.xml`, pulled 2026-10-02) maps them
 | XS9922B | `camera@2` | 0 (GPIO 37/38) | 2 | 2, `laneAssign 0x20` | 4 x 1920x1080 AHD |
 | PR2000 | `camera@1` | 1 (GPIO 39/40) | 1 | 4, `laneAssign 0x4320` | 1 x 1280x720 (reverse) |
 
-The CCI slave addresses are not in that file; they come from the stock driver code.
+The stock AIS user-space drivers (`libais_pr2000.so`, `libais_xs9922b.so`) carry the rest:
+
+| Decoder | CCI address (7-bit) | Chip ID | Reset |
+|---|---|---|---|
+| XS9922B | 0x30 | reg 0x40F0 = 0x9999 | |
+| PR2000 | 0x5C | reg 0xFC (word) = 0x2000 | GPIO 115, active low: 50 ms high, 100 ms low, 50 ms high |
 
 ## The decoders
 
@@ -64,7 +69,7 @@ detected signal, a fixed `MEDIA_BUS_FMT_UYVY8_1X16` output.
    lists 3 CSIPHY, 4 CSID, ISPIF and 2 VFE entities, and `i2cdetect` sees the CCI buses.
    Assumption to check there: the `ahb` clock maps to `GCC_CAMSS_AHB_CLK_SRC` (SM6125 has
    no gated camss AHB clock in mainline's GCC).
-2. Slot map from the unit: decoder per slot and lanes **(done, table above)**; CCI
-   addresses still open.
+2. Slot map from the unit: decoder per slot, lanes, CCI addresses, chip IDs **(done,
+   tables above)**.
 3. PR2000 driver (reverse camera first: one input, simplest table).
 4. XS9922B driver (four AHD inputs, virtual channels).
