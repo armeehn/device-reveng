@@ -7,7 +7,6 @@ import android.content.IntentFilter
 import android.content.Context
 import android.content.BroadcastReceiver
 import android.content.Intent
-import android.media.AudioManager
 import android.content.pm.PackageManager // v2.5
 import android.util.Log
 import android.os.Bundle
@@ -45,6 +44,7 @@ import com.ripostelabs.carlauncher.carlib.BtCarKit
 import com.ripostelabs.carlauncher.service.OtaUpdater
 import com.ripostelabs.carlauncher.service.UplinkService
 import com.ripostelabs.carlauncher.service.UplinkSignals
+import com.ripostelabs.carlauncher.carlib.NavVolume
 import com.ripostelabs.carlauncher.carlib.PhoneInternet
 import com.ripostelabs.carlauncher.carlib.CarEvents
 import com.ripostelabs.carlauncher.carlib.ClusterFeed
@@ -250,6 +250,10 @@ class MainActivity : ComponentActivity() {
 
     /** Riposte OS 0.2 only: Android's volume keys and dialog, turned into amp steps. */
     private var ampVolumeKeys: AmpVolumeKeys? = null
+
+    /** The launcher's volume keys go to the amp once [AmpVolumeKeys] runs, else to the stock stream. */
+    private fun volumeRoute(): NavVolume.Route =
+        if (ampVolumeKeys != null) NavVolume.Route.AMP else NavVolume.Route.STREAM
 
     /** Riposte OS 0.2 only: the phone through the stock stack's car-kit profiles. */
     private var btCarKit: BtCarKit? = null
@@ -721,7 +725,7 @@ class MainActivity : ComponentActivity() {
         themeStore = ThemeStore(applicationContext)
         wallpaperStore = WallpaperStore(applicationContext)
         widgetHost = HomeWidgetHost(applicationContext)
-        navBar = NavBar(applicationContext).also {
+        navBar = NavBar(applicationContext, ::volumeRoute).also {
             it.service = mcuOwner as? CarNav
             it.projection = { if (carEvents.carplayState.value.connected) Projection.LIVE else Projection.IDLE }
         }
@@ -1056,7 +1060,7 @@ class MainActivity : ComponentActivity() {
             }
         }
         keyActions = KeyActionDispatcher(
-            audio = getSystemService(AudioManager::class.java),
+            volume = { step -> NavVolume.step(applicationContext, step, volumeRoute()) },
             gestures = wheelGestures,
             carKit = { btCarKit },
             zlinkConnected = { carEvents.zlinkConnected.value },
