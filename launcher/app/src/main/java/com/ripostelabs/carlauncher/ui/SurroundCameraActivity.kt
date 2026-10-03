@@ -38,6 +38,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ripostelabs.carlauncher.data.AisCamera
 import com.ripostelabs.carlauncher.data.AisCameraNative
 import com.ripostelabs.carlauncher.data.AisCameraWorker
+import com.ripostelabs.carlauncher.data.SurroundScreen
 import com.ripostelabs.carlauncher.data.SurroundSignal
 import com.ripostelabs.carlauncher.service.CanCaptureService
 import com.ripostelabs.carlauncher.ui.theme.CarLauncherTheme
@@ -76,6 +77,7 @@ class SurroundCameraActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        SurroundScreen.opened()
 
         setContent {
             val vehicle by CanCaptureService.vehicle().snapshot.collectAsStateWithLifecycle()
@@ -229,6 +231,7 @@ class SurroundCameraActivity : ComponentActivity() {
 
     override fun onDestroy() {
         closeCamera()
+        SurroundScreen.closed()
         handler.removeCallbacksAndMessages(null)
         super.onDestroy()
     }
