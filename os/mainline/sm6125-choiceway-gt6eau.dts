@@ -530,6 +530,17 @@
 					remote-endpoint = <&pr2000_ep>;
 				};
 			};
+
+			/* CSIPHY 2: the XS9922B, two lanes (stock laneAssign 0x20), VC 0..3 */
+			port@2 {
+				reg = <2>;
+
+				camss_csiphy2_ep: endpoint {
+					clock-lanes = <7>;
+					data-lanes = <0 1>;
+					remote-endpoint = <&xs9922b_ep>;
+				};
+			};
 		};
 	};
 
@@ -555,6 +566,20 @@
 			clock-frequency = <400000>;
 			#address-cells = <1>;
 			#size-cells = <0>;
+
+			/* the four 360 cameras' decoder (stock: AIS slave 0x60, ID 0x9999) */
+			video-decoder@30 {
+				compatible = "xinshi,xs9922b";
+				reg = <0x30>;
+
+				port {
+					xs9922b_ep: endpoint {
+						data-lanes = <1 2>;
+						link-frequencies = /bits/ 64 <750000000>;
+						remote-endpoint = <&camss_csiphy2_ep>;
+					};
+				};
+			};
 		};
 
 		cci_i2c1: i2c-bus@1 {

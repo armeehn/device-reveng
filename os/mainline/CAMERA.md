@@ -77,4 +77,11 @@ detected signal, a fixed `MEDIA_BUS_FMT_UYVY8_1X16` output.
    "PR2000 at 0x5c"; then `media-ctl` links pr2000 -> csiphy1 -> csid1 -> ispif ->
    vfe0_rdi0 and `v4l2-ctl --stream-mmap` on that video node captures frames. The 4-lane
    `data-lanes <0 1 2 3>` mapping of stock `laneAssign 0x4320` is an assumption to check.
-4. XS9922B driver (four AHD inputs, virtual channels).
+4. XS9922B driver (four AHD inputs, virtual channels). **Built 2026-10-03**
+   (`media-xs9922b.patch`): chip ID 0x9999, the stock AIS start-stream sequence (pre +
+   resolution + all-channel start, 1080p default, 720p), 2 lanes. The tables come from the
+   user-space AIS driver, which is what streams on the stock unit; the kernel driver's own
+   INIT0 table is a different, unused-at-stream configuration. Assumptions to check: the
+   750 MHz link frequency (the PLL registers are not decoded) and the 2 ms per-write delay.
+5. camss CSID 4.7 routes only virtual channel 0 (`vc = 0` in `camss-csid-4-7.c`), so on
+   mainline the XS9922B shows camera 0 alone until CSID 4.7 maps VC 1..3 to RDI 1..3.
