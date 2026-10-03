@@ -36,8 +36,10 @@ for p in "$HERE"/*.patch; do
   patch -d "$TREE" -p1 --forward --silent --no-backup-if-mismatch -r - < "$p" || { echo "$p does not apply"; exit 1; }
 done
 
-# 1c. the PR2000 tables, generated from pr2000/*.tsv: the patch adds the driver, not the data
+# 1c. the decoder tables, generated from pr2000/ and xs9922b/: the patches add the drivers,
+# not the data
 python3 "$HERE/pr2000-tables.py" > "$TREE/drivers/media/i2c/pr2000_tables.h"
+python3 "$HERE/xs9922b-tables.py" > "$TREE/drivers/media/i2c/xs9922b_tables.h"
 
 # 2. kernel and DTB
 make -C "$TREE" -s ARCH=arm64 LLVM="$LLVM_SUFFIX" O="$KBUILD" defconfig gt6eau.config
