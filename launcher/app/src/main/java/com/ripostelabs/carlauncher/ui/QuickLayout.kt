@@ -35,6 +35,16 @@ enum class CarPlayAction(val feature: Zlink.Feature, val label: String) {
 
     /** ⚠ UNVERIFIED whether Zlink 5.4.62 honours the code from a sender other than the gateway. */
     fun intent(): IntentSpec = Zlink.request(feature)
+
+    /**
+     * One tap: [send] the request, then [open] CarPlay. The request alone switched the phone
+     * behind the launcher and nothing showed until CarPlay was tapped (car, 2026-10-02). Sent
+     * first, the phone is already redrawing while the CarPlay screen comes to the front.
+     */
+    fun run(send: (IntentSpec) -> Unit, open: () -> Boolean) {
+        send(intent())
+        open()
+    }
 }
 
 /** One grid cell: an app to launch, or a projected-phone shortcut. */
