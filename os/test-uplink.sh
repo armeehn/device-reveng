@@ -13,7 +13,8 @@ fail() { echo "FAIL: $*"; exit 1; }
 mkdir -p "$T/pkg/tailscale_9.9.9_arm64"
 cat > "$T/pkg/tailscale_9.9.9_arm64/tailscaled" <<'F'
 #!/bin/sh
-echo "tailscaled $*" >> "$CALLS"
+logs=none; [ -n "$TS_LOGS_DIR" ] && [ -d "$TS_LOGS_DIR" ] && logs=dir
+echo "tailscaled $* logs=$logs" >> "$CALLS"
 F
 cat > "$T/pkg/tailscale_9.9.9_arm64/tailscale" <<'F'
 #!/bin/sh
@@ -87,5 +88,17 @@ d=$T/joined/ts
 run joined "$GOOD" "$T/good.tgz" >/dev/null
 grep -q "^tailscaled " "$T/joined/calls" || fail "joined: daemon not started"
 ! grep -q " up " "$T/joined/calls" || fail "joined: tried to log in"
+
+# 6. Started by init: no HOME and a read-only cwd. tailscaled finds no place for its log
+#    state and panics unless the script hands it an existing TS_LOGS_DIR. Its logs stay on
+#    the car (--no-logs-no-support), never uploaded to the vendor.
+d=$T/init/ts
+mkdir -p "$T/init"
+sed -e "s|^DIR=.*|DIR=$d|" -e "s|^TS_SHA256=.*|TS_SHA256=$GOOD|" -e "s|^TS_VERSION=.*|TS_VERSION=9.9.9|" \
+  "$SRC" > "$T/init/uplink.sh"
+(cd / && env -i PATH="$T/bin:/usr/bin:/bin" CALLS="$T/init/calls" TARBALL="$T/good.tgz" \
+  sh "$T/init/uplink.sh" > "$T/init/out" 2>&1) || true
+grep -q "^tailscaled .* logs=dir" "$T/init/calls" || fail "init: no log dir for tailscaled: $(cat "$T/init/calls")"
+grep -q "^tailscaled .*--no-logs-no-support" "$T/init/calls" || fail "init: tailscaled would upload logs"
 
 echo "UPLINK PASS"
