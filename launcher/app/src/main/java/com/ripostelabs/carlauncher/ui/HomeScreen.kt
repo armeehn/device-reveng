@@ -198,7 +198,7 @@ fun HomeScreen(
     val runQuick: (QuickSlot<AppInfo>) -> Unit = { slot ->
         when (slot) {
             is QuickSlot.App -> appRepository.launch(slot.app)
-            is QuickSlot.Action -> slot.action.intent().broadcast(appContext)
+            is QuickSlot.Action -> slot.action.run({ it.broadcast(appContext) }, { Zlink.openAny(appContext) })
         }
     }
     // Climate controls dialog, opened from the card or CENTER on it.

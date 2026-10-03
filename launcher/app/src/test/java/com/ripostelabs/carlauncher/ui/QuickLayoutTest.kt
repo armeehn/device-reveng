@@ -92,4 +92,17 @@ class QuickLayoutTest {
             assertEquals(Zlink.ACTION_MESSAGE, action.intent().action)
         }
     }
+
+    @Test
+    fun aShortcutSwitchesThePhoneThenShowsCarPlay() {
+        // Car, 2026-10-02: the request alone switched the phone behind the launcher, and
+        // nothing showed until the owner tapped CarPlay. The request goes first, so the phone
+        // is already redrawing while the CarPlay screen comes to the front.
+        for (action in CarPlayAction.entries) {
+            val steps = mutableListOf<String>()
+            action.run(send = { steps += "send ${it.ints}" }, open = { steps += "open"; true })
+
+            assertEquals(listOf("send ${action.intent().ints}", "open"), steps)
+        }
+    }
 }
