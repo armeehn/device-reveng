@@ -1,6 +1,7 @@
 package com.ripostelabs.carlauncher.carlib
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -106,6 +107,62 @@ class AccStandbyTest {
 
         assertEquals(StandbyFallback.Left.NEVER, AccStandby(shell::run).recover())
         assertEquals(StandbyFallback.Left.YES, AccStandby(shell::run).recover())
+    }
+
+    /** Shutdowns the light depth scheduled: delay and the job, run by hand. */
+    private class FakeLater {
+        val delays = mutableListOf<Long>()
+        val jobs = mutableListOf<() -> Unit>()
+        var cancelled = 0
+
+        fun schedule(delayMs: Long, job: () -> Unit): () -> Unit {
+            delays += delayMs
+            jobs += job
+            return { cancelled++ }
+        }
+    }
+
+    private fun light(shell: FakeShell, later: FakeLater) =
+        AccStandby(shell::run, depth = { AccStandby.Depth.LIGHT }, later = later::schedule)
+
+    // Bench 2026-10-07: an s2idle suspend never resumes, not even on an RTC alarm. LIGHT keeps
+    // the kernel awake (the Display lock stays held) and leaves USB alone, so nothing suspends.
+    @Test
+    fun lightKeepsTheKernelAwakeAndUsbAlone() {
+        val shell = FakeShell(wifiOn = "1", usbRole = "peripheral")
+        light(shell, FakeLater()).enter()
+
+        assertTrue(AccStandby.RADIOS_OFF in shell.ran)
+        assertTrue(AccStandby.CAMERA_GATE_OFF in shell.ran)
+        assertFalse(AccStandby.CAMERA_OFF in shell.ran)
+        assertFalse(shell.ran.any { "wake_unlock" in it })
+        assertFalse(AccStandby.USB_HOST in shell.ran)
+        assertFalse(AccStandby.USB_POWER_OFF in shell.ran)
+    }
+
+    // ~1 A awake on the bench: warm for LIGHT_MAX_MS, then shut down to spare the battery.
+    @Test
+    fun lightShutsDownAfterItsWindow() {
+        val shell = FakeShell(wifiOn = "1")
+        val later = FakeLater()
+        light(shell, later).enter()
+
+        assertEquals(listOf(AccStandby.LIGHT_MAX_MS), later.delays)
+        later.jobs.single().invoke()
+        assertTrue(AccStandby.SHUTDOWN in shell.ran)
+    }
+
+    @Test
+    fun anAccOnInsideTheWindowCancelsTheShutdown() {
+        val shell = FakeShell(wifiOn = "1")
+        val later = FakeLater()
+        val standby = light(shell, later)
+        standby.enter()
+        standby.leave()
+
+        assertEquals(1, later.cancelled)
+        assertFalse(AccStandby.USB_POWER_ON in shell.ran)
+        assertEquals("", shell.marker)
     }
 
     @Test

@@ -239,7 +239,7 @@ class SettingsStore(context: Context) {
         ds.edit { it[RECONNECT_KEY] = mode.name }
     }
 
-    /** RAV4-151: suspend on ACC off ([StandbyMode]); OFF when never set and after a failed wake. */
+    /** RAV4-151: standby on ACC off ([StandbyMode]); LIGHT when never set, one step down after a failed wake. */
     val standby: StateFlow<StandbyMode> =
         ds.data
             .map { prefs -> StandbyMode.of(prefs[STANDBY_KEY]) }
