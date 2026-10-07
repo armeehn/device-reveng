@@ -23,17 +23,24 @@ class TyreRadioLink(
     private val onState: (TyreRadioState) -> Unit,
 ) {
 
-    private companion object {
-        const val TAG = "TyreRadioLink"
+    companion object {
+        private const val TAG = "TyreRadioLink"
 
         /** North American Toyota sensors (and most others sold here) send at 315 MHz. */
-        const val FREQUENCY = "315M"
+        private const val FREQUENCY = "315M"
 
         /** rtl_433 prints this to stderr once the dongle is open and tuned. */
-        const val TUNED_MARKER = "Tuned to"
+        private const val TUNED_MARKER = "Tuned to"
 
-        const val ABSENT_RETRY_MS = 30_000L
-        const val RESTART_DELAY_MS = 3_000L
+        private const val ABSENT_RETRY_MS = 30_000L
+        private const val RESTART_DELAY_MS = 3_000L
+
+        /**
+         * JSON readings plus log messages: [TUNED_MARKER] is a log message, and `-F json` alone
+         * silences them ("Use -F log if you want any messages", unit 2026-10-07).
+         */
+        internal fun command(binary: String): String =
+            "exec ${RootShell.quote(binary)} -f $FREQUENCY -F json -F log"
     }
 
     @Volatile
@@ -81,9 +88,8 @@ class TyreRadioLink(
 
     /** @return true when the receiver was tuned at some point before rtl_433 exited. */
     private fun runOnce(): Boolean {
-        val command = "exec ${RootShell.quote(binary)} -f $FREQUENCY -F json"
         val proc = runCatching {
-            ProcessBuilder("su", "-c", command).redirectErrorStream(true).start()
+            ProcessBuilder("su", "-c", command(binary)).redirectErrorStream(true).start()
         }.getOrElse {
             Log.d(TAG, "su unavailable: ${it.message}")
             return false
