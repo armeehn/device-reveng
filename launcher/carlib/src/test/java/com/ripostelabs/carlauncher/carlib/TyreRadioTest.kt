@@ -100,6 +100,15 @@ class TyreRadioTest {
         assertEquals(TyreState.OK, TyreHealth.of(reading("d", 219.0, 0), emptyList()))
     }
 
+    /** rtl_433 prints "Tuned to" only as a log message, and -F json alone silences those. */
+    @Test
+    fun commandKeepsLogMessagesForTunedMarker() {
+        val args = TyreRadioLink.command("/x/rtl_433").split(" ")
+
+        assertTrue(args.windowed(2).contains(listOf("-F", "json")))
+        assertTrue(args.windowed(2).contains(listOf("-F", "log")))
+    }
+
     private fun reading(id: String, kpa: Double, at: Long) = TyreReading(id, "Toyota", kpa, null, at)
 
     private companion object {
