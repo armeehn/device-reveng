@@ -52,6 +52,7 @@ import com.ripostelabs.carlauncher.carlib.ClusterFeed
 import com.ripostelabs.carlauncher.carlib.ClusterText
 import com.ripostelabs.carlauncher.carlib.DozeGuard
 import com.ripostelabs.carlauncher.carlib.McuFactorySet
+import com.ripostelabs.carlauncher.carlib.CodecMicGain
 import com.ripostelabs.carlauncher.carlib.McuSetupProtocol
 import com.ripostelabs.carlauncher.carlib.McuSetupStore
 import com.ripostelabs.carlauncher.carlib.RadioMemory
@@ -638,6 +639,8 @@ class MainActivity : ComponentActivity() {
                 )
                 // A standby never left (RST, B+ cut) kept Wi-Fi and BT off on every boot since.
                 lifecycleScope.launch(Dispatchers.IO) {
+                    // RAV4-278: the vendor's mic gain leaves CarPlay callers hearing almost nothing.
+                    CodecMicGain.apply()
                     val left = accStandby.recover()
                     if (StandbyFallback.failedWake(left, StandbyFallback.PowerOn.read())) {
                         Log.w(STANDBY_TAG, "RST after a standby never left: the wake failed, one depth shallower")
