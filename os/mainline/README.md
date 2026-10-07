@@ -33,6 +33,12 @@ adb reboot bootloader
 fastboot boot boot-mainline.img      # RAM only; a power cycle returns to the installed system
 ```
 
+On this unit's pigtail a `fastboot boot` transfer can stall; enter the bootloader fresh
+(`adb reboot bootloader`), `usbreset 18d1:d00d`, then one `fastboot boot`. A transfer cut off
+mid-way leaves the bootloader wedged until RST. The bootloader only boots this DTB when it
+matches the board exactly (msm-id/board-id in the DTS); otherwise it applies the unit's own
+dtbo overlay, fails and returns to fastboot. A failed test boot reboots itself after 90 s.
+
 Pass: the panel shows kernel messages, then the laptop sees `18d1:4ee7`
 (`lsusb`), `screen /dev/ttyACM0` gives a shell, `dmesg` there lists what probed.
 

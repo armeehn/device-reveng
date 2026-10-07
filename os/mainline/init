@@ -12,6 +12,13 @@ mount -t configfs configfs /sys/kernel/config
 
 echo "riposte mainline: $(uname -r) up" > /dev/kmsg
 
+# Back to the installed system: an immediate reset through sysrq (this busybox has no reboot)
+hand_back() {
+  echo "riposte mainline: $1, rebooting to the installed system" > /dev/kmsg
+  echo 1 > /proc/sys/kernel/sysrq
+  echo b > /proc/sysrq-trigger
+}
+
 # USB gadget: one config with an ACM serial port and an NCM network function
 readonly G=/sys/kernel/config/usb_gadget/g1
 mkdir -p $G/strings/0x409 $G/configs/c.1/strings/0x409 $G/functions/acm.GS0 $G/functions/ncm.usb0
@@ -37,8 +44,14 @@ if [ -n "$udc" ]; then
   ifconfig usb0 172.16.42.1 netmask 255.255.255.0 up
   telnetd -l /bin/sh
 else
-  echo "riposte mainline: no UDC after 30 s" > /dev/kmsg
+  # Nothing can reach this kernel without USB: go back to the installed system rather
+  # than sit on a shared bench unit until someone power-cycles it.
+  sleep 60
+  hand_back "no UDC after 30 s"
 fi
+
+# A test boot holds the unit for 10 minutes at most, then hands it back
+( sleep 600; hand_back "10 min up" ) &
 
 # A shell on the USB serial port and one on the panel console, forever
 while true; do
