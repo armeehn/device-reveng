@@ -10,6 +10,7 @@ bash -n setup.sh
 bash -n rav4-usb-update
 bash -n road-noise-pull
 bash -n road-noise-collect
+bash -n bench-standby
 python3 -m py_compile road-noise-file
 
 # Warnings and errors only: the files are kept byte-identical to what zero already runs.
@@ -18,7 +19,7 @@ python3 -m py_compile road-noise-file
 if command -v shellcheck >/dev/null; then
     shellcheck -S warning setup.sh
     shellcheck -S warning -e SC2034,SC2011 rav4-usb-update
-    shellcheck -S warning road-noise-pull road-noise-collect
+    shellcheck -S warning road-noise-pull road-noise-collect bench-standby
 else
     echo "shellcheck not installed; syntax only"
 fi
