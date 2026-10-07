@@ -73,6 +73,9 @@ class ArmAudioRoute(private val mcu: Mcu, private val run: Executor = ownThread(
 
     private var projected = false
 
+    /** A player that started under CarPlay is CarPlay's own audio, not a source to fall back to. */
+    private var mediaUnderProjection = false
+
     private var sessions = false
 
     /** The last `3F` pair sent; the vendor's mNaviPlay / mSystemPlay start false (EventService.java:461). */
@@ -85,9 +88,11 @@ class ArmAudioRoute(private val mcu: Mcu, private val run: Executor = ownThread(
         syncSound(what)
 
         if (now.media && !before.media) {
+            mediaUnderProjection = projected
             mediaStarted(what)
         }
         if (!now.media && before.media) {
+            mediaUnderProjection = false
             mediaPaused()
         }
     }
@@ -177,7 +182,7 @@ class ArmAudioRoute(private val mcu: Mcu, private val run: Executor = ownThread(
     /** The source still up once CarPlay leaves, in the vendor's priority. */
     private fun pending(): Mode? = when {
         btAudio -> Mode.BT_MUSIC
-        playback.media -> mediaMode()
+        playback.media && !mediaUnderProjection -> mediaMode()
         else -> null
     }
 
