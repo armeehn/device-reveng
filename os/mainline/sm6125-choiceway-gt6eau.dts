@@ -20,11 +20,13 @@
 
 	/* required for bootloader to select correct board */
 	/*
-	 * The SoC reports QCM6125 (0x1d3), not SM6125 (394). The board IDs are the stock base
-	 * DTBs' (boot.img, 2026-09-30), so ABL takes this DTB whichever base it would have picked.
+	 * ABL must see an exact match for this board, or it applies the unit's downstream dtbo
+	 * overlay to this DTB, fails ("Dtb overlay failed") and drops back to fastboot (bench,
+	 * 2026-10-07). These are the car overlay's own IDs: QCM6125 (0x1d3) rev 1.0, board 0x22
+	 * subtype 0; ABL then logs "Exact DTB match found. DTBO search is not required".
 	 */
-	qcom,msm-id = <0x1d3 0>;
-	qcom,board-id = <0 0>, <0 1>, <0 2>;
+	qcom,msm-id = <0x1d3 0x10000>;
+	qcom,board-id = <0x22 0>;
 
 	aliases {
 		serial1 = &mcu_uart;

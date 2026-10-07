@@ -13,7 +13,9 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 
 readonly BOARD=sm6125-choiceway-gt6eau
 readonly LLVM_SUFFIX=${LLVM_SUFFIX:--19}   # clang-19, llvm-nm-19 … (Debian's versioned names)
-readonly CMDLINE="console=tty0 loglevel=7 rdinit=/init"
+# panic=10: a crash reboots instead of hanging on the splash. clk/pd_ignore_unused: keep what
+# the bootloader left running (display, USB) on until a driver claims it.
+readonly CMDLINE="console=tty0 loglevel=7 rdinit=/init panic=10 clk_ignore_unused pd_ignore_unused"
 
 [ $# = 4 ] || { sed -n 2,11p "$0"; exit 2; }
 TREE=$1 STOCK=$2 BUSYBOX=$3 OUT=$4
