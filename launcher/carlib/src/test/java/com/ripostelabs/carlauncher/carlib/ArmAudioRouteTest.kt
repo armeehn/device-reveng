@@ -174,14 +174,28 @@ class ArmAudioRouteTest {
         assertEquals(listOf(Mode.CARPLAY), modes)
     }
 
-    /** DISCONNECT with a player still up hands the amp to it instead of leaving it on NULL. */
+    /** DISCONNECT with a player that was up before CarPlay hands the amp back to it. */
     @Test
     fun disconnectFallsBackToThePlayingSource() {
+        route.onPlayback(Playback(media = true, any = true))
+        route.onProjection(connected = true)
+        route.onProjection(connected = false)
+
+        assertEquals(listOf(Mode.MUSIC, Mode.CARPLAY, Mode.MUSIC), modes)
+    }
+
+    /**
+     * A player that started under CarPlay is CarPlay's own audio, still up at key-off. Calling
+     * it MUSIC stored Music as the last source, and every cold boot opened the Music app (car
+     * logs 2026-10-01 to 10-03: "projection down: sent mode MUSIC", then "resuming MUSIC").
+     */
+    @Test
+    fun disconnectIgnoresCarPlaysOwnPlayer() {
         route.onProjection(connected = true)
         route.onPlayback(Playback(media = true, any = true))
         route.onProjection(connected = false)
 
-        assertEquals(listOf(Mode.CARPLAY, Mode.MUSIC), modes)
+        assertEquals(listOf(Mode.CARPLAY, Mode.NULL), modes)
     }
 
     private companion object {

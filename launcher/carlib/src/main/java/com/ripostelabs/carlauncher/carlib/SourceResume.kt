@@ -11,8 +11,12 @@ import com.ripostelabs.carlauncher.carlib.McuOwnerProtocol.Mode
  */
 object SourceResume {
 
-    /** The sources a person picks and a suite app plays. */
-    private val PLAYABLE = setOf(Mode.RADIO, Mode.BT_MUSIC, Mode.MOVIE, Mode.MUSIC)
+    /**
+     * The sources a person picks. CarPlay is one: without it, an older Music pick outlived every
+     * CarPlay drive and reopened at each cold boot. The launcher opens no app for CarPlay, since
+     * the phone reconnects by itself.
+     */
+    private val PLAYABLE = setOf(Mode.RADIO, Mode.BT_MUSIC, Mode.MOVIE, Mode.MUSIC, Mode.CARPLAY)
 
     fun keeps(mode: Mode): Boolean = mode in PLAYABLE
 
