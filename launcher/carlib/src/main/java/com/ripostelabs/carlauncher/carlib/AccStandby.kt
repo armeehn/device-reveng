@@ -1,6 +1,8 @@
 package com.ripostelabs.carlauncher.carlib
 
 import android.util.Log
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 /**
  * AccStandby — the Android half of stock's ACC sleep and wake, through the root shell.
@@ -32,11 +34,34 @@ import android.util.Log
  *
  * [decoder] re-arms the PR2000: a kernel suspend holds it in reset and its resume drops the
  * channel (zxw_pr2000_suspend/_resume, share carlauncher/pr2000-driver.md).
+ *
+ * [Depth], read at enter and held until leave:
+ *
+ *     DEEP   all of the above: the kernel may suspend
+ *     LIGHT  radios off and the camera gate shut, but the Display lock stays held and USB is left
+ *            alone, so the kernel never suspends; [SHUTDOWN] after [LIGHT_MAX_MS]
+ *
+ * LIGHT exists because an s2idle suspend on this unit never resumes, not even on an RTC alarm
+ * (bench, 2026-10-07 09:33). Before #335 the unit never really suspended, and the MCU's POWER
+ * press at ACC on lit it every time (2026-09-28/29): LIGHT is that state, kept on purpose. The
+ * unit draws about 1 A awake (bench supply), so the window is short and then it powers off.
  */
 class AccStandby(
     private val shell: (String) -> RootShell.Result = { RootShell.exec(it) },
     private val decoder: () -> Unit = {},
+    private val depth: () -> Depth = { Depth.DEEP },
+    private val later: (Long, () -> Unit) -> (() -> Unit) = ::schedule,
 ) : McuSleepWake.Standby {
+
+    enum class Depth { LIGHT, DEEP }
+
+    /** The depth [enter] chose; null outside standby. */
+    @Volatile
+    private var entered: Depth? = null
+
+    /** Cancels LIGHT's pending shutdown; null when none is pending. */
+    @Volatile
+    private var cancelShutdown: (() -> Unit)? = null
 
     /** The radios as enter found them; null outside standby. */
     @Volatile
@@ -57,12 +82,28 @@ class AccStandby(
         }
 
         run(RADIOS_OFF)
+
+        val chosen = depth()
+        entered = chosen
+        if (chosen == Depth.LIGHT) {
+            run(CAMERA_GATE_OFF)
+            cancelShutdown = later(LIGHT_MAX_MS) { run(SHUTDOWN) }
+            return
+        }
+
         run(CAMERA_OFF)
         usbSleep()
     }
 
     override fun leave() {
-        usbWake()
+        cancelShutdown?.invoke()
+        cancelShutdown = null
+
+        // LIGHT never handed the port over, so there is nothing to give back.
+        if (entered != Depth.LIGHT) {
+            usbWake()
+        }
+        entered = null
         run(CAMERA_ON)
         decoder()
 
@@ -199,8 +240,22 @@ class AccStandby(
 
         const val RADIOS_OFF = "svc wifi disable; svc bluetooth disable; " +
             "settings put secure location_mode 0; cmd connectivity airplane-mode enable"
-        const val CAMERA_OFF = "setprop sys.acc.state 0; " +
+        const val CAMERA_GATE_OFF = "setprop sys.acc.state 0"
+        const val CAMERA_OFF = "$CAMERA_GATE_OFF; " +
             "echo PowerManagerService.Display > /sys/power/wake_unlock"
+
+        /** LIGHT's warm window, the owner's pick (2026-10-07): ~1 A for 1 h is about 1 Ah of a car battery. */
+        const val LIGHT_MAX_MS = 60 * 60 * 1000L
+        const val SHUTDOWN = "svc power shutdown"
+
+        private val TIMER = Executors.newSingleThreadScheduledExecutor { r ->
+            Thread(r, "acc-standby").apply { isDaemon = true }
+        }
+
+        private fun schedule(delayMs: Long, job: () -> Unit): () -> Unit {
+            val future = TIMER.schedule(job, delayMs, TimeUnit.MILLISECONDS)
+            return { future.cancel(false) }
+        }
         const val CAMERA_ON = "echo PowerManagerService.Display > /sys/power/wake_lock; " +
             "setprop sys.acc.state 1"
         const val AIRPLANE_OFF = "cmd connectivity airplane-mode disable"

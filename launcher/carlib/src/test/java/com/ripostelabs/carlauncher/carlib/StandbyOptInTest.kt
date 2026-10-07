@@ -53,10 +53,29 @@ class StandbyOptInTest {
         McuSleepWake(rec, gate.acc(acc), standby = gate.standby(rec))
 
     @Test
-    fun defaultIsOff() {
-        assertEquals(StandbyMode.OFF, StandbyMode.of(null))
-        assertEquals(StandbyMode.OFF, StandbyMode.of("garbage"))
+    fun defaultIsLight() {
+        assertEquals(StandbyMode.LIGHT, StandbyMode.of(null))
+        assertEquals(StandbyMode.LIGHT, StandbyMode.of("garbage"))
         assertEquals(StandbyMode.ON, StandbyMode.of("ON"))
+        assertEquals(StandbyMode.OFF, StandbyMode.of("OFF"))
+    }
+
+    // A wake that ends in RST steps down one depth: deep to light, light to off.
+    @Test
+    fun aFailedWakeStepsDownOneDepth() {
+        assertEquals(StandbyMode.LIGHT, StandbyMode.ON.fallback())
+        assertEquals(StandbyMode.OFF, StandbyMode.LIGHT.fallback())
+        assertEquals(StandbyMode.OFF, StandbyMode.OFF.fallback())
+    }
+
+    @Test
+    fun lightPassesAccAndStandbyThrough() {
+        mode = StandbyMode.LIGHT
+        val rec = Recorder()
+        val acc = FakeAcc(McuSleepWake.Acc.ON)
+        drive(gated(rec, acc), acc)
+
+        assertEquals(listOf("enter", "darken", "leave"), rec.log.filter { it in standbyCommands })
     }
 
     @Test

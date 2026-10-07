@@ -80,14 +80,15 @@ fun PowerSettingsScreen(
         }
 
         SettingsSection(title = "Sleep") {
-            // RAV4-151: standby suspends the SoC, and the MCU does not wake it yet; opt-in until it does.
+            // RAV4-151: deep standby never resumes on this unit (bench 2026-10-07); light stays awake.
             if (settingsStore != null) {
                 val standby by settingsStore.standby.collectAsStateWithLifecycle()
-                ToggleSetting(
+                PickerSetting(
                     label = "Standby when the car is off",
-                    description = "Suspend instead of a cold boot. Experimental: if the screen stays black at a start, press RST and standby turns itself off.",
-                    checked = standby == StandbyMode.ON,
-                    onChange = { on -> settingsStore.setStandby(if (on) StandbyMode.ON else StandbyMode.OFF) },
+                    description = "Light keeps the unit warm for 1 h, then powers off. Deep suspends and does not wake on this unit yet: if the screen stays black, press RST.",
+                    current = standby,
+                    options = STANDBY_OPTIONS,
+                    onSelect = settingsStore::setStandby,
                 )
             }
             ToggleSetting(
@@ -228,3 +229,9 @@ private fun OptionSetting(
         enabled = enabled,
     )
 }
+
+private val STANDBY_OPTIONS = listOf(
+    StandbyMode.OFF to "Off: a cold boot at every start",
+    StandbyMode.LIGHT to "Light: warm for 1 h (default)",
+    StandbyMode.ON to "Deep: suspend (experimental)",
+)

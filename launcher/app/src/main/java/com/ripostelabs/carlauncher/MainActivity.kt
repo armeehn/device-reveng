@@ -630,13 +630,18 @@ class MainActivity : ComponentActivity() {
                 // a wake that ends in RST turns it back off (StandbyFallback).
                 val optIn = StandbyOptIn { settingsStore.standby.value }
                 val acc = optIn.acc(carAcc)
-                val accStandby = AccStandby(decoder = { DecoderSignal.redetect(); DecoderSignal.locked() })
+                val accStandby = AccStandby(
+                    decoder = { DecoderSignal.redetect(); DecoderSignal.locked() },
+                    depth = {
+                        if (settingsStore.standby.value == StandbyMode.ON) AccStandby.Depth.DEEP else AccStandby.Depth.LIGHT
+                    },
+                )
                 // A standby never left (RST, B+ cut) kept Wi-Fi and BT off on every boot since.
                 lifecycleScope.launch(Dispatchers.IO) {
                     val left = accStandby.recover()
                     if (StandbyFallback.failedWake(left, StandbyFallback.PowerOn.read())) {
-                        Log.w(STANDBY_TAG, "RST after a standby never left: the wake failed, standby off")
-                        settingsStore.setStandby(StandbyMode.OFF)
+                        Log.w(STANDBY_TAG, "RST after a standby never left: the wake failed, one depth shallower")
+                        settingsStore.setStandby(settingsStore.standby.value.fallback())
                     }
                 }
                 val standby = optIn.standby(accStandby)

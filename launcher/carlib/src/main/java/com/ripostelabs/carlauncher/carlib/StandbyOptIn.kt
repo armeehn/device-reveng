@@ -1,13 +1,23 @@
 package com.ripostelabs.carlauncher.carlib
 
-/** Settings → Power & sleep → "Standby when the car is off". Off unless chosen. */
+/**
+ * Settings → Power & sleep → "Standby when the car is off". ON is the deep standby (a kernel
+ * suspend), kept under its old stored name; LIGHT stays awake for a while ([AccStandby.Depth]).
+ */
 enum class StandbyMode {
     OFF,
+    LIGHT,
     ON;
 
+    /** After a wake that ended in RST ([StandbyFallback]): one depth shallower. */
+    fun fallback(): StandbyMode = when (this) {
+        ON -> LIGHT
+        LIGHT, OFF -> OFF
+    }
+
     companion object {
-        /** A stored name; anything unknown or unset is OFF until the ACC-on wake works (RAV4-151). */
-        fun of(name: String?): StandbyMode = entries.firstOrNull { it.name == name } ?: OFF
+        /** A stored name; anything unknown or unset is LIGHT, which never suspends the kernel. */
+        fun of(name: String?): StandbyMode = entries.firstOrNull { it.name == name } ?: LIGHT
     }
 }
 
@@ -25,7 +35,7 @@ enum class StandbyMode {
  *     AccStandby ◀── standby() ◀── McuSleepWake         OFF: enter, darken, leave do nothing
  *
  * The MCU then cuts B+ and the next start is a cold boot. The POWER key path keeps its port
- * sleep, as before standby. [StandbyMode.ON] passes everything through unchanged.
+ * sleep, as before standby. LIGHT and ON pass everything through unchanged.
  *
  * The mode is read at [McuSleepWake.Standby.enter] and held until leave, so a standby entered
  * is always left, even if the setting flips while asleep.
@@ -35,7 +45,7 @@ class StandbyOptIn(private val mode: () -> StandbyMode) {
     @Volatile
     private var armed = false
 
-    private fun active(): Boolean = armed || mode() == StandbyMode.ON
+    private fun active(): Boolean = armed || mode() != StandbyMode.OFF
 
     /** ACC as the machine sees it: unreadable while standby is off, like the GSI's empty property. */
     fun acc(inner: McuSleepWake.AccSource): McuSleepWake.AccSource = object : McuSleepWake.AccSource {
@@ -51,7 +61,7 @@ class StandbyOptIn(private val mode: () -> StandbyMode) {
     /** [AccStandby] behind the switch; enter decides, darken and leave follow that decision. */
     fun standby(inner: McuSleepWake.Standby): McuSleepWake.Standby = object : McuSleepWake.Standby {
         override fun enter() {
-            armed = mode() == StandbyMode.ON
+            armed = mode() != StandbyMode.OFF
             if (!armed) {
                 return
             }
