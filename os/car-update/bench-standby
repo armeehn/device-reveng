@@ -1,0 +1,119 @@
+#!/bin/bash
+# Record one standby attempt on the bench, end to end, and say where it stopped (RAV4-285).
+#
+#   bench-standby [SERIAL]        run on zero with the unit plugged in over USB
+#
+#   arm ──▶ owner: Standby ON, ACC off, wait, ACC on ──▶ adb drops ──▶ adb back ──▶ pull + summary
+#
+# Why: every start is a cold boot because a standby wake has never come back clean, and the
+# evidence so far is a frozen-task abort on 2026-09-30 (eventpoll wakeup) and an owner report.
+# This arms the kernel's PM debug lines, starts a logger that writes to the unit's /data (so the
+# log survives an RST), waits through the owner's ACC cycle, then pulls the log and prints the
+# lines that decide it: suspend entry/exit, the freeze, the wake IRQ, McuSleepWake, AccStandby,
+# StandbyFallback and the PMIC power-on reason.
+#
+# Every adb call is bounded: a half-open link to a suspended unit blocks forever otherwise.
+set -uo pipefail
+
+SERIAL=${1:-${RAV4_SERIAL:-da40e9ac}}
+OUT=~/rav4-update/standby-$(date +%Y%m%d-%H%M%S)
+LOG_ON_UNIT=/data/local/tmp/standby.log
+ADB_TIMEOUT=20
+# How long the owner has for the ACC cycle, and how long a wake may take to bring adb back.
+DROP_WAIT_S=900
+BACK_WAIT_S=1800
+POLL_S=2
+
+mkdir -p "$OUT"
+say() { echo "== $*"; }
+unit() { timeout "$ADB_TIMEOUT" adb -s "$SERIAL" shell "$@" 2>/dev/null | tr -d '\r'; }
+root() { unit su -c "'$*'"; }
+online() { timeout 5 adb -s "$SERIAL" get-state 2>/dev/null | grep -q device; }
+
+# The facts that tell one boot from the next, saved before and after.
+snapshot() {
+    local tag=$1
+    {
+        echo "# $tag $(date -Is)"
+        echo "boot_id $(unit cat /proc/sys/kernel/random/boot_id)"
+        echo "uptime $(unit cat /proc/uptime)"
+        echo "mem_sleep $(unit cat /sys/power/mem_sleep)"
+        echo "standby_marker '$(unit getprop persist.riposte.standby.radios)'"
+        echo "-- suspend_stats"
+        root cat /sys/kernel/debug/suspend_stats
+        echo "-- wakeup_sources (active or with events)"
+        root cat /sys/kernel/debug/wakeup_sources | awk 'NR == 1 || $2 > 0 || $6 > 0'
+        echo "-- power-on reason"
+        root "dmesg | grep -m 2 -E \"Power-(on|off) reason\""
+    } > "$OUT/$tag.txt"
+}
+
+say "waiting for $SERIAL"
+for _ in $(seq 1 60); do
+    online && break
+    sleep "$POLL_S"
+done
+online || { echo "no unit on USB: plug it in and run again"; exit 1; }
+
+say "arming"
+root mount -t debugfs none /sys/kernel/debug >/dev/null 2>&1
+root "echo 1 > /sys/power/pm_debug_messages"
+root "echo 1 > /sys/power/pm_print_times"
+root "pkill -f \"logcat .*$LOG_ON_UNIT\"; rm -f $LOG_ON_UNIT*"
+# Kernel, main and system, rotated on /data: it keeps writing through the suspend and stops at RST.
+root "setsid nohup logcat -b all -v threadtime -f $LOG_ON_UNIT -r 4096 -n 8 >/dev/null 2>&1 &"
+snapshot before
+boot_before=$(unit cat /proc/sys/kernel/random/boot_id)
+
+cat <<'EOF'
+
+Now, at the unit:
+  1. Settings > Power & sleep > Standby when the car is off: ON
+  2. Turn ACC off. Wait 2 minutes (the screen goes dark, then the unit suspends).
+  3. Turn ACC on. Wait 30 s.
+  4. If the screen is still black, press RST once.
+This script waits and collects the rest by itself.
+
+EOF
+
+say "waiting for ACC off (adb drops when standby hands the USB port over)"
+waited=0
+while online && [ "$waited" -lt "$DROP_WAIT_S" ]; do
+    sleep "$POLL_S"
+    waited=$((waited + POLL_S))
+done
+online && { echo "adb never dropped in ${DROP_WAIT_S} s: standby did not engage"; }
+say "adb gone after ${waited} s at $(date +%T)"
+
+say "waiting for the unit to come back"
+waited=0
+until online || [ "$waited" -ge "$BACK_WAIT_S" ]; do
+    sleep "$POLL_S"
+    waited=$((waited + POLL_S))
+done
+online || { echo "unit not back after ${BACK_WAIT_S} s; plug in and rerun to collect"; exit 1; }
+say "back after ${waited} s at $(date +%T)"
+sleep 10
+
+boot_after=$(unit cat /proc/sys/kernel/random/boot_id)
+snapshot after
+if [ "$boot_before" = "$boot_after" ]; then
+    say "SAME BOOT: the unit resumed from standby"
+else
+    say "NEW BOOT: the wake did not resume (RST or power cut); the log below is the old boot's end"
+fi
+
+say "pulling the on-unit log"
+for f in $(unit ls /data/local/tmp | grep -E '^standby\.log'); do
+    timeout 120 adb -s "$SERIAL" pull "/data/local/tmp/$f" "$OUT/$f" >/dev/null 2>&1
+done
+cat "$OUT"/standby.log* 2>/dev/null | sort > "$OUT/all.log"
+
+say "decisive lines ($OUT/key.log)"
+grep -a -E 'PM: |suspend entry|suspend exit|Freezing|refusing to freeze|freeze process failed|Wakeup|wakeup source|Resume caused|IRQ.*wake|McuSleepWake|AccStandby|StandbyFallback|Going to sleep|Waking up|GTP System|qpnp-power-on|KPDPWR' \
+    "$OUT/all.log" > "$OUT/key.log"
+tail -60 "$OUT/key.log"
+echo
+cat "$OUT/after.txt"
+echo
+say "saved in $OUT"

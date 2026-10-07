@@ -74,6 +74,10 @@ mv "$DIR/rav4-usb-update.part" "$DIR/rav4-usb-update"
 curl -sfo "$DIR/road-noise-pull.part" "$BASE/car-update/road-noise-pull"
 chmod 755 "$DIR/road-noise-pull.part"
 mv "$DIR/road-noise-pull.part" "$DIR/road-noise-pull"
+# RAV4-285: the bench standby recorder, run by hand from a shell on this laptop.
+curl -sfo "$DIR/bench-standby.part" "$BASE/car-update/bench-standby"
+chmod 755 "$DIR/bench-standby.part"
+mv "$DIR/bench-standby.part" "$DIR/bench-standby"
 unit_text="[Unit]
 Description=Update the RAV4 head unit from $DIR when it is plugged in
 
