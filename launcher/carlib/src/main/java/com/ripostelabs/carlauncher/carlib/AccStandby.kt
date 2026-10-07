@@ -244,8 +244,8 @@ class AccStandby(
         const val CAMERA_OFF = "$CAMERA_GATE_OFF; " +
             "echo PowerManagerService.Display > /sys/power/wake_unlock"
 
-        /** LIGHT's warm window: ~1 A for 2 h is about 2 Ah of a car battery. */
-        const val LIGHT_MAX_MS = 2 * 60 * 60 * 1000L
+        /** LIGHT's warm window, the owner's pick (2026-10-07): ~1 A for 1 h is about 1 Ah of a car battery. */
+        const val LIGHT_MAX_MS = 60 * 60 * 1000L
         const val SHUTDOWN = "svc power shutdown"
 
         private val TIMER = Executors.newSingleThreadScheduledExecutor { r ->

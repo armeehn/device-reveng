@@ -85,7 +85,7 @@ fun PowerSettingsScreen(
                 val standby by settingsStore.standby.collectAsStateWithLifecycle()
                 PickerSetting(
                     label = "Standby when the car is off",
-                    description = "Light keeps the unit warm for 2 h, then powers off. Deep suspends and does not wake on this unit yet: if the screen stays black, press RST.",
+                    description = "Light keeps the unit warm for 1 h, then powers off. Deep suspends and does not wake on this unit yet: if the screen stays black, press RST.",
                     current = standby,
                     options = STANDBY_OPTIONS,
                     onSelect = settingsStore::setStandby,
@@ -232,6 +232,6 @@ private fun OptionSetting(
 
 private val STANDBY_OPTIONS = listOf(
     StandbyMode.OFF to "Off: a cold boot at every start",
-    StandbyMode.LIGHT to "Light: warm for 2 h (default)",
+    StandbyMode.LIGHT to "Light: warm for 1 h (default)",
     StandbyMode.ON to "Deep: suspend (experimental)",
 )
