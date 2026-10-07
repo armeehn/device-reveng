@@ -414,7 +414,7 @@ label_system_file "$SYS/$PRIVAPP_XML"
     system/bin/*) chmod 0755 "$dst" ;;
   esac
 done
-MILESTONE=$([ "$PROFILE" = gsi ] && echo 0.2 || echo 0.1)   # 0.1 stock re-mastered, 0.2 GSI base
+MILESTONE=$(os_milestone "$PROFILE" "$SYS/build.prop")   # 0.1 stock, 0.2 A14 GSI, 0.3 A16+
 VERSION=${VERSION:-$MILESTONE+$(date -u +%Y%m%d).vc$("$AAPT2" dump badging "$APPS/carlauncher.apk" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p")}
 # `@carkit ` lines are kept (tag stripped) only when the stack runs the car-kit roles; `@gsi `
 # lines only on the AOSP GSI base.

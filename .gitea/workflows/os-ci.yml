@@ -32,6 +32,8 @@ jobs:
         run: os/test-vbmeta-flags.sh
       - name: image set fits the super
         run: os/test-super-fit.sh
+      - name: milestone follows the Android a GSI carries
+        run: os/test-milestone.sh
       - name: mainline boot image packer
         run: os/mainline/test-mkboot.sh
       - name: PR2000 tables match their source

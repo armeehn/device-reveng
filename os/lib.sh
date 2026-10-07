@@ -143,6 +143,23 @@ super_fits() { # dir
   log "images total $(( total / 1048576 )) MiB of $(( SUPER_GROUP_BYTES / 1048576 )) MiB"
 }
 
+# The Riposte OS milestone a build is, from its profile and the Android its system carries:
+# 0.1 the stock system re-mastered, 0.2 an Android 14 GSI, 0.3 Android 16 or later (SDK 36+).
+readonly MILESTONE_A16_SDK=36
+os_milestone() { # profile build.prop
+  local sdk
+  if [ "$1" != gsi ]; then
+    echo 0.1
+    return
+  fi
+  sdk=$(sed -n 's/^ro.build.version.sdk=//p' "$2" 2>/dev/null | head -1)
+  if [ "${sdk:-0}" -ge "$MILESTONE_A16_SDK" ]; then
+    echo 0.3
+  else
+    echo 0.2
+  fi
+}
+
 repack_image() { # kind tree out mountpoint(label, e.g. system)
   local kind=$1 tree=$2 out=$3 name=$4
   rm -f "$out"
