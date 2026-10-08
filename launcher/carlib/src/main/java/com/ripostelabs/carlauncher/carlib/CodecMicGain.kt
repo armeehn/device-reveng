@@ -11,16 +11,18 @@ import android.util.Log
  * routes never set it again. At 8 speech reached the phone near -47 dBFS and a caller's voicemail
  * held nothing a transcriber could hear (bench, 2026-10-07): the "underwater" CarPlay calls, on
  * stock firmware too. Raising the value lifted every capture source by 12 to 24 dB on the bench
- * (bench-micgain, 16:28). [VOLUME] 16 is about +12 dB at the codec's 1.5 dB step, with room left
- * before loud speech clips; 20 already peaked at -4 dBFS on room noise.
+ * (bench-micgain, 16:28). [VOLUME] is the codec's top, 20: about +18 dB at its 1.5 dB step, the
+ * owner's pick (2026-10-07). Room noise alone peaked at -4 dBFS there, so loud speech can clip;
+ * RNNoise and the echo canceller run after it.
  *
  * The value holds until the audio HAL restarts, which reapplies the vendor's 8; a launcher start
  * follows any reboot, so this covers the normal path.
  */
 object CodecMicGain {
 
-    /** 0..20 on this codec; the vendor's value is [VENDOR_VOLUME]. */
-    const val VOLUME = 16
+    /** 0..20 on this codec ([MAX_VOLUME]); the vendor's value is [VENDOR_VOLUME]. */
+    const val VOLUME = 20
+    const val MAX_VOLUME = 20
     const val VENDOR_VOLUME = 8
 
     private const val TAG = "CodecMicGain"
