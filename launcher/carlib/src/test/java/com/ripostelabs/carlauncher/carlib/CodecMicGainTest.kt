@@ -15,11 +15,11 @@ class CodecMicGainTest {
         )
     }
 
-    // Bench 2026-10-07: 8 left speech near -47 dBFS; 20 peaked at -4 dBFS on room noise.
+    // Bench 2026-10-07: 8 left speech near -47 dBFS; the owner picked the top, 20.
     @Test
-    fun theChosenGainIsAboveTheVendorAndBelowTheTop() {
+    fun theChosenGainIsAboveTheVendorAndWithinRange() {
         assertTrue(CodecMicGain.VOLUME > CodecMicGain.VENDOR_VOLUME)
-        assertTrue(CodecMicGain.VOLUME < 20)
+        assertTrue(CodecMicGain.VOLUME <= CodecMicGain.MAX_VOLUME)
     }
 
     @Test
