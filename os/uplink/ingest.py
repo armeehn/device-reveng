@@ -73,8 +73,11 @@ SUITE_DIR = "suite"
 LAUNCHER_RE = re.compile(r"^carlauncher-.+-vc(\d+)\.apk$")
 CARSERVICE_RE = re.compile(r"^carservice-.+-vc(\d+)\.apk$")
 
-# OS releases: <releases root>/os/<version>/, filled by `rav4 publish-os` (os/ota/mkpayload.py).
+# OS releases: <releases root>/os-ota/<version>/ on disk, filled by `rav4 publish-os`
+# (os/ota/mkpayload.py), served as /v1/releases/os/<version>/payload.bin. The share's os/ folder
+# beside it holds flashable image sets, not payloads.
 OS_DIR = "os"
+OS_DISK_DIR = "os-ota"
 OS_PAYLOAD = "payload.bin"
 OS_PROPS = "payload_properties.txt"
 OS_MANIFEST = "MANIFEST"
@@ -428,7 +431,7 @@ class Releases:
         <releases root>/carlauncher-<name>-vc<code>.apk   newest one is the launcher
         <releases root>/carservice-<name>-vc<code>.apk    newest one is the car service
         <suite root>/<package>.apk                        every suite app
-        <releases root>/os/<version>/payload.bin          one row per OS release, under "os"
+        <releases root>/os-ota/<version>/payload.bin      one row per OS release, under "os"
                                     payload_properties.txt  update_engine's four headers
                                     MANIFEST                os/build.sh's, for profile and flags
 
@@ -491,7 +494,7 @@ class Releases:
 
     def _os_rows(self):
         root = self.cfg.releases_root
-        osd = os.path.join(root, OS_DIR) if root else None
+        osd = os.path.join(root, OS_DISK_DIR) if root else None
         if not osd or not os.path.isdir(osd):
             return []
         rows = (self._os_row(v) for v in sorted(os.listdir(osd)) if OS_VERSION_RE.match(v))
@@ -505,7 +508,7 @@ class Releases:
         """One OS release, or None while it is half copied: the payload size must match its
         properties, and the build MANIFEST must name this version. The sha256 is FILE_HASH
         itself (sha256 of the whole payload, base64), so 1.8 GB is never hashed per request."""
-        d = os.path.join(self.cfg.releases_root, OS_DIR, version)
+        d = os.path.join(self.cfg.releases_root, OS_DISK_DIR, version)
         try:
             with open(os.path.join(d, OS_PROPS)) as f:
                 headers = f.read()
@@ -532,7 +535,7 @@ class Releases:
     def file_root(self, rel):
         """(root, parts) for a requested APK or OS payload path, or None if it is not one we serve."""
         if len(rel) == 3 and rel[0] == OS_DIR and OS_VERSION_RE.match(rel[1]) and rel[2] == OS_PAYLOAD:
-            return self.cfg.releases_root, rel
+            return os.path.join(self.cfg.releases_root, OS_DISK_DIR), rel[1:]
         if not rel or not rel[-1].endswith(".apk"):
             return None
         if rel[0] == SUITE_DIR and len(rel) == 2:

@@ -101,7 +101,8 @@ A file that does not parse (half copied, not an APK) is left out. Only `.apk` na
 two folders are served. `cert_sha256` is for people: the car checks the signer against its own
 pins. What the car does with this is in the launcher's `UPLINK.md`.
 
-OS releases sit in `<releases root>/os/<version>/` as `payload.bin`, `payload_properties.txt`
+OS releases sit in `<releases root>/os-ota/<version>/` (the share's `os/` beside it holds
+flashable image sets) as `payload.bin`, `payload_properties.txt`
 (from `os/ota/mkpayload.py`) and the build's `MANIFEST`. Each becomes a row in an `os` array:
 `version`, `path`, `size`, `sha256` (FILE_HASH in hex, so the payload is never hashed per
 request), `headers` (the properties text, passed to update_engine as is), `profile`,

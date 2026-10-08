@@ -205,7 +205,7 @@ class ReleasesTest(Harness):
     def put_os(self, version, payload=b"CrAU payload bytes", manifest="profile=gsi\ncar_owner=1\nbench=0\n",
                size=None):
         """An OS release as `rav4 publish-os` leaves it: payload, its properties, the build MANIFEST."""
-        d = os.path.join(self.cfg.releases_root, "os", version)
+        d = os.path.join(self.cfg.releases_root, "os-ota", version)
         os.makedirs(d)
         self.put(d, "payload.bin", payload)
         file_hash = base64.b64encode(hashlib.sha256(payload).digest()).decode()
@@ -228,9 +228,10 @@ class ReleasesTest(Harness):
 
     def test_os_release_half_copied_is_left_out(self):
         self.put_os("0.2+20261005.vc1055", size=999)
-        os.makedirs(os.path.join(self.cfg.releases_root, "os", "0.2+20261006.vc1056"))
+        os.makedirs(os.path.join(self.cfg.releases_root, "os-ota", "0.2+20261006.vc1056"))
         self.put_os("0.2+20261007.vc1057")
-        os.remove(os.path.join(self.cfg.releases_root, "os", "0.2+20261007.vc1057", "MANIFEST"))
+        os.remove(os.path.join(self.cfg.releases_root, "os-ota", "0.2+20261007.vc1057", "MANIFEST"))
+        os.makedirs(os.path.join(self.cfg.releases_root, "os", "0.2"))      # an image set, not a payload
         self.put_os("0.2+20261008.vc1058")
         self.assertEqual(["0.2+20261008.vc1058"], [r["version"] for r in self.manifest()["os"]])
 
