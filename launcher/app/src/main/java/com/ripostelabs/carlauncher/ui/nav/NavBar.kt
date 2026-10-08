@@ -154,10 +154,16 @@ class NavBar(
         if (service == null && !ensureOverlayAllowed()) return
 
         policy = NavBarPolicy(mode, context.packageName) { projection() }.also { it.onReverse(reverse) }
+        // One line per start, stop and change: on the bench (2026-10-07 09:40) Music came to the
+        // front with no bar and no way out, and nothing said whether the watch was running.
+        Log.i(TAG, "watch started, mode $mode")
         watch = ui.launch {
             while (isActive) {
                 val pkg = withContext(Dispatchers.IO) { foreground() }
-                policy.onPoll(pkg)?.let(::apply)
+                policy.onPoll(pkg)?.let { next ->
+                    Log.i(TAG, "$pkg in front: $state -> $next")
+                    apply(next)
+                }
                 delay(policy.nextPollMs())
             }
         }
@@ -177,6 +183,9 @@ class NavBar(
     }
 
     fun hide() {
+        if (watch != null) {
+            Log.i(TAG, "watch stopped: the launcher is in front or the bar is off")
+        }
         hotbar?.close() // RAV4-200: the launcher is in front, the strip has nothing to sit over
         watch?.cancel()
         watch = null
