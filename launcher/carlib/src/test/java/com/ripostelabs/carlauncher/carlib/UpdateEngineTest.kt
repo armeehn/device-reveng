@@ -17,7 +17,7 @@ class UpdateEngineTest {
     fun `apply hands update_engine the file, its size and the four headers`() {
         val cmd = UpdateEngine.apply("/data/ota_package/payload.bin", 1_900_000_000L, headers)!!
         assertEquals(
-            "restorecon -R /data/ota_package; update_engine_client --update " +
+            "restorecon -RF /data/ota_package; update_engine_client --update " +
                 "--payload=file:///data/ota_package/payload.bin --offset=0 --size=1900000000 " +
                 "--headers='FILE_HASH=qg+/==\nFILE_SIZE=1900000000\nMETADATA_HASH=bWV0YQ==\nMETADATA_SIZE=12'",
             cmd,

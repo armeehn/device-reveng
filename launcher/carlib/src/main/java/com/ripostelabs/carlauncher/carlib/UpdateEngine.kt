@@ -6,7 +6,7 @@ package com.ripostelabs.carlauncher.carlib
  * here can touch the running system. Its client cannot use the SOCKS uplink, so the launcher
  * downloads the payload and hands it a file (share carlauncher/os-ota.md, section 4).
  *
- *     apply   restorecon, then --update with the file, its size and the four headers
+ *     apply   restorecon -F, then --update with the file, its size and the four headers
  *     status  --follow prints one line per change; the first comes at once:
  *               onStatusUpdate(UPDATE_STATUS_DOWNLOADING (3), 0.5)
  *             and an apply that ends prints
@@ -78,7 +78,9 @@ object UpdateEngine {
     fun apply(file: String, size: Long, headers: String): String? {
         val pairs = headerPairs(headers) ?: return null
         val joined = pairs.joinToString("\n") { "${it.first}=${it.second}" }
-        return "restorecon -R $PACKAGE_DIR; update_engine_client --update " +
+        // -F: restorecon skips a tree whose relabel digest is unchanged, so a payload moved in
+        // from elsewhere kept its old label and update_engine was denied the read (bench, 2026-10-07).
+        return "restorecon -RF $PACKAGE_DIR; update_engine_client --update " +
             "--payload=file://$file --offset=0 --size=$size --headers='$joined'"
     }
 

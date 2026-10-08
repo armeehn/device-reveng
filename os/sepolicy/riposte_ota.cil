@@ -8,3 +8,10 @@
 ; phhsu_daemon is declared in the GSI's system_ext_sepolicy.cil; CIL resolves it across files.
 ; Compiled against the 0.2 set with init's secilc flags: builds, and no neverallow line changes.
 (allow update_engine phhsu_daemon (binder (call transfer)))
+;
+; The COW images of a Virtual A/B update live in /data; on this unit libfiemap maps them through
+; a loop device, and update_engine was denied writing it (bench, 2026-10-07):
+;
+;   avc: denied { write } name="loop0" scontext=u:r:update_engine:s0 tcontext=u:object_r:loop_device:s0
+;   update_engine: Can't zero-fill COW device for system_ext_a: /dev/block/loop0 (kInstallDeviceOpenError)
+(allow update_engine loop_device (blk_file (open read write ioctl getattr)))

@@ -63,6 +63,40 @@ PY=$PY "$HERE/ota/publish-os.sh" "$T/img" "$T/key.pem" "$T/share" > "$T/out" 2>&
 [ "$(stat -c %Y "$d/payload.bin")" = "$before" ] || fail "payload rebuilt"
 grep -q "already published" "$T/out" || fail "no-op not said: $(cat "$T/out")"
 
+echo "== --host with --firmware: the unit's abl/xbl travel to the build host"
+# Fake ssh/scp: "host:path" is a path here, every remote command is logged and run locally
+# from a folder of its own, so a local path handed to the remote build shows up in the log.
+mkdir -p "$T/fake" "$T/fw"
+head -c 65536 /dev/urandom > "$T/fw/abl.img"
+head -c 131072 /dev/urandom > "$T/fw/xbl.img"
+cat > "$T/fake/ssh" <<STUB
+#!/usr/bin/env bash
+shift
+echo "\$*" >> "$T/remote.log"
+cd "$T" && bash -c "\$*"
+STUB
+cat > "$T/fake/scp" <<'STUB'
+#!/usr/bin/env bash
+args=()
+for a in "$@"; do [ "$a" = -q ] && continue; args+=("${a#fakehost:}"); done
+cp "${args[@]}"
+STUB
+chmod +x "$T/fake/"*
+sed -i "s/^version=.*/version=0.2+20261008.vc1062/" "$T/img/MANIFEST"
+PATH="$T/fake:$PATH" PY=$PY "$HERE/ota/publish-os.sh" "$T/img" "$T/key.pem" "$T/share" --host fakehost --firmware "$T/fw" \
+  > "$T/out" 2>&1 || fail "host publish: $(cat "$T/out")"
+grep mkpayload "$T/remote.log" | grep -q -- "--firmware $T/fw" && fail "the remote build got the local firmware path"
+"$PY" - "$HERE/ota" "$T/share/os-ota/0.2+20261008.vc1062/payload.bin" <<'PYEOF' || fail "abl/xbl not in the payload"
+import struct, sys
+sys.path.insert(0, sys.argv[1])
+import update_metadata_pb2 as um
+d = open(sys.argv[2], "rb").read()
+_, _, msize, _ = struct.unpack(">4sQQI", d[:24])
+m = um.DeltaArchiveManifest(); m.ParseFromString(d[24:24 + msize])
+names = {p.partition_name for p in m.partitions}
+assert {"abl", "xbl"} <= names, names
+PYEOF
+
 echo "== a set without a usable version is refused"
 sed -i 's/^version=.*/version=..\/escape/' "$T/img/MANIFEST"
 PY=$PY "$HERE/ota/publish-os.sh" "$T/img" "$T/key.pem" "$T/share" > "$T/out" 2>&1 && fail "accepted a bad version"
