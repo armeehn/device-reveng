@@ -24,17 +24,19 @@ die() { echo "publish-os: $*" >&2; exit 1; }
 [ $# -ge 3 ] || die "usage: publish-os.sh IMAGE_DIR KEY.pem SHARE_ROOT [--host HOST] [--firmware DIR] [--jobs N]"
 img=$1 key=$2 share=$3
 shift 3
-host="" extra=()
+host="" fw="" extra=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --host) host=$2; shift 2 ;;
-    --firmware|--jobs) extra+=("$1" "$2"); shift 2 ;;
+    --firmware) fw=$2; shift 2 ;;
+    --jobs) extra+=("$1" "$2"); shift 2 ;;
     *) die "unknown option $1" ;;
   esac
 done
 
 [ -f "$img/MANIFEST" ] || die "$img has no MANIFEST (not an os/build.sh output)"
 [ -f "$key" ] || die "no key at $key"
+[ -z "$fw" ] || { [ -f "$fw/abl.img" ] && [ -f "$fw/xbl.img" ]; } || die "--firmware $fw needs abl.img and xbl.img"
 version=$(sed -n 's/^version=//p' "$img/MANIFEST" | head -1)
 [[ $version =~ $VERSION_RE ]] || die "MANIFEST version '$version' is not a folder name"
 
@@ -49,6 +51,7 @@ mkdir -p "$partial"
 
 # The build: here, or on HOST with the images, the key and os/ota copied to a temp folder.
 if [ -z "$host" ]; then
+  [ -n "$fw" ] && extra+=(--firmware "$fw")
   "$PY" "$HERE/mkpayload.py" "$img" "$key" "$partial" "${extra[@]}"
 else
   remote=$(ssh "$host" mktemp -d)
@@ -57,6 +60,12 @@ else
   scp -q "$img"/*.img "$host:$remote/img/"
   scp -q "$key" "$host:$remote/key.pem"
   scp -q "$HERE/mkpayload.py" "$HERE/update_metadata_pb2.py" "$host:$remote/"
+  # The unit's own bootloader images go along; a local path means nothing on HOST.
+  if [ -n "$fw" ]; then
+    ssh "$host" mkdir -p "$remote/fw"
+    scp -q "$fw/abl.img" "$fw/xbl.img" "$host:$remote/fw/"
+    extra+=(--firmware "$remote/fw")
+  fi
   ssh "$host" "python3 $remote/mkpayload.py $remote/img $remote/key.pem $remote/out ${extra[*]}"
   scp -q "$host:$remote/out/payload.bin" "$host:$remote/out/payload_properties.txt" "$partial/"
 fi
