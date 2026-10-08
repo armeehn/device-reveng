@@ -70,6 +70,7 @@ the server:
 | `GET /v1/models/<path>` | the models folder, read-only, `Range` supported |
 | `GET /v1/releases/manifest.json` | the APKs the car may install (below) |
 | `GET /v1/releases/<path>.apk` | one APK the manifest names, read-only, `Range` supported |
+| `GET /v1/releases/os/<version>/payload.bin` | one OS payload for update_engine, `Range` supported |
 
 Kinds: `road-noise` (48 kHz mono PCM16 WAV plus a `road-noise/1` sidecar in `meta`) and
 `diag` (any file). Limits: 64 MB per capture, 32 MB per log file, 8 MB per chunk, 1 GB per
@@ -99,6 +100,14 @@ file once per size and modification time, with the standard library only:
 A file that does not parse (half copied, not an APK) is left out. Only `.apk` names in those
 two folders are served. `cert_sha256` is for people: the car checks the signer against its own
 pins. What the car does with this is in the launcher's `UPLINK.md`.
+
+OS releases sit in `<releases root>/os-ota/<version>/` (the share's `os/` beside it holds
+flashable image sets) as `payload.bin`, `payload_properties.txt`
+(from `os/ota/mkpayload.py`) and the build's `MANIFEST`. Each becomes a row in an `os` array:
+`version`, `path`, `size`, `sha256` (FILE_HASH in hex, so the payload is never hashed per
+request), `headers` (the properties text, passed to update_engine as is), `profile`,
+`car_owner`, `bench`. A folder whose payload size disagrees with FILE_SIZE, or whose MANIFEST
+names another version, is still being copied and is left out.
 
 ## Tests
 

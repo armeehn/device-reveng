@@ -82,4 +82,47 @@ class ReleaseManifestTest {
                 .map { it.name },
         )
     }
+
+    // --- OS payloads (the "os" array) -----------------------------------------------------------
+
+    private val headers = "FILE_HASH=qg==\\nFILE_SIZE=1900000000\\nMETADATA_HASH=bWV0YQ==\\nMETADATA_SIZE=12\\n"
+
+    private fun osRow(
+        version: String = "0.2+20261005.vc1055",
+        path: String = "os/$version/payload.bin",
+        size: Long = 1_900_000_000L,
+        hdr: String = headers,
+    ) = """{"version":"$version","path":"$path","size":$size,"sha256":"$sha","headers":"$hdr",
+        "profile":"gsi","car_owner":true,"bench":false}"""
+
+    private fun osDoc(vararg rows: String) =
+        """{"schema":"${ReleaseManifest.SCHEMA}","apps":[],"os":[${rows.joinToString(",")}]}"""
+
+    @Test
+    fun `an OS row carries what update_engine needs`() {
+        val os = ReleaseManifest.parse(osDoc(osRow()))!!.os.single()
+        assertEquals("0.2+20261005.vc1055", os.version)
+        assertEquals("os/0.2+20261005.vc1055/payload.bin", os.path)
+        assertEquals(1_900_000_000L, os.size)
+        assertEquals(headers.replace("\\n", "\n"), os.headers)
+        assertEquals(Triple("gsi", true, false), Triple(os.profile, os.carOwner, os.bench))
+    }
+
+    @Test
+    fun `malformed OS rows are dropped`() {
+        val m = ReleaseManifest.parse(osDoc(
+            osRow(path = "os/../payload.bin"),
+            osRow(path = "os/0.2+20261005.vc1055/boot.img"),
+            osRow(size = ReleaseManifest.MAX_OS_BYTES + 1),
+            osRow(hdr = "FILE_HASH=qg==\\nFILE_SIZE=1900000000\\n"),     // two of four headers
+            osRow(hdr = "FILE_HASH=qg==\\nFILE_SIZE=1\\nMETADATA_HASH=bWV0YQ==\\nMETADATA_SIZE=12\\n"),
+            osRow(version = "0.2+20261006.vc1056"),
+        ))!!
+        assertEquals(listOf("0.2+20261006.vc1056"), m.os.map { it.version })
+    }
+
+    @Test
+    fun `a manifest from before OS rows has none`() {
+        assertEquals(emptyList<ReleaseManifest.Os>(), ReleaseManifest.parse(doc(row()))!!.os)
+    }
 }
