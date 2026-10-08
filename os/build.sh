@@ -175,6 +175,13 @@ else
   echo "$CAMERA_MODE_PROP_CONTEXT" >> "$SYS/$PLAT_PROPERTY_CONTEXTS"
   log "car service policy appended: PR2000 nodes, $CAMERA_MODE_PROP_CONTEXT"
 fi
+# The launcher follows update_engine's progress through the root shell; on the GSI that shell's
+# domain needs one binder rule (sepolicy/riposte_ota.cil, share carlauncher/os-ota.md).
+if [ "$PROFILE" = gsi ]; then
+  [ -f "$SYS/$PLAT_SEPOLICY" ] || die "the GSI carries no $PLAT_SEPOLICY"
+  cat "$HERE/sepolicy/riposte_ota.cil" >> "$SYS/$PLAT_SEPOLICY"
+  log "OTA policy appended: update_engine may call back into the root shell"
+fi
 # Where /product really is at runtime. A GSI ships its own /system/product and links /product
 # to it, so the super's product partition never mounts there (unit, 2026-09-19): the suite and
 # the boot animation go into the system image on that profile.

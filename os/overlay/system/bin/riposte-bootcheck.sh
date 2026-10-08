@@ -21,8 +21,15 @@ DEADLINE_S=300
 POLL_S=5
 TAG=riposte-bootcheck
 
+# bootctl's is-* queries on the unit PRINT 1 or 0 and exit 0 either way (boot HAL 1.1, seen on
+# the bench 2026-10-07). An older bootctl answers by exit status and prints nothing. Both read here.
+slot_is() { # slot_is is-slot-bootable|is-slot-marked-successful SLOT
+    answer=$(bootctl "$1" "$2") || return 1
+    [ "$answer" != 0 ]
+}
+
 cur=$(bootctl get-current-slot)
-if bootctl is-slot-marked-successful "$cur"; then
+if slot_is is-slot-marked-successful "$cur"; then
     rm -f "$MARK"
     exit 0
 fi
@@ -30,7 +37,7 @@ fi
 # Not the first boot of an OTA: a flash, or the bootloader already fell back. Today's rule.
 target=$(cat "$MARK" 2>/dev/null)
 if [ "$target" != "$cur" ]; then
-    bootctl mark-successful
+    bootctl mark-boot-successful
     rm -f "$MARK"
     log -t "$TAG" "slot $cur marked (no OTA pending for it)"
     exit 0
@@ -49,7 +56,7 @@ while [ "$waited" -lt "$DEADLINE_S" ]; do
     fi
     last=$pid
     if [ "$up" -ge "$HEALTHY_S" ]; then
-        bootctl mark-successful
+        bootctl mark-boot-successful
         rm -f "$MARK"
         log -t "$TAG" "slot $cur marked: launcher up ${up}s after the update"
         exit 0
@@ -59,7 +66,7 @@ while [ "$waited" -lt "$DEADLINE_S" ]; do
 done
 
 other=$((1 - cur))
-if ! bootctl is-slot-bootable "$other"; then
+if ! slot_is is-slot-bootable "$other"; then
     log -t "$TAG" "slot $cur unhealthy after ${DEADLINE_S}s, slot $other not bootable: staying, unmarked"
     exit 0
 fi

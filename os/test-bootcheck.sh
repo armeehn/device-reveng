@@ -32,18 +32,20 @@ found=$(awk -v script="$SCRIPT" '
 T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT
 mkdir -p "$T/stub" "$T/data/riposte"
-# bootctl: slot state as files. cur = running slot; marked-N, bootable-N exist when true.
+# bootctl as the unit's (0.2, boot HAL 1.1) answers, seen 2026-10-07: the is-* queries PRINT 1 or 0
+# and always exit 0, whatever its help text says; marking is mark-boot-successful. Slot state as
+# files: cur = running slot; marked-N, bootable-N exist when true.
 cat > "$T/stub/bootctl" <<STUB
 #!/usr/bin/env bash
 S=$T/slots
 echo "bootctl \$*" >> "$T/calls"
 case "\$1" in
   get-current-slot) cat "\$S/cur" ;;
-  is-slot-marked-successful) [ -e "\$S/marked-\$2" ] ;;
-  is-slot-bootable) [ -e "\$S/bootable-\$2" ] ;;
-  mark-successful) touch "\$S/marked-\$(cat "\$S/cur")" ;;
+  is-slot-marked-successful) [ -e "\$S/marked-\$2" ] && echo 1 || echo 0 ;;
+  is-slot-bootable) [ -e "\$S/bootable-\$2" ] && echo 1 || echo 0 ;;
+  mark-boot-successful) touch "\$S/marked-\$(cat "\$S/cur")" ;;
   set-active-boot-slot) echo "\$2" > "\$S/active" ;;
-  *) exit 64 ;;
+  *) echo "unknown command \$1" >&2; exit 64 ;;
 esac
 STUB
 # pidof: the next line of pids on each call, the last one once the list runs out.
@@ -80,7 +82,7 @@ rebooted() { grep -q '^reboot' "$T/calls"; }
 echo "== slot already good: nothing to do, a stale marker goes"
 slots 1 "1" "0 1"; echo 1 > "$MARK"; echo 4242 > "$T/pids"
 run
-grep -q mark-successful "$T/calls" && fail "re-marked a good slot"
+grep -q mark-boot-successful "$T/calls" && fail "re-marked a good slot"
 [ ! -e "$MARK" ] || fail "marker kept"
 
 echo "== no OTA marker: marked at boot_completed, as update_verifier did"
