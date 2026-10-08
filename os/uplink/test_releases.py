@@ -4,6 +4,8 @@
 The APKs are built here byte by byte (a zip, a binary manifest, an APK Signing Block holding a
 fake certificate), so the tests need no Android SDK and no real key.
 """
+import base64
+import base64
 import hashlib
 import io
 import os
@@ -199,6 +201,48 @@ class ReleasesTest(Harness):
         self.tags = ["tag:laptop"]
         status, _, _ = self.call("GET", "/v1/releases/manifest.json")
         self.assertEqual(403, status)
+
+    def put_os(self, version, payload=b"CrAU payload bytes", manifest="profile=gsi\ncar_owner=1\nbench=0\n",
+               size=None):
+        """An OS release as `rav4 publish-os` leaves it: payload, its properties, the build MANIFEST."""
+        d = os.path.join(self.cfg.releases_root, "os", version)
+        os.makedirs(d)
+        self.put(d, "payload.bin", payload)
+        file_hash = base64.b64encode(hashlib.sha256(payload).digest()).decode()
+        props = (f"FILE_HASH={file_hash}\nFILE_SIZE={len(payload) if size is None else size}\n"
+                 "METADATA_HASH=bWV0YQ==\nMETADATA_SIZE=12\n")
+        self.put(d, "payload_properties.txt", props.encode())
+        self.put(d, "MANIFEST", f"version={version}\n{manifest}".encode())
+        return payload, props
+
+    def test_os_payload_listed_with_its_update_engine_headers(self):
+        payload, props = self.put_os("0.2+20261005.vc1055")
+        m = self.manifest()
+        self.assertEqual([], m["apps"])
+        (row,) = m["os"]
+        self.assertEqual("0.2+20261005.vc1055", row["version"])
+        self.assertEqual("os/0.2+20261005.vc1055/payload.bin", row["path"])
+        self.assertEqual((len(payload), digest(payload)), (row["size"], row["sha256"]))
+        self.assertEqual(props, row["headers"])
+        self.assertEqual(("gsi", True, False), (row["profile"], row["car_owner"], row["bench"]))
+
+    def test_os_release_half_copied_is_left_out(self):
+        self.put_os("0.2+20261005.vc1055", size=999)
+        os.makedirs(os.path.join(self.cfg.releases_root, "os", "0.2+20261006.vc1056"))
+        self.put_os("0.2+20261007.vc1057")
+        os.remove(os.path.join(self.cfg.releases_root, "os", "0.2+20261007.vc1057", "MANIFEST"))
+        self.put_os("0.2+20261008.vc1058")
+        self.assertEqual(["0.2+20261008.vc1058"], [r["version"] for r in self.manifest()["os"]])
+
+    def test_os_payload_served_with_range(self):
+        payload, _ = self.put_os("0.2+20261005.vc1055")
+        status, _, body = self.call("GET", "/v1/releases/os/0.2+20261005.vc1055/payload.bin",
+                                    headers={"Range": "bytes=4-"})
+        self.assertEqual((206, payload[4:]), (status, body))
+        status, _, _ = self.call("GET", "/v1/releases/os/0.2+20261005.vc1055/MANIFEST")
+        self.assertEqual(404, status)
+        status, _, _ = self.call("GET", "/v1/releases/os/../payload.bin")
+        self.assertEqual(404, status)
 
     def test_no_release_roots_is_not_found(self):
         self.cfg.releases_root = None

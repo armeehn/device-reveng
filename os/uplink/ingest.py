@@ -22,12 +22,14 @@ after a reboot, and a resume needs no server-issued id:
     GET   /v1/models/<path>           Range supported
     GET   /v1/releases/manifest.json  launcher, car service and suite: versionCode, sha256, cert
     GET   /v1/releases/<path>.apk     a file the manifest names, Range supported
+    GET   /v1/releases/os/<version>/payload.bin  an OS payload for update_engine, Range supported
     GET   /v1/health
 
 A file reaches the share only after its sha256 matches. Partials live in the state dir,
 never on the share. Python stdlib only.
 """
 import argparse
+import base64
 import datetime
 import fcntl
 import hashlib
@@ -70,6 +72,14 @@ RELEASES_SCHEMA = "riposte-releases/1"
 SUITE_DIR = "suite"
 LAUNCHER_RE = re.compile(r"^carlauncher-.+-vc(\d+)\.apk$")
 CARSERVICE_RE = re.compile(r"^carservice-.+-vc(\d+)\.apk$")
+
+# OS releases: <releases root>/os/<version>/, filled by `rav4 publish-os` (os/ota/mkpayload.py).
+OS_DIR = "os"
+OS_PAYLOAD = "payload.bin"
+OS_PROPS = "payload_properties.txt"
+OS_MANIFEST = "MANIFEST"
+OS_VERSION_RE = re.compile(r"^[0-9][A-Za-z0-9.+_-]*$")
+OS_HEADER_KEYS = ("FILE_HASH", "FILE_SIZE", "METADATA_HASH", "METADATA_SIZE")
 
 HTTP_OK = 200
 HTTP_CREATED = 201
@@ -418,6 +428,9 @@ class Releases:
         <releases root>/carlauncher-<name>-vc<code>.apk   newest one is the launcher
         <releases root>/carservice-<name>-vc<code>.apk    newest one is the car service
         <suite root>/<package>.apk                        every suite app
+        <releases root>/os/<version>/payload.bin          one row per OS release, under "os"
+                                    payload_properties.txt  update_engine's four headers
+                                    MANIFEST                os/build.sh's, for profile and flags
 
     Each APK is read once per (size, mtime): package, versionCode, sha256, signing cert.
     A file that does not parse (half copied, not an APK) is left out of the manifest.
@@ -473,10 +486,53 @@ class Releases:
             for name in sorted(os.listdir(suite)):
                 if name.endswith(".apk") and not name.startswith("."):
                     rows.append(self._row("suite", os.path.join(suite, name), f"{SUITE_DIR}/{name}"))
-        return {"schema": RELEASES_SCHEMA, "generated": iso(utc_now()), "apps": [r for r in rows if r]}
+        return {"schema": RELEASES_SCHEMA, "generated": iso(utc_now()), "apps": [r for r in rows if r],
+                "os": self._os_rows()}
+
+    def _os_rows(self):
+        root = self.cfg.releases_root
+        osd = os.path.join(root, OS_DIR) if root else None
+        if not osd or not os.path.isdir(osd):
+            return []
+        rows = (self._os_row(v) for v in sorted(os.listdir(osd)) if OS_VERSION_RE.match(v))
+        return [r for r in rows if r]
+
+    @staticmethod
+    def _pairs(text):
+        return dict(line.split("=", 1) for line in text.splitlines() if "=" in line)
+
+    def _os_row(self, version):
+        """One OS release, or None while it is half copied: the payload size must match its
+        properties, and the build MANIFEST must name this version. The sha256 is FILE_HASH
+        itself (sha256 of the whole payload, base64), so 1.8 GB is never hashed per request."""
+        d = os.path.join(self.cfg.releases_root, OS_DIR, version)
+        try:
+            with open(os.path.join(d, OS_PROPS)) as f:
+                headers = f.read()
+            with open(os.path.join(d, OS_MANIFEST)) as f:
+                build = self._pairs(f.read())
+            size = os.stat(os.path.join(d, OS_PAYLOAD)).st_size
+        except OSError:
+            return None
+
+        props = self._pairs(headers)
+        if set(props) != set(OS_HEADER_KEYS) or props["FILE_SIZE"] != str(size) or build.get("version") != version:
+            return None
+        try:
+            sha = base64.b64decode(props["FILE_HASH"], validate=True).hex()
+        except ValueError:
+            return None
+        if not SHA_RE.match(sha):
+            return None
+
+        return {"version": version, "path": f"{OS_DIR}/{version}/{OS_PAYLOAD}", "size": size, "sha256": sha,
+                "headers": headers, "profile": build.get("profile", ""),
+                "car_owner": build.get("car_owner") == "1", "bench": build.get("bench") == "1"}
 
     def file_root(self, rel):
-        """(root, parts) for a requested APK path, or None if it is not one we serve."""
+        """(root, parts) for a requested APK or OS payload path, or None if it is not one we serve."""
+        if len(rel) == 3 and rel[0] == OS_DIR and OS_VERSION_RE.match(rel[1]) and rel[2] == OS_PAYLOAD:
+            return self.cfg.releases_root, rel
         if not rel or not rel[-1].endswith(".apk"):
             return None
         if rel[0] == SUITE_DIR and len(rel) == 2:
