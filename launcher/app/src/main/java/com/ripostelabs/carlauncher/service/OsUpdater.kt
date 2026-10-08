@@ -34,7 +34,8 @@ import java.io.File
  * update_engine checks the payload's signature against the running image's otacerts and writes
  * only the other slot, so the running system is never touched. Off unless the image (or adb on
  * the bench) sets persist.riposte.os.ota=1: the first apply is a supervised bench test (os-ota.md
- * section 7), and the image has no riposte-bootcheck yet.
+ * section 7). Only an image with riposte-bootcheck may take one: it marks the new slot good
+ * only once the launcher stays up, else switches back. The marker it reads is written here.
  */
 class OsUpdater(
     private val context: Context,
@@ -166,7 +167,13 @@ class OsUpdater(
         prefs.setPhase(OsPrefs.Phase.REBOOTING)
         prefs.setState("Restarting into ${prefs.pendingVersion}")
         Log.i(TAG, "ACC off with ${prefs.pendingVersion} staged: reboot")
-        RootShell.exec("reboot")
+        // The marker tells riposte-bootcheck this boot is the update's first; without it the
+        // new slot would be marked good unchecked, so no marker, no reboot.
+        val r = RootShell.exec("mkdir -p $MARK_DIR && echo \$((1 - \$(bootctl get-current-slot))) > $MARK && reboot")
+        if (!r.ok) {
+            prefs.setPhase(OsPrefs.Phase.APPLYING)
+            prefs.setState("Could not mark the update for riposte-bootcheck; not restarting")
+        }
     }
 
     /** After the reboot: the new slot runs, or the bootloader fell back to the old one. */
@@ -232,6 +239,8 @@ class OsUpdater(
         private const val GROUP = "riposte-os"
         private const val PAYLOAD_EXT = "bin"
         private const val STAGED = "${UpdateEngine.PACKAGE_DIR}/payload.bin"
+        private const val MARK_DIR = "/data/riposte"
+        private const val MARK = "$MARK_DIR/ota-pending"   // os/overlay/system/bin/riposte-bootcheck.sh
         private const val TICK_MS = 60_000L
         private const val PERCENT = 100
         private const val ERROR_CHARS = 200
