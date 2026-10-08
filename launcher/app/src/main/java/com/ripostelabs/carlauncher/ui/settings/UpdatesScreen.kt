@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ripostelabs.carlauncher.BuildConfig
 import com.ripostelabs.carlauncher.carlib.RootShell
+import com.ripostelabs.carlauncher.data.OsPrefs
 import com.ripostelabs.carlauncher.data.OtaPrefs
 import com.ripostelabs.carlauncher.data.UpdateController
 import com.ripostelabs.carlauncher.data.UpdateStatus
@@ -55,6 +56,7 @@ fun UpdatesScreen(
     val context = LocalContext.current
     val ota = remember { OtaPrefs.get(context) }
     val tailnet by ota.status.collectAsStateWithLifecycle()
+    val osOta by remember { OsPrefs.get(context) }.status.collectAsStateWithLifecycle()
 
     SettingsScaffold(
         title = "Updates",
@@ -83,6 +85,14 @@ fun UpdatesScreen(
                 description = "Suite apps, car service and launcher install by themselves when parked",
                 onClick = ota::requestCheck,
             )
+        }
+
+        // RAV4-277: OsUpdater, the other slot through update_engine. Readout only.
+        SettingsSection(title = "Riposte OS") {
+            InfoRow("Now", osOta.state)
+            if (osOta.lastResult.isNotEmpty()) {
+                InfoRow("Last update", osOta.lastResult)
+            }
         }
 
         SettingsSection(title = "Latest release") {

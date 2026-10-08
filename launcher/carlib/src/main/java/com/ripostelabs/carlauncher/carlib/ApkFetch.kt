@@ -14,6 +14,7 @@ import java.io.IOException
  * changed, the tether budget is spent); the partial stays for next time. A finished file whose
  * sha256 is wrong is deleted whole, so a bad transfer costs one download, not a bad install.
  * Other versions of the same package are cleared, so flash holds one candidate per app.
+ * An OS payload (OsUpdater) comes the same way as an [Item] named `riposte-os-<version>.bin`.
  */
 class ApkFetch(
     private val http: Http,
@@ -29,6 +30,12 @@ class ApkFetch(
 
     class Reply(val status: Int, val body: ByteArray)
 
+    /**
+     * One file to fetch: `<group>-<version>.<ext>` on flash, `/v1/releases/<path>` on the server.
+     * Other versions of the same group are cleared.
+     */
+    data class Item(val group: String, val version: String, val ext: String, val path: String, val sha256: String, val size: Long)
+
     sealed interface Result {
         data class Done(val file: File) : Result
         data class Paused(val reason: String) : Result
@@ -38,7 +45,10 @@ class ApkFetch(
         data object Corrupt : Result
     }
 
-    fun fetch(app: ReleaseManifest.App, gate: UplinkClient.Gate, onBytes: (Long) -> Unit): Result {
+    fun fetch(app: ReleaseManifest.App, gate: UplinkClient.Gate, onBytes: (Long) -> Unit): Result =
+        fetch(item(app), gate, onBytes)
+
+    fun fetch(app: Item, gate: UplinkClient.Gate, onBytes: (Long) -> Unit): Result {
         dir.mkdirs()
         clearOthers(app)
         val done = apk(app)
@@ -68,18 +78,20 @@ class ApkFetch(
     }
 
     /** Bytes of [app] already on flash. */
-    fun partBytes(app: ReleaseManifest.App): Long = part(app).length()
+    fun partBytes(app: ReleaseManifest.App): Long = part(item(app)).length()
 
     /** Bytes still to fetch for [app]: the budget is asked for this before a download starts. */
-    fun remaining(app: ReleaseManifest.App): Long {
+    fun remaining(app: ReleaseManifest.App): Long = remaining(item(app))
+
+    fun remaining(app: Item): Long {
         if (apk(app).length() == app.size) {
             return 0
         }
-        return (app.size - partBytes(app)).coerceAtLeast(0)
+        return (app.size - part(app).length()).coerceAtLeast(0)
     }
 
     /** Chunks from the partial's length to the end. Null when every byte is in. */
-    private fun pull(app: ReleaseManifest.App, part: File, gate: UplinkClient.Gate, onBytes: (Long) -> Unit): Result? {
+    private fun pull(app: Item, part: File, gate: UplinkClient.Gate, onBytes: (Long) -> Unit): Result? {
         var offset = part.length()
         FileOutputStream(part, true).use { out ->
             while (offset < app.size) {
@@ -104,22 +116,26 @@ class ApkFetch(
         return null
     }
 
-    private fun clearOthers(app: ReleaseManifest.App) {
-        val mine = Regex("^" + Regex.escape(app.pkg) + "-(\\d+)\\.(apk|part)$")
+    private fun clearOthers(app: Item) {
+        val mine = Regex("^" + Regex.escape(app.group) + "-(.+)\\.(" + Regex.escape(app.ext) + "|part)$")
         dir.listFiles()?.forEach { f ->
             val m = mine.matchEntire(f.name) ?: return@forEach
-            if (m.groupValues[1].toLong() != app.versionCode) {
+            if (m.groupValues[1] != app.version) {
                 f.delete()
             }
         }
     }
 
-    private fun apk(app: ReleaseManifest.App) = File(dir, "${app.pkg}-${app.versionCode}.apk")
+    private fun item(app: ReleaseManifest.App) =
+        Item(app.pkg, app.versionCode.toString(), APK_EXT, app.path, app.sha256, app.size)
 
-    private fun part(app: ReleaseManifest.App) = File(dir, "${app.pkg}-${app.versionCode}.part")
+    private fun apk(app: Item) = File(dir, "${app.group}-${app.version}.${app.ext}")
+
+    private fun part(app: Item) = File(dir, "${app.group}-${app.version}.part")
 
     companion object {
         const val CHUNK_BYTES = 256 * 1024
+        private const val APK_EXT = "apk"
         private const val HTTP_OK = 200
         private const val HTTP_PARTIAL = 206
     }

@@ -1,0 +1,16 @@
+# Replaces the GSI's update_verifier.rc. init.rc still exec_starts update_verifier_nonencrypted
+# at zygote-start, so the names stay; they no longer mark the slot good before the framework has
+# run. riposte-bootcheck.sh (riposte.rc, at boot_completed) marks it instead.
+service update_verifier_nonencrypted /system/bin/log -t riposte-bootcheck "update_verifier deferred to riposte-bootcheck"
+    user root
+    group root
+    seclabel u:r:su:s0
+    oneshot
+    disabled
+
+service update_verifier /system/bin/log -t riposte-bootcheck "update_verifier deferred to riposte-bootcheck"
+    user root
+    group root
+    seclabel u:r:su:s0
+    oneshot
+    disabled

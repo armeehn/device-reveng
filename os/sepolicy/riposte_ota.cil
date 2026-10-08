@@ -1,0 +1,10 @@
+; The launcher's OsUpdater drives update_engine through the root shell (phh su, domain
+; phhsu_daemon). update_engine_client --follow binds a status callback, and update_engine was
+; denied the call back into that domain on the bench unit (2026-10-07):
+;
+;   avc: denied { call } scontext=u:r:update_engine:s0 tcontext=u:r:phhsu_daemon:s0 tclass=binder
+;   update_engine_client: Failed to bind() the UpdateEngine daemon.
+;
+; phhsu_daemon is declared in the GSI's system_ext_sepolicy.cil; CIL resolves it across files.
+; Compiled against the 0.2 set with init's secilc flags: builds, and no neverallow line changes.
+(allow update_engine phhsu_daemon (binder (call transfer)))

@@ -9,6 +9,17 @@ service riposte_firstboot /system/bin/sh /system/bin/riposte-firstboot.sh
 
 on property:sys.boot_completed=1
     start riposte_firstboot
+    start riposte_bootcheck
+
+# Marks the slot good once it has proved itself, and rolls a bad OTA back (riposte-bootcheck.sh).
+# Replaces update_verifier's early mark (update_verifier.rc).
+service riposte_bootcheck /system/bin/sh /system/bin/riposte-bootcheck.sh
+    class late_start
+    user root
+    group root
+    seclabel u:r:su:s0
+    oneshot
+    disabled
 
 # Bench aid on car-owner builds: adb on the 4PIN USB while the boot animation runs, so a
 # framework that never comes up still yields logcat. The vendor forces the port to host at
