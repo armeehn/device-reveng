@@ -54,6 +54,8 @@ jobs:
         run: os/test-sleep-mode.sh
       - name: a slot is marked good only once it has proved itself
         run: os/test-bootcheck.sh
+      - name: the OTA bench script drives update_engine as the unit expects
+        run: os/test-bench-ota.sh
       - name: blockfix stops on a failed read
         run: os/test-blockfix.sh
       - name: flash-0.2 parses and fetches only os/ helpers
