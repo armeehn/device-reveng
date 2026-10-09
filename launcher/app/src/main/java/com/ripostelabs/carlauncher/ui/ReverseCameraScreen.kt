@@ -12,6 +12,7 @@ import android.hardware.camera2.CameraDevice
 import android.hardware.camera2.CameraManager
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import android.util.Size
 import android.view.Surface
@@ -25,6 +26,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,6 +44,7 @@ import com.ripostelabs.carlauncher.data.AisCamera
 import com.ripostelabs.carlauncher.data.AisCameraNative
 import com.ripostelabs.carlauncher.data.AisCameraWorker
 import com.ripostelabs.carlauncher.data.DecoderSignal
+import com.ripostelabs.carlauncher.data.FeedWatch
 import com.ripostelabs.carlauncher.data.ReverseFeedPath
 import com.ripostelabs.carlauncher.ui.theme.carShape
 import java.util.concurrent.ExecutorService
@@ -83,6 +86,7 @@ fun ReverseCameraScreen(
     radar: RadarState? = null,
     showRadar: Boolean = true,
     mirrored: Boolean = false,
+    shown: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     if (verdict == ReverseCameraGate.Verdict.HIDDEN) {
@@ -91,7 +95,7 @@ fun ReverseCameraScreen(
 
     Box(modifier = modifier.fillMaxSize().background(Color.Black)) {
         when (verdict) {
-            ReverseCameraGate.Verdict.PREVIEW -> CameraPreview(mirrored = mirrored, modifier = Modifier.fillMaxSize())
+            ReverseCameraGate.Verdict.PREVIEW -> CameraPreview(mirrored = mirrored, shown = shown, modifier = Modifier.fillMaxSize())
             ReverseCameraGate.Verdict.NO_PERMISSION -> Notice(NO_PERMISSION_MESSAGE)
             ReverseCameraGate.Verdict.HIDDEN -> Unit
         }
@@ -113,17 +117,24 @@ fun ReverseCameraScreen(
     }
 }
 
-/** The camera2 preview. Failures replace the picture with their reason; nothing throws out. */
+/**
+ * The camera preview. Failures replace the picture with their reason; nothing throws out. On the
+ * AIS path the picture also hides while its frames stop ([FeedWatch]): a stopped stream leaves its
+ * last frame on the texture, and the warm feed made that frame minutes old by reverse time.
+ * [shown] is false while the window is warm and unseen.
+ */
 @Composable
-private fun CameraPreview(mirrored: Boolean, modifier: Modifier = Modifier) {
+private fun CameraPreview(mirrored: Boolean, shown: Boolean, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     var failure by remember { mutableStateOf<String?>(null) }
+    // The OS says whether it owns the car; the client lib says whether AIS can be driven.
+    val path = remember { ReverseFeedPath.choose(AndroidOwnerGate(context).ownerEnabled(), AisCameraNative::load) }
+    // camera2 has no frame counter here; its picture is trusted as before.
+    var live by remember { mutableStateOf(path != ReverseFeedPath.AIS) }
     val session = remember {
-        // The OS says whether it owns the car; the client lib says whether AIS can be driven.
-        val path = ReverseFeedPath.choose(AndroidOwnerGate(context).ownerEnabled(), AisCameraNative::load)
         Log.i(TAG, "reverse feed path: $path")
         when (path) {
-            ReverseFeedPath.AIS -> AisReverseSession { failure = it }
+            ReverseFeedPath.AIS -> AisReverseSession(onFailure = { failure = it }, onLive = { live = it })
             ReverseFeedPath.CAMERA2 -> ReverseCameraSession(context) { failure = it }
         }
     }
@@ -131,6 +142,10 @@ private fun CameraPreview(mirrored: Boolean, modifier: Modifier = Modifier) {
     // Reverse disengaged → this leaves the composition → the camera is handed back.
     DisposableEffect(session) {
         onDispose { session.close() }
+    }
+
+    LaunchedEffect(session, shown) {
+        session.shown(shown)
     }
 
     AndroidView(
@@ -157,6 +172,11 @@ private fun CameraPreview(mirrored: Boolean, modifier: Modifier = Modifier) {
         modifier = modifier,
     )
 
+    // A frozen frame never passes for the reverse picture: black until frames move again.
+    if (!live && failure == null) {
+        Box(modifier = Modifier.fillMaxSize().background(Color.Black))
+        Notice(WAITING_MESSAGE)
+    }
     failure?.let { Notice(it) }
 }
 
@@ -196,6 +216,9 @@ private interface ReverseSession {
     fun open(texture: SurfaceTexture)
 
     fun close()
+
+    /** The picture is on screen (reverse), not warm and unseen. */
+    fun shown(shown: Boolean) {}
 }
 
 /**
@@ -207,17 +230,58 @@ private interface ReverseSession {
  *     open(texture) ─▶ Surface(texture) ─▶ worker: AisCamera.open ─▶ [1 s later] frame count logged
  *     close()       ─▶ worker: AisCamera.close ─▶ surface.release
  */
-private class AisReverseSession(private val onFailure: (String?) -> Unit) : ReverseSession {
+private class AisReverseSession(
+    private val onFailure: (String?) -> Unit,
+    private val onLive: (Boolean) -> Unit,
+) : ReverseSession {
     private val handler = Handler(Looper.getMainLooper())
     private val camera = AisCameraWorker(
         AisCamera(AisCameraNative), AIS_WORKER, AIS_TIMER, post = { handler.post(it) }, signal = DecoderSignal,
     )
     private var surface: Surface? = null
+    private val watch = FeedWatch()
+    private var shown = false
+    private var wasLive: Boolean? = null
+
+    /**
+     * Every [FeedWatch.POLL_MS]: ask the client for its frame count, publish live or not, and
+     * reopen a stale stream that is on screen. The reopen goes through the same worker as
+     * checkFrames' and bumps its generation, so the two never race on one stream.
+     */
+    private val poll = object : Runnable {
+        override fun run() {
+            camera.frames { watch.frames(it, SystemClock.uptimeMillis()) }
+            val now = SystemClock.uptimeMillis()
+            val live = watch.live(now)
+            if (live != wasLive) {
+                Log.i(TAG, "reverse picture ${if (live) "live" else "stale"} (shown=$shown)")
+                wasLive = live
+            }
+            onLive(live)
+            val target = surface
+            if (target != null && watch.reopenDue(shown, now)) {
+                Log.i(TAG, "reverse shown with no frames for ${FeedWatch.STALE_MS} ms: reopening")
+                watch.reopened(now)
+                start(target)
+            }
+            handler.postDelayed(this, FeedWatch.POLL_MS)
+        }
+    }
+
+    override fun shown(shown: Boolean) {
+        this.shown = shown
+    }
 
     override fun open(texture: SurfaceTexture) {
         val target = Surface(texture)
         surface = target
+        watch.reopened()
+        start(target)
+        handler.removeCallbacks(poll)
+        handler.post(poll)
+    }
 
+    private fun start(target: Surface) {
         camera.open(target) { state ->
             if (state is AisCamera.State.Failed) {
                 Log.w(TAG, state.reason)
@@ -422,6 +486,7 @@ private const val TAG = "ReverseCamera"
 private const val REVERSE_CAMERA_ID = "1"
 
 private const val NO_PERMISSION_MESSAGE = "Camera permission not granted"
+private const val WAITING_MESSAGE = "Waiting for the camera picture"
 
 /** How long after the AIS open the frame counter is read and logged. */
 private const val FIRST_FRAME_CHECK_MS = 1000L

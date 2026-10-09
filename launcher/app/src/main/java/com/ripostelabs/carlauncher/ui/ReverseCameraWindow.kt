@@ -107,6 +107,9 @@ class ReverseCameraWindow(
     private var radar by mutableStateOf<RadarState?>(null)
     private var options by mutableStateOf(Options(showRadar = true, mirrored = false))
     private var steeringDeg by mutableStateOf<Double?>(null)
+
+    /** The picture is on screen (FULL); WARM keeps the feed but nobody sees it. */
+    private var shown by mutableStateOf(false)
     private var warmth = Warmth.COLD
     private var layout = Layout.NONE
     private var wanted = ReverseCameraGate.Verdict.HIDDEN
@@ -145,6 +148,7 @@ class ReverseCameraWindow(
         runCatching { windowManager.removeViewImmediate(v) }
         view = null
         layout = Layout.NONE
+        shown = false
         verdict = ReverseCameraGate.Verdict.HIDDEN
         Log.i(TAG, "reverse window removed")
     }
@@ -169,6 +173,7 @@ class ReverseCameraWindow(
 
     /** Adds the window in [next], or moves an existing one to it without touching the feed. */
     private fun place(next: Layout) {
+        shown = next == Layout.FULL
         val v = view
         if (v != null) {
             if (layout != next) {
@@ -251,6 +256,7 @@ class ReverseCameraWindow(
                     radar = radar,
                     showRadar = options.showRadar,
                     mirrored = options.mirrored,
+                    shown = shown,
                 )
 
                 // Guide lines and their chip over the feed. HomeScreen's ReverseOverlay draws
