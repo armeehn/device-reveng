@@ -46,26 +46,29 @@ released with `exitCurMode` for Android audio to come back. The vendor radio doe
 
 ## 1. Replacement matrix
 
+"Where we are" re-checked 2026-10-22 against `main` at `81d0de2`. Riposte OS 0.2 carries none of
+these packages; where a cell names 0.2, that is what stands in for the package there.
+
 | OEM package | Label | What it really is | Replace? | Contract a replacement must keep | Where we are |
 |---|---|---|---|---|---|
-| `com.szchoiceway.eventcenter` | — | MCU gateway, SysVar host, mode owner | **Never** | — | consumed by everything |
-| `com.szchoiceway.canbus2` | Canbus | CAN decode + HVAC/door/radar UI, reflected into the reverse camera | **Never** (safety) | consume its broadcasts (§5, §6, §8) | radar/climate/steering readers in carlib |
+| `com.szchoiceway.eventcenter` | — | MCU gateway, SysVar host, mode owner | **Never** | — | consumed by everything; absent on Riposte OS 0.2, where `McuOwner` in our car service owns the MCU link and serves an `IEventService` subset |
+| `com.szchoiceway.canbus2` | Canbus | CAN decode + HVAC/door/radar UI, reflected into the reverse camera | **Never** (safety) | consume its broadcasts (§5, §6, §8) | radar/climate/steering readers in carlib; on 0.2 `HiworldCanDecoder` reads the box and `ClimateKeys` sends the HVAC keys (UNVERIFIED on the car) |
 | `com.szchoiceway.customerui` | — | stock home; a *window* the gateway inflates by name | Keep installed, replace as HOME | be HOME; answer the UI-mode echo (§gateway 1) | CarLauncher is HOME; APK not yet pulled |
-| `com.szchoiceway.radio` | Radio | tuner UI over `sendRadioKey`/`sendUserFreq`/callbacks | **Yes** | claim SRC_RADIO, key table, PS name, TA/AF/PTY setup, zone via `changeSetup` | CarLauncher RadioScreen (#30, #31) + suite radio; keep the APK until both are proven on the car |
+| `com.szchoiceway.radio` | Radio | tuner UI over `sendRadioKey`/`sendUserFreq`/callbacks | **Yes** | claim SRC_RADIO, key table, PS name, TA/AF/PTY setup, zone via `changeSetup` | CarLauncher RadioScreen (#30, #31) + suite radio; keep the APK until both are proven on the car. On 0.2 the owner tunes, seeks, scans and reads the PS name |
 | `com.szchoiceway.musicplayer` | Music | USB/local player, `SRC_MUSIC` 11, `setValidModeAllInfor` | **Yes** | audio focus; optional `setValidModeAllInfor` so the vendor now-playing broadcast stays alive | suite `com.ripostelabs.music` (MediaSession); vendor metadata path unused |
-| `com.szchoiceway.videoplayer` | HD movies | player, `SRC_MOVIE` 10, PIP overlay, **handbrake gating** via `Sys_CurBreakSate` | **Yes** | reproduce the brake gate (legal), PIP optional | suite `com.ripostelabs.video`; brake gate not implemented |
+| `com.szchoiceway.videoplayer` | HD movies | player, `SRC_MOVIE` 10, PIP overlay, **handbrake gating** via `Sys_CurBreakSate` | **Yes** | reproduce the brake gate (legal), PIP optional | suite `com.ripostelabs.video` with a brake gate; on 0.2 the launcher keeps `Sys_CurBreakSate` from its own motion state (`SysVarMirror`), since this unit never raises the brake bit |
 | `com.szchoiceway.zxwmedia` | zxwmedia | background media scanner + SQLite index, exported provider | Yes, by omission | nothing — use MediaStore | not needed |
-| `com.szchoiceway.btsuite` | Bluetooth | HBCP protocol to the BT module: phone, contacts, A2DP | **Not yet** — it owns the module protocol | drive it: broadcasts §9, `zxw_bluetooth_contral_action`, `IBTService` | status chip fix in progress; suite `bluetooth` app is Android BT only |
+| `com.szchoiceway.btsuite` | Bluetooth | HBCP protocol to the BT module: phone, contacts, A2DP | **Not yet** — it owns the module protocol | drive it: broadcasts §9, `zxw_bluetooth_contral_action`, `IBTService` | status chip fix in progress; suite `bluetooth` app is Android BT only. On 0.2 Android's own stack runs the car-kit profiles and the launcher tells the MCU about calls |
 | `com.szchoiceway.settings` | System | SysVar editor; every write goes through `changeSetup` | **Yes**, in slices | key domains §3-5, `changeSetup` (78), `sendBacklight` (60); factory menu stays | CarLauncher settings screens; keys being corrected |
 | `com.szchoiceway.gps` | GPS | GNSS status page; writes nav package keys | **Yes** | `Set_NavPackageName/ClassName/LableName` if we offer a nav picker | suite `com.ripostelabs.gps` |
-| `com.szchoiceway.navigation` | Navigation | **misnamed**: front/rear/blind camera + HDMI viewer | Later | `sendMode(50/51/52)` + `setCameraChannel` + `Camera.open`; brake gate; `force_camera_close` | nothing; UNVERIFIED whether a normal app may open the camera HAL |
+| `com.szchoiceway.navigation` | Navigation | **misnamed**: front/rear/blind camera + HDMI viewer | Later | `sendMode(50/51/52)` + `setCameraChannel` + `Camera.open`; brake gate; `force_camera_close` | on 0.2 the launcher opens the cameras through Qualcomm AIS, as eventcenter did: the reverse picture and a 360 grid (`SurroundCameraActivity`); nothing on 0.1 |
 | `com.szchoiceway.photoreader` | XDemonstrate | 16-image demo slideshow | Remove | — | suite `photos` is a real viewer |
-| `com.szchoiceway.learn.key` | ZXWLib | SWC / panel / touch key learning | Keep (factory tool) | protocol §learn.key if we ever host a learner | launcher reads its JSON map (in progress) |
+| `com.szchoiceway.learn.key` | ZXWLib | SWC / panel / touch key learning | Keep (factory tool) | protocol §learn.key if we ever host a learner | on 0.2 the launcher hosts the learner (`WheelLearn`) and keeps the slot map |
 | `com.szchoiceway.apkinstall` | Apk Installer | silent `pm install -r` from USB | **Remove** (security) | — | suite `installer` |
 | `com.szchoiceway.canbusdebug` | CanbusDebug | MCU/CAN frame injector overlay | Keep hidden (diagnostics) | — | — |
 | `com.lfg.szchoiceway.canupgrade` | CanUpgrade | MCU/CAN/BT firmware flasher | Keep hidden (bricks the MCU if misused) | — | — |
 | `com.choiceway.weather` | Weather | Seniverse (China) API client | Remove | — | suite `weather`, own source |
-| `com.zjinnova.zlink` | ZLINK5 | CarPlay / AA / HiCar / mirror receiver, `SRC_CARPLAY` 32, packed DEX | **Never** (proprietary) | drive by intent: `ZLINK_MAIN`, `REQ_SPEC_FUNC_CMD`, status broadcasts | helper in progress; never put its class names in `SYS_LAUNCHER_APP_HIDE_KEY` |
+| `com.zjinnova.zlink` | ZLINK5 | CarPlay / AA / HiCar / mirror receiver, `SRC_CARPLAY` 32, packed DEX | **Never** (proprietary) | drive by intent: `ZLINK_MAIN`, `REQ_SPEC_FUNC_CMD`, status broadcasts | helper in progress; never put its class names in `SYS_LAUNCHER_APP_HIDE_KEY`. On 0.2 the OEM daemon runs with the projection suite as its app (`ZLINK_REWRITE.md` §9) |
 | `com.mmbox.xbrowser` | XBrowser | Chinese browser, not system uid | Remove | — | suite `browser` |
 | `com.android.atslcarconsole` | Console (中控) | Cadillac ATS-L original-car console: CAN car settings, plate number, greeting screen; claims `SRC_ATSL_AIRCONSOLE`/`SRC_CAR_AUX`, writes raw CAN frames via `ACTION_MCU_CMD_EVENT` | Remove (wrong car; a CAN writer) | — | decompiled, nothing to keep |
 

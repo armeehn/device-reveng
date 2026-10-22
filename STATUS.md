@@ -1,6 +1,6 @@
 # Project status
 
-_Last updated: 2026-09-19. Unit: Choiceway/AiNavi **GT6-EAU**, Qualcomm **QCM6125**, Android 13 stock, in a 2019 Toyota RAV4 (XA50); on a bench since 2026-09-18._
+_Last updated: 2026-10-22 (`main` at `81d0de2`). Unit: Choiceway/AiNavi **GT6-EAU**, Qualcomm **QCM6125**, Android 13 stock, in a 2019 Toyota RAV4 (XA50); back in the car on Riposte OS 0.2 since 2026-09-22._
 
 ## Done
 
@@ -17,7 +17,17 @@ _Last updated: 2026-09-19. Unit: Choiceway/AiNavi **GT6-EAU**, Qualcomm **QCM612
 - **0.2** (AOSP 14 GSI, no OEM app, our own MCU owner) runs on the bench: boot, touch,
   gesture navigation, Wi-Fi, radio tune and seek on the real MCU, volume from the MCU,
   Bluetooth car-kit profiles, all 28 suite apps launching clean, Setup Doctor green.
-- Waiting for the car: reverse camera, wheel keys, headlamps, a paired phone.
+- In the car since 2026-09-22. Car sessions drove fixes to the reverse feed, ACC standby,
+  wireless CarPlay with a paired iPhone, and call audio. Headlamps and wired CarPlay are not
+  yet proven; the ordered car checklist is [`os/ACCEPTANCE.md`](os/ACCEPTANCE.md).
+- **Car service** (`launcher/carservice`): a priv-app signed with the image's own platform
+  key (AOSP's public test key). It hosts the one MCU owner, draws the nav bar and serves an
+  `IEventService` subset, so apps written for the vendor gateway still find one.
+- **Updates.** The launcher, car service and suite update themselves over the network; signed
+  A/B OS payloads go through `update_engine` with a slot that falls back if the launcher does
+  not stay up. OS updates stay off until the supervised bench test passes ([`os/ota/`](os/ota/)).
+- **Mainline Linux 6.18**: a RAM-only boot image for the unit, with panel, touch, MCU link,
+  backlight and camera-decoder drivers ([`os/mainline/`](os/mainline/)). Not a usable system yet.
 - Details, pipeline and the bench tools: [`os/README.md`](os/README.md).
 
 ## Key facts
@@ -30,7 +40,8 @@ _Last updated: 2026-09-19. Unit: Choiceway/AiNavi **GT6-EAU**, Qualcomm **QCM612
 ## Open goals
 
 1. **Debloat / de-spyware.** Plan in [`debloat-plan.md`](debloat-plan.md), batch in `debloat.sh` (Tier 1, reversible `pm uninstall --user 0`).
-2. **HVAC controls.** RAV4 climate over this CAN box is most likely display-only ([FINDINGS.md](FINDINGS.md)); writes are not shipped.
+2. **HVAC controls.** The stock climate keys are sent (0.1 through canbus2, 0.2 as the stock
+   box frames), but the RAV4's answer is unverified; it may be display-only ([FINDINGS.md](FINDINGS.md)).
 3. **Play / Android Auto reliability** via a Play Integrity module.
 4. **Boot time** ([`boot-speed/`](boot-speed/)).
 
@@ -47,6 +58,12 @@ _Last updated: 2026-09-19. Unit: Choiceway/AiNavi **GT6-EAU**, Qualcomm **QCM612
   signal, driver profiles, notification shelf, on-screen keyboard, theming, Setup Doctor,
   backup/restore, self-update, and a full reskin of the vendor settings. Fully drivable from the
   steering-wheel keys. GPS-derived speed gates the distracting parts to parked-only.
+- **What it does on Riposte OS 0.2**, where no OEM app is left. Cameras: the reverse picture with
+  stock's dynamic guide lines, and a 360-camera grid. Chrome: its own nav bar and edge hotbar,
+  call and volume popups over any app. Car: wheel-key learning, radio regions and presets, the
+  stock DSP EQ and sound settings, factory JBL amp controls, tyre pressures (CAN box or a USB
+  radio), the stock Toyota car settings and cluster text. Also a screensaver, one home widget
+  and ACC standby.
 - **It reads the car's own bus.** A CANable on the Toyota body bus behind the unit, over the
   Android USB host API — no kernel driver, no root. Speed, wheel speeds, steering, yaw and
   acceleration, brake pressure, rpm, gear, odometer, temperatures and ambient light, all verified
@@ -55,9 +72,12 @@ _Last updated: 2026-09-19. Unit: Choiceway/AiNavi **GT6-EAU**, Qualcomm **QCM612
   **confirmed unobtainable** ([`CUSTOM_ANDROID.md`](CUSTOM_ANDROID.md) §2b), so a platform-signed
   `/system/priv-app` build is ruled out; Magisk root replaced it. A root helper receives the
   `signature`-protected broadcasts (SWC, day/night, reverse). Without root it all degrades silently.
-- **Blocked, do not read as done.** HVAC writes, radar byte layout (GUESSED; the manoeuvring strips
-  stay hidden), radio scan / RDS station text (no such method in the vendor AIDL), and anything drawn
-  over the reverse camera (vendor-composited, out of scope).
+  On 0.2 the image is ours, so the car service is platform-signed with the image's own key.
+- **Blocked, do not read as done.** HVAC writes are sent but unverified on the car. The radar
+  byte layout is UNCONFIRMED, so the manoeuvring strips stay hidden. Radio scan and RDS station
+  text have no method in the vendor AIDL on 0.1; 0.2 decodes the station name from the MCU.
+  Nothing is drawn over the reverse camera on 0.1 (vendor-composited); on 0.2 the launcher draws
+  the picture.
 - **Docs:** [`launcher/README.md`](launcher/README.md) (what each release shipped) and
   [`LAUNCHER_DESIGN.md`](LAUNCHER_DESIGN.md) (UI/UX spec and capability tiers).
 
