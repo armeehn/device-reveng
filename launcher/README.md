@@ -41,9 +41,9 @@ The launcher as it looked at each milestone, from the first grid to the home it 
 ```
 launcher/
 ├── settings.gradle.kts          # includes :app and :carlib; google/mavenCentral/JitPack repos
-├── build.gradle.kts             # AGP 8.5.2, Kotlin 2.0.20 (+ compose compiler plugin), apply false
+├── build.gradle.kts             # AGP 8.7.3, Kotlin 2.4.21 (+ compose compiler plugin), apply false
 ├── gradle.properties            # AndroidX, non-transitive R, parallel/caching
-├── gradle/wrapper/…             # Gradle 8.9 wrapper
+├── gradle/wrapper/…             # Gradle 8.14.6 wrapper
 │
 ├── carlib/                      # Android library — the car integration layer
 │   ├── build.gradle.kts         # namespace com.ripostelabs.carlauncher.carlib, aidl=true, libsu dep
@@ -89,7 +89,7 @@ cd launcher
 ./gradlew :app:assembleDebug
 ```
 
-The Gradle wrapper pins Gradle 8.9, so no system Gradle is needed. The version is
+The Gradle wrapper pins Gradle 8.14.6, so no system Gradle is needed. The version is
 derived from git history, so build from a **full clone** — a shallow clone fails the
 build with an explicit message rather than producing a wrong versionCode.
 
