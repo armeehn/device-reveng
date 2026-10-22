@@ -45,7 +45,16 @@ python3 "$HERE/xs9922b-tables.py" > "$TREE/drivers/media/i2c/xs9922b_tables.h"
 
 # 2. kernel and DTB
 make -C "$TREE" -s ARCH=arm64 LLVM="$LLVM_SUFFIX" O="$KBUILD" defconfig gt6eau.config
-make -C "$TREE" -s ARCH=arm64 LLVM="$LLVM_SUFFIX" O="$KBUILD" -j"$(nproc)" Image "qcom/$BOARD.dtb"
+make -C "$TREE" -s ARCH=arm64 LLVM="$LLVM_SUFFIX" O="$KBUILD" -j"$(nproc)" Image modules "qcom/$BOARD.dtb"
+
+# 2b. modules and the build id, for a rootfs that boots with this kernel (Riposte OS's gt6
+# target): the rootfs's /lib/modules must come from the same build as the boot image.
+rm -rf "$OUT/modules"
+make -C "$TREE" -s ARCH=arm64 LLVM="$LLVM_SUFFIX" O="$KBUILD" INSTALL_MOD_PATH="$OUT/modules" \
+  INSTALL_MOD_STRIP=1 modules_install
+RELEASE=$(cat "$KBUILD/include/config/kernel.release")
+echo "$RELEASE $(sha256sum "$KBUILD/arch/arm64/boot/Image" | cut -c1-12)" > "$OUT/kernel-build-id"
+cp "$KBUILD/arch/arm64/boot/Image" "$KBUILD/arch/arm64/boot/dts/qcom/$BOARD.dtb" "$OUT/"
 
 # 3. initramfs: busybox and the init script, nothing else
 ROOT="$OUT/rootfs"
@@ -59,4 +68,4 @@ install -m 755 "$HERE/init" "$ROOT/init"
 python3 "$HERE/mkboot_v2.py" "$STOCK" "$KBUILD/arch/arm64/boot/Image" "$OUT/initramfs.cpio.gz" \
   "$KBUILD/arch/arm64/boot/dts/qcom/$BOARD.dtb" "$CMDLINE" "$OUT/boot-mainline.img"
 sha256sum "$OUT/boot-mainline.img" | tee "$OUT/boot-mainline.img.sha256"
-echo "kernel $(cat "$KBUILD/include/config/kernel.release")"
+echo "kernel $(cat "$OUT/kernel-build-id")"
