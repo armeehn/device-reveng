@@ -19,8 +19,8 @@ unit, so a failed boot costs a reboot, not a flash.
 | `pwm-lpg-pm6125.patch` | the PM6125's single LPG PWM channel (`qcom,pm6125-pwm`, base 0xb300) for the backlight |
 | `gt6eau.config` | what arm64 `defconfig` leaves out for this board |
 | `pdmapper-sm6125.patch` | SM6125 in the kernel's protection-domain mapper, with SM6115's domain list: the modem starts its WLAN domain only once a mapper answers |
-| `firmware.sh` | stages the modem, Wi-Fi and Bluetooth firmware from the unit's own `modem` and `bluetooth` partition dumps into a `/lib/firmware` tree with sums (the blobs stay out of the repo) |
-| `test-firmware.sh` | `firmware.sh` against fake partitions: paths, names, sums, and a refusal when `wlanmdsp.mbn` is missing (CI) |
+| `firmware.sh` | stages the modem, audio DSP, Wi-Fi and Bluetooth firmware from the unit's own `modem` and `bluetooth` partition dumps into a `/lib/firmware` tree with sums (the blobs stay out of the repo) |
+| `test-firmware.sh` | `firmware.sh` against fake partitions: paths, names, sums, and a refusal when `wlanmdsp.mbn` or `adsp.mdt` is missing (CI) |
 | `init` | busybox init: USB gadget (ACM + NCM), telnetd, dmesg on the panel |
 | `mkboot_v2.py` | packs a header-v2 boot image with the stock image's addresses |
 | `build.sh` | all of the above from a v6.18 tree, plus `modules/`, `Image`, the DTB and `kernel-build-id` for Riposte OS's `gt6` rootfs; heavy, runs on the build server |
@@ -62,7 +62,7 @@ show the bootloader's picture with kernel text over it.
 
 ## What is not there yet
 
-Audio, GPU (no upstream SM6125 GPU node). Wi-Fi and Bluetooth are described but unproven until a bench boot (below); cameras: `CAMERA.md`.
+GPU (no upstream SM6125 GPU node), microphones and Bluetooth call audio (Audio, below). Wi-Fi, Bluetooth and speaker audio are described but unproven until a bench boot (below); cameras: `CAMERA.md`.
 
 ## Touch and the MCU link
 
@@ -131,3 +131,71 @@ partitions), `tqftpserv`, `qrtr` tools. The modem is not auto-booted: start it w
   as `board.bin` when linux-firmware's `board-2.bin` has no entry for the chip's board id
 - the BT UART pins (stock pulls copied), baud 3.2 Mbit/s, and no enable GPIO (stock has none)
 - BT audio: the stock path is SLIMbus to the codec (BTFM), not described here
+
+## Audio
+
+Sound leaves the SoC as I2S on the secondary MI2S port and goes to the car's audio chain, which
+the MCU owns: it switches sources and sets the amp volume (`05 05 v`). Evidence, all stock:
+
+- the live device tree: card `qcom,sm6150-asoc-snd`, model `trinket-idp-snd-card` (Qualcomm's
+  reference IDP card, kept almost as is); `qcom,msm-mi2s-master` set for every port, secondary
+  MI2S with one RX line and no TX; its pins `sec_i2s_*` on GPIO 125 (SCK), 126 (WS), 127 (SD0),
+  128 (SD1), and no MCLK pin
+- the HAL: `audio_platform_info_intcodec.xml` maps `SND_DEVICE_OUT_SPEAKER` to `SEC_MI2S_RX`,
+  24 bits; the vendor's own lines in `mixer_paths_idp.xml` add `SEC_MI2S_RX Audio Mixer
+  MultiMediaN` to every playback path and set `SEC_MI2S_RX Format` to `S24_LE`
+- no audio chip on the SoC's I2C buses (the stock `i2c-devices` list has panels, bridges and
+  touch only), so the receiver is driven by the MCU, not by Linux
+- stock dmesg: the ADSP loads `adsp.mdt` + `adsp.b02`-`b27` from `/vendor/firmware_mnt/image`
+  (the `modem` partition, ueventd's only firmware directory), then the card registers
+
+The SoC's own codec is there too: a WCD937x on SoundWire (both slaves bind at boot) behind the
+LPASS RX/TX/VA macros. Its four WSA881x speaker amps are in the tree but absent on the board
+(all four probes fail). The HAL also routes playback to the WCD937x headphone outputs, and the
+vendor patched its driver to drive a PA enable on GPIO 131 with them. Whether those outputs
+reach anything in the car is unknown; the speaker device says I2S.
+
+| Path | Stock | Mainline 6.18 |
+|---|---|---|
+| ADSP | `qcom,lpass@ab00000` PIL, PAS id 1, SMEM 423, SSCTL 0x14, wdog SPI 396 | `remoteproc_adsp` (`qcom,sm6115-adsp-pas`, the same ids), APR over glink |
+| speaker | MultiMedia → `SEC_MI2S_RX` (I2S, SoC master) → car amp | q6asm MultiMedia1-3 → q6routing → q6afe `SECONDARY_MI2S_RX`, SD0 |
+| microphone (CarPlay, voice) | WCD937x ADC1 + ADC2 (`INP3`) → TX macro → `TX_CDC_DMA_TX_3` | not described: no SM6115/SM6125 RX or VA macro upstream |
+| Bluetooth calls | WCN399x over SLIMbus (BTFM slave, `SLIMBUS_7`) ↔ `SEC_MI2S_RX` | not described: no BTFM driver upstream |
+| FM / tuner | MCU side (the `SLIM_8` FM path in the HAL is the WCN's and unused) | n/a |
+
+The card is SM6115's (`qcom,qrb4210-rb2-sndcard`): Qualcomm's RB2 drives a bridge from the
+same port. The receiver is a `linux,spdif-dit` stand-in, since nothing about it is controllable
+from the SoC. Mainline's machine driver fixes the back end at 48 kHz, 2 channels, S16_LE,
+BCLK 1.536 MHz (32 fs); stock sent 24-bit samples. The PEARL array, if it arrives over USB, needs
+nothing here (`snd-usb-audio`).
+
+The ADSP starts by itself once `adsp.mdt` is in `/lib/firmware/qcom/sm6125/choiceway/gt6eau/`
+(`firmware.sh` takes it from the `modem` dump the Wi-Fi already needs; no extra partition). APR
+waits for the `msm/adsp/audio_pd` domain, which `pdmapper-sm6125.patch` answers.
+
+Proposed for Riposte OS's `gt6` rootfs (`/etc/asound.conf`), once the card shows up as `GT6EAU`:
+
+```
+# Route the first stream to the car amp's I2S line, once per boot:
+#   amixer -c GT6EAU cset name='SEC_MI2S_RX Audio Mixer MultiMedia1' 1
+pcm.!default {
+    type plug
+    slave { pcm "hw:GT6EAU,0" rate 48000 channels 2 format S16_LE }
+}
+ctl.!default { type hw card GT6EAU }
+```
+
+Volume stays on the MCU (`riposte-mcud`): the card has no gain of its own, and the amp is
+silent until the MCU selects the head unit as its source (stock: `3F` on every stream start).
+
+### Unverified until the bench boot
+
+- that the ADSP boots under `qcom,sm6115-adsp-pas` with only the CX vote (stock proxy-votes
+  `vdd_cx`; SM6125's RPM has no LPI domains), and that SID 0x41 is the audio stream
+- that the receiver locks to 16-bit samples in a 32 fs frame; if it wants 64 fs or 24 bits, the
+  machine driver's back-end fixup needs a GT6 case
+- what the receiver is: scope GPIO 125-127 during playback, then follow SD0 on the board
+- whether GPIO 131 (the vendor's PA enable) or the WCD937x headphone outputs feed the car at all
+- mic and call audio: WCD937x needs SM6125 entries in the LPASS RX/VA macro drivers and the
+  SoundWire masters described; BT calls need a SLIMbus BTFM codec or SCO over the HCI UART
+

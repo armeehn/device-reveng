@@ -11,6 +11,9 @@
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/input/input.h>
 #include <dt-bindings/pinctrl/qcom,pmic-gpio.h>
+#include <dt-bindings/soc/qcom,apr.h>
+#include <dt-bindings/sound/qcom,q6afe.h>
+#include <dt-bindings/sound/qcom,q6asm.h>
 #include "sm6125.dtsi"
 #include "pm6125.dtsi"
 
@@ -804,5 +807,222 @@
 			drive-strength = <2>;
 			bias-pull-up;
 		};
+	};
+};
+
+/*
+ * Audio: the ADSP (LPASS QDSP6) runs the stock firmware, and the kernel talks to it over APR
+ * (q6core, q6afe, q6asm, q6adm). The stock HAL sends every speaker stream to the secondary
+ * MI2S port (audio_platform_info_intcodec.xml: SND_DEVICE_OUT_SPEAKER = SEC_MI2S_RX), one
+ * data line out of the SoC to the car's audio chain, which the MCU switches and sets the
+ * volume of (05 05 v). Nothing on that chain sits on a SoC bus, so the far end is a stand-in.
+ *
+ *   q6asm MultiMedia1-3 ──► q6adm routing ──► q6afe SECONDARY_MI2S_RX ──► GPIO 125-127 ──► amp/DSP
+ *
+ * The bindings come from SM6115 (Qualcomm RB2), whose LPASS shares this SoC's generation and
+ * whose card drives the same port. Every number is the stock device tree's: PAS id 1, crash
+ * SMEM 423, SSCTL 0x14, wdog SPI 396, glink SPI 391 on APCS bit 8, SMP2P SMEM 443/429 on
+ * SPI 393 and APCS bit 10, audio stream 0x41.
+ */
+/ {
+	/* stock qcom,smp2p-adsp */
+	smp2p-adsp {
+		compatible = "qcom,smp2p";
+		qcom,smem = <443>, <429>;
+		interrupts = <GIC_SPI 393 IRQ_TYPE_EDGE_RISING>;
+		mboxes = <&apcs_glb 10>;
+		qcom,local-pid = <0>;
+		qcom,remote-pid = <2>;
+
+		adsp_smp2p_out: master-kernel {
+			qcom,entry-name = "master-kernel";
+			#qcom,smem-state-cells = <1>;
+		};
+
+		adsp_smp2p_in: slave-kernel {
+			qcom,entry-name = "slave-kernel";
+			interrupt-controller;
+			#interrupt-cells = <2>;
+		};
+	};
+
+	/*
+	 * The receiver on the I2S line: not on I2C, no MCLK pin, clocked by the SoC (stock
+	 * qcom,msm-mi2s-master). A control-less transmitter stands in until the bench names it.
+	 */
+	audio_out: audio-codec {
+		compatible = "linux,spdif-dit";
+		#sound-dai-cells = <0>;
+	};
+
+	sound {
+		compatible = "qcom,qrb4210-rb2-sndcard";
+		model = "GT6-EAU";
+		pinctrl-0 = <&sec_mi2s_active>;
+		pinctrl-names = "default";
+
+		mm1-dai-link {
+			link-name = "MultiMedia1";
+
+			cpu {
+				sound-dai = <&q6asmdai MSM_FRONTEND_DAI_MULTIMEDIA1>;
+			};
+		};
+
+		mm2-dai-link {
+			link-name = "MultiMedia2";
+
+			cpu {
+				sound-dai = <&q6asmdai MSM_FRONTEND_DAI_MULTIMEDIA2>;
+			};
+		};
+
+		mm3-dai-link {
+			link-name = "MultiMedia3";
+
+			cpu {
+				sound-dai = <&q6asmdai MSM_FRONTEND_DAI_MULTIMEDIA3>;
+			};
+		};
+
+		car-dai-link {
+			link-name = "Car Audio";
+
+			cpu {
+				sound-dai = <&q6afedai SECONDARY_MI2S_RX>;
+			};
+
+			platform {
+				sound-dai = <&q6routing>;
+			};
+
+			codec {
+				sound-dai = <&audio_out>;
+			};
+		};
+	};
+};
+
+&{/soc@0} {
+	remoteproc_adsp: remoteproc@ab00000 {
+		compatible = "qcom,sm6115-adsp-pas";
+		reg = <0x0ab00000 0x100>;
+
+		interrupts-extended = <&intc GIC_SPI 396 IRQ_TYPE_EDGE_RISING>,
+				      <&adsp_smp2p_in 0 IRQ_TYPE_EDGE_RISING>,
+				      <&adsp_smp2p_in 1 IRQ_TYPE_EDGE_RISING>,
+				      <&adsp_smp2p_in 2 IRQ_TYPE_EDGE_RISING>,
+				      <&adsp_smp2p_in 3 IRQ_TYPE_EDGE_RISING>;
+		interrupt-names = "wdog", "fatal", "ready",
+				  "handover", "stop-ack";
+
+		clocks = <&rpmcc RPM_SMD_XO_CLK_SRC>;
+		clock-names = "xo";
+
+		/* stock votes only vdd_cx; SM6125's RPM has no LPI domains */
+		power-domains = <&rpmpd SM6125_VDDCX>;
+
+		memory-region = <&adsp_pil_mem>;
+		firmware-name = "qcom/sm6125/choiceway/gt6eau/adsp.mdt";
+
+		qcom,smem-states = <&adsp_smp2p_out 0>;
+		qcom,smem-state-names = "stop";
+
+		glink-edge {
+			interrupts = <GIC_SPI 391 IRQ_TYPE_EDGE_RISING>;
+			label = "lpass";
+			qcom,remote-pid = <2>;
+			mboxes = <&apcs_glb 8>;
+
+			apr {
+				compatible = "qcom,apr-v2";
+				qcom,glink-channels = "apr_audio_svc";
+				qcom,domain = <APR_DOMAIN_ADSP>;
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				service@3 {
+					reg = <APR_SVC_ADSP_CORE>;
+					compatible = "qcom,q6core";
+					qcom,protection-domain = "avs/audio",
+								 "msm/adsp/audio_pd";
+				};
+
+				q6afe: service@4 {
+					compatible = "qcom,q6afe";
+					reg = <APR_SVC_AFE>;
+					qcom,protection-domain = "avs/audio",
+								 "msm/adsp/audio_pd";
+
+					q6afedai: dais {
+						compatible = "qcom,q6afe-dais";
+						#address-cells = <1>;
+						#size-cells = <0>;
+						#sound-dai-cells = <1>;
+
+						/* stock qcom,msm-mi2s-rx-lines = <1>: SD0 only */
+						dai@12 {
+							reg = <SECONDARY_MI2S_RX>;
+							qcom,sd-lines = <0>;
+						};
+					};
+
+					q6afecc: clock-controller {
+						compatible = "qcom,q6afe-clocks";
+						#clock-cells = <2>;
+					};
+				};
+
+				q6asm: service@7 {
+					compatible = "qcom,q6asm";
+					reg = <APR_SVC_ASM>;
+					qcom,protection-domain = "avs/audio",
+								 "msm/adsp/audio_pd";
+
+					q6asmdai: dais {
+						compatible = "qcom,q6asm-dais";
+						#address-cells = <1>;
+						#size-cells = <0>;
+						#sound-dai-cells = <1>;
+						/* stock qcom,msm-audio-ion */
+						iommus = <&apps_smmu 0x41 0x0>;
+
+						dai@0 {
+							reg = <MSM_FRONTEND_DAI_MULTIMEDIA1>;
+						};
+
+						dai@1 {
+							reg = <MSM_FRONTEND_DAI_MULTIMEDIA2>;
+						};
+
+						dai@2 {
+							reg = <MSM_FRONTEND_DAI_MULTIMEDIA3>;
+						};
+					};
+				};
+
+				q6adm: service@8 {
+					compatible = "qcom,q6adm";
+					reg = <APR_SVC_ADM>;
+					qcom,protection-domain = "avs/audio",
+								 "msm/adsp/audio_pd";
+
+					q6routing: routing {
+						compatible = "qcom,q6adm-routing";
+						#sound-dai-cells = <0>;
+					};
+				};
+			};
+		};
+	};
+};
+
+&tlmm {
+	/* stock sec_i2s_*_active: SCK 125, WS 126, SD0 127, SD1 128 (unused), 8 mA, no pulls */
+	sec_mi2s_active: sec-mi2s-active-state {
+		pins = "gpio125", "gpio126", "gpio127", "gpio128";
+		function = "sec_mi2s";
+		drive-strength = <8>;
+		bias-disable;
 	};
 };
