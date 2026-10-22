@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Stage the Wi-Fi, Bluetooth and modem firmware the mainline kernel loads, from the unit's own
+# Stage the Wi-Fi, Bluetooth, modem and audio DSP firmware the mainline kernel loads, from the unit's own
 # stock partitions, as a /lib/firmware tree for the gt6 rootfs. The blobs are Qualcomm's and
 # the vendor's: they never enter this repository, so this runs at build time against a dump.
 #
 #   modem.img (vfat) /image/ ─┬─ modem.mdt modem.bNN wlanmdsp.mbn *.jsn ─► qcom/sm6125/choiceway/gt6eau/
+#                             ├─ adsp.mdt adsp.bNN (audio DSP) ──────────► qcom/sm6125/choiceway/gt6eau/
 #                             └─ bdwlan.bin ─────────────────────────────► ath10k/WCN3990/hw1.0/board.bin
 #   bluetooth.img (vfat) /image/ ── crbtfw*.tlv crnv*.bin apbtfw*.tlv apnv*.bin ─► qca/
 #   LINUX_FIRMWARE ── ath10k/WCN3990/hw1.0/firmware-5.bin (feature flags only; the code runs in
@@ -26,12 +27,13 @@ readonly SUMS=SHA256SUMS-gt6eau
 # Stock keeps every blob in the partition's image/ folder (/vendor/firmware_mnt/image,
 # /vendor/bt_firmware/image on Android).
 readonly IMAGE_DIR=image
-readonly MODEM_FILES='^(modem\.mdt|modem\.b[0-9]+|wlanmdsp\.mbn|[a-z0-9_]+\.jsn)$'
+# The ADSP's image sits beside the modem's: stock ueventd loads adsp.mdt from /vendor/firmware_mnt/image.
+readonly MODEM_FILES='^(modem\.mdt|modem\.b[0-9]+|adsp\.mdt|adsp\.b[0-9]+|wlanmdsp\.mbn|[a-z0-9_]+\.jsn)$'
 readonly BDF_FILE=bdwlan.bin
 readonly BT_FILES='^(crbtfw|apbtfw)[0-9]+\.tlv$|^(crnv|apnv)[0-9]+[a-z]?\.bin$'
 readonly ATH10K_FW=firmware-5.bin
 
-[ $# -ge 1 ] && [ $# -le 2 ] || { sed -n 2,17p "$0"; exit 2; }
+[ $# -ge 1 ] && [ $# -le 2 ] || { sed -n 2,18p "$0"; exit 2; }
 OUT=$1 LINUX_FW=${2:-}
 
 RIPOSTE_OS_ENV=${RIPOSTE_OS_ENV:-/etc/riposte-os.env}
@@ -66,6 +68,7 @@ echo "modem: $MODEM_IMG"
 found=$(names "$MODEM_IMG" "$MODEM_FILES")
 grep -qix 'modem.mdt' <<<"$found" || die "no $IMAGE_DIR/modem.mdt in $MODEM_IMG"
 grep -qix 'wlanmdsp.mbn' <<<"$found" || die "no $IMAGE_DIR/wlanmdsp.mbn in $MODEM_IMG"
+grep -qix 'adsp.mdt' <<<"$found" || die "no $IMAGE_DIR/adsp.mdt in $MODEM_IMG"
 for n in $found; do take "$MODEM_IMG" "$n" "$MODEM_DIR"; done
 
 # The board data file: calibration for this unit's antennas and front end. Shipped as
