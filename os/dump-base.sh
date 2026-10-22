@@ -8,9 +8,12 @@
 # again. Re-run until `assemble` reports every partition complete. Every adb
 # call is bounded: an unplugged unit leaves adb half-open, not refused.
 #
-# Usage: dump-base.sh [--serial S] [--out DIR] [--parts "system product boot ..."] [--all] [assemble]
+# Usage: dump-base.sh [--serial S] [--out DIR] [--parts "system product boot ..."] [--all]
+#                     [--max-chunks N] [assemble]
 #   --all: every named partition except userdata and super (super holds the logical ones we
 #   already fetch by name), the default set first so a short visit still banks the useful part.
+#   --max-chunks: fetch at most N new chunks, then assemble and exit 0. A timer tick that
+#   holds the shared car lock gives it back after one chunk instead of a whole partition.
 
 set -euo pipefail
 readonly CHUNK_MIB=16
@@ -27,9 +30,10 @@ readonly CHUNK_T=900       # seconds for one chunk: 16 MiB at the ~35 KiB/s an L
 RIPOSTE_OS_ENV=${RIPOSTE_OS_ENV:-/etc/riposte-os.env}
 # shellcheck source=/dev/null
 [ -r "$RIPOSTE_OS_ENV" ] && . "$RIPOSTE_OS_ENV"
-SERIAL=${RAV4_SERIAL:-${RIPOSTE_CAR_ADB:?set RIPOSTE_CAR_ADB}}
-OUT=${RAV4_BASE_OUT:-${RIPOSTE_SHARE:?set RIPOSTE_SHARE}/os/base}
+SERIAL=${RAV4_SERIAL:-${RIPOSTE_CAR_ADB:-}}
+OUT=${RAV4_BASE_OUT:-${RIPOSTE_SHARE:+$RIPOSTE_SHARE/os/base}}
 PARTS=$DEFAULT_PARTS
+MAX_CHUNKS=0               # 0: no limit
 MODE=dump
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -37,10 +41,13 @@ while [ $# -gt 0 ]; do
     --out) OUT=$2; shift 2 ;;
     --parts) PARTS=$2; shift 2 ;;
     --all) PARTS=all; shift ;;
+    --max-chunks) MAX_CHUNKS=$2; shift 2 ;;
     assemble) MODE=assemble; shift ;;
     *) echo "unknown arg $1" >&2; exit 2 ;;
   esac
 done
+# Checked after the flags: --serial and --out stand in for the site file.
+: "${SERIAL:?set RIPOSTE_CAR_ADB or pass --serial}" "${OUT:?set RIPOSTE_SHARE or pass --out}"
 
 log() { printf '%s dump-base: %s\n' "$(date '+%F %T')" "$*" >&2; }
 a()  { timeout "$ADB_T" adb -s "$SERIAL" "$@"; }
@@ -104,6 +111,7 @@ if [ "$PARTS" = all ]; then
   log "all partitions: $(wc -w <<<"$PARTS") to fetch"
 fi
 
+fetched=0
 for part in $PARTS; do
   dev=$(blockdev_for "$part" "$SLOT")
   mkdir -p "$OUT/$part"
@@ -116,13 +124,26 @@ for part in $PARTS; do
   for i in $(seq 0 $((want - 1))); do
     n=$(printf %04d "$i")
     [ -f "$OUT/$part/$n.ok" ] && continue
+    if [ "$MAX_CHUNKS" -gt 0 ] && [ "$fetched" -ge "$MAX_CHUNKS" ]; then
+      log "fetched $fetched chunks, the --max-chunks budget; next run resumes"
+      break 2
+    fi
     expect=$(su_ "dd if=$dev bs=$CHUNK skip=$i count=1 2>/dev/null | sha256sum" | awk '{print $1}')
     [ ${#expect} -eq 64 ] || { log "$part: chunk $n hash failed on device; stopping"; exit 1; }
     timeout "$CHUNK_T" adb -s "$SERIAL" exec-out "su -c 'dd if=$dev bs=$CHUNK skip=$i count=1 2>/dev/null | gzip -1'" \
       | gzip -dc > "$OUT/$part/$n.bin" || { log "$part: chunk $n transfer failed; stopping"; exit 1; }
     got=$(sha256sum "$OUT/$part/$n.bin" | awk '{print $1}')
     [ "$got" = "$expect" ] || { log "$part: chunk $n hash mismatch; will retry"; rm -f "$OUT/$part/$n.bin"; exit 1; }
+    # The hash only proves the copy equals what dd read. A dd that read nothing (a by-name
+    # path that did not resolve) hashes and copies as an empty chunk, so check the length too.
+    len=$(( size - i * CHUNK < CHUNK ? size - i * CHUNK : CHUNK ))
+    if [ "$(stat -c %s "$OUT/$part/$n.bin")" -ne "$len" ]; then
+      log "$part: chunk $n is short (want $len bytes from $dev); will retry"
+      rm -f "$OUT/$part/$n.bin"
+      exit 1
+    fi
     touch "$OUT/$part/$n.ok"
+    fetched=$((fetched + 1))
     log "$part: chunk $((i + 1))/$want ok"
   done
 done
