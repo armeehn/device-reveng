@@ -334,8 +334,15 @@
 };
 
 &usb3_dwc3 {
-	/* the bench laptop is the host: adb and the boot gadget */
-	dr_mode = "peripheral";
+	/*
+	 * Either role, switched from userspace: device by default, so the bench laptop stays the
+	 * host (adb, the boot gadget); host when Riposte OS runs Android Auto with a phone on the
+	 * cable: echo host > /sys/class/usb_role/<dwc3>-role-switch/role. No connector or extcon
+	 * here, the unit's socket has no ID pin that Linux sees.
+	 */
+	dr_mode = "otg";
+	usb-role-switch;
+	role-switch-default-mode = "peripheral";
 };
 
 &mdss {

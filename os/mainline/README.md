@@ -64,6 +64,23 @@ show the bootloader's picture with kernel text over it.
 
 GPU (no upstream SM6125 GPU node) and Bluetooth call audio (Audio, below). Wi-Fi, Bluetooth, speaker audio and the microphones are described but unproven until a bench boot (below); the microphone links ship switched off. Cameras: `CAMERA.md`.
 
+## USB: device or host
+
+The USB controller (dwc3) is dual-role. It boots as a **device**, so the bench laptop stays the
+host: `fastboot boot`, adb on Android, the boot gadget's ACM shell and NCM link. Riposte OS
+(Linux) switches it to **host** for Android Auto, where the phone on the cable is the device:
+
+```
+cat /sys/class/usb_role/*-role-switch/role          # device | host | none
+echo host   > /sys/class/usb_role/*-role-switch/role
+echo device > /sys/class/usb_role/*-role-switch/role   # back, e.g. when Android Auto exits
+```
+
+There is no connector or extcon node: Linux sees no ID pin on the unit's socket, so nothing
+switches by itself. Unknown until the bench: whether the car's USB sockets get VBUS from the
+SoC side in host mode (stock powers phones for CarPlay/Android Auto through the same port, but
+the switch that does it is not described here).
+
 ## Touch and the MCU link
 
 Touch is the stock Goodix GT9xx on SE2 (`i2c2`, 0x14, irq GPIO 88, reset GPIO 87) under
