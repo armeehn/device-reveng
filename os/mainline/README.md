@@ -20,7 +20,7 @@ unit, so a failed boot costs a reboot, not a flash.
 | `gt6eau.config` | what arm64 `defconfig` leaves out for this board |
 | `init` | busybox init: USB gadget (ACM + NCM), telnetd, dmesg on the panel |
 | `mkboot_v2.py` | packs a header-v2 boot image with the stock image's addresses |
-| `build.sh` | all of the above from a v6.18 tree; heavy, runs on the build server |
+| `build.sh` | all of the above from a v6.18 tree, plus `modules/`, `Image`, the DTB and `kernel-build-id` for Riposte OS's `gt6` rootfs; heavy, runs on the build server |
 | `test-mkboot.sh` | the packer keeps the stock fields and page layout (CI) |
 
 ## Bench test

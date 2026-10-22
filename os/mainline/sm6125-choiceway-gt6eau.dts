@@ -265,6 +265,26 @@
 };
 
 
+/*
+ * The unit stores on UFS, not eMMC: the stock partitions are /dev/block/sdaN (super is
+ * sda6) and EDL reads it with --memory=ufs. Supplies as on laurel-sprout, the mainline
+ * SM6125 board with UFS on the same PM6125 rails. Riposte OS (Linux) roots from userdata.
+ */
+&ufs_mem_hc {
+	vcc-supply = <&vreg_l24a>;
+	vccq2-supply = <&vreg_l11a>;
+	vcc-max-microamp = <600000>;
+	vccq2-max-microamp = <600000>;
+	vdd-hba-supply = <&vreg_l18a>;
+	status = "okay";
+};
+
+&ufs_mem_phy {
+	vdda-phy-supply = <&vreg_l4a>;
+	vdda-pll-supply = <&vreg_l10a>;
+	status = "okay";
+};
+
 &tlmm {
 	gpio-reserved-ranges = <22 2>, <28 6>;
 };
