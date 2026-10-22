@@ -176,16 +176,15 @@ android {
     lint {
         checkReleaseBuilds = false
         abortOnError = true
+        // Compose 1.7's check misreads every `value = ...` inside a produceState producer
+        // under Kotlin 2.x lint and flagged all 11 call sites, each of which assigns value.
+        disable += "ProduceStateDoesNotAssignValue"
         baseline = file("lint-baseline.xml")
     }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-    }
-
-    kotlinOptions {
-        jvmTarget = "17"
     }
 
     packaging {
@@ -200,16 +199,23 @@ androidComponents {
     }
 }
 
+// Kotlin 2.2 made the string-typed android { kotlinOptions } DSL an error.
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+    }
+}
+
 dependencies {
     implementation(project(":carlib"))
 
     implementation("androidx.core:core-ktx:1.13.1")
-    implementation("androidx.activity:activity-compose:1.9.2")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.6")
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.6")
+    implementation("androidx.activity:activity-compose:1.9.3")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
 
     // Compose BOM keeps all Compose artifacts on compatible versions.
-    val composeBom = platform("androidx.compose:compose-bom:2024.09.02")
+    val composeBom = platform("androidx.compose:compose-bom:2025.03.01")
     implementation(composeBom)
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
@@ -217,16 +223,16 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
 
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
 
     // DataStore Preferences — app-local persistence (theme system v0.5 + drawer favorites/order v0.4).
-    implementation("androidx.datastore:datastore-preferences:1.1.1")
+    implementation("androidx.datastore:datastore-preferences:1.3.0")
 
     // v2.9 ProfileInstaller — writes src/main/baseline-prof.txt (which AGP compiles into the APK)
     // into the app's ART profile on first run, so the cold-start path is AOT-compiled from the
     // second launch. Required here because the unit side-loads: the Play Store install path that
     // normally applies a baseline profile never runs.
-    implementation("androidx.profileinstaller:profileinstaller:1.3.1")
+    implementation("androidx.profileinstaller:profileinstaller:1.4.1")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 
@@ -236,7 +242,7 @@ dependencies {
 
     // Virtual-time tests for the coroutine-driven input timing (KeyPump's repeat/long-press
     // timers) and the ignition-session holder. Same version line as coroutines-android above.
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
 
     // The real org.json, for the theme and driver-profile codecs. `org.json` ships in the
     // platform, so the app declares no JSON dependency — but a local unit test compiles against
@@ -251,10 +257,10 @@ dependencies {
     // indicator going missing. Versions come from the same Compose BOM as the app.
     androidTestImplementation(composeBom)
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
-    androidTestImplementation("androidx.test.ext:junit:1.2.1")
-    androidTestImplementation("androidx.test:runner:1.6.2")
-    androidTestImplementation("androidx.test:core:1.6.1")
-    androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
+    androidTestImplementation("androidx.test.ext:junit:1.3.0")
+    androidTestImplementation("androidx.test:runner:1.7.0")
+    androidTestImplementation("androidx.test:core:1.7.0")
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.7.0")
     // The Accessibility Test Framework: the a11y audit over every top-bar screen.
     androidTestImplementation("com.google.android.apps.common.testing.accessibility.framework:accessibility-test-framework:4.1.1")
     androidTestImplementation("com.google.guava:guava:33.3.1-android")   // ATF's ImmutableSet on its API

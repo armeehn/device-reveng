@@ -87,20 +87,23 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
-    }
-
     // The binder tests construct the generated ICarService.Stub, whose base is android.os.Binder.
     testOptions {
         unitTests.isReturnDefaultValues = true
     }
 }
 
+// Kotlin 2.2 made the string-typed android { kotlinOptions } DSL an error.
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+    }
+}
+
 dependencies {
     // McuOwner, the ICarService AIDL and the parcels live in carlib, shared with the launcher.
     implementation(project(":carlib"))
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
 
     testImplementation("junit:junit:4.13.2")
 }

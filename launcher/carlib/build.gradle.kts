@@ -30,10 +30,6 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
-    }
-
     // android.util.Log is a stub on the JVM and throws unless told to return defaults. The
     // transport logs why a board is unreachable, and a unit test exercising that path must not
     // fail on the logging rather than the logic.
@@ -42,12 +38,19 @@ android {
     }
 }
 
+// Kotlin 2.2 made the string-typed android { kotlinOptions } DSL an error.
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+    }
+}
+
 dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
-    implementation("androidx.annotation:annotation:1.8.2")
+    implementation("androidx.annotation:annotation:1.11.0")
 
     // Kotlin coroutines — CarEvents exposes car state as Flows.
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
 
     // libsu — robust `su` shell for privileged SysVar writes and `am broadcast`.
     // Published on JitPack (repo declared in settings.gradle.kts).
