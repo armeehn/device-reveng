@@ -7,6 +7,7 @@
 /dts-v1/;
 
 #include <dt-bindings/arm/qcom,ids.h>
+#include <dt-bindings/firmware/qcom,scm.h>
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/input/input.h>
 #include <dt-bindings/pinctrl/qcom,pmic-gpio.h>
@@ -30,6 +31,7 @@
 
 	aliases {
 		serial1 = &mcu_uart;
+		serial2 = &bt_uart;
 	};
 
 	chosen {
@@ -98,6 +100,41 @@
 		cmdline_mem: memory@ffd00000 {
 			reg = <0x0 0xffd40000 0x0 0x1000>;
 			no-map;
+		};
+
+		/*
+		 * The modem's remote file system buffer. Stock allocates its 2 MiB at boot
+		 * (qcom,sharedmem-uio, reg <0 0x200000>, client 1), so this one is dynamic too.
+		 */
+		rmtfs_mem: rmtfs {
+			compatible = "qcom,rmtfs-mem";
+			size = <0x0 0x200000>;
+			alignment = <0x0 0x100000>;
+			no-map;
+
+			qcom,client-id = <1>;
+			qcom,vmid = <QCOM_SCM_VMID_MSS_MSA>;
+		};
+	};
+
+	/* The modem's SMP2P link: stock qcom,smp2p-modem (SMEM 435/428, SPI 70, APCS bit 14) */
+	smp2p-mpss {
+		compatible = "qcom,smp2p";
+		qcom,smem = <435>, <428>;
+		interrupts = <GIC_SPI 70 IRQ_TYPE_EDGE_RISING>;
+		mboxes = <&apcs_glb 14>;
+		qcom,local-pid = <0>;
+		qcom,remote-pid = <1>;
+
+		modem_smp2p_out: master-kernel {
+			qcom,entry-name = "master-kernel";
+			#qcom,smem-state-cells = <1>;
+		};
+
+		modem_smp2p_in: slave-kernel {
+			qcom,entry-name = "slave-kernel";
+			interrupt-controller;
+			#interrupt-cells = <2>;
 		};
 	};
 
@@ -641,5 +678,131 @@
 		function = "cci_i2c";
 		drive-strength = <2>;
 		bias-pull-up;
+	};
+};
+
+/*
+ * Wi-Fi + Bluetooth: a Qualcomm WCN3990-family combo chip (stock "qca,wcn3990" BT node, "qcom,icnss"
+ * WLAN at 0xc800000, BT SoC property "cherokee"). The WLAN firmware runs inside the modem DSP,
+ * so Wi-Fi needs the modem up first:
+ *
+ *   remoteproc mpss (modem.mdt) ──QMI──► wlan PD (wlanmdsp.mbn via tqftpserv) ◄──QMI── ath10k_snoc
+ *
+ * Every number here is the stock device tree's; the bindings are SM6115's, whose modem
+ * resources (PAS id 4, crash SMEM 421, SSCTL 0x12) and WCN3990 rails match this SoC's.
+ */
+&{/soc@0} {
+	remoteproc_mpss: remoteproc@6080000 {
+		compatible = "qcom,sm6115-mpss-pas";
+		reg = <0x06080000 0x100>;
+
+		interrupts-extended = <&intc GIC_SPI 307 IRQ_TYPE_EDGE_RISING>,
+				      <&modem_smp2p_in 0 IRQ_TYPE_EDGE_RISING>,
+				      <&modem_smp2p_in 1 IRQ_TYPE_EDGE_RISING>,
+				      <&modem_smp2p_in 2 IRQ_TYPE_EDGE_RISING>,
+				      <&modem_smp2p_in 3 IRQ_TYPE_EDGE_RISING>,
+				      <&modem_smp2p_in 7 IRQ_TYPE_EDGE_RISING>;
+		interrupt-names = "wdog", "fatal", "ready", "handover",
+				  "stop-ack", "shutdown-ack";
+
+		clocks = <&rpmcc RPM_SMD_XO_CLK_SRC>;
+		clock-names = "xo";
+
+		power-domains = <&rpmpd SM6125_VDDCX>;
+
+		memory-region = <&modem_mem>;
+		firmware-name = "qcom/sm6125/choiceway/gt6eau/modem.mdt";
+
+		qcom,smem-states = <&modem_smp2p_out 0>;
+		qcom,smem-state-names = "stop";
+
+		glink-edge {
+			interrupts = <GIC_SPI 68 IRQ_TYPE_EDGE_RISING>;
+			label = "mpss";
+			qcom,remote-pid = <1>;
+			mboxes = <&apcs_glb 12>;
+		};
+	};
+
+	/* Stock qcom,icnss: same SPIs 358-369, SMMU stream 0x80, MSA at 0x53300000 */
+	wifi: wifi@c800000 {
+		compatible = "qcom,wcn3990-wifi";
+		reg = <0x0c800000 0x800000>;
+		reg-names = "membase";
+		memory-region = <&wlan_msa_mem>;
+		interrupts = <GIC_SPI 358 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 359 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 360 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 361 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 362 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 363 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 364 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 365 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 366 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 367 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 368 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 369 IRQ_TYPE_LEVEL_HIGH>;
+		iommus = <&apps_smmu 0x80 0x1>;
+
+		/* stock: vdd-cx-mx L8, vdd-1.8-xo L16, vdd-1.3-rfa L17, vdd-3.3-ch0 L23 */
+		vdd-0.8-cx-mx-supply = <&vreg_l8a>;
+		vdd-1.8-xo-supply = <&vreg_l16a>;
+		vdd-1.3-rfa-supply = <&vreg_l17a>;
+		vdd-3.3-ch0-supply = <&vreg_l23a>;
+
+		/* stock qcom,wlan-msa-fixed-region: the firmware owns the MSA permissions */
+		qcom,msa-fixed-perm;
+	};
+};
+
+/*
+ * Bluetooth: SE9 as a 4-wire UART on GPIO 10-13 (stock /dev/ttyHS0, qupv3_se9_4uart, SPI 312).
+ * Mainline only describes SE9 as i2c9/spi9, so the UART node lives here.
+ */
+&qupv3_id_1 {
+	bt_uart: serial@4c90000 {
+		compatible = "qcom,geni-uart";
+		reg = <0x04c90000 0x4000>;
+		clocks = <&gcc GCC_QUPV3_WRAP1_S4_CLK>;
+		clock-names = "se";
+		interrupts = <GIC_SPI 312 IRQ_TYPE_LEVEL_HIGH>;
+		pinctrl-0 = <&bt_uart_default>;
+		pinctrl-names = "default";
+
+		/* stock bt_wcn3990: vdd-io L9, vdd-xtal L16, vdd-core L17, vdd-pa L23 */
+		bluetooth {
+			compatible = "qcom,wcn3990-bt";
+			vddio-supply = <&vreg_l9a>;
+			vddxo-supply = <&vreg_l16a>;
+			vddrf-supply = <&vreg_l17a>;
+			vddch0-supply = <&vreg_l23a>;
+			max-speed = <3200000>;
+		};
+	};
+};
+
+&tlmm {
+	/* stock pulls: CTS/RX none, RTS down, TX up */
+	bt_uart_default: bt-uart-default-state {
+		cts-rx-pins {
+			pins = "gpio10", "gpio13";
+			function = "qup14";
+			drive-strength = <2>;
+			bias-disable;
+		};
+
+		rts-pins {
+			pins = "gpio11";
+			function = "qup14";
+			drive-strength = <2>;
+			bias-pull-down;
+		};
+
+		tx-pins {
+			pins = "gpio12";
+			function = "qup14";
+			drive-strength = <2>;
+			bias-pull-up;
+		};
 	};
 };
