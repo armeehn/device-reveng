@@ -3,7 +3,7 @@
 # MANIFEST is published into a temp share, and the car ingest's own release code
 # (os/uplink/ingest.py) must then offer it with the payload's real size and sha256. A second
 # publish of the same version is a no-op; a half-built one is never offered. Needs python3 with
-# protobuf >= 7.35 (forge), or PY=...
+# protobuf >= 7.35, or PY=...
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 PY=${PY:-python3}

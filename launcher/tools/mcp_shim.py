@@ -3,7 +3,7 @@
 
 Claude Code connects every configured MCP server for every session, including the
 daemon's pre-warmed spares that churn every few seconds. Each connect used to be an
-ssh → pct exec → python import of ARTEMIS on CT 124 (190 MB, seconds of CPU) plus a
+ssh → pct exec → python import of ARTEMIS on the farm CT (190 MB, seconds of CPU) plus a
 secret resolve and an .env rewrite. On 2026-09-17 that left 16 bridges on the farm.
 
     client ──stdio──► shim ──(first tools/call)──► headunit artemis mcp-real ──► 124

@@ -4,7 +4,7 @@
 # android.jar (to mint tiny APKs carrying the OEM package names).
 #
 # Fixture:  system.img = ext4 with labels   product.img = erofs
-# Apps:     the real launcher + suite from the launcher.hq webroot by default.
+# Apps:     the real launcher + suite from the release host's webroot by default.
 # Negative control: check.sh against the untouched base must FAIL.
 
 set -euo pipefail
@@ -12,14 +12,19 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 # shellcheck source=lib.sh
 . "$HERE/lib.sh"
 [ "$(id -u)" = 0 ] || die "run as root"
+# Site values (hosts, addresses, share paths) come from $RIPOSTE_OS_ENV, never from this
+# file: the repo is public. os/riposte-os.env.example lists them.
+RIPOSTE_OS_ENV=${RIPOSTE_OS_ENV:-/etc/riposte-os.env}
+# shellcheck source=/dev/null
+[ -r "$RIPOSTE_OS_ENV" ] && . "$RIPOSTE_OS_ENV"
 
 SDK=${ANDROID_SDK_ROOT:-$(ls -d /home/*/Android/Sdk 2>/dev/null | head -1)}
 AAPT2=${AAPT2:-$(ls "$SDK"/build-tools/*/aapt2 | sort -V | tail -1)}; export AAPT2
 ANDROID_JAR=$(ls "$SDK"/platforms/android-*/android.jar | sort -V | tail -1)
-WEBROOT=${WEBROOT:-/z1-pool/subvol-104-disk-1/var/www/launcher}
+WEBROOT=${WEBROOT:-${RIPOSTE_WEBROOT:?set RIPOSTE_WEBROOT}}
 LAUNCHER_APK=${LAUNCHER_APK:-$(ls "$WEBROOT"/carlauncher-*-vc*.apk | sort -t c -k3 -V | tail -1)}
 
-TOOLS_CACHE=${TOOLS_CACHE:-/z1-pool/share/carlauncher/os/tools/unit}
+TOOLS_CACHE=${TOOLS_CACHE:-${RIPOSTE_SHARE:?set RIPOSTE_SHARE}/os/tools/unit}
 W=$(mktemp -d "${TMPDIR:-/var/tmp}/riposte-fx.XXXXXX")
 trap 'rm -rf "$W"' EXIT
 mkdir -p "$W/base" "$W/apps/suite" "$W/out" "$W/sys" "$W/prod"

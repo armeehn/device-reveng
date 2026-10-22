@@ -4,11 +4,11 @@
 #   publish-os.sh IMAGE_DIR KEY.pem SHARE_ROOT [--host HOST] [--firmware DIR] [--jobs N]
 #
 #   IMAGE_DIR (os/build.sh output: *.img + MANIFEST)
-#      ──▶ mkpayload.py, here or on --host (forge: python3 with protobuf >= 7.35, 20 threads)
+#      ──▶ mkpayload.py, here or on --host (a big host: python3 with protobuf >= 7.35, 20 threads)
 #      ──▶ SHARE_ROOT/os-ota/.<version>.partial/ ──rename──▶ SHARE_ROOT/os-ota/<version>/
 #            payload.bin  payload_properties.txt  MANIFEST
 #
-# SHARE_ROOT is the car ingest's --releases-root (share/carlauncher); it serves the folder as
+# SHARE_ROOT is the car ingest's --releases-root (the share's project folder); it serves the folder as
 # /v1/releases/os/<version>/payload.bin and lists it only once the rename has happened. The
 # version comes from the build's MANIFEST; a version already published is left alone.
 # KEY.pem must match a certificate in the running image's otacerts.zip (share

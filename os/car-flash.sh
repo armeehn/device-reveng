@@ -105,4 +105,4 @@ adb -s "$SERIAL" shell su -c 'tar -C /data/misc -cf /data/local/tmp/diag.tar rip
 adb -s "$SERIAL" pull /data/local/tmp/diag.tar "$out/diag.tar" >/dev/null && tar -C "$out" -xf "$out/diag.tar" && rm -f "$out/diag.tar"
 log "diagnostics in $out"
 [ -f "$OS_DIR/diag-check.py" ] && python3 "$OS_DIR/diag-check.py" "$out/riposte/diag"
-log "DONE. Send $out to x: scp -r $out sasha@x.hq:/z1-pool/share/carlauncher/diag/"
+log "DONE. Send $out to the share's diag/ folder (scp -r)."

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Builds launcher/app/src/main/assets/tpms/rtl_433: rtl_433 for the head unit (Android arm64,
 # API 29) with libusb and librtlsdr linked in, so one file runs from a root shell with nothing
-# else installed. Runs on forge (NDK 27). Sources are pinned by sha256.
+# else installed. Runs on the build host (NDK 27). Sources are pinned by sha256.
 #
 #   libusb 1.0.27 ──▶ librtlsdr 2.0.2 ──▶ rtl_433 25.02 ──▶ assets/tpms/rtl_433 + rtl_433.sha256
 #

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # setup.sh and rav4-usb-update run on zero, the laptop that updates the head unit over USB,
 # where a syntax slip costs a trip to the car. They must parse, pass shellcheck, and setup.sh
-# must fetch from car-update/ only files that live next to it, because the launcher.hq
+# must fetch from car-update/ only files that live next to it, because the release host
 # car-update/ publisher copies exactly that list from main.
 set -euo pipefail
 cd "$(dirname "$0")/car-update"

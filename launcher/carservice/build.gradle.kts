@@ -17,7 +17,7 @@ val platformAlias = "platform"
 val platformStorePass = "android"
 
 // PKCS#8 key + X.509 cert -> PKCS12 under build/, with the JDK alone: no openssl or keytool on
-// the path, so forge and CI build it the same way.
+// the path, so the build host and CI build it the same way.
 fun platformKeystore(): File {
     val store = layout.buildDirectory.file("platform.p12").get().asFile
     store.parentFile.mkdirs()

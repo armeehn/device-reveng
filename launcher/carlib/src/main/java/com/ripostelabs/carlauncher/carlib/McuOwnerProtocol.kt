@@ -390,7 +390,7 @@ object McuOwnerProtocol {
     /**
      * The config blocks the vendor sends between the setups and the backlight, byte for byte as
      * eventcenter wrote them on a restart (strace of /dev/ttyHS1 writes, unit on 0.1,
-     * 2026-09-18, `share/carlauncher/evidence/2026-09-18-riposte-os-0.1-first-boot/`):
+     * 2026-09-18, `evidence/2026-09-18-riposte-os-0.1-first-boot/`):
      * sendFactorySet, sendVolumeFader, sendEQMode, sendSleepTime, SendDspSndSet, sendVolumeGain
      * all go out as opcode `4F` with a sub-id, then sendBTState(1). Their bit meanings are
      * config-derived and undocumented, so this replays the unit's own defaults rather than

@@ -1,6 +1,6 @@
 #!/bin/bash
 # Build the signed overlay APK into ../../overlay/product/overlay/ (committed: the image build
-# on x has no JDK). Runs in LXC 111: aapt2 -> apksigner, a throwaway key is fine for a static
+# on x has no JDK). Runs on the build host: aapt2 -> apksigner, a throwaway key is fine for a static
 # system overlay.
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)

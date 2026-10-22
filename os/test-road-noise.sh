@@ -78,7 +78,8 @@ cat > "$T/stub/ssh" <<'STUB'
 exit 255
 STUB
 chmod +x "$T/stub/ssh"
-DEST="$T/share" bash "$COLLECT" > "$T/out" 2>&1 || fail "collect exited $?: $(cat "$T/out")"
+# 192.0.2.1 is TEST-NET-1: never reachable, so zero is offline here and on CI.
+RIPOSTE_OS_ENV=/dev/null ZERO=nobody@192.0.2.1 DEST="$T/share" bash "$COLLECT" > "$T/out" 2>&1 || fail "collect exited $?: $(cat "$T/out")"
 grep -q "zero offline" "$T/out" || fail "collect summary: $(cat "$T/out")"
 [ ! -e "$T/share" ] || fail "collect made the share folder with zero offline"
 

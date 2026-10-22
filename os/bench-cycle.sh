@@ -1,35 +1,41 @@
 #!/usr/bin/env bash
-# One bench iteration of Riposte OS 0.2: a release launcher from launcher.hq, the image set
+# One bench iteration of Riposte OS 0.2: a release launcher from the release host, the image set
 # built here, shipped to the laptop at the bench, flashed over fastbootd without a wipe.
 #
-#     launcher.hq ──apk──▶ build.sh --profile gsi --bench ──▶ share/.../0.2-bench
+#     release host ──apk──▶ build.sh --profile gsi --bench ──▶ share/.../0.2-bench
 #         ──rsync──▶ laptop:~/rav4-headunit/os/0.2-bench ──▶ adb reboot fastboot ──▶ fastboot-flash-set.sh
 #         ──boot──▶ bench-verify.sh (every logical partition hashed against SHA256SUMS over adb)
 #
 # Usage: bench-cycle.sh <vcNNN> [--wipe]        runs as root on x (build.sh loop-mounts)
-#   vcNNN   a launcher versionCode listed at launcher.hq (the release job publishes one per
+#   vcNNN   a launcher versionCode listed on the release host (the release job publishes one per
 #           push to main); its .sha256 is checked before the build.
 #   --wipe  erase userdata on the flash (needed when crossing 0.1 <-> 0.2, see BENCH.md).
 # Env: ALLOW_BRANCH=1 to bench a branch checkout (default: main only),
-#      BENCH_HOST (default sasha@100.107.107.95), BENCH_SERIAL (adb serial, default da40e9ac),
-#      SHARE_HOST (how the laptop reaches this share, default sasha@x.hq.ripostelabs.xyz),
-#      SHARE (default /z1-pool/share/carlauncher/os), APPS (default $SHARE/apps-bench),
+#      BENCH_HOST (the bench laptop), BENCH_SERIAL (adb serial, default da40e9ac),
+#      SHARE_HOST (how the laptop reaches this share), SHARE (the share's os/ folder),
+#      APPS (default $SHARE/apps-bench),
 #      TOOLS (the debug toolbelt cache, default $SHARE/tools/unit; tools/fetch.sh fills it),
-#      LAUNCHER_URL (default https://launcher.hq.ripostelabs.xyz), AAPT2 (build.sh finds one),
-#      UNIT_ADB (the unit on Wi-Fi from here, default 10.0.10.14:5555; the data-side tools go there).
+#      LAUNCHER_URL (the release host), AAPT2 (build.sh finds one),
+#      UNIT_ADB (the unit on Wi-Fi from here; the data-side tools go there).
+#      Each defaults to its RIPOSTE_* value in $RIPOSTE_OS_ENV.
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
+# Site values (hosts, addresses, share paths) come from $RIPOSTE_OS_ENV, never from this
+# file: the repo is public. os/riposte-os.env.example lists them.
+RIPOSTE_OS_ENV=${RIPOSTE_OS_ENV:-/etc/riposte-os.env}
+# shellcheck source=/dev/null
+[ -r "$RIPOSTE_OS_ENV" ] && . "$RIPOSTE_OS_ENV"
 
 VC=${1:?usage: bench-cycle.sh <vcNNN> [--wipe]}
 WIPE=${2:-}
-BENCH_HOST=${BENCH_HOST:-sasha@100.107.107.95}
+BENCH_HOST=${BENCH_HOST:-${RIPOSTE_BENCH_HOST:?set RIPOSTE_BENCH_HOST}}
 BENCH_SERIAL=${BENCH_SERIAL:-da40e9ac}
-SHARE_HOST=${SHARE_HOST:-sasha@x.hq.ripostelabs.xyz}
-SHARE=${SHARE:-/z1-pool/share/carlauncher/os}
+SHARE_HOST=${SHARE_HOST:-${RIPOSTE_SHARE_HOST:?set RIPOSTE_SHARE_HOST}}
+SHARE=${SHARE:-${RIPOSTE_SHARE:?set RIPOSTE_SHARE}/os}
 APPS=${APPS:-$SHARE/apps-bench}
 TOOLS=${TOOLS:-$SHARE/tools/unit}
-LAUNCHER_URL=${LAUNCHER_URL:-https://launcher.hq.ripostelabs.xyz}
-UNIT_ADB=${UNIT_ADB:-10.0.10.14:5555}
+LAUNCHER_URL=${LAUNCHER_URL:-${RIPOSTE_RELEASE_URL:?set RIPOSTE_RELEASE_URL}}
+UNIT_ADB=${UNIT_ADB:-${RIPOSTE_UNIT_ADB:?set RIPOSTE_UNIT_ADB}}
 OUT=$SHARE/0.2-bench
 GSI=$SHARE/gsi/system-td-arm64-ab-vanilla-ci20240226.img.xz   # the last Android 14 GSI that boots on kernel 4.14
 readonly FASTBOOTD_USB_ID=18d1:4ee0
@@ -43,7 +49,7 @@ die() { echo "[bench] ERROR: $*" >&2; exit 1; }
 # guard, and RESULT.md then names the branch, not main.
 [ "${ALLOW_BRANCH:-0}" = 1 ] || [ "$(cat "$HERE/../.git/HEAD" 2>/dev/null)" = "ref: refs/heads/main" ] || die "checkout is not on main (ALLOW_BRANCH=1 to bench a branch)"
 
-# 1. the release launcher, checksum verified against launcher.hq
+# 1. the release launcher, checksum verified against the release host
 curl -sf -o "$APPS/carlauncher.apk" "$LAUNCHER_URL/carlauncher-0.7-$VC.apk" || die "no $VC at $LAUNCHER_URL"
 want=$(curl -sf "$LAUNCHER_URL/carlauncher-0.7-$VC.apk.sha256" | awk '{print $1}')
 have=$(sha256sum "$APPS/carlauncher.apk" | awk '{print $1}')

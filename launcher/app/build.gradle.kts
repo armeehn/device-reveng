@@ -49,7 +49,7 @@ android {
     compileSdk = 34
 
     // The AIS reverse-camera shim (app/src/main/cpp): a dlopen bridge to the unit's
-    // libais_camera.so. NDK and CMake live in forge's /opt/android-sdk, which CI bind-mounts.
+    // libais_camera.so. NDK and CMake live in the build host's /opt/android-sdk, which CI bind-mounts.
     ndkVersion = "27.2.12479018"
     externalNativeBuild {
         cmake {

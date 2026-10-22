@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # flash-0.2.sh runs on zero at the car, where a syntax slip costs a trip. It must parse,
 # pass shellcheck, and fetch only helpers that live next to it in os/, because the
-# launcher.hq car-update/os/ publisher copies exactly that list from main.
+# release host car-update/os/ publisher copies exactly that list from main.
 set -euo pipefail
 cd "$(dirname "$0")"
 

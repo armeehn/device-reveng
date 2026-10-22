@@ -13,9 +13,14 @@
 #
 # The reboot is not a verb: it is the step a person watches (`adb reboot`, zero on the pigtail).
 # PAYLOAD_DIR is a publish-os.sh output folder (payload.bin + payload_properties.txt).
-# Env: UNIT (adb serial, default 10.0.10.14:5555), POLL_S (default 10), ADB (default adb).
+# Env: UNIT (adb serial, default RIPOSTE_UNIT_ADB), POLL_S (default 10), ADB (default adb).
 set -euo pipefail
-UNIT=${UNIT:-10.0.10.14:5555}
+# Site values (hosts, addresses, share paths) come from $RIPOSTE_OS_ENV, never from this
+# file: the repo is public. os/riposte-os.env.example lists them.
+RIPOSTE_OS_ENV=${RIPOSTE_OS_ENV:-/etc/riposte-os.env}
+# shellcheck source=/dev/null
+[ -r "$RIPOSTE_OS_ENV" ] && . "$RIPOSTE_OS_ENV"
+UNIT=${UNIT:-${RIPOSTE_UNIT_ADB:?set RIPOSTE_UNIT_ADB}}
 POLL_S=${POLL_S:-10}
 ADB=${ADB:-adb}
 readonly PKG_DIR=/data/ota_package

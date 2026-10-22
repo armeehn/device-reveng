@@ -1,7 +1,7 @@
 #!/bin/bash
 # Flash the Riposte OS 0.2 image set on the head unit from zero, over the USB pigtail.
 #
-#   curl -sfO https://launcher.hq.ripostelabs.xyz/car-update/os/flash-0.2.sh && bash flash-0.2.sh
+#   curl -sfO <release host>/car-update/os/flash-0.2.sh && bash flash-0.2.sh
 #
 # Start it at home on the LAN: step 1 pulls ~3.5 GB from x (resumable), then it waits for Enter.
 # Take zero to the car, plug the unit in, press Enter. Away from home the network steps time out
@@ -11,8 +11,9 @@
 # each step checks before it acts. Log: ~/rav4-headunit/os/flash-<stamp>.log
 set -uo pipefail
 
-BASE=https://launcher.hq.ripostelabs.xyz/car-update/os
-SRC="sasha@x.hq.ripostelabs.xyz:/z1-pool/share/carlauncher/os/0.2-bench/"
+# The publisher fills the @...@ placeholders when it copies this file to the release host.
+BASE=${RIPOSTE_RELEASE_URL:-@RELEASE_URL@}/car-update/os
+SRC="${RIPOSTE_BENCH_SRC:-@BENCH_SRC@}"
 OS_DIR="$HOME/rav4-headunit/os"
 DIR="$OS_DIR/0.2-bench"
 # The unit's adb serial changed once already; with one device attached, use that one.

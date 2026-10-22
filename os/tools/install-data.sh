@@ -3,11 +3,16 @@
 # /data/local/riposte/bin. They survive a no-wipe flash and vanish with a userdata wipe, so
 # bench-cycle.sh --wipe is followed by this. frida-server is the only one today.
 #
-# Usage: install-data.sh [CACHE] [SERIAL]      (defaults: the share cache, 10.0.10.14:5555)
+# Usage: install-data.sh [CACHE] [SERIAL]      (defaults: the share cache, RIPOSTE_UNIT_ADB)
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
-CACHE=${1:-/z1-pool/share/carlauncher/os/tools/unit}
-SERIAL=${2:-10.0.10.14:5555}
+# Site values (hosts, addresses, share paths) come from $RIPOSTE_OS_ENV, never from this
+# file: the repo is public. os/riposte-os.env.example lists them.
+RIPOSTE_OS_ENV=${RIPOSTE_OS_ENV:-/etc/riposte-os.env}
+# shellcheck source=/dev/null
+[ -r "$RIPOSTE_OS_ENV" ] && . "$RIPOSTE_OS_ENV"
+CACHE=${1:-${RIPOSTE_SHARE:?set RIPOSTE_SHARE}/os/tools/unit}
+SERIAL=${2:-${RIPOSTE_UNIT_ADB:?set RIPOSTE_UNIT_ADB}}
 ADB=${ADB:-adb}
 readonly DATA_BIN=/data/local/riposte/bin
 

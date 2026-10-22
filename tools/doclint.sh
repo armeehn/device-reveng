@@ -66,4 +66,10 @@ for p in sys.argv[1:]:
 PY
 )
 
+# 7. The same estate internals in code and scripts. A default value leaks as surely as a
+#    sentence does: site values belong in an env file outside the repo (os/riposte-os.env.example,
+#    /etc/headunit.env). Tracker ids are allowed here: comments cite them as provenance.
+code_pat='launcher\.hq|\.hq\.ripostelabs|\.hq\b|\bLXC\b|share/carlauncher|/z1-pool|sasha@(x|zero|forge|100)|10\.0\.(1|10)\.[0-9]+|100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.[0-9]+\.[0-9]+|\bvile\b|\bforge\b|\bml350p\b|srv-android'
+while IFS= read -r line; do hit "internal (code): $line"; done < <(git grep -n -I -E "$code_pat" -- . ':!*.md' ':!tools/doclint.sh' | cut -c1-160)
+
 if [ "$bad" = 0 ]; then echo "DOCLINT PASS ($(echo $files | wc -w) files)"; else echo "DOCLINT: $bad finding(s)"; exit 1; fi
