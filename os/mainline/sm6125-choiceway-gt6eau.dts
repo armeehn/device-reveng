@@ -900,6 +900,81 @@
 				sound-dai = <&audio_out>;
 			};
 		};
+
+		/*
+		 * Microphones: stock records WCD937x ADC1 (AMIC1) and ADC2 (INP3, AMIC3) → TX macro
+		 * → TX_CDC_DMA_TX_3 (cdc-dma port 45115). The card waits for every link's
+		 * components, so a macro or codec that fails to probe would take the speaker down
+		 * with it. Both links stay off until the bench shows wcd937x bound (dmesg "bound
+		 * sdw..."). Then set them to "okay" and add audio-routing = "AMIC1", "MIC BIAS1",
+		 * "AMIC3", "MIC BIAS3" (stock's routes; a route to a codec outside the card fails
+		 * the whole card, so not yet).
+		 */
+		mm4-dai-link {
+			link-name = "MultiMedia4";
+			status = "disabled";
+
+			cpu {
+				sound-dai = <&q6asmdai MSM_FRONTEND_DAI_MULTIMEDIA4>;
+			};
+		};
+
+		mic-dai-link {
+			link-name = "Microphone";
+			status = "disabled";
+
+			cpu {
+				sound-dai = <&q6afedai TX_CODEC_DMA_TX_3>;
+			};
+
+			platform {
+				sound-dai = <&q6routing>;
+			};
+
+			codec {
+				sound-dai = <&wcd937x 1>, <&swr_tx 0>, <&txmacro 0>;
+			};
+		};
+	};
+
+	/*
+	 * The SoC's codec. Stock: qcom,wcd937x-codec, reset GPIO 120, rx/tx/px from L9A and the
+	 * buck from L14A (1.8 V each), micbias 1-3 at 1.8 V, slaves 0x...224 (RX) and 0x...223 (TX)
+	 * on the macros' SoundWire masters. Stock names no mic-bias supply: Linux falls back to a
+	 * dummy, and whether the bias reaches the car's mic is a bench question.
+	 */
+	wcd937x: audio-codec-1 {
+		compatible = "qcom,wcd9370-codec";
+
+		pinctrl-0 = <&wcd_reset_n>;
+		pinctrl-names = "default";
+
+		reset-gpios = <&tlmm 120 GPIO_ACTIVE_LOW>;
+
+		vdd-buck-supply = <&vreg_l14a>;
+		vdd-rxtx-supply = <&vreg_l9a>;
+		vdd-px-supply = <&vreg_l9a>;
+
+		qcom,micbias1-microvolt = <1800000>;
+		qcom,micbias2-microvolt = <1800000>;
+		qcom,micbias3-microvolt = <1800000>;
+
+		qcom,rx-device = <&wcd937x_rx>;
+		qcom,tx-device = <&wcd937x_tx>;
+
+		#sound-dai-cells = <1>;
+	};
+
+	/*
+	 * The macros' "fsgen" input. On SM8250 the VA macro's frame-sync generator feeds RX and
+	 * TX; this SoC's bolero has no VA macro (stock qcom,va-without-decimation, 3 macros: RX,
+	 * TX, WSA) and each macro gates its own MCLK. The drivers only enable fsgen, so an
+	 * always-on clock stands in.
+	 */
+	lpass_fsgen: lpass-fsgen-clk {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <19200000>;
 	};
 };
 
@@ -998,6 +1073,11 @@
 						dai@2 {
 							reg = <MSM_FRONTEND_DAI_MULTIMEDIA3>;
 						};
+
+						/* capture front end for the microphones */
+						dai@3 {
+							reg = <MSM_FRONTEND_DAI_MULTIMEDIA4>;
+						};
 					};
 				};
 
@@ -1024,5 +1104,158 @@
 		function = "sec_mi2s";
 		drive-strength = <8>;
 		bias-disable;
+	};
+
+	/* stock rx_swr_*_active: CLK 110, DATA 111-112, 10 mA, bus hold */
+	rx_swr_active: rx-swr-active-state {
+		pins = "gpio110", "gpio111", "gpio112";
+		function = "swr_rx";
+		drive-strength = <10>;
+		bias-bus-hold;
+	};
+
+	/* stock tx_swr_*_active: CLK 106, DATA 107-108, 10 mA, bus hold */
+	tx_swr_active: tx-swr-active-state {
+		pins = "gpio106", "gpio107", "gpio108";
+		function = "swr_tx";
+		drive-strength = <10>;
+		bias-bus-hold;
+	};
+
+	/* stock wcd937x_reset_active: 16 mA */
+	wcd_reset_n: wcd-reset-n-state {
+		pins = "gpio120";
+		function = "gpio";
+		drive-strength = <16>;
+		output-high;
+	};
+};
+
+/*
+ * Microphone path: the LPASS digital codec ("bolero") RX and TX macros, each with its own
+ * SoundWire master, and the WCD937x's two SoundWire slaves on them. The layout is SM8250's
+ * (TX macro owns the TX SoundWire, no VA decimators), not SM6115's, so the macros take the
+ * sm8250 match data. Addresses, interrupts and clocks are the stock tree's: RX 0xa440000 +
+ * SWR 0xa450000 (SPI 188), TX 0xa460000 + SWR 0xa470000 (SPI 184); q6afe clocks 0x30c/0x30d
+ * (TX core/NPL) and 0x30e/0x30f (RX core/NPL). The drivers set both to 19.2 MHz.
+ *
+ *   AMIC1 ─► WCD937x ADC1 ─► TX SoundWire ─► TX macro DEC ─► TX_CODEC_DMA_TX_3 ─► MultiMedia4
+ *
+ * The RX side carries no audio here: the WCD937x driver binds only once both slaves are up.
+ */
+&{/soc@0} {
+	rxmacro: codec@a440000 {
+		compatible = "qcom,sm8250-lpass-rx-macro";
+		reg = <0x0a440000 0x1000>;
+
+		pinctrl-0 = <&rx_swr_active>;
+		pinctrl-names = "default";
+
+		clocks = <&q6afecc LPASS_CLK_ID_RX_CORE_MCLK LPASS_CLK_ATTRIBUTE_COUPLE_NO>,
+			 <&q6afecc LPASS_CLK_ID_RX_CORE_NPL_MCLK LPASS_CLK_ATTRIBUTE_COUPLE_NO>,
+			 <&q6afecc LPASS_HW_DCODEC_VOTE LPASS_CLK_ATTRIBUTE_COUPLE_NO>,
+			 <&lpass_fsgen>;
+		clock-names = "mclk", "npl", "dcodec", "fsgen";
+
+		#clock-cells = <0>;
+		clock-output-names = "mclk";
+		#sound-dai-cells = <1>;
+	};
+
+	/* port setup copied from SM8250's RX master (5 ports, as stock qcom,swr-num-ports) */
+	swr_rx: soundwire@a450000 {
+		compatible = "qcom,soundwire-v1.5.1";
+		reg = <0x0a450000 0x2000>;
+		interrupts = <GIC_SPI 188 IRQ_TYPE_LEVEL_HIGH>;
+
+		clocks = <&rxmacro>;
+		clock-names = "iface";
+		label = "RX";
+
+		qcom,din-ports = <0>;
+		qcom,dout-ports = <5>;
+
+		qcom,ports-sinterval-low =	/bits/ 8 <0x03 0x1f 0x1f 0x07 0x00>;
+		qcom,ports-offset1 =		/bits/ 8 <0x00 0x00 0x0b 0x01 0x00>;
+		qcom,ports-offset2 =		/bits/ 8 <0x00 0x00 0x0b 0x00 0x00>;
+		qcom,ports-hstart =		/bits/ 8 <0xff 0x03 0xff 0xff 0xff>;
+		qcom,ports-hstop =		/bits/ 8 <0xff 0x06 0xff 0xff 0xff>;
+		qcom,ports-word-length =	/bits/ 8 <0x01 0x07 0x04 0xff 0xff>;
+		qcom,ports-block-pack-mode =	/bits/ 8 <0xff 0x00 0x01 0xff 0xff>;
+		qcom,ports-lane-control =	/bits/ 8 <0x01 0x00 0x00 0x00 0x00>;
+		qcom,ports-block-group-count =	/bits/ 8 <0xff 0xff 0xff 0xff 0x00>;
+
+		#sound-dai-cells = <1>;
+		#address-cells = <2>;
+		#size-cells = <0>;
+
+		/* stock wcd937x-rx-slave, 0x1170224 */
+		wcd937x_rx: codec@0,4 {
+			compatible = "sdw20217010a00";
+			reg = <0 4>;
+			qcom,rx-port-mapping = <1 2 3 4 5>;
+		};
+	};
+
+	txmacro: codec@a460000 {
+		compatible = "qcom,sm8250-lpass-tx-macro";
+		reg = <0x0a460000 0x1000>;
+
+		pinctrl-0 = <&tx_swr_active>;
+		pinctrl-names = "default";
+
+		clocks = <&q6afecc LPASS_CLK_ID_TX_CORE_MCLK LPASS_CLK_ATTRIBUTE_COUPLE_NO>,
+			 <&q6afecc LPASS_CLK_ID_TX_CORE_NPL_MCLK LPASS_CLK_ATTRIBUTE_COUPLE_NO>,
+			 <&q6afecc LPASS_HW_DCODEC_VOTE LPASS_CLK_ATTRIBUTE_COUPLE_NO>,
+			 <&lpass_fsgen>;
+		clock-names = "mclk", "npl", "dcodec", "fsgen";
+
+		#clock-cells = <0>;
+		clock-output-names = "mclk";
+		#sound-dai-cells = <1>;
+	};
+
+	/* port setup copied from SM8250's TX master (5 ports, as stock) */
+	swr_tx: soundwire@a470000 {
+		compatible = "qcom,soundwire-v1.5.1";
+		reg = <0x0a470000 0x2000>;
+		interrupts = <GIC_SPI 184 IRQ_TYPE_LEVEL_HIGH>;
+		interrupt-names = "core";
+
+		clocks = <&txmacro>;
+		clock-names = "iface";
+		label = "TX";
+
+		qcom,din-ports = <5>;
+		qcom,dout-ports = <0>;
+
+		qcom,ports-sinterval-low =	/bits/ 8 <0xff 0x01 0x01 0x03 0x03>;
+		qcom,ports-offset1 =		/bits/ 8 <0xff 0x01 0x00 0x02 0x00>;
+		qcom,ports-offset2 =		/bits/ 8 <0xff 0x00 0x00 0x00 0x00>;
+		qcom,ports-block-pack-mode =	/bits/ 8 <0xff 0xff 0xff 0xff 0xff>;
+		qcom,ports-hstart =		/bits/ 8 <0xff 0xff 0xff 0xff 0xff>;
+		qcom,ports-hstop =		/bits/ 8 <0xff 0xff 0xff 0xff 0xff>;
+		qcom,ports-word-length =	/bits/ 8 <0xff 0xff 0xff 0xff 0xff>;
+		qcom,ports-block-group-count =	/bits/ 8 <0xff 0xff 0xff 0xff 0xff>;
+		qcom,ports-lane-control =	/bits/ 8 <0xff 0x00 0x01 0x00 0x01>;
+
+		#sound-dai-cells = <1>;
+		#address-cells = <2>;
+		#size-cells = <0>;
+
+		/* stock wcd937x-tx-slave, 0x1170223 */
+		wcd937x_tx: codec@0,3 {
+			compatible = "sdw20217010a00";
+			reg = <0 3>;
+
+			/* WCD port 1 ADC1, 2 ADC2/3, 3 DMIC0-3 + MBHC, 4 DMIC4-7 */
+			qcom,tx-port-mapping = <1 1 2 3>;
+
+			/*
+			 * slave port channels in order adc1, adc2, adc3, mic0, dmic1, mbhc, dmic2,
+			 * dmic3, dmic4, dmic5, dmic6, dmic7 (qcm6490-idp's WCD9370 mapping)
+			 */
+			qcom,tx-channel-mapping = /bits/ 8 <1 2 1 1 2 3 3 4 1 2 3 4>;
+		};
 	};
 };

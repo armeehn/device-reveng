@@ -62,7 +62,7 @@ show the bootloader's picture with kernel text over it.
 
 ## What is not there yet
 
-GPU (no upstream SM6125 GPU node), microphones and Bluetooth call audio (Audio, below). Wi-Fi, Bluetooth and speaker audio are described but unproven until a bench boot (below); cameras: `CAMERA.md`.
+GPU (no upstream SM6125 GPU node) and Bluetooth call audio (Audio, below). Wi-Fi, Bluetooth, speaker audio and the microphones are described but unproven until a bench boot (below); the microphone links ship switched off. Cameras: `CAMERA.md`.
 
 ## Touch and the MCU link
 
@@ -130,7 +130,7 @@ partitions), `tqftpserv`, `qrtr` tools. The modem is not auto-booted: start it w
 - that `bdwlan.bin` is the right board file name in this modem image, and that ath10k takes it
   as `board.bin` when linux-firmware's `board-2.bin` has no entry for the chip's board id
 - the BT UART pins (stock pulls copied), baud 3.2 Mbit/s, and no enable GPIO (stock has none)
-- BT audio: the stock path is SLIMbus to the codec (BTFM), not described here
+- BT call audio: the stock path is SLIMbus to the ADSP (BTFM), not described here (Audio, below)
 
 ## Audio
 
@@ -150,7 +150,7 @@ the MCU owns: it switches sources and sets the amp volume (`05 05 v`). Evidence,
   (the `modem` partition, ueventd's only firmware directory), then the card registers
 
 The SoC's own codec is there too: a WCD937x on SoundWire (both slaves bind at boot) behind the
-LPASS RX/TX/VA macros. Its four WSA881x speaker amps are in the tree but absent on the board
+LPASS RX and TX macros (stock `qcom,va-without-decimation`: no VA macro). Its four WSA881x speaker amps are in the tree but absent on the board
 (all four probes fail). The HAL also routes playback to the WCD937x headphone outputs, and the
 vendor patched its driver to drive a PA enable on GPIO 131 with them. Whether those outputs
 reach anything in the car is unknown; the speaker device says I2S.
@@ -159,8 +159,8 @@ reach anything in the car is unknown; the speaker device says I2S.
 |---|---|---|
 | ADSP | `qcom,lpass@ab00000` PIL, PAS id 1, SMEM 423, SSCTL 0x14, wdog SPI 396 | `remoteproc_adsp` (`qcom,sm6115-adsp-pas`, the same ids), APR over glink |
 | speaker | MultiMedia → `SEC_MI2S_RX` (I2S, SoC master) → car amp | q6asm MultiMedia1-3 → q6routing → q6afe `SECONDARY_MI2S_RX`, SD0 |
-| microphone (CarPlay, voice) | WCD937x ADC1 + ADC2 (`INP3`) → TX macro → `TX_CDC_DMA_TX_3` | not described: no SM6115/SM6125 RX or VA macro upstream |
-| Bluetooth calls | WCN399x over SLIMbus (BTFM slave, `SLIMBUS_7`) ↔ `SEC_MI2S_RX` | not described: no BTFM driver upstream |
+| microphone (CarPlay, voice) | WCD937x ADC1 + ADC2 (`INP3`) → TX macro → `TX_CDC_DMA_TX_3` | described, links off: `wcd9370-codec` + `sm8250-lpass-rx/tx-macro` + `soundwire-v1.5.1` → q6afe `TX_CODEC_DMA_TX_3` → MultiMedia4 |
+| Bluetooth calls | WCN399x over SLIMbus (BTFM slave, `SLIMBUS_7`) ↔ `SEC_MI2S_RX` | not described: no WCN399x SLIMbus codec, no q6afe `SLIMBUS_7` (below) |
 | FM / tuner | MCU side (the `SLIM_8` FM path in the HAL is the WCN's and unused) | n/a |
 
 The card is SM6115's (`qcom,qrb4210-rb2-sndcard`): Qualcomm's RB2 drives a bridge from the
@@ -188,6 +188,71 @@ ctl.!default { type hw card GT6EAU }
 Volume stays on the MCU (`riposte-mcud`): the card has no gain of its own, and the amp is
 silent until the MCU selects the head unit as its source (stock: `3F` on every stream start).
 
+### Microphones
+
+Mainline 6.18 has every driver the stock mic path uses; only the device tree was missing:
+
+- WCD937x: `sound/soc/codecs/wcd937x.c` and `wcd937x-sdw.c` (`qcom,wcd9370-codec`)
+- macros: `lpass-tx-macro.c` and `lpass-rx-macro.c` match `qcom,sm8250-lpass-*-macro`;
+  6.18 also has `qcom,sm6115-lpass-tx-macro`, and the SM6115 RX and VA compatibles follow in
+  6.19 (sound tree commits `8ff3dcb0e8a8` and `893e2fd509e9`)
+- SoundWire: `drivers/soundwire/qcom.c` matches v1.3.0 to v2.0.0 and reads the block's own
+  version register at probe
+- the ADSP side: q6afe `TX_CODEC_DMA_TX_3` and its q6routing mixers
+
+This SoC's LPASS is laid out like SM8250's, not SM6115's: the TX macro owns the TX SoundWire
+master and there is no VA macro. So the board DTS takes the sm8250 match data, with the stock
+addresses, interrupts, clock ids and pins. The macros' `fsgen` input (SM8250's VA macro) is
+an always-on stand-in, since each macro here gates its own MCLK.
+
+The capture links (`mm4-dai-link`, `mic-dai-link`) ship disabled. The card waits for every
+link's components, so a macro that fails to probe would silence the speaker too. At the bench,
+check that `wcd937x` binds both slaves, set both links to `okay`, add the `AMIC` to `MIC BIAS`
+routes noted in the DTS, then:
+
+```
+amixer -c GT6EAU cset name='MultiMedia4 Mixer TX_CODEC_DMA_TX_3' 1
+amixer -c GT6EAU cset name='TX_AIF1_CAP Mixer DEC0' 1
+amixer -c GT6EAU cset name='TX DEC0 MUX' 'SWR_MIC'
+amixer -c GT6EAU cset name='TX SMIC MUX0' 'ADC0'   # TX SWR_ADC0 = WCD ADC1 (stock route)
+amixer -c GT6EAU cset name='ADC1 Switch' 1
+arecord -D hw:GT6EAU,3 -f S16_LE -r 48000 -c 1 -d 5 mic.wav
+```
+
+The control names are the mainline drivers'. Stock's mixer paths name the same blocks, but the
+exact ADC and mux values are a bench question.
+
+### Bluetooth call audio
+
+Not possible on 6.18 without new driver code. Stock carries SCO between the WCN399x and the
+ADSP over a second SLIMbus (`slim@a340000`, stock `qcom,btfmslim_slave`, elemental address
+`00 01 20 02 17 02`: manufacturer 0x217, product 0x220). Mainline lacks three pieces:
+
+- a SLIMbus codec driver for the WCN399x: nothing in `sound/soc/codecs`. A draft exists
+  (sdm845-mainline merge request 99, `wcn3990.c`, unmerged and unfinished)
+- q6afe `SLIMBUS_7`: q6afe-dai ports stop at `SLIMBUS_6_TX` (`q6afe-dai.c` line 408)
+- the NGD controller's version for this SoC: `qcom-ngd-ctrl.c` knows v1.5.0 and v2.1.0, and
+  the stock node gives no version
+
+SCO over HCI would sidestep all three, with BlueZ and PipeWire doing the audio in software.
+Mainline does not mark the WCN3990 as wideband-capable (`hci_qca.c`, `qca_soc_data_wcn3990`
+has no capabilities; the WCN3991 does). It does not show where the controller sends SCO,
+either: the vendor NVM decides, and stock routes it to SLIMbus. The sdm845 phones that use the
+same chip went the SLIMbus way, which suggests the vendor NVMs do not offer HCI.
+
+Driver work, in order:
+
+| Piece | Files | Size |
+|---|---|---|
+| q6afe `SLIMBUS_7_RX/TX` (AFE ports 0x400e/0x400f) | `qcom,q6dsp-lpass-ports.h`, `q6afe.c`, `q6dsp-lpass-ports.c`, `q6afe-dai.c` | about 60 lines, half a day |
+| NGD on SM6125: stock reg 0xa340000 (0x2c000) + BAM 0xa304000 (0x20000), SPI 403/404, SMMU SID 0x73 | DTS, maybe an offset table in `qcom-ngd-ctrl.c` | 1 day once the version register is read |
+| WCN399x SLIMbus codec: BT SCO RX/TX DAIs on `slim217,220`, ports from Qualcomm's `btfm_slim_wcn3990.c` | new `sound/soc/codecs/wcn3990.c` | 1 to 2 weeks with bench access |
+| card links SLIMBUS_7 ↔ MultiMedia, a session manager that routes call audio | DTS, PipeWire "hardwired SCO" setup | days |
+
+Until then, the fallback is USB. A USB Bluetooth adapter (btusb) carries SCO over HCI, and
+PipeWire's native HFP backend handles calls with it. A USB microphone, or the PEARL array over
+USB, needs only `snd-usb-audio`.
+
 ### Unverified until the bench boot
 
 - that the ADSP boots under `qcom,sm6115-adsp-pas` with only the CX vote (stock proxy-votes
@@ -196,6 +261,11 @@ silent until the MCU selects the head unit as its source (stock: `3F` on every s
   machine driver's back-end fixup needs a GT6 case
 - what the receiver is: scope GPIO 125-127 during playback, then follow SD0 on the board
 - whether GPIO 131 (the vendor's PA enable) or the WCD937x headphone outputs feed the car at all
-- mic and call audio: WCD937x needs SM6125 entries in the LPASS RX/VA macro drivers and the
-  SoundWire masters described; BT calls need a SLIMbus BTFM codec or SCO over the HCI UART
+- that the macros run with SM8250's match data (bolero register maps of one generation), and
+  that the macros need nothing from the absent VA block
+- that `wcd937x` binds both slaves at 6.18's port maps, and what powers the mic bias (stock
+  names no supply; Linux uses a dummy)
+- which input the car's mic is on: stock enables ADC1 (AMIC1) and ADC2 with `INP3` (AMIC3)
+- where the WCN3990 sends SCO with the unit's NVM: run an HFP call and watch `btmon` for SCO
+  data on the UART. If it shows, SCO over HCI works and the SLIMbus work above is moot
 
