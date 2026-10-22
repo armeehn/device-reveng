@@ -6,10 +6,12 @@ authoritative source for every event, service, and setting referenced here (cite
 
 - **Panel:** 1920 × 720 px landscape, ~240 dpi → **~1280 × 480 dp** working canvas.
 - **Input:** finger touch (gloved, moving vehicle) + steering-wheel keys (SWC).
-- **OS:** Android 13, rooted.
+- **OS:** Android 13, rooted; or Riposte OS 0.2 (AOSP 14, no OEM app), see `os/README.md`.
 - **Ship model:** COMPANION home first (coexists with vendor `com.szchoiceway.customerui`;
   user chooses the default via the Android home-resolver). The FULL REPLACEMENT tier as a
   privileged/system app is ruled out for good (§6.4); the ROOT TIER replaced it and shipped.
+  On Riposte OS 0.2 the image is ours: the launcher is HOME as a priv-app and a platform-signed
+  car service owns the MCU, so the vendor-owned limits below apply to stock firmware only.
 
 Throughout, **all sizes are in dp** on the ~1280 × 480 dp canvas unless a px value is stated.
 
@@ -187,6 +189,10 @@ As laid out in §2. Root destination; SWC HOME key always returns here (§4).
 - Explicitly **no write path in v1** (writing needs raw A/C key opcodes / MCU passthrough that
   best belong to a system build — CAR_API §5). A "Controls" affordance is greyed with a tooltip
   until the system build enables it.
+- **As built (2026-10-22):** the screen is still a readout, and a Controls dialog
+  (`ui/ClimateControlsDialog.kt`) sends the stock key presses: canbus2 key values on stock
+  (`carlib/ClimateControl`), the box frames on 0.2 (`carlib/ClimateKeys`). A chip lights only
+  from the car's climate report. The RAV4's answer is UNVERIFIED.
 
 ### 3.6 Reverse overlay (full-screen)
 - Triggered by protected broadcast **`ACTION_BACKCAR_START`**; dismissed on `ACTION_BACKCAR_END`
@@ -204,6 +210,9 @@ As laid out in §2. Root destination; SWC HOME key always returns here (§4).
   the vendor composites its own reverse window above all apps and `ui/ReverseOverlay.kt` never
   contends for those pixels. The radar decode is UNCONFIRMED besides, so the maneuvering
   side-strips stay hidden.
+- **Riposte OS 0.2:** no vendor window exists, so the launcher draws the picture itself as an
+  overlay window above any app (`ui/ReverseCameraWindow.kt`, feed via Qualcomm AIS in
+  `data/AisCamera.kt`), with the stock dynamic guide lines (`ui/GuideTrajectory.kt`).
 
 ### 3.7 Settings
 - Large-tile settings: Theme (Day/Night/Auto), Reachability mirror (LHD/RHD), QuickLaunch
@@ -426,13 +435,13 @@ its place, on a plain user install of the rooted unit:
 
 **Still not shipped, and blocked on the vehicle or the vendor API rather than on effort:**
 - **Write-enabled Climate.** Whether this car's HVAC is CAN-writable at all is untested (STATUS
-  goal #3, "likely display-only"), so §3.5 stays read-only. Root does not change this.
-- **Our radar/trajectory over the camera picture.** The vendor composites the reverse window above
-  all apps; §3.6.
+  goal #2, "may be display-only"). The key presses are sent (§3.5); a car test decides.
+- **Our radar/trajectory over the camera picture on stock.** The vendor composites the reverse
+  window above all apps; §3.6. On 0.2 the trajectory is drawn; the radar is not.
 - **Radar side-strips.** The `MCU_CAR_CAN_RADAR_INFO` byte layout is GUESSED, so they stay hidden
   until a capture confirms the offsets.
-- **Radio scan and RDS station text.** The vendor AIDL has no PS/RT getter and nothing that starts
-  a scan; seek is the whole control surface.
+- **Radio scan and RDS station text on stock.** The vendor AIDL has no PS/RT getter and nothing
+  that starts a scan; seek is the whole control surface. On 0.2 the MCU owner decodes the PS name.
 
 ---
 
@@ -452,4 +461,5 @@ normal companion app that degrades gracefully around the protected
 `com.szchoiceway.permission.broadcast` and root-only SysVar writes, following an MVP → v1 →
 root-tier path. The platform-signed `/system/priv-app` full replacement is ruled out for good
 because the vendor key is unobtainable; Magisk root stands in for the signature where it can.
-Native radar overlays and write-enabled climate/audio control remain unbuilt.
+Native radar overlays remain unbuilt, and climate key presses are sent but unverified on the
+car. On Riposte OS 0.2 the launcher draws the reverse picture itself and drives the DSP and amp.

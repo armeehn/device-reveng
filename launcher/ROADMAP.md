@@ -1,12 +1,13 @@
 # CarLauncher roadmap
 
-_Last verified against `main` on 2026-08-28 at versionCode 61. Every "shipped" claim below was
-checked by reading the code, not by the presence of a file with the right name._
+_Last verified against `main` on 2026-10-22 at `81d0de2` (versionCode 1072). Every "shipped"
+claim below was checked by reading the code, not by the presence of a file with the right name._
 
 _The sections "0.7 — the raw bus, read on the head unit" (verified at versionCode 244) and
 "0.7 — accessories and games" (verified at 254) were added 2026-09-08 the same way. The older
 sections were not re-audited on that date. The speed, traceability and documentation-truth
-entries were re-audited 2026-09-09 against `main` at PR #108._
+entries were re-audited 2026-09-09 against `main` at PR #108. The ground rules, "0.7 — Riposte
+OS 0.2, the car owner", "Deferred" and "Out of scope" were re-audited 2026-10-22 at `81d0de2`._
 
 Workflow: **one feature = one branch off `main` = one PR**. Versions are derived from git
 (see below) — do not claim, bump, or mention a versionCode in a PR. Only tagged `main`
@@ -40,12 +41,16 @@ These are settled. Re-proposing them costs a session each time, so the reasoning
 
 - **Reverse video is permanently vendor-owned.** The vendor composites its own reverse window
   above all apps; we cannot host or draw over the feed. Anything "reverse camera" beyond
-  coexistence and settings is out of scope forever.
+  coexistence and settings is out of scope forever. This holds on stock firmware (0.1). On
+  Riposte OS 0.2 there is no vendor window: the launcher draws the picture itself through
+  Qualcomm AIS (`AisCamera`, `ReverseCameraWindow`), with stock's guide lines (`GuideTrajectory`).
 - **The platform signature tier is unreachable** — the platform private key is confirmed
   unobtainable. The design doc's "system app" tier was replaced by a **root tier** (Magisk root
-  + permissive SELinux), which is what shipped.
-- **HVAC writes are unproven.** Climate may be display-only on this vehicle. The control ships
-  only if a live test proves writability; until then it stays read-only.
+  + permissive SELinux), which is what shipped. On 0.2 the image's platform key is AOSP's
+  public test key, so the car service (`launcher/carservice`) is a platform-signed priv-app there.
+- **HVAC writes are unproven.** Climate may be display-only on this vehicle. The stock key
+  presses now ship (`ClimateControl` on 0.1, `ClimateKeys` on 0.2) ahead of a live test. Each
+  chip lights only from the car's own climate report, so a key the car ignores shows as ignored.
 - **The radar byte layout is guessed.** The code says so and degrades to a placeholder rather
   than fabricating a reading. Radar features do not grow until a capture confirms the layout.
 - **Never write a guessed encoding to the vehicle.** The `Rdo_MyFavorite0..5` preset format and
@@ -328,9 +333,42 @@ logged the command it ignored. The no-optimistic-update rule holds on a running 
 only in unit tests. The remaining ~1 s per HTTP step is the emulator's own networking (a raw socket
 request from inside it takes ~530 ms) and is to be re-measured on the car.
 
+## 0.7 — Riposte OS 0.2, the car owner
+
+On 0.2 no OEM app runs, so everything the vendor gateway and canbus2 did is ours. The base
+stays 0.7. Shipped since 2026-09-19, verified by reading the code at `81d0de2`:
+
+- **The car service** (`launcher/carservice`, `com.ripostelabs.car`). One `McuOwner` per image
+  (`OwnerHost`), the nav bar window with a system inset, factory reset, system controls, and an
+  `IEventService` subset (`EventCompatService`) for apps written against the gateway.
+- **Reverse and cameras.** The picture as an overlay window over any app, CarPlay included
+  (`ReverseCameraWindow`), opened the way stock does (`AisCamera`, `DecoderSignal`), kept warm
+  while ACC is on, reopened when the decoder changes format, never a frozen frame. Dynamic guide
+  lines ported from stock. A 2x2 grid of the 360 cameras (`SurroundCameraActivity`).
+- **Navigation chrome.** The launcher's own nav bar, folding to a pill, kept off CarPlay until a
+  session and off the reverse picture; an edge app hotbar (`ui/nav/`).
+- **Phone.** Incoming-call and volume popups over any app, DTMF, call log, auto-answer, redial,
+  mute, calls through the DSP as speech, HFP parked while CarPlay is up.
+- **Audio and radio.** The stock DSP 48-band EQ, crossover, subwoofer and listening position
+  (`DspEq`, `DspSound`); factory JBL amp controls (`OemAmp`); amp volume stepped from our keys;
+  radio regions, RDS switch and presets kept across reboots; cluster text (`ClusterText`).
+- **Car.** The stock Toyota car settings (`CarCustomizeScreen`), door popup, climate keys, wheel-key learning
+  (`WheelLearn`), CAN gear reverse, tyre pressures from the box or an RTL-SDR (`TyreRadio`).
+- **Power.** ACC standby: OFF, LIGHT (never suspends the kernel) or ON (suspend to idle), one
+  step shallower after a failed wake (`StandbyOptIn`, `StandbyFallback`).
+- **Home.** Clock, weather card, wallpaper, status chips, one Android widget (`HomeWidgetHost`),
+  a screensaver.
+- **Updates.** Launcher, car service and suite over the network with a crash rollback
+  (`OtaUpdater`); A/B OS payloads (`OsUpdater`), off until the supervised bench test passes.
+
+Car sessions since 2026-09-22 drove most of the fixes above; none of this is a stability claim.
+
 ## Deferred — needs the car, not the desk
 
 Not blocked forever, just not buildable from here. Each needs one session at the vehicle.
+
+- **Climate key presses.** Sent on both OS lines; whether the RAV4 acts on them is unseen.
+- **The first OS payload on the unit.** `os/ota/bench-ota.sh` scripts the supervised test.
 
 - **The Accessories page on the real unit.** Config is pushed and a virtual board answers over
   the private network; nobody has tapped the page in the car yet.
@@ -370,8 +408,9 @@ Not blocked forever, just not buildable from here. Each needs one session at the
 
 ## Explicitly out of scope
 
-- Hosting or drawing over the reverse camera video (vendor-owned).
-- Platform-signature / privileged install (key unobtainable; the root tier replaced it).
+- Hosting or drawing over the reverse camera video on 0.1 (vendor-owned; 0.2 draws its own).
+- Platform-signature / privileged install on stock (key unobtainable; the root tier replaced it).
 - Theming the vendor IME (impossible; replaced by the in-app keyboard).
-- Radio scan and RDS station text — no method to start a scan and no station-name or radio-text
-  getter exists in the vendor AIDL. Seek and a boolean RDS indicator are the whole surface.
+- Radio scan and RDS station text on 0.1 — no method to start a scan and no station-name or
+  radio-text getter exists in the vendor AIDL. Seek and a boolean RDS indicator are the whole
+  surface. On 0.2 the MCU owner decodes the station name and sends the scan key itself.
