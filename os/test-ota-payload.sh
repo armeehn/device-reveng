@@ -3,7 +3,7 @@
 # then check it the way update_engine does: both RSA signatures against the
 # public key, every blob's sha256, and the images rebuilt from the operations
 # byte-exact. A second key must fail. Needs python3 with protobuf >= 7.35
-# (forge: ~/ota-proto/venv/bin/python, or PY=...).
+# (e.g. ~/ota-proto/venv/bin/python, or PY=...).
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 PY=${PY:-python3}

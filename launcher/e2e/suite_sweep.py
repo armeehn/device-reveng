@@ -1,7 +1,7 @@
 """Sweep every com.ripostelabs.* suite app on a farm instance: launch, layout checks, one tap deep, crashes.
 
 Not a pytest case: the suite is another repo (rav4-apps) and its 28 APKs must be installed on the
-instance first (the served set from launcher.hq, plus the launcher's `farm` variant so the apps
+instance first (the served set from the release host, plus the launcher's `farm` variant so the apps
 find its providers). Runs next to test_layout_sweep.py and reuses its parsing and rules. Output:
 a JSON report on stdout, one PNG per app main screen in ./shots/, progress on stderr.
 

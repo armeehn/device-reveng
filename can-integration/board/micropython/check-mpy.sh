@@ -7,7 +7,7 @@
 #
 #   MICROPYTHON=/path/to/micropython MPY_CROSS=/path/to/mpy-cross sh check-mpy.sh
 #
-# Defaults are the build in LXC 111 (micropython v1.25.0, built with CFLAGS_EXTRA=-Wno-error
+# Defaults are the build host's (micropython v1.25.0, built with CFLAGS_EXTRA=-Wno-error
 # because a newer gcc trips its -Werror). Exits 2 when no interpreter is present: absent is not
 # the same as passing, and a caller must be able to tell.
 set -eu

@@ -5,19 +5,24 @@
 #   stock system.img ──▶ /data/local/tmp/zlink/{z-link,z-mdnsd,z-usbmuxd,lib/*.so}   (survives a flash)
 #                    ──▶ /system/bin/z-mdnsd                     (the daemon's fixed path; lost on a flash)
 #   cmd wifi start-softap RAV4-CarPlay wpa2 <psk> -b 5 -f <STA freq>   ──▶ riposte.ap.* props
-#   z-link -c zhuoxw  ◀──127.0.0.1──▶  com.ripostelabs.projection (installed from launcher.hq suite/)
+#   z-link -c zhuoxw  ◀──127.0.0.1──▶  com.ripostelabs.projection (installed from the release host's suite/)
 #
 # Usage: bench-carplay.sh [--restart]     runs on the build host; adb reaches the unit over Wi-Fi.
 #   --restart   only restart the daemon (after an app reinstall).
-# Env: UNIT (adb serial, default 10.0.10.14:5555), SHARE (default /z1-pool/share/carlauncher/os),
-#      ADB (default the LXC 111 platform-tools adb through pct exec).
+# Env: UNIT (adb serial), SHARE (the share's os/ folder), ADB (the build host's adb),
+#      STAGE (a folder that adb can push from), PSK (the access point password).
 set -euo pipefail
-UNIT=${UNIT:-10.0.10.14:5555}
-SHARE=${SHARE:-/z1-pool/share/carlauncher/os}
-ADB=${ADB:-pct exec 111 -- /opt/android-sdk/platform-tools/adb}
-STAGE=/z1-pool/subvol-111-disk-0/var/tmp/zlink     # what LXC 111's adb can push
+# Site values (hosts, addresses, share paths) come from $RIPOSTE_OS_ENV, never from this
+# file: the repo is public. os/riposte-os.env.example lists them.
+RIPOSTE_OS_ENV=${RIPOSTE_OS_ENV:-/etc/riposte-os.env}
+# shellcheck source=/dev/null
+[ -r "$RIPOSTE_OS_ENV" ] && . "$RIPOSTE_OS_ENV"
+UNIT=${UNIT:-${RIPOSTE_UNIT_ADB:?set RIPOSTE_UNIT_ADB}}
+SHARE=${SHARE:-${RIPOSTE_SHARE:?set RIPOSTE_SHARE}/os}
+ADB=${ADB:-${RIPOSTE_BUILD_ADB:-adb}}
+STAGE=${STAGE:-${RIPOSTE_ZLINK_STAGE:?set RIPOSTE_ZLINK_STAGE}}
 readonly SSID=RAV4-CarPlay
-readonly PSK=rav4carplay2026
+readonly PSK=${PSK:-${RIPOSTE_CARPLAY_PSK:?set RIPOSTE_CARPLAY_PSK}}
 readonly DAEMON_DIR=/data/local/tmp/zlink
 readonly APP=com.ripostelabs.projection
 
@@ -83,6 +88,6 @@ log "access point $SSID up, keeper loop running"
 for perm in BLUETOOTH_CONNECT NEARBY_WIFI_DEVICES BLUETOOTH_ADVERTISE POST_NOTIFICATIONS; do
   a shell "pm grant $APP android.permission.$perm" 2>/dev/null || true
 done
-a shell "am start -n $APP/.CarPlayActivity" >/dev/null 2>&1 || log "projection app not installed: launcher.hq suite/"
+a shell "am start -n $APP/.CarPlayActivity" >/dev/null 2>&1 || log "projection app not installed: the release host's suite/"
 start_daemon
 log "pair an iPhone with the unit; the session follows on its own (logcat -s Projection btopt)"

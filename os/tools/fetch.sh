@@ -4,10 +4,15 @@
 #
 #   tools.lock ──curl──▶ CACHE/<name>[.tar.gz|.apk|.xz] ──sha256──▶ build.sh --tools CACHE
 #
-# Usage: fetch.sh CACHE          (default /z1-pool/share/carlauncher/os/tools/unit)
+# Usage: fetch.sh CACHE          (default $RIPOSTE_SHARE/os/tools/unit)
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
-CACHE=${1:-/z1-pool/share/carlauncher/os/tools/unit}
+# Site values (hosts, addresses, share paths) come from $RIPOSTE_OS_ENV, never from this
+# file: the repo is public. os/riposte-os.env.example lists them.
+RIPOSTE_OS_ENV=${RIPOSTE_OS_ENV:-/etc/riposte-os.env}
+# shellcheck source=/dev/null
+[ -r "$RIPOSTE_OS_ENV" ] && . "$RIPOSTE_OS_ENV"
+CACHE=${1:-${RIPOSTE_SHARE:?set RIPOSTE_SHARE}/os/tools/unit}
 mkdir -p "$CACHE"
 
 log() { printf '[tools] %s\n' "$*" >&2; }

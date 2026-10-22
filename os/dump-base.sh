@@ -22,8 +22,13 @@ readonly DEFAULT_PARTS="vbmeta_system vbmeta dtbo boot product system"
 readonly ADB_T=30          # seconds for a control call
 readonly CHUNK_T=900       # seconds for one chunk: 16 MiB at the ~35 KiB/s an LTE uplink gives
 
-SERIAL=${RAV4_SERIAL:-100.127.132.101:5555}
-OUT=${RAV4_BASE_OUT:-/z1-pool/share/carlauncher/os/base}
+# Site values (hosts, addresses, share paths) come from $RIPOSTE_OS_ENV, never from this
+# file: the repo is public. os/riposte-os.env.example lists them.
+RIPOSTE_OS_ENV=${RIPOSTE_OS_ENV:-/etc/riposte-os.env}
+# shellcheck source=/dev/null
+[ -r "$RIPOSTE_OS_ENV" ] && . "$RIPOSTE_OS_ENV"
+SERIAL=${RAV4_SERIAL:-${RIPOSTE_CAR_ADB:?set RIPOSTE_CAR_ADB}}
+OUT=${RAV4_BASE_OUT:-${RIPOSTE_SHARE:?set RIPOSTE_SHARE}/os/base}
 PARTS=$DEFAULT_PARTS
 MODE=dump
 while [ $# -gt 0 ]; do

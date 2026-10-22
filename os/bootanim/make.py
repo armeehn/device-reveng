@@ -10,7 +10,7 @@ night variant) and JetBrains Mono from the launcher, drawn with Pillow.
     └──────────────────────────────────────────────┘
 
 Usage: make.py OUT.zip    (stored, not deflated: Android's bootanimation requires it)
-Runs where Pillow lives (LXC 111); build.sh takes the finished zip from --apps.
+Runs where Pillow lives (the build host); build.sh takes the finished zip from --apps.
 """
 import io
 import os

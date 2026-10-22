@@ -1,14 +1,15 @@
 #!/bin/bash
 # Set zero up to update the head unit over USB with no network, from the latest builds.
 #
-#   curl -sf https://launcher.hq.ripostelabs.xyz/car-update/setup.sh | bash
+#   curl -sf <release host>/car-update/setup.sh | bash
 #
-# Run it at home (it needs launcher.hq), as your normal user; it asks for sudo once for the
+# Run it at home (it needs the release host), as your normal user; it asks for sudo once for the
 # udev rule and the service. Re-run it any time to refresh: files that did not change are not
 # downloaded again. After that, plugging the head unit into zero runs the update by itself.
 set -euo pipefail
 
-BASE=https://launcher.hq.ripostelabs.xyz
+# The publisher fills the placeholder when it copies this file to the release host.
+BASE=${RIPOSTE_RELEASE_URL:-@RELEASE_URL@}
 DIR="$HOME/rav4-update"
 BIN=/usr/local/bin/rav4-usb-update
 UNIT=/etc/systemd/system/rav4-usb-update.service
@@ -20,10 +21,10 @@ command -v adb >/dev/null || die "adb is missing: sudo pacman -S android-tools"
 command -v curl >/dev/null || die "curl is missing"
 mkdir -p "$DIR/suite"
 
-# 1. Launcher: the newest one launcher.hq links to, checked against its .sha256.
+# 1. Launcher: the newest one the release host links to, checked against its .sha256.
 name=$(curl -sf "$BASE/" | grep -oE 'carlauncher-[^"]*-vc[0-9]+\.apk' | sort -u \
        | sed 's/.*-vc\([0-9]*\)\.apk/\1 &/' | sort -n | tail -1 | cut -d' ' -f2)
-[ -n "$name" ] || die "launcher.hq lists no launcher"
+[ -n "$name" ] || die "$BASE lists no launcher"
 sum=$(curl -sf "$BASE/$name.sha256" | cut -d' ' -f1)
 
 if [ ! -f "$DIR/$name" ] || [ "$(sha256sum "$DIR/$name" | cut -d' ' -f1)" != "$sum" ]; then
@@ -40,7 +41,7 @@ find "$DIR" -maxdepth 1 -name 'carlauncher-*.apk' ! -name "$name" -delete   # ke
 listing=$(curl -sf -H 'Accept: application/json' "$BASE/suite/" \
           | grep -oE '"name":"[^"]+\.apk","size":[0-9]+,"url":"[^"]*","mod_time":"[^"]+"' \
           | sed -E 's/"name":"([^"]+)","size":([0-9]+),"url":"[^"]*","mod_time":"([^"]+)"/\1 \2 \3/')
-[ -n "$listing" ] || die "launcher.hq lists no suite apps"
+[ -n "$listing" ] || die "$BASE lists no suite apps"
 touch "$DIR/suite.list"
 
 fetched=0
@@ -55,7 +56,7 @@ while read -r apk size mtime; do
 done <<<"$listing"
 echo "$listing" > "$DIR/suite.list"
 
-# An app launcher.hq no longer serves leaves this folder too.
+# An app the release host no longer serves leaves this folder too.
 for f in "$DIR"/suite/*.apk; do
     grep -q "^$(basename "$f") " "$DIR/suite.list" || rm -f "$f"
 done
@@ -106,10 +107,10 @@ if [ -e "$BIN" ] || [ "$(cat "$UNIT" 2>/dev/null)" != "$unit_text" ] || [ "$(cat
     echo "system files updated"
 fi
 
-# Hourly refresh as the user (no sudo): new builds arrive whenever launcher.hq is reachable.
+# Hourly refresh as the user (no sudo): new builds arrive whenever the release host is reachable.
 TIMER_DIR="$HOME/.config/systemd/user"
 mkdir -p "$TIMER_DIR"
-printf '%s\n' "[Unit]" "Description=Refresh $DIR from launcher.hq" "" "[Service]" "Type=oneshot" \
+printf '%s\n' "[Unit]" "Description=Refresh $DIR from the release host" "" "[Service]" "Type=oneshot" \
     "Environment=RAV4_REFRESH_ONLY=1" "ExecStart=/bin/bash $DIR/setup.sh" > "$TIMER_DIR/rav4-update-refresh.service"
 printf '%s\n' "[Unit]" "Description=Refresh $DIR hourly" "" "[Timer]" "OnBootSec=5min" "OnUnitActiveSec=1h" \
     "Persistent=true" "" "[Install]" "WantedBy=timers.target" > "$TIMER_DIR/rav4-update-refresh.timer"

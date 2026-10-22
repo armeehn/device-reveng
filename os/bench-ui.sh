@@ -9,12 +9,17 @@
 #     bench-ui.sh sweep                 launch every com.ripostelabs.* app; report the ones that
 #                                       do not come to the front or crash (logcat FATAL)
 #
-# Env: ADB (default: the SDK's platform-tools adb), UNIT (adb serial, default 10.0.10.14:5555).
+# Env: ADB (default: the SDK's platform-tools adb), UNIT (adb serial, default RIPOSTE_UNIT_ADB).
 # A Compose screen that is off-screen is not in the dump; `find` swipes up to eight times.
 set -euo pipefail
+# Site values (hosts, addresses, share paths) come from $RIPOSTE_OS_ENV, never from this
+# file: the repo is public. os/riposte-os.env.example lists them.
+RIPOSTE_OS_ENV=${RIPOSTE_OS_ENV:-/etc/riposte-os.env}
+# shellcheck source=/dev/null
+[ -r "$RIPOSTE_OS_ENV" ] && . "$RIPOSTE_OS_ENV"
 
 ADB=${ADB:-/opt/android-sdk/platform-tools/adb}
-UNIT=${UNIT:-10.0.10.14:5555}
+UNIT=${UNIT:-${RIPOSTE_UNIT_ADB:?set RIPOSTE_UNIT_ADB}}
 readonly DUMP=/sdcard/riposte-ui.xml
 readonly SWIPE="960 600 960 250 300"     # one screen-height scroll on the 1920x720 panel
 readonly FIND_TRIES=8
